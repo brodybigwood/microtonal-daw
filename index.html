@@ -1,7 +1,12 @@
 
-
+<script defer src="pianoroll.js"></script>
 <link rel="stylesheet" href="pianoroll.css">
-
+<div id="menu">
+    <select id="temperament" onclick="setTemp(this.value)">
+        <option value="12">12</option>
+        <option value ="22">22</option>
+    </select>
+</div>
     <div id="pianoroll">
         <canvas id="grid"></canvas>
         <canvas id="notes"></canvas>
@@ -12,4 +17,3 @@
 
 
 
-    <script src="pianoroll.js"></script>

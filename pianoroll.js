@@ -9,7 +9,15 @@ notesCtx = notesCanvas.getContext("2d");
 let gridWidth = 5000; // Total width (time axis)
 let gridHeight = 2000; // Total height (note axis)
 let cellWidth = 50; // Time step width
-let cellHeight = 20; // Note height
+let defaultNoteHeight = 20; // Note height
+
+
+function setTemp(temp){
+    cellHeight = defaultNoteHeight * 12/temp
+    drawGrid()
+}
+
+setTemp(12)
 
 // Set canvas size
 canvas.width = gridWidth;
@@ -198,3 +206,5 @@ notesCanvas.addEventListener("mouseup", function(e) {
     draggingNote = null;
     edge = "";
 });
+
+
