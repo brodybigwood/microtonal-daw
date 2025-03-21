@@ -1,0 +1,20 @@
+<style>
+    body {
+        margin: 0;
+        overflow: hidden;
+    }
+    #pianoroll {
+        width: 800px; /* Viewport width */
+        height: 400px; /* Viewport height */
+        overflow: auto;
+        position: relative;
+        background: #222; /* Dark background for contrast */
+    }
+    #grid {
+        position: absolute;
+        z-index: 10;
+    }
+    #notes {
+        z-index: 11;
+    }
+</style>

@@ -1,0 +1,15 @@
+the whole gui is gonna be in html, javascript objects for organizing tracks, plugins, midi regions, etc. the live parameters of each can be easily decoded by javascript in realtime. so the params for each instrument consist of the following (all of these are a set that exists for each track in the project)
+
+1. instrument vsts, effect vsts, the order of all of them, could be complicated routing but it will be organized in the track object somehow
+
+2. knob states for all vsts, determined by user settings and automation
+
+3. midi notes pressed, determined by midi regions, also includes their properties
+
+4. audio input buffer(yes there may be latency but its manageable, anyone serious about recording will be using an audio driver that i can make possible using a browser plugin that communicates with a native asio compatibility layer via udp)
+
+so after javascript collects these parameters, it can send it all to the webassembly cpp module. the module will dynamically load or unload each vsts's process class when the user adds or removes to the track, because javascript will send the cpp a signal for it. all the rest of the knobs, midi, and buffer will be sent dynamically in realtime
+
+the cpp will process efficiently almost native performance, and send the buffer back to javascript. so now a whole track has been processed. if there is complicated track routing and busses, all js has to do is determine what track to send it to and then just send cpp for that track with the previous track as input. basically javascript is doing all the light organization work while cpp does the dirty work (which conveniently doesnt need dom access)
+
+once the master track has been processed, the returned buffer from the cpp will be send to js so that js can render the output to the selected user output device, whether they are using normal browser audio settings or the asio udp plugin
