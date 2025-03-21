@@ -2,10 +2,12 @@
     body {
         margin: 0;
         overflow: hidden;
+        height: 100%;
+        width: 100%;
     }
     #pianoroll {
-        width: 800px; /* Viewport width */
-        height: 400px; /* Viewport height */
+        width: 100vw; /* Viewport width */
+        height: 100vh; /* Viewport height */
         overflow: auto;
         position: relative;
         background: #222; /* Dark background for contrast */
@@ -15,6 +17,7 @@
         z-index: 10;
     }
     #notes {
+        position: absolute;
         z-index: 11;
     }
 </style>
