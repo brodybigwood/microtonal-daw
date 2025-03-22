@@ -1,13 +1,15 @@
-<style>
+
     body {
         margin: 0;
         overflow: hidden;
         height: 100%;
         width: 100%;
     }
+
     #pianoroll {
-        width: 100vw; /* Viewport width */
-        height: 100vh; /* Viewport height */
+        width: 100%; /* Viewport width */
+        height: 100%; /* Viewport height */
+  
         overflow: auto;
         position: relative;
         background: #222; /* Dark background for contrast */
@@ -20,4 +22,12 @@
         position: absolute;
         z-index: 11;
     }
-</style>
+    #playhead {
+      position: absolute;
+      z-index: 12;
+    }
+    #topLayer {
+        position: absolute;
+        z-index: 13;
+        
+      }
