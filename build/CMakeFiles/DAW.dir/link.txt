@@ -1,0 +1,1 @@
+/usr/bin/c++ -Wl,--dependency-file=CMakeFiles/DAW.dir/link.d CMakeFiles/DAW.dir/src/main.cpp.o CMakeFiles/DAW.dir/src/PianoRoll.cpp.o CMakeFiles/DAW.dir/src/Region.cpp.o CMakeFiles/DAW.dir/src/Note.cpp.o -o DAW  /usr/lib/libSDL3_ttf.so.0.3.0 /usr/lib/libSDL3.so.0.2.10

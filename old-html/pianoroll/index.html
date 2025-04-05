@@ -1,0 +1,50 @@
+
+<script defer src="pianoroll.js?v="+ new Date().getTime()></script>
+<script defer src="keys.js?v="+ new Date().getTime()></script>
+<script defer src="notes.js?v="+ new Date().getTime()></script></script>
+<link rel="stylesheet" href="pianoroll.css">
+<body>
+<div id="menu">
+    <select id="temperament" onchange="setTemp(this.value)">
+        <option value="12">12 (default)</option>
+        <option value="17">17</option>
+        <option value ="22">22</option>
+        <option value ="24">24</option>
+        <option value="31">31</option>
+    </select>
+    <select id="divisor" onchange="changeCells(this.value)">
+        <option value ="4">4 (default)</option>
+        <option value="1">1</option> 
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value ="4">4</option>
+        <option value ="5">5</option>
+        <option value="6">6</option>
+        <option value="7">7</option>
+        <option value="8">8</option>
+        <option value ="9">9</option>
+        <option value ="10">10</option>
+        <option value="11">11</option>
+        <option value="12">12</option>
+    </select>
+    <button onclick="togglePlay()">Play</button>
+    <button onclick="beginning()">Back to Start</button>
+    <button id="togglePlayNote" onclick="playNoteOnTouch = !playNoteOnTouch; this.innerText='play note on click: '+playNoteOnTouch">play note on click: false</button>
+
+</div>
+
+<div id="editor">
+    <div id="keys12">
+    </div>
+    <div id="pianoroll">
+        <canvas id="grid"></canvas>
+        <canvas id="notes"></canvas>
+        <canvas id="playhead"></canvas>
+        <canvas id="topLayer"></canvas>
+    </div>
+</div>
+
+
+
+</body>
+

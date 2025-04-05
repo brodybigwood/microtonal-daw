@@ -1,0 +1,173 @@
+
+#include <SDL_ttf.h>
+#include "Region.h"
+#include "Note.h"
+#include "fract.h" 
+
+#ifndef PIANOROLL_H
+#define PIANOROLL_H
+
+class PianoRoll {
+
+    public:
+
+
+
+    PianoRoll(int, int, Region&);
+    ~PianoRoll();
+    
+        SDL_Window* window;
+        SDL_Renderer* renderer;
+        SDL_Texture* backgroundTexture;
+        SDL_Texture* gridTexture;
+        SDL_Texture* PianoTexture;
+        SDL_Texture* NotesTexture;
+        SDL_Texture* KeyTexture;
+
+
+        TTF_Font* font;
+        SDL_FRect textRect;
+
+        SDL_Texture* keys[128];
+
+        Region& region;
+
+        float keyLength = 40;
+
+        struct ColorCodes{
+            uint8_t background[4];
+            uint8_t grid[4];
+            uint8_t subGrid[4];
+
+            uint8_t note[4];
+            uint8_t noteSelected[4];
+            uint8_t noteBorder[4];
+            uint8_t noteSelectedBorder[4];
+
+            uint8_t keyText[4];
+            uint8_t keyWhite[4];
+            uint8_t keyBlack[4];
+            uint8_t keyWhiteActive[4];
+            uint8_t keyBlackActive[4];
+
+            uint8_t pianoSeparator[4];
+            
+        };
+
+        int lineWidth = 1;
+
+        ColorCodes colors {
+            {66,84,95,255},
+            {46,64,75,255},
+            {56,74,86,255},
+
+            {200,255,211,255},
+            {254,160,161,255},
+            {136,176,141,255},
+            {187,111,111,255},
+
+            {108,91,93,255},
+            {238,242,250,255},
+            {76,77,79,255},
+            {219,223,231,255},
+            {95,96,98,255},
+
+            {50,66,76,255}
+        };
+
+        void setRenderColor(SDL_Renderer*, uint8_t*);
+
+        double barWidth = 80;
+        double octaveHeight = 200;
+
+        double notesPerOctave = 22;
+        double notesPerBar = 4;
+        double gridHeight12;
+
+        double yOffset12;
+
+        double numCellsDown12;
+
+        double gridWidth;
+        double gridHeight;
+
+        int windowWidth;
+        int windowHeight;
+
+        float mouseX, mouseY;
+
+        double scrollX = 0;
+        double scrollY = 300; 
+
+        double scaleX = 1;
+        double scaleY = 1;
+
+        int scrollSensitivity = 5;
+        float scaleSensitivity = 1.1;
+        double numCellsRight;
+        double numCellsDown;
+
+ 
+        bool isShiftPressed = false;
+        bool isCtrlPressed = false;
+        bool isAltPressed = false;
+        bool refreshGrid = false; 
+        bool refreshNotes = false;
+        bool lmb = false; 
+
+        int yOffset;
+        int xOffset;    SDL_Event e;
+
+        double yMin;
+
+        double yMax;
+        
+        bool running = true;
+
+
+
+
+        bool tick();
+
+        void UpdateGrid();
+        void RenderGridTexture();
+        
+
+        void createKeys();
+        void RenderRoll();
+        void RenderKeys();
+        void RenderNotes();
+        double getMidiNum();
+        void handleInput(SDL_Event&);
+        void toggleKey(SDL_Event&, SDL_Scancode, bool&);
+        void initWindow();
+
+        void Scroll();
+
+        void createNote(fract, fract);
+
+        void deleteNote(int);
+
+        int getExistingNote();
+
+        double getNote(double);
+        double getY(double);
+
+        fract getHoveredTime();
+        double getX(double);
+
+        
+        fract lastLength = fract(1, 1);
+
+        SDL_Texture* layers[4]; 
+
+        fract getHoveredNote();
+
+
+        float getNotePosX(Note&);
+        float getNoteEnd(Note&);
+        float getNoteHeight(Note&);
+        
+};
+
+#endif

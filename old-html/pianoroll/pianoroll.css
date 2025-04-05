@@ -1,0 +1,100 @@
+
+    body {
+        margin: 0;
+        overflow: hidden;
+        height: 100%;
+        width: 100%;
+        background: #222; /* Dark background for contrast */
+    }
+
+
+    #grid {
+        position: absolute;
+        z-index: 10;
+        height:100%;
+        width: 100%;
+    }
+    #notes {
+        position: absolute;
+        z-index: 11;
+        height:100%;
+        width: 100%;
+    }
+    #playhead {
+      position: absolute;
+      z-index: 12;
+      height:100%;
+      width: 100%;
+    }
+    #topLayer {
+        position: absolute;
+        z-index: 13;
+        height:100%;
+        width: 100%;
+      }
+
+    #editor {
+        display: flex;
+        flex-direction: row;
+        height: 100%;
+        width: 100vh;
+
+
+ 
+    }
+
+    #pianoroll {
+        overflow: auto;
+        flex-grow: 1;
+        height: 100%;
+        position: relative;
+        background: #222; /* Dark background for contrast */
+    }
+
+    #keys12 {
+        height: 100%;
+        overflow-y: auto;
+        width: 0px;
+        display: flex;
+        flex-direction: column;
+        scrollbar-width: none; /* Hide scrollbar for Firefox */
+    }
+    #keys12::-webkit-scrollbar {
+        display: none; /* Hide scrollbar for WebKit browsers */
+    }
+
+
+    .piano-key {
+     
+        width: 100%; /* Width of each key */
+        background-color: white; /* Default color for white keys */
+        border: 0px solid #000; /* Border to differentiate keys */
+        cursor: pointer; /* Pointer cursor to indicate clickable */
+        display: inline-block;
+        position: relative;
+        height: calc(100% /128);
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        border: none;
+    }
+    
+    .piano-key.white {
+        background-color: white;
+        z-index: 1; /* Ensure white keys are in the front */
+    }
+    
+    .piano-key.black {
+        background-color: black;
+        height: 100px; /* Black keys are shorter */
+        position: absolute;
+        z-index: 2; /* Ensure black keys are above white keys */
+        left: 0px; /* Adjust for proper positioning */
+        width: 70%; /* Width of black keys */
+    }
+    
+    .piano-key.pressed {
+        background-color: lightgray; /* Color when pressed */
+        transform: scale(0.98); /* Shrink the key when pressed */
+    }
+    
