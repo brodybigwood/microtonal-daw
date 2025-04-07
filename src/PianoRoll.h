@@ -94,7 +94,9 @@ class PianoRoll {
         double barWidth = 80;
         double octaveHeight = 200;
 
-        double notesPerOctave = 22;
+        double referenceOffset;
+
+        double notesPerOctave = 12;
         double notesPerBar = 4;
         double cellHeight12;
 

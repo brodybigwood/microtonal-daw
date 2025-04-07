@@ -41,6 +41,9 @@ PianoRoll::~PianoRoll() {
 
 
 void PianoRoll::UpdateGrid() {
+    if(notesPerOctave <= 0) {
+        notesPerOctave = 1;
+    }
     cellHeight = octaveHeight/notesPerOctave;
     cellWidth = barWidth/notesPerBar;
     cellHeight12 = octaveHeight/12.0;
@@ -49,6 +52,7 @@ void PianoRoll::UpdateGrid() {
     yMin = cellHeight12*59 - std::floor(cellHeight12*59/cellHeight)*cellHeight;
     yMax = cellHeight12*69 - std::floor(cellHeight12*69/cellHeight)*cellHeight;
 
+    Scroll();
 }
 
 fract PianoRoll::getHoveredTime() {
@@ -146,8 +150,8 @@ void PianoRoll::Scroll() {
     if((scrollY-yMin) <= 0) {
         scrollY = yMin;
     } else {
-        if(scrollY+windowHeight+yMax >= 128*cellHeight12) {
-            scrollY = 128*cellHeight12 - windowHeight - yMax;
+        if(scrollY+windowHeight+yMin+yMax >= 128*cellHeight12) {
+            scrollY = 128*cellHeight12 - windowHeight - yMin -yMax;
         }
     }
                 numCellsDown = (scrollY-yMin)/cellHeight;
@@ -356,6 +360,20 @@ void PianoRoll::handleInput(SDL_Event& e) {
             }
             handleMouse();
             break;
+
+        case SDL_EVENT_KEY_DOWN:
+        std::cout << "Keycode: " << e.key.scancode << std::endl;
+
+            if (e.key.scancode == SDLK_MINUS) {
+                notesPerOctave -= 1;
+                UpdateGrid();
+            } else if (e.key.scancode == 46) {
+                notesPerOctave += 1;
+                UpdateGrid();
+            } 
+            break;
+        
+
         case SDL_EVENT_MOUSE_MOTION:
             SDL_GetMouseState(&mouseX, &mouseY);
 
@@ -399,7 +417,7 @@ void PianoRoll::createNote(fract start, fract pitch) {
         std::cout<<"bar: "<<double(lastLength)<<std::endl;
         
         region.notes.push_back(Note(start, lastLength + start, pitch, notesPerOctave));
-        
+
         refreshGrid = true;
 }
 
