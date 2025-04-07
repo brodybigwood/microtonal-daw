@@ -9,7 +9,7 @@
 
 PianoRoll::PianoRoll(int windowWidth, int windowHeight, Region& region) : region(region) {
 
-
+    SDL_SetCursor(cursors.grabber);
     this->windowWidth = windowWidth;
     this->windowHeight = windowHeight;
 
@@ -41,34 +41,34 @@ PianoRoll::~PianoRoll() {
 
 
 void PianoRoll::UpdateGrid() {
-    gridHeight = octaveHeight/notesPerOctave;
-    gridWidth = barWidth/notesPerBar;
-    gridHeight12 = octaveHeight/12.0;
+    cellHeight = octaveHeight/notesPerOctave;
+    cellWidth = barWidth/notesPerBar;
+    cellHeight12 = octaveHeight/12.0;
 
-    double a440 = gridHeight12*59;
-    yMin = gridHeight12*59 - std::floor(gridHeight12*59/gridHeight)*gridHeight;
-    yMax = gridHeight12*69 - std::floor(gridHeight12*69/gridHeight)*gridHeight;
+    double a440 = cellHeight12*59;
+    yMin = cellHeight12*59 - std::floor(cellHeight12*59/cellHeight)*cellHeight;
+    yMax = cellHeight12*69 - std::floor(cellHeight12*69/cellHeight)*cellHeight;
 
 }
 
 fract PianoRoll::getHoveredTime() {
-    return fract(std::floor((mouseX+scrollX)/gridWidth),notesPerBar);
+    return fract(std::floor((mouseX+scrollX)/cellWidth),notesPerBar);
 }
 
 double PianoRoll::getX(double grid) {
-    return grid * gridWidth;
+    return grid * cellWidth;
 }
 
 double PianoRoll::getNote(double y) {
-    return 128-(y + scrollY)/gridHeight12;
+    return 128-(y + scrollY)/cellHeight12;
 }
 
 double PianoRoll::getY(double noteMidiNum) {
-    return -gridHeight12*((noteMidiNum-128)+(scrollY/gridHeight12)) - lineWidth;
+    return -cellHeight12*((noteMidiNum-128)+(scrollY/cellHeight12)) - lineWidth;
 }
 
-fract PianoRoll::getHoveredNote() {
-    fract result = fract((notesPerOctave*128)-std::ceil(numCellsDown+((mouseY+yMin)/gridHeight))*12,notesPerOctave);
+fract PianoRoll::getHoveredCell() {
+    fract result = fract((notesPerOctave*128)-std::ceil(numCellsDown+((mouseY+yMin)/cellHeight))*12,notesPerOctave);
     std::cout<<result.num/result.den<<std::endl;
     return result;
 }
@@ -93,7 +93,7 @@ SDL_RenderFillRect(renderer, &backgroundRect); // Render the background rectangl
 
         SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255); // RGBA
 
-    for (double y = yOffset12-gridHeight12; y < windowHeight+gridHeight12; y += gridHeight12) {
+    for (double y = yOffset12-cellHeight12; y < windowHeight+cellHeight12; y += cellHeight12) {
 
 
              //SDL_RenderLine(renderer, 0, y, 20, y);
@@ -140,24 +140,24 @@ void PianoRoll::RenderRoll() {
 void PianoRoll::Scroll() {
 
 
-    numCellsRight = scrollX/gridWidth; 
-    numCellsDown = (scrollY-yMin)/gridHeight;
-    numCellsDown12 = scrollY/gridHeight12;
+    numCellsRight = scrollX/cellWidth; 
+    numCellsDown = (scrollY-yMin)/cellHeight;
+    numCellsDown12 = scrollY/cellHeight12;
     if((scrollY-yMin) <= 0) {
         scrollY = yMin;
     } else {
-        if(scrollY+windowHeight+yMax >= 128*gridHeight12) {
-            scrollY = 128*gridHeight12 - windowHeight - yMax;
+        if(scrollY+windowHeight+yMax >= 128*cellHeight12) {
+            scrollY = 128*cellHeight12 - windowHeight - yMax;
         }
     }
-                numCellsDown = (scrollY-yMin)/gridHeight;
-            std::cout<<"bottom :"<<numCellsDown+(windowHeight/gridHeight)<<"; top: "<<numCellsDown<<std::endl;
+                numCellsDown = (scrollY-yMin)/cellHeight;
+            std::cout<<"bottom :"<<numCellsDown+(windowHeight/cellHeight)<<"; top: "<<numCellsDown<<std::endl;
 
 
-    yOffset = (std::ceil(numCellsDown) * gridHeight) - scrollY;
-    yOffset12 = (std::ceil(numCellsDown12) * gridHeight12) - scrollY;
+    yOffset = (std::ceil(numCellsDown) * cellHeight) - scrollY;
+    yOffset12 = (std::ceil(numCellsDown12) * cellHeight12) - scrollY;
 
-    xOffset = (std::ceil(numCellsRight) * gridWidth) - scrollX;
+    xOffset = (std::ceil(numCellsRight) * cellWidth) - scrollX;
 
         refreshGrid = true;
   
@@ -177,12 +177,12 @@ void PianoRoll::RenderGridTexture() {
 
     std::cout<<"about to draw vertical grid texture"<<std::endl;
     
-    for (double x = xOffset; x < windowWidth; x += gridWidth) {
+    for (double x = xOffset; x < windowWidth; x += cellWidth) {
         SDL_RenderLine(renderer, x, 0, x, windowHeight);
     }
     std::cout<<"about to draw  horizontal grid texture"<<std::endl;
-       std::cout<<"yOffset: "<<yOffset<<", windowHeight: "<<windowHeight<<", gridHeight: "<<gridHeight<<std::endl;
-    for (double y = yOffset; y < windowHeight; y += gridHeight) {
+       std::cout<<"yOffset: "<<yOffset<<", windowHeight: "<<windowHeight<<", cellHeight: "<<cellHeight<<std::endl;
+    for (double y = yOffset; y < windowHeight; y += cellHeight) {
         SDL_RenderLine(renderer, 0, y, windowWidth, y);
     }
 
@@ -249,7 +249,7 @@ void PianoRoll::initWindow() {
 
     SDL_SetRenderTarget(renderer, NULL);
 
-    if(windowHeight > (128*gridHeight12 - yMax - yMin)) {
+    if(windowHeight > (128*cellHeight12 - yMax - yMin)) {
         octaveHeight = 12*windowHeight/128;
         UpdateGrid();
         
@@ -295,9 +295,9 @@ void PianoRoll::handleInput(SDL_Event& e) {
                 if (barWidth <= 4) {
                     barWidth = 4;
                 }
-                double gridAtX = (mouseX / gridWidth) + (scrollX / gridWidth);
+                double gridAtX = (mouseX / cellWidth) + (scrollX / cellWidth);
                 UpdateGrid();
-                scrollX = gridAtX * gridWidth - mouseX;
+                scrollX = gridAtX * cellWidth - mouseX;
             } else
             if (isAltPressed) {
                 octaveHeight *= std::pow(scaleSensitivity, e.wheel.y);
@@ -305,9 +305,9 @@ void PianoRoll::handleInput(SDL_Event& e) {
                     octaveHeight = windowHeight * 12 / 128;
                 }
 
-                double gridAtY = (mouseY / gridHeight) + (scrollY / gridHeight);
+                double gridAtY = (mouseY / cellHeight) + (scrollY / cellHeight);
                 UpdateGrid();
-                scrollY = gridAtY * gridHeight - mouseY;
+                scrollY = gridAtY * cellHeight - mouseY;
             } else if (isShiftPressed) {
                 scrollX -= e.wheel.y * scrollSensitivity;
             } else {
@@ -329,12 +329,13 @@ void PianoRoll::handleInput(SDL_Event& e) {
             if (e.button.button == SDL_BUTTON_LEFT) {
                 lmb = true;
                 if(mouseX > keyLength) {
-                    createNote(getHoveredTime(), getHoveredNote());
+                    createNote(getHoveredTime(), getHoveredCell());
                 }
             }
             if (e.button.button == SDL_BUTTON_RIGHT) {
+                rmb = true;
                 if(mouseX > keyLength) {
-                    deleteNote(getExistingNote());
+                    deleteNote(hoveredNote);
                 }
 
             }
@@ -343,10 +344,28 @@ void PianoRoll::handleInput(SDL_Event& e) {
             if (e.button.button == SDL_BUTTON_LEFT) {
                 lmb = false;
             }
+            if (e.button.button == SDL_BUTTON_RIGHT) {
+                rmb = false;
+            }
             break;
         case SDL_EVENT_MOUSE_MOTION:
             SDL_GetMouseState(&mouseX, &mouseY);
 
+            getExistingNote();
+            if(rmb) {
+                SDL_SetCursor(cursors.pencil);
+                if(hoveredNote != -1) {
+                    deleteNote(hoveredNote);
+                } 
+            } else {
+                if(hoveredNote != -1) {
+                    SDL_SetCursor(cursors.mover);
+                } else {
+                    SDL_SetCursor(cursors.selector);
+                }
+            }
+
+            
             if(lmb) {
                 
             }
@@ -399,21 +418,27 @@ SDL_RenderTexture(renderer, NotesTexture, NULL, NULL);
 
 }
 
-int PianoRoll::getExistingNote() {
-    for(int i = 0; i<region.notes.size(); i++) {
-        std::cout<<i<<std::endl;
+void PianoRoll::getExistingNote() {
+    hoveredNote = -1; // Default to -1, in case no note is found
+
+    for (int i = 0; i < region.notes.size(); i++) {
         Note& note = region.notes[i];
-        if(
-            mouseX >= getNotePosX(note) &&
-            mouseX <= getNoteEnd(note) &&
-            mouseY <= getY(note.num) &&
-            mouseY >= getY(note.num) + getNoteHeight(note)
-        ) {
-            return i;
+        
+        // Get the required positions and size once per iteration
+        const int notePosX = getNotePosX(note);
+        const int noteEnd = getNoteEnd(note);
+        const int noteY = getY(note.num);
+        const int noteHeight = getNoteHeight(note);
+        
+        // Check if mouse is within note bounds
+        if (mouseX >= notePosX && mouseX <= noteEnd &&
+            mouseY <= noteY && mouseY >= (noteY + noteHeight)) {
+            hoveredNote = i; // Found the hovered note
+            return; // Exit early
         }
     }
-    return -1;
 }
+
 
 float PianoRoll::getNotePosX(Note& note) {
     return note.start*barWidth -scrollX;
@@ -424,7 +449,7 @@ float PianoRoll::getNoteEnd(Note& note) {
 }
 
 float PianoRoll::getNoteHeight(Note& note) {
-    return -gridHeight12*12/note.temperament + lineWidth;
+    return -cellHeight12*12/note.temperament + lineWidth;
 }
 
 void PianoRoll::deleteNote(int index) {

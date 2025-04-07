@@ -9,6 +9,10 @@ Home::Home() {
     SDL_SetRenderDrawColor(renderer, 100,100,100,255);
     
     SDL_RenderClear(renderer);
+
+
+    
+
     SDL_RenderPresent(renderer);
 }
 

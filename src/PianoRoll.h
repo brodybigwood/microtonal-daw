@@ -75,6 +75,20 @@ class PianoRoll {
             {50,66,76,255}
         };
 
+        struct Cursors{
+            SDL_Cursor* grabber;
+            SDL_Cursor* pencil;
+            SDL_Cursor* mover;
+            SDL_Cursor* selector;
+        };
+
+        Cursors cursors{
+            SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER),
+            SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_TEXT),
+            SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_MOVE),
+            SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT),
+        };
+
         void setRenderColor(SDL_Renderer*, uint8_t*);
 
         double barWidth = 80;
@@ -82,14 +96,14 @@ class PianoRoll {
 
         double notesPerOctave = 22;
         double notesPerBar = 4;
-        double gridHeight12;
+        double cellHeight12;
 
         double yOffset12;
 
         double numCellsDown12;
 
-        double gridWidth;
-        double gridHeight;
+        double cellWidth;
+        double cellHeight;
 
         int windowWidth;
         int windowHeight;
@@ -114,6 +128,7 @@ class PianoRoll {
         bool refreshGrid = false; 
         bool refreshNotes = false;
         bool lmb = false; 
+        bool rmb = false;
 
         int yOffset;
         int xOffset;    SDL_Event e;
@@ -124,7 +139,7 @@ class PianoRoll {
         
         bool running = true;
 
-
+        int hoveredNote;
 
 
         bool tick();
@@ -148,7 +163,7 @@ class PianoRoll {
 
         void deleteNote(int);
 
-        int getExistingNote();
+        void getExistingNote();
 
         double getNote(double);
         double getY(double);
@@ -161,7 +176,7 @@ class PianoRoll {
 
         SDL_Texture* layers[4]; 
 
-        fract getHoveredNote();
+        fract getHoveredCell();
 
 
         float getNotePosX(Note&);
