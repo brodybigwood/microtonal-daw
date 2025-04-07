@@ -96,7 +96,7 @@ SDL_RenderFillRect(renderer, &backgroundRect); // Render the background rectangl
     for (double y = yOffset12-cellHeight12; y < windowHeight+cellHeight12; y += cellHeight12) {
 
 
-             //SDL_RenderLine(renderer, 0, y, 20, y);
+             SDL_RenderLine(renderer, 0, y, keyLength, y);
 
 
         double noteNum = std::abs(getNote(y)-1);
@@ -160,7 +160,7 @@ void PianoRoll::Scroll() {
     xOffset = (std::ceil(numCellsRight) * cellWidth) - scrollX;
 
         refreshGrid = true;
-  
+        handleMouse();
 }
 
 
@@ -329,7 +329,12 @@ void PianoRoll::handleInput(SDL_Event& e) {
             if (e.button.button == SDL_BUTTON_LEFT) {
                 lmb = true;
                 if(mouseX > keyLength) {
-                    createNote(getHoveredTime(), getHoveredCell());
+                    if(hoveredNote == -1) {
+                        createNote(getHoveredTime(), getHoveredCell());
+                    } else {
+                        std::cout<<"movingnote = hoverednote"<<std::endl;
+                        movingNote = hoveredNote;
+                    }
                 }
             }
             if (e.button.button == SDL_BUTTON_RIGHT) {
@@ -339,35 +344,46 @@ void PianoRoll::handleInput(SDL_Event& e) {
                 }
 
             }
+            handleMouse();
             break;
         case SDL_EVENT_MOUSE_BUTTON_UP:
             if (e.button.button == SDL_BUTTON_LEFT) {
                 lmb = false;
+                movingNote = -1;
             }
             if (e.button.button == SDL_BUTTON_RIGHT) {
                 rmb = false;
             }
+            handleMouse();
             break;
         case SDL_EVENT_MOUSE_MOTION:
             SDL_GetMouseState(&mouseX, &mouseY);
 
-            getExistingNote();
-            if(rmb) {
-                SDL_SetCursor(cursors.pencil);
-                if(hoveredNote != -1) {
-                    deleteNote(hoveredNote);
-                } 
-            } else {
-                if(hoveredNote != -1) {
-                    SDL_SetCursor(cursors.mover);
-                } else {
-                    SDL_SetCursor(cursors.selector);
-                }
-            }
+            handleMouse();
 
             
-            if(lmb) {
+            if(lmb && movingNote != -1) {
+
+                float dX = mouseX - last_lmb_x;
+                float dirX = std::abs(dX)/dX;
+
+                float dY = mouseY - last_lmb_y;
+                float dirY = std::abs(dY)/dY;
+
+                if(std::abs(dX) >= cellWidth) {
+                    moveNote(movingNote, std::ceil(dirX*dX)/dX,0);
+                    last_lmb_x += dX;
+                } if (std::abs(dY) >= cellHeight) {
+                    moveNote(movingNote, 0,std::ceil(dirY*dY)/dY);
+                    last_lmb_y += dY;
+                }
                 
+
+
+
+            } else {
+                last_lmb_x = mouseX;
+                last_lmb_y = mouseY;
             }
 
             break;
@@ -383,7 +399,7 @@ void PianoRoll::createNote(fract start, fract pitch) {
         std::cout<<"bar: "<<double(lastLength)<<std::endl;
         
         region.notes.push_back(Note(start, lastLength + start, pitch, notesPerOctave));
-
+        
         refreshGrid = true;
 }
 
@@ -462,3 +478,31 @@ void PianoRoll::deleteNote(int index) {
 }
 
 
+void PianoRoll::handleMouse() {
+    getExistingNote();
+    if(rmb) {
+        SDL_SetCursor(cursors.pencil);
+        if(hoveredNote != -1) {
+            deleteNote(hoveredNote);
+        } 
+    } else {
+        if(hoveredNote != -1) {
+            SDL_SetCursor(cursors.mover);
+        } else {
+            SDL_SetCursor(cursors.selector);
+        }
+    }
+}
+
+
+void PianoRoll::moveNote(int noteIndex, int moveX, int moveY) {
+    std::cout<<moveX<<std::endl;
+    fract x = fract(moveX,notesPerBar);
+    fract y = fract(-moveY*12,notesPerOctave);
+
+    Note& note = region.notes[noteIndex];
+    note.start = note.start + x;
+    note.end = note.end + x;
+    note.num = note.num + y;
+    Scroll();
+}

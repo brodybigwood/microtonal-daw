@@ -20,6 +20,8 @@ class Region {
 
  void createNote(fract, fract);
 
+ void sort();
+
 };
 
 

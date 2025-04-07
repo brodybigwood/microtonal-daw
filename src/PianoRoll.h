@@ -110,6 +110,8 @@ class PianoRoll {
 
         float mouseX, mouseY;
 
+        float last_lmb_x, last_lmb_y;
+
         double scrollX = 0;
         double scrollY = 300; 
 
@@ -140,6 +142,7 @@ class PianoRoll {
         bool running = true;
 
         int hoveredNote;
+        int movingNote;
 
 
         bool tick();
@@ -177,11 +180,13 @@ class PianoRoll {
         SDL_Texture* layers[4]; 
 
         fract getHoveredCell();
-
+        void handleMouse();
 
         float getNotePosX(Note&);
         float getNoteEnd(Note&);
         float getNoteHeight(Note&);
+
+        void moveNote(int, int, int);
         
 };
 
