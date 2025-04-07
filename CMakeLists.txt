@@ -3,9 +3,14 @@ project(MySDL2WebApp)
 
 set(SOURCES
     src/main.cpp
-    src/PianoRoll.cpp  # Add your source files here
-    src/Region.cpp  # Add your source files here
-    src/Note.cpp  # Add your source files here
+    src/PianoRoll.cpp  
+    src/Region.cpp
+    src/Note.cpp  
+    src/Home.cpp 
+    src/ControlArea.cpp 
+    src/Button.cpp  
+    src/WindowHandler.cpp
+    
 )
 
 # Add an executable target

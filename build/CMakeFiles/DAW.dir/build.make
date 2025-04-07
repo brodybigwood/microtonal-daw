@@ -128,12 +128,72 @@ CMakeFiles/DAW.dir/src/Note.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/DAW.dir/src/Note.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /mnt/2TB/home/brody/projects/daw/src/Note.cpp -o CMakeFiles/DAW.dir/src/Note.cpp.s
 
+CMakeFiles/DAW.dir/src/Home.cpp.o: CMakeFiles/DAW.dir/flags.make
+CMakeFiles/DAW.dir/src/Home.cpp.o: /mnt/2TB/home/brody/projects/daw/src/Home.cpp
+CMakeFiles/DAW.dir/src/Home.cpp.o: CMakeFiles/DAW.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/mnt/2TB/home/brody/projects/daw/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/DAW.dir/src/Home.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/DAW.dir/src/Home.cpp.o -MF CMakeFiles/DAW.dir/src/Home.cpp.o.d -o CMakeFiles/DAW.dir/src/Home.cpp.o -c /mnt/2TB/home/brody/projects/daw/src/Home.cpp
+
+CMakeFiles/DAW.dir/src/Home.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/DAW.dir/src/Home.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /mnt/2TB/home/brody/projects/daw/src/Home.cpp > CMakeFiles/DAW.dir/src/Home.cpp.i
+
+CMakeFiles/DAW.dir/src/Home.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/DAW.dir/src/Home.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /mnt/2TB/home/brody/projects/daw/src/Home.cpp -o CMakeFiles/DAW.dir/src/Home.cpp.s
+
+CMakeFiles/DAW.dir/src/ControlArea.cpp.o: CMakeFiles/DAW.dir/flags.make
+CMakeFiles/DAW.dir/src/ControlArea.cpp.o: /mnt/2TB/home/brody/projects/daw/src/ControlArea.cpp
+CMakeFiles/DAW.dir/src/ControlArea.cpp.o: CMakeFiles/DAW.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/mnt/2TB/home/brody/projects/daw/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object CMakeFiles/DAW.dir/src/ControlArea.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/DAW.dir/src/ControlArea.cpp.o -MF CMakeFiles/DAW.dir/src/ControlArea.cpp.o.d -o CMakeFiles/DAW.dir/src/ControlArea.cpp.o -c /mnt/2TB/home/brody/projects/daw/src/ControlArea.cpp
+
+CMakeFiles/DAW.dir/src/ControlArea.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/DAW.dir/src/ControlArea.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /mnt/2TB/home/brody/projects/daw/src/ControlArea.cpp > CMakeFiles/DAW.dir/src/ControlArea.cpp.i
+
+CMakeFiles/DAW.dir/src/ControlArea.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/DAW.dir/src/ControlArea.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /mnt/2TB/home/brody/projects/daw/src/ControlArea.cpp -o CMakeFiles/DAW.dir/src/ControlArea.cpp.s
+
+CMakeFiles/DAW.dir/src/Button.cpp.o: CMakeFiles/DAW.dir/flags.make
+CMakeFiles/DAW.dir/src/Button.cpp.o: /mnt/2TB/home/brody/projects/daw/src/Button.cpp
+CMakeFiles/DAW.dir/src/Button.cpp.o: CMakeFiles/DAW.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/mnt/2TB/home/brody/projects/daw/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/DAW.dir/src/Button.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/DAW.dir/src/Button.cpp.o -MF CMakeFiles/DAW.dir/src/Button.cpp.o.d -o CMakeFiles/DAW.dir/src/Button.cpp.o -c /mnt/2TB/home/brody/projects/daw/src/Button.cpp
+
+CMakeFiles/DAW.dir/src/Button.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/DAW.dir/src/Button.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /mnt/2TB/home/brody/projects/daw/src/Button.cpp > CMakeFiles/DAW.dir/src/Button.cpp.i
+
+CMakeFiles/DAW.dir/src/Button.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/DAW.dir/src/Button.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /mnt/2TB/home/brody/projects/daw/src/Button.cpp -o CMakeFiles/DAW.dir/src/Button.cpp.s
+
+CMakeFiles/DAW.dir/src/WindowHandler.cpp.o: CMakeFiles/DAW.dir/flags.make
+CMakeFiles/DAW.dir/src/WindowHandler.cpp.o: /mnt/2TB/home/brody/projects/daw/src/WindowHandler.cpp
+CMakeFiles/DAW.dir/src/WindowHandler.cpp.o: CMakeFiles/DAW.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/mnt/2TB/home/brody/projects/daw/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Building CXX object CMakeFiles/DAW.dir/src/WindowHandler.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/DAW.dir/src/WindowHandler.cpp.o -MF CMakeFiles/DAW.dir/src/WindowHandler.cpp.o.d -o CMakeFiles/DAW.dir/src/WindowHandler.cpp.o -c /mnt/2TB/home/brody/projects/daw/src/WindowHandler.cpp
+
+CMakeFiles/DAW.dir/src/WindowHandler.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/DAW.dir/src/WindowHandler.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /mnt/2TB/home/brody/projects/daw/src/WindowHandler.cpp > CMakeFiles/DAW.dir/src/WindowHandler.cpp.i
+
+CMakeFiles/DAW.dir/src/WindowHandler.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/DAW.dir/src/WindowHandler.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /mnt/2TB/home/brody/projects/daw/src/WindowHandler.cpp -o CMakeFiles/DAW.dir/src/WindowHandler.cpp.s
+
 # Object files for target DAW
 DAW_OBJECTS = \
 "CMakeFiles/DAW.dir/src/main.cpp.o" \
 "CMakeFiles/DAW.dir/src/PianoRoll.cpp.o" \
 "CMakeFiles/DAW.dir/src/Region.cpp.o" \
-"CMakeFiles/DAW.dir/src/Note.cpp.o"
+"CMakeFiles/DAW.dir/src/Note.cpp.o" \
+"CMakeFiles/DAW.dir/src/Home.cpp.o" \
+"CMakeFiles/DAW.dir/src/ControlArea.cpp.o" \
+"CMakeFiles/DAW.dir/src/Button.cpp.o" \
+"CMakeFiles/DAW.dir/src/WindowHandler.cpp.o"
 
 # External object files for target DAW
 DAW_EXTERNAL_OBJECTS =
@@ -142,12 +202,16 @@ DAW: CMakeFiles/DAW.dir/src/main.cpp.o
 DAW: CMakeFiles/DAW.dir/src/PianoRoll.cpp.o
 DAW: CMakeFiles/DAW.dir/src/Region.cpp.o
 DAW: CMakeFiles/DAW.dir/src/Note.cpp.o
+DAW: CMakeFiles/DAW.dir/src/Home.cpp.o
+DAW: CMakeFiles/DAW.dir/src/ControlArea.cpp.o
+DAW: CMakeFiles/DAW.dir/src/Button.cpp.o
+DAW: CMakeFiles/DAW.dir/src/WindowHandler.cpp.o
 DAW: CMakeFiles/DAW.dir/build.make
 DAW: CMakeFiles/DAW.dir/compiler_depend.ts
 DAW: /usr/lib/libSDL3_ttf.so.0.3.0
 DAW: /usr/lib/libSDL3.so.0.2.10
 DAW: CMakeFiles/DAW.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/mnt/2TB/home/brody/projects/daw/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Linking CXX executable DAW"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/mnt/2TB/home/brody/projects/daw/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_9) "Linking CXX executable DAW"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/DAW.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.

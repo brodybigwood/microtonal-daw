@@ -14,7 +14,7 @@ class PianoRoll {
 
 
     PianoRoll(int, int, Region&);
-    ~PianoRoll();
+    virtual ~PianoRoll();
     
         SDL_Window* window;
         SDL_Renderer* renderer;
@@ -102,7 +102,7 @@ class PianoRoll {
         double scaleX = 1;
         double scaleY = 1;
 
-        int scrollSensitivity = 5;
+        int scrollSensitivity = 10;
         float scaleSensitivity = 1.1;
         double numCellsRight;
         double numCellsDown;

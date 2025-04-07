@@ -6,6 +6,10 @@ DAW: \
   CMakeFiles/DAW.dir/src/PianoRoll.cpp.o \
   CMakeFiles/DAW.dir/src/Region.cpp.o \
   CMakeFiles/DAW.dir/src/Note.cpp.o \
+  CMakeFiles/DAW.dir/src/Home.cpp.o \
+  CMakeFiles/DAW.dir/src/ControlArea.cpp.o \
+  CMakeFiles/DAW.dir/src/Button.cpp.o \
+  CMakeFiles/DAW.dir/src/WindowHandler.cpp.o \
   /usr/lib/libSDL3_ttf.so.0.3.0 \
   /usr/lib/libSDL3.so.0.2.10 \
   /usr/lib/gcc/x86_64-pc-linux-gnu/14.2.1/../../../../lib/libstdc++.so \
@@ -68,6 +72,14 @@ CMakeFiles/DAW.dir/src/PianoRoll.cpp.o:
 CMakeFiles/DAW.dir/src/Region.cpp.o:
 
 CMakeFiles/DAW.dir/src/Note.cpp.o:
+
+CMakeFiles/DAW.dir/src/Home.cpp.o:
+
+CMakeFiles/DAW.dir/src/ControlArea.cpp.o:
+
+CMakeFiles/DAW.dir/src/Button.cpp.o:
+
+CMakeFiles/DAW.dir/src/WindowHandler.cpp.o:
 
 /usr/lib/libSDL3_ttf.so.0.3.0:
 

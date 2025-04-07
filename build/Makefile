@@ -142,6 +142,78 @@ CopyAssets/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CopyAssets.dir/build.make CMakeFiles/CopyAssets.dir/build
 .PHONY : CopyAssets/fast
 
+src/Button.o: src/Button.cpp.o
+.PHONY : src/Button.o
+
+# target to build an object file
+src/Button.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Button.cpp.o
+.PHONY : src/Button.cpp.o
+
+src/Button.i: src/Button.cpp.i
+.PHONY : src/Button.i
+
+# target to preprocess a source file
+src/Button.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Button.cpp.i
+.PHONY : src/Button.cpp.i
+
+src/Button.s: src/Button.cpp.s
+.PHONY : src/Button.s
+
+# target to generate assembly for a file
+src/Button.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Button.cpp.s
+.PHONY : src/Button.cpp.s
+
+src/ControlArea.o: src/ControlArea.cpp.o
+.PHONY : src/ControlArea.o
+
+# target to build an object file
+src/ControlArea.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/ControlArea.cpp.o
+.PHONY : src/ControlArea.cpp.o
+
+src/ControlArea.i: src/ControlArea.cpp.i
+.PHONY : src/ControlArea.i
+
+# target to preprocess a source file
+src/ControlArea.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/ControlArea.cpp.i
+.PHONY : src/ControlArea.cpp.i
+
+src/ControlArea.s: src/ControlArea.cpp.s
+.PHONY : src/ControlArea.s
+
+# target to generate assembly for a file
+src/ControlArea.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/ControlArea.cpp.s
+.PHONY : src/ControlArea.cpp.s
+
+src/Home.o: src/Home.cpp.o
+.PHONY : src/Home.o
+
+# target to build an object file
+src/Home.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Home.cpp.o
+.PHONY : src/Home.cpp.o
+
+src/Home.i: src/Home.cpp.i
+.PHONY : src/Home.i
+
+# target to preprocess a source file
+src/Home.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Home.cpp.i
+.PHONY : src/Home.cpp.i
+
+src/Home.s: src/Home.cpp.s
+.PHONY : src/Home.s
+
+# target to generate assembly for a file
+src/Home.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Home.cpp.s
+.PHONY : src/Home.cpp.s
+
 src/Note.o: src/Note.cpp.o
 .PHONY : src/Note.o
 
@@ -214,6 +286,30 @@ src/Region.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Region.cpp.s
 .PHONY : src/Region.cpp.s
 
+src/WindowHandler.o: src/WindowHandler.cpp.o
+.PHONY : src/WindowHandler.o
+
+# target to build an object file
+src/WindowHandler.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/WindowHandler.cpp.o
+.PHONY : src/WindowHandler.cpp.o
+
+src/WindowHandler.i: src/WindowHandler.cpp.i
+.PHONY : src/WindowHandler.i
+
+# target to preprocess a source file
+src/WindowHandler.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/WindowHandler.cpp.i
+.PHONY : src/WindowHandler.cpp.i
+
+src/WindowHandler.s: src/WindowHandler.cpp.s
+.PHONY : src/WindowHandler.s
+
+# target to generate assembly for a file
+src/WindowHandler.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/WindowHandler.cpp.s
+.PHONY : src/WindowHandler.cpp.s
+
 src/main.o: src/main.cpp.o
 .PHONY : src/main.o
 
@@ -248,6 +344,15 @@ help:
 	@echo "... rebuild_cache"
 	@echo "... CopyAssets"
 	@echo "... DAW"
+	@echo "... src/Button.o"
+	@echo "... src/Button.i"
+	@echo "... src/Button.s"
+	@echo "... src/ControlArea.o"
+	@echo "... src/ControlArea.i"
+	@echo "... src/ControlArea.s"
+	@echo "... src/Home.o"
+	@echo "... src/Home.i"
+	@echo "... src/Home.s"
 	@echo "... src/Note.o"
 	@echo "... src/Note.i"
 	@echo "... src/Note.s"
@@ -257,6 +362,9 @@ help:
 	@echo "... src/Region.o"
 	@echo "... src/Region.i"
 	@echo "... src/Region.s"
+	@echo "... src/WindowHandler.o"
+	@echo "... src/WindowHandler.i"
+	@echo "... src/WindowHandler.s"
 	@echo "... src/main.o"
 	@echo "... src/main.i"
 	@echo "... src/main.s"

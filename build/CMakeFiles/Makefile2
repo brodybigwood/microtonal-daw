@@ -88,12 +88,12 @@ clean: CMakeFiles/CopyAssets.dir/clean
 CMakeFiles/DAW.dir/all: CMakeFiles/CopyAssets.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/mnt/2TB/home/brody/projects/daw/build/CMakeFiles --progress-num=1,2,3,4,5 "Built target DAW"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/mnt/2TB/home/brody/projects/daw/build/CMakeFiles --progress-num=1,2,3,4,5,6,7,8,9 "Built target DAW"
 .PHONY : CMakeFiles/DAW.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/DAW.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /mnt/2TB/home/brody/projects/daw/build/CMakeFiles 5
+	$(CMAKE_COMMAND) -E cmake_progress_start /mnt/2TB/home/brody/projects/daw/build/CMakeFiles 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/DAW.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /mnt/2TB/home/brody/projects/daw/build/CMakeFiles 0
 .PHONY : CMakeFiles/DAW.dir/rule
@@ -105,7 +105,7 @@ DAW: CMakeFiles/DAW.dir/rule
 # codegen rule for target.
 CMakeFiles/DAW.dir/codegen: CMakeFiles/CopyAssets.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/mnt/2TB/home/brody/projects/daw/build/CMakeFiles --progress-num=1,2,3,4,5 "Finished codegen for target DAW"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/mnt/2TB/home/brody/projects/daw/build/CMakeFiles --progress-num=1,2,3,4,5,6,7,8,9 "Finished codegen for target DAW"
 .PHONY : CMakeFiles/DAW.dir/codegen
 
 # clean rule for target.

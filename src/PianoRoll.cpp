@@ -13,7 +13,7 @@ PianoRoll::PianoRoll(int windowWidth, int windowHeight, Region& region) : region
     this->windowWidth = windowWidth;
     this->windowHeight = windowHeight;
 
-    window = SDL_CreateWindow("Piano Roll", windowWidth, windowHeight, SDL_WINDOW_RESIZABLE);
+    window = SDL_CreateWindow("Piano Roll", windowWidth, windowHeight, SDL_WINDOW_RESIZABLE | SDL_WINDOW_UTILITY);
 
         renderer = SDL_CreateRenderer(window, NULL);
 
@@ -34,6 +34,7 @@ PianoRoll::~PianoRoll() {
     for(int i = 0; i<4; i++) {
         SDL_DestroyTexture(layers[i]);
     }
+    std::cout<<"closing iwndow"<<std::endl;
 
 }
 
@@ -251,9 +252,9 @@ void PianoRoll::initWindow() {
     if(windowHeight > (128*gridHeight12 - yMax - yMin)) {
         octaveHeight = 12*windowHeight/128;
         UpdateGrid();
-        Scroll();
+        
     }
-
+    Scroll();
     RenderGridTexture();      
     std::cout<<"rendered grid texture"<<std::endl;
     RenderKeys();
