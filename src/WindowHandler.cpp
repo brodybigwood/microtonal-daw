@@ -63,19 +63,7 @@ void WindowHandler::loop() {
 
 
 
-                    case SDL_EVENT_KEY_DOWN:
 
-                            /*if (e.key.scancode == SDL_SCANCODE_N) {
-                                PianoRoll* window1 = new PianoRoll(800, 600, midiRegion2);
-                                
-                                windows->push_back(window1);
-                                SDL_SetWindowParent(window1->window, home->window); 
-                                break;
-                            } else {
-                                handleKeyboard();
-                                break;
-                            }
-*/
 
                             case SDL_EVENT_QUIT:
                             running = false;
