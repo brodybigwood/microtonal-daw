@@ -170,7 +170,7 @@ class PianoRoll {
 
         void getExistingNote();
 
-        double getNote(double);
+        double getNoteName(double);
         double getY(double);
 
         fract getHoveredTime();

@@ -63,16 +63,16 @@ double PianoRoll::getX(double grid) {
     return grid * cellWidth;
 }
 
-double PianoRoll::getNote(double y) {
-    return 128-(y + scrollY)/cellHeight12;
+double PianoRoll::getNoteName(double y) {
+    return 129-(y + scrollY)/cellHeight12;
 }
 
 double PianoRoll::getY(double noteMidiNum) {
-    return -cellHeight12*((noteMidiNum-128)+(scrollY/cellHeight12)) - lineWidth;
+    return -cellHeight12*((noteMidiNum-129)+(scrollY/cellHeight12)) - lineWidth;
 }
 
 fract PianoRoll::getHoveredCell() {
-    fract result = fract((notesPerOctave*128)-std::ceil(numCellsDown+((mouseY+yMin)/cellHeight))*12,notesPerOctave);
+    fract result = fract((notesPerOctave*128)-std::ceil(numCellsDown+((mouseY+yMin)/cellHeight))*12,notesPerOctave) + fract(1,1);
     std::cout<<result.num/result.den<<std::endl;
     return result;
 }
@@ -104,7 +104,7 @@ SDL_RenderLine(renderer, keyLength+1,0,keyLength+1,windowHeight);
              SDL_RenderLine(renderer, 0, y, keyLength, y);
 
 
-        double noteNum = std::abs(getNote(y)-1);
+        double noteNum = std::abs(getNoteName(y)-1);
         
         const char* noteNumStr = std::to_string(noteNum).c_str();
 
@@ -148,8 +148,8 @@ void PianoRoll::Scroll() {
     numCellsRight = scrollX/cellWidth; 
     numCellsDown = (scrollY-yMin)/cellHeight;
     numCellsDown12 = scrollY/cellHeight12;
-    if((scrollY-yMin) <= 0) {
-        scrollY = yMin;
+    if((scrollY-yMin - cellHeight12) <= 0) {
+        scrollY = yMin + cellHeight12;
     } else {
         if(scrollY+windowHeight+yMin+yMax >= 128*cellHeight12) {
             scrollY = 128*cellHeight12 - windowHeight - yMin -yMax;
