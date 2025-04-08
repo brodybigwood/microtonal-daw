@@ -1,1 +1,4 @@
 build/
+lib/
+lib/vst3sdk
+old-html/

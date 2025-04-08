@@ -36,13 +36,16 @@ void Home::tick() {
     
     SDL_RenderClear(renderer);
 
+
+    insts->render();
+    controls->render();
+    song->render();
+
     for(size_t i = 0; i<buttons.size(); i++) {
         Button& button = buttons[i];
         button.render(); 
     }
-    insts->render();
-    controls->render();
-    song->render();
+    
     SDL_RenderPresent(renderer);
 }
 
