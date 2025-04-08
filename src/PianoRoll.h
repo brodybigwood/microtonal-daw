@@ -3,6 +3,7 @@
 #include "Region.h"
 #include "Note.h"
 #include "fract.h" 
+#include "styles.h"
 
 #ifndef PIANOROLL_H
 #define PIANOROLL_H
@@ -34,60 +35,7 @@ class PianoRoll {
 
         float keyLength = 40;
 
-        struct ColorCodes{
-            uint8_t background[4];
-            uint8_t grid[4];
-            uint8_t subGrid[4];
-
-            uint8_t note[4];
-            uint8_t noteSelected[4];
-            uint8_t noteBorder[4];
-            uint8_t noteSelectedBorder[4];
-
-            uint8_t keyText[4];
-            uint8_t keyWhite[4];
-            uint8_t keyBlack[4];
-            uint8_t keyWhiteActive[4];
-            uint8_t keyBlackActive[4];
-
-            uint8_t pianoSeparator[4];
-            
-        };
-
-        int lineWidth = 1;
-
-        ColorCodes colors {
-            {66,84,95,255},
-            {46,64,75,255},
-            {56,74,86,255},
-
-            {200,255,211,255},
-            {254,160,161,255},
-            {136,176,141,255},
-            {187,111,111,255},
-
-            {108,91,93,255},
-            {238,242,250,255},
-            {76,77,79,255},
-            {219,223,231,255},
-            {95,96,98,255},
-
-            {50,66,76,255}
-        };
-
-        struct Cursors{
-            SDL_Cursor* grabber;
-            SDL_Cursor* pencil;
-            SDL_Cursor* mover;
-            SDL_Cursor* selector;
-        };
-
-        Cursors cursors{
-            SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER),
-            SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_TEXT),
-            SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_MOVE),
-            SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT),
-        };
+        
 
         void setRenderColor(SDL_Renderer*, uint8_t*);
 

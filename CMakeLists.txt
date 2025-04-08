@@ -17,7 +17,7 @@ set(SOURCES
     src/InstrumentList.cpp
     src/SongRoll.cpp
     #src/Plugin.cpp
-    
+    src/styles.cpp
 )
 
 # Add an executable target
