@@ -5,19 +5,24 @@ WindowHandler::WindowHandler() {
 
     
 
-  
+    home = new Home(this);
     
    
 
     SDL_Init(SDL_INIT_VIDEO);
     TTF_Init();
 
-    editor = new PianoRoll(800, 600, midiRegion1);
-    SDL_SetWindowParent(editor->window, home.window); 
-    windows->push_back(editor);
+
 }
 WindowHandler::~WindowHandler() {
 
+}
+
+void WindowHandler::createPianoRoll(Region& region) {
+    std::cout<<"creating"<<std::endl;
+    editor = new PianoRoll(800, 600, region);
+    SDL_SetWindowParent(editor->window, home->window); 
+    windows->push_back(editor);
 }
 
 void WindowHandler::loop() {
@@ -43,7 +48,7 @@ void WindowHandler::loop() {
         if(timeSinceLastFrame >= frameTime) {   
             lastTime = double(SDL_GetTicks())-frameTime;
 
-
+            home->tick();
             for(int i = windows->size() - 1; i >= 0; --i) {
 
                     (*windows)[i]->tick();
@@ -52,24 +57,25 @@ void WindowHandler::loop() {
             
 
             while (SDL_PollEvent(&e)) {
+                
                 switch (e.type) {
 
 
-                        break;
+
 
                     case SDL_EVENT_KEY_DOWN:
 
-                            if (e.key.scancode == SDL_SCANCODE_N) {
+                            /*if (e.key.scancode == SDL_SCANCODE_N) {
                                 PianoRoll* window1 = new PianoRoll(800, 600, midiRegion2);
                                 
                                 windows->push_back(window1);
-                                SDL_SetWindowParent(window1->window, home.window); 
+                                SDL_SetWindowParent(window1->window, home->window); 
                                 break;
                             } else {
                                 handleKeyboard();
                                 break;
                             }
-
+*/
 
                             case SDL_EVENT_QUIT:
                             running = false;
@@ -135,32 +141,48 @@ void WindowHandler::loop() {
 }
 
 
-void WindowHandler::handleKeyboard() {
+bool WindowHandler::handleKeyboard() {
+    
     focusedWindow = SDL_GetKeyboardFocus();
     if (focusedWindow != nullptr) {
-        // Iterate through the windows to find the corresponding PianoRoll object
-        for (PianoRoll* window : *windows) {
-            // Assuming that the PianoRoll class has a method to get the SDL_Window* for that window
-            if (window->window == focusedWindow) {
-                window->handleInput(e);;
-                return;
+
+        if(focusedWindow == home->window) {
+            
+            return home->handleInput(e);
+        } else {
+            for (PianoRoll* window : *windows) {
+                // Assuming that the PianoRoll class has a method to get the SDL_Window* for that window
+                if (window->window == focusedWindow) {
+                    window->handleInput(e);;
+                    return false;
+                }
             }
         }
+        // Iterate through the windows to find the corresponding PianoRoll object
+
     } 
+    return false;
 }
 
-void WindowHandler::handleMouse() {
+bool WindowHandler::handleMouse() {
+    
     focusedWindow = SDL_GetMouseFocus();
     if (focusedWindow != nullptr) {
+
+        if(focusedWindow == home->window) {
+            return home->handleInput(e);
+        } else {
         // Iterate through the windows to find the corresponding PianoRoll object
-        for (PianoRoll* window : *windows) {
-            // Assuming that the PianoRoll class has a method to get the SDL_Window* for that window
-            if (window->window == focusedWindow) {
-                window->handleInput(e);;
-                return;
+            for (PianoRoll* window : *windows) {
+                // Assuming that the PianoRoll class has a method to get the SDL_Window* for that window
+                if (window->window == focusedWindow) {
+                    window->handleInput(e);
+                    return false;
+                }
             }
         }
     } 
+    return false;
 }
 
 PianoRoll* WindowHandler::findWindow() {

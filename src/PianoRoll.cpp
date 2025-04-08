@@ -34,7 +34,7 @@ PianoRoll::~PianoRoll() {
     for(int i = 0; i<4; i++) {
         SDL_DestroyTexture(layers[i]);
     }
-    std::cout<<"closing iwndow"<<std::endl;
+
 
 }
 
@@ -73,7 +73,7 @@ double PianoRoll::getY(double noteMidiNum) {
 
 fract PianoRoll::getHoveredCell() {
     fract result = fract((notesPerOctave*128)-std::ceil(numCellsDown+((mouseY+yMin)/cellHeight))*12,notesPerOctave) + fract(1,1);
-    std::cout<<result.num/result.den<<std::endl;
+
     return result;
 }
 
@@ -133,7 +133,7 @@ SDL_RenderLine(renderer, keyLength+1,0,keyLength+1,windowHeight);
 
 void PianoRoll::RenderRoll() {
     SDL_SetRenderTarget(renderer, NULL);
-    //std::cout<<"abt to render layers"<<std::endl;
+
     for(int i = 0; i<4; i++) {
         SDL_RenderTexture(renderer, layers[i], NULL, NULL);
     }
@@ -156,7 +156,6 @@ void PianoRoll::Scroll() {
         }
     }
                 numCellsDown = (scrollY-yMin)/cellHeight;
-            std::cout<<"bottom :"<<numCellsDown+(windowHeight/cellHeight)<<"; top: "<<numCellsDown<<std::endl;
 
 
     yOffset = (std::ceil(numCellsDown) * cellHeight) - scrollY;
@@ -172,7 +171,7 @@ void PianoRoll::Scroll() {
 void PianoRoll::RenderGridTexture() {
 
 
-       std::cout<<"rendering grid texture"<<std::endl;
+
 
     SDL_SetRenderTarget(renderer, gridTexture);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0); // Transparent
@@ -180,13 +179,13 @@ void PianoRoll::RenderGridTexture() {
 
     setRenderColor(renderer, colors.grid);
 
-    std::cout<<"about to draw vertical grid texture"<<std::endl;
+
     
     for (double x = xOffset; x < windowWidth; x += cellWidth) {
         SDL_RenderLine(renderer, x, 0, x, windowHeight);
     }
-    std::cout<<"about to draw  horizontal grid texture"<<std::endl;
-       std::cout<<"yOffset: "<<yOffset<<", windowHeight: "<<windowHeight<<", cellHeight: "<<cellHeight<<std::endl;
+
+    
     for (double y = yOffset; y < windowHeight; y += cellHeight) {
         SDL_RenderLine(renderer, 0, y, windowWidth, y);
     }
@@ -263,7 +262,7 @@ void PianoRoll::initWindow() {
     }
     Scroll();
     RenderGridTexture();      
-    std::cout<<"rendered grid texture"<<std::endl;
+
     RenderKeys();
     RenderNotes();
     RenderRoll();
@@ -342,7 +341,6 @@ void PianoRoll::handleInput(SDL_Event& e) {
                         notesPerOctave = region.notes[hoveredNote].temperament;
                         UpdateGrid();
                         Scroll();
-                        std::cout<<"movingnote = hoverednote"<<std::endl;
                         movingNote = hoveredNote;
                     }
                 }
@@ -368,7 +366,6 @@ void PianoRoll::handleInput(SDL_Event& e) {
             break;
 
         case SDL_EVENT_KEY_DOWN:
-        std::cout << "Keycode: " << e.key.scancode << std::endl;
 
             if (e.key.scancode == SDLK_MINUS) {
                 notesPerOctave -= 1;
@@ -420,7 +417,6 @@ void PianoRoll::handleInput(SDL_Event& e) {
 }
 
 void PianoRoll::createNote(fract start, fract pitch) {
-        std::cout<<"bar: "<<double(lastLength)<<std::endl;
         
         region.notes.push_back(Note(start, lastLength + start, pitch, notesPerOctave));
 
@@ -434,7 +430,7 @@ void PianoRoll::RenderNotes() {
 
     for(int i = 0; i<region.notes.size(); i++) {
         Note& note = region.notes[i];
-            std::cout<<"note length: "<<getNoteEnd(note)<<std::endl;
+
             float noteX = getNotePosX(note) +1;
             float noteY = getY(note.num) -1 ;
             float noteEnd = getNoteEnd(note) -2;
@@ -451,7 +447,6 @@ void PianoRoll::RenderNotes() {
 
             SDL_RenderLine(renderer, noteEnd, noteY, noteEnd, noteTop);
             SDL_RenderLine(renderer, noteX, noteTop, noteEnd, noteTop);
-            std::cout<<"rendered note with num "<<note.num<<" at "<<note.start*barWidth<<std::endl;
 
     }
 
@@ -497,7 +492,7 @@ float PianoRoll::getNoteHeight(Note& note) {
 void PianoRoll::deleteNote(int index) {
     if(index != -1) {
         region.notes.erase(region.notes.begin() + index); 
-        std::cout<<"deleted succ"<<std::endl;
+
         Scroll();
     }
 
@@ -522,7 +517,7 @@ void PianoRoll::handleMouse() {
 
 
 void PianoRoll::moveNote(int noteIndex, int moveX, int moveY) {
-    std::cout<<moveX<<std::endl;
+
     fract x = fract(moveX,notesPerBar);
     fract y = fract(-moveY*12,notesPerOctave);
 

@@ -17,15 +17,18 @@ SDL_Event e;
         WindowHandler();
         ~WindowHandler();
 
-        void handleKeyboard();
-        void handleMouse();
+        bool handleKeyboard();
+        bool handleMouse();
 
-        Region midiRegion1;
-        Region midiRegion2;
-        Home home;
+
+        Home* home;
         PianoRoll* editor;
         PianoRoll* findWindow();
         void loop();
+
+        void createPianoRoll(Region&);
+
+
 };
 
 #endif
