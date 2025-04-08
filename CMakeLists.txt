@@ -10,6 +10,8 @@ set(SOURCES
     src/ControlArea.cpp 
     src/Button.cpp  
     src/WindowHandler.cpp
+    src/Instrument.cpp
+    src/InstrumentList.cpp
     
 )
 

@@ -7,9 +7,10 @@
 class ControlArea {
 
     public:
-        ControlArea(int x, int y, int width, int height);
+        ControlArea(int x, int y, int width, int height, SDL_Renderer* renderer);
         ~ControlArea();
         
+        SDL_Renderer* renderer;
         int x;
         int y;
         int width;

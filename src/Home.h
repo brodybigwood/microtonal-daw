@@ -5,6 +5,7 @@
 #include "Button.h"
 #include <vector>
 #include "WindowHandler.h"
+#include "InstrumentList.h"
 
 #ifndef HOME_H
 #define HOME_H
@@ -15,6 +16,9 @@ class Home {
 
     public:
 
+    int windowHeight = 1080;
+    int windowWidth = 1920;
+    InstrumentList* insts;
 
     Region midiRegion1;
 Region midiRegion2;

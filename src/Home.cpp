@@ -5,21 +5,21 @@
 Home::Home(WindowHandler* windowHandler) {
 
     this->windowHandler = windowHandler;
-    window = SDL_CreateWindow("Piano Roll", 1500, 800, 0);
+    window = SDL_CreateWindow("Piano Roll", windowWidth, windowHeight, SDL_WINDOW_RESIZABLE);
 
     renderer = SDL_CreateRenderer(window, NULL);
     
-    SDL_SetRenderDrawColor(renderer, 100,100,100,255);
-    
-    SDL_RenderClear(renderer);
 
 
-    Button playButton("edit region 1", 50,50, 50,50,renderer);
 
-    Button playButton2("edit region 2", 150,50, 50,50,renderer);
+    Button playButton("edit region 1", 250,50, 50,50,renderer);
+
+    Button playButton2("edit region 2", 350,50, 50,50,renderer);
 
     buttons.push_back(playButton);
     buttons.push_back(playButton2);
+
+    insts = new InstrumentList(windowHeight, renderer);
 
 
 }
@@ -32,10 +32,15 @@ Home::~Home() {
 }
 
 void Home::tick() {
+    SDL_SetRenderDrawColor(renderer, 100,100,100,255);
+    
+    SDL_RenderClear(renderer);
+
     for(size_t i = 0; i<buttons.size(); i++) {
         Button& button = buttons[i];
         button.render(); 
     }
+    insts->render();
     SDL_RenderPresent(renderer);
 }
 
@@ -55,11 +60,13 @@ bool Home::handleInput(SDL_Event& e) {
                 if(hoveredButton != nullptr) {
                     if(hoveredButton->title == "edit region 1") {
                         windowHandler->createPianoRoll(midiRegion1);
+                        hoveredButton->hovered = false;
                         hoveredButton = nullptr;
                         return true;
                     }
                     if(hoveredButton->title == "edit region 2") {
                         windowHandler->createPianoRoll(midiRegion2);
+                        hoveredButton->hovered = false;
                         hoveredButton = nullptr;
                         return true;
                     }
