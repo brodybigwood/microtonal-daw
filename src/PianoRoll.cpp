@@ -92,10 +92,11 @@ void PianoRoll::RenderKeys() {
             SDL_FRect backgroundRect = {0, 0, keyLength, windowHeight};
 
         setRenderColor(renderer, colors.keyWhite);
-SDL_RenderFillRect(renderer, &backgroundRect); // Render the background rectangle
+SDL_RenderFillRect(renderer, &backgroundRect); 
+SDL_SetRenderDrawColor(renderer,0,0,0,255);
+SDL_RenderLine(renderer, keyLength+1,0,keyLength+1,windowHeight);
 
-
-        SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255); // RGBA
+        SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255); 
 
     for (double y = yOffset12-cellHeight12; y < windowHeight+cellHeight12; y += cellHeight12) {
 
@@ -198,10 +199,12 @@ bool PianoRoll::tick() {
     //handleInput(e);
     if(refreshGrid) {
         RenderGridTexture();  
+
         RenderKeys();
+        RenderNotes();  
         refreshGrid = false;
 
-        RenderNotes()  ;     
+   
         RenderRoll();
 
     }
@@ -336,6 +339,9 @@ void PianoRoll::handleInput(SDL_Event& e) {
                     if(hoveredNote == -1) {
                         createNote(getHoveredTime(), getHoveredCell());
                     } else {
+                        notesPerOctave = region.notes[hoveredNote].temperament;
+                        UpdateGrid();
+                        Scroll();
                         std::cout<<"movingnote = hoverednote"<<std::endl;
                         movingNote = hoveredNote;
                     }
@@ -425,6 +431,7 @@ void PianoRoll::RenderNotes() {
     SDL_SetRenderTarget(renderer, NotesTexture);
     SDL_SetRenderDrawColor(renderer,0,0,0,0);
     SDL_RenderClear(renderer);
+
     for(int i = 0; i<region.notes.size(); i++) {
         Note& note = region.notes[i];
             std::cout<<"note length: "<<getNoteEnd(note)<<std::endl;
@@ -447,6 +454,7 @@ void PianoRoll::RenderNotes() {
             std::cout<<"rendered note with num "<<note.num<<" at "<<note.start*barWidth<<std::endl;
 
     }
+
     SDL_SetRenderTarget(renderer, NULL);
 SDL_RenderTexture(renderer, NotesTexture, NULL, NULL);
 

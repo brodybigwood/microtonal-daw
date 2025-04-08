@@ -1,4 +1,0 @@
-/mnt/2TB/home/brody/projects/daw/build/CMakeFiles/DAW.dir
-/mnt/2TB/home/brody/projects/daw/build/CMakeFiles/CopyAssets.dir
-/mnt/2TB/home/brody/projects/daw/build/CMakeFiles/edit_cache.dir
-/mnt/2TB/home/brody/projects/daw/build/CMakeFiles/rebuild_cache.dir
