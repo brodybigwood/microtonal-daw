@@ -9,19 +9,19 @@ Home::Home(WindowHandler* windowHandler) {
 
     renderer = SDL_CreateRenderer(window, NULL);
     
+    controls = new ControlArea(controlsHeight, windowWidth, renderer);
 
 
+    Button playButton("edit region 1", 250,controlsHeight+50, 50,50,renderer);
 
-    Button playButton("edit region 1", 250,50, 50,50,renderer);
-
-    Button playButton2("edit region 2", 350,50, 50,50,renderer);
+    Button playButton2("edit region 2", 350,controlsHeight+50, 50,50,renderer);
 
     buttons.push_back(playButton);
     buttons.push_back(playButton2);
 
-    insts = new InstrumentList(windowHeight, renderer);
+    insts = new InstrumentList(controlsHeight, instWidth, windowHeight, renderer);
 
-
+    song = new SongRoll(instWidth, controlsHeight, windowWidth-instWidth, windowHeight-controlsHeight-mixerHeight, renderer);
 }
 
 
@@ -41,6 +41,8 @@ void Home::tick() {
         button.render(); 
     }
     insts->render();
+    controls->render();
+    song->render();
     SDL_RenderPresent(renderer);
 }
 

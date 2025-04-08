@@ -1,14 +1,14 @@
 #include <SDL3/SDL.h>
 #include <SDL_ttf.h>
 
-#ifndef CONTROLAREA_H
-#define CONTROLAREA_H
+#ifndef SONGROLL_H
+#define SONGROLL_H
 
-class ControlArea {
+class SongRoll {
 
     public:
-        ControlArea(int height, int width, SDL_Renderer* renderer);
-        ~ControlArea();
+    SongRoll(int x, int y, int width, int height, SDL_Renderer* renderer);
+        ~SongRoll();
         
         SDL_Renderer* renderer;
         int x = 0;

@@ -12,6 +12,7 @@ set(SOURCES
     src/WindowHandler.cpp
     src/Instrument.cpp
     src/InstrumentList.cpp
+    src/SongRoll.cpp
     
 )
 

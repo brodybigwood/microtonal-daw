@@ -10,12 +10,14 @@
 class InstrumentList {
 
     public:
-    InstrumentList(int height, SDL_Renderer* renderer);
+    InstrumentList(int y, int width, int height, SDL_Renderer* renderer);
         ~InstrumentList();
 
         int height;
 
-        int width = 200;
+        int width;
+
+        int y;
 
         int instrumentHeight = 50;
         

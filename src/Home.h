@@ -6,6 +6,8 @@
 #include <vector>
 #include "WindowHandler.h"
 #include "InstrumentList.h"
+#include "ControlArea.h"
+#include "SongRoll.h"
 
 #ifndef HOME_H
 #define HOME_H
@@ -18,6 +20,15 @@ class Home {
 
     int windowHeight = 1080;
     int windowWidth = 1920;
+
+    int controlsHeight = 50;
+
+    int instWidth = 200;
+
+    int mixerHeight = 200;
+
+    SongRoll* song;
+    
     InstrumentList* insts;
 
     Region midiRegion1;
@@ -41,6 +52,10 @@ Region midiRegion2;
         std::vector<Button> buttons;
 
         Button* hoveredButton = nullptr;
+
+        ControlArea* controls;
+
+
 };
 
 #endif
