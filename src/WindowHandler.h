@@ -4,22 +4,24 @@
 #define WINDOWHANDLER_H
 #include <vector>
 #include "PianoRoll.h"
-#include "Region.h"
+
 #include "Home.h"
 #include <thread>
 #include <algorithm>
+#include "Project.h"
 
 class WindowHandler {
     public:
     SDL_Window* focusedWindow;
 std::vector<PianoRoll*>* windows = new std::vector<PianoRoll*>();
 SDL_Event e;
-        WindowHandler();
+        WindowHandler(Project* project);
         ~WindowHandler();
 
         bool handleKeyboard();
         bool handleMouse();
 
+        Project* project;
 
         Home* home;
         PianoRoll* editor;

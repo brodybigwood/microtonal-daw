@@ -1,13 +1,13 @@
 
 #include <SDL_ttf.h>
-#include "Region.h"
-#include "Note.h"
+
 #include "Button.h"
 #include <vector>
 #include "WindowHandler.h"
 #include "InstrumentList.h"
 #include "ControlArea.h"
 #include "SongRoll.h"
+#include "Project.h"
 
 #ifndef HOME_H
 #define HOME_H
@@ -31,11 +31,12 @@ class Home {
     
     InstrumentList* insts;
 
-    Region midiRegion1;
-Region midiRegion2;
 
-        Home(WindowHandler* windowHandler);
+
+        Home(Project* project, WindowHandler* windowHandler);
         ~Home();
+
+        Project* project;
 
         WindowHandler* windowHandler;
         SDL_Window* window;

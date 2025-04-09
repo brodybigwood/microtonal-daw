@@ -1,11 +1,11 @@
 #include "WindowHandler.h"
 
-WindowHandler::WindowHandler() {
+WindowHandler::WindowHandler(Project* project) {
 
 
-    
+    this->project = project;
 
-    home = new Home(this);
+    home = new Home(project, this);
     
    
 

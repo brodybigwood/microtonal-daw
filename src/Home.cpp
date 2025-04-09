@@ -2,8 +2,8 @@
 
 
 
-Home::Home(WindowHandler* windowHandler) {
-
+Home::Home(Project* project, WindowHandler* windowHandler) {
+    this->project = project;
     this->windowHandler = windowHandler;
     window = SDL_CreateWindow("Piano Roll", windowWidth, windowHeight, SDL_WINDOW_RESIZABLE);
 
@@ -64,13 +64,13 @@ bool Home::handleInput(SDL_Event& e) {
                 std::cout<<"ss"<<std::endl;
                 if(hoveredButton != nullptr) {
                     if(hoveredButton->title == "edit region 1") {
-                        windowHandler->createPianoRoll(midiRegion1);
+                        windowHandler->createPianoRoll(project->midiRegion1);
                         hoveredButton->hovered = false;
                         hoveredButton = nullptr;
                         return true;
                     }
                     if(hoveredButton->title == "edit region 2") {
-                        windowHandler->createPianoRoll(midiRegion2);
+                        windowHandler->createPianoRoll(project->midiRegion2);
                         hoveredButton->hovered = false;
                         hoveredButton = nullptr;
                         return true;

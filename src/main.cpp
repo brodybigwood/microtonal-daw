@@ -1,18 +1,18 @@
 
 
 #include "WindowHandler.h"
-
+#include "Project.h"
 
 
 
 int main() {
 
-
+    Project* project = new Project();
     
 
-    WindowHandler handler;
+    WindowHandler gui(project);
 
-    handler.loop();
+    gui.loop();
 
 }
 

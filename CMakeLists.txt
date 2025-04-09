@@ -18,6 +18,8 @@ set(SOURCES
     src/SongRoll.cpp
     #src/Plugin.cpp
     src/styles.cpp
+    src/Project.cpp
+    src/MidiRouter.cpp
 )
 
 # Add an executable target
