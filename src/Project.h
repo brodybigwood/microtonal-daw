@@ -1,6 +1,8 @@
 #include "Region.h"
 #include "Note.h"
 #include "MidiRouter.h"
+#include <vector>
+#include "fract.h"
 
 #ifndef PROJECT_H
 #define PROJECT_H
@@ -16,12 +18,16 @@ class Project {
     MidiRouter router;
 
     float tempo = 120;
-    Region midiRegion1;
-Region midiRegion2;
 
 void load();
 
 void save();
+
+void createRegion(fract x, int y);
+
+float mouseX;
+float mouseY;
+
 };
 
 #endif

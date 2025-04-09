@@ -2,21 +2,30 @@
 #include <SDL_ttf.h>
 #include <cmath>
 #include "styles.h"
+#include "Project.h"
+#include <iostream>
+#include "WindowHandler.h"
 
 #ifndef SONGROLL_H
 #define SONGROLL_H
 
+class WindowHandler;  // forward declaration
+
+
 class SongRoll {
 
     public:
-    SongRoll(int x, int y, int width, int height, SDL_Renderer* renderer);
+    SongRoll(int x, int y, int width, int height, SDL_Renderer* renderer, Project* project, WindowHandler* windowHandler);
         ~SongRoll();
         
+        WindowHandler* windowHandler;
         SDL_Renderer* renderer;
         int x = 0;
         int y = 0;
         int width;
         int height;
+
+        Project* project;
 
         int cellHeight = 50;
         int cellWidth = 20;
@@ -25,8 +34,11 @@ class SongRoll {
 
         SDL_Texture* texture;
         SDL_Texture* gridTexture;
+        SDL_Texture* regionTexture;
 
         SDL_FRect dstRect;
+
+        SDL_FRect regionRect;
 
         float mouseX = 0;
         float mouseY = 0;
@@ -50,7 +62,16 @@ class SongRoll {
 
         void RenderGridTexture();
 
+        void renderRegions();
+        void renderRegion(int);
 
+        void getHoveredRegion();
+
+        int hoveredRegion = -1;
+
+        void moveMouse(float, float);
+
+        void clickMouse(SDL_Event& e);
 };
 
 #endif

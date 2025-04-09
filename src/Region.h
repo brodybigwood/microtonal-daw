@@ -12,16 +12,27 @@ class Region {
         
 
     public:
-        Region();
+        Region(fract startTime, int y);
         ~Region();
-        int size;
-        int effectiveSize = 0;
+
  std::vector<Note> notes; 
 
  void createNote(fract, fract);
 
  void sort();
 
+ fract startTime;
+
+ int y;
+
+ fract length = fract(4,1);
+
+ bool userSetRight = false;
+ bool userSetLeft = false;
+
+ void moveX(fract);
+ void moveY(int);
+ void resize(bool, fract);
 };
 
 

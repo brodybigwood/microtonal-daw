@@ -1,8 +1,10 @@
 #include "SongRoll.h"
 
 
-SongRoll::SongRoll(int x, int y, int width, int height, SDL_Renderer* renderer) {
+SongRoll::SongRoll(int x, int y, int width, int height, SDL_Renderer* renderer, Project* project, WindowHandler* windowHandler) {
 
+    this->windowHandler = windowHandler;
+    this->project = project;
     this->width = width;
     this->height = height;
     this->renderer = renderer;
@@ -12,6 +14,7 @@ SongRoll::SongRoll(int x, int y, int width, int height, SDL_Renderer* renderer) 
 
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
     gridTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
+    regionTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
 
     dstRect = {x, y, width, height};
 
@@ -22,6 +25,7 @@ SongRoll::SongRoll(int x, int y, int width, int height, SDL_Renderer* renderer) 
 
 void SongRoll::render() {
     RenderGridTexture();
+    renderRegions();
     SDL_SetRenderTarget(renderer,texture);
     SDL_SetRenderDrawColor(renderer, colors.background[0], colors.background[1], colors.background[2], colors.background[3]);
     SDL_RenderClear(renderer);
@@ -29,6 +33,7 @@ void SongRoll::render() {
     SDL_RenderTexture(renderer, texture, nullptr, &dstRect);
 
     SDL_RenderTexture(renderer,gridTexture,nullptr, &dstRect);
+    SDL_RenderTexture(renderer,regionTexture,nullptr, &dstRect);
 }
 
 
@@ -51,6 +56,7 @@ void SongRoll::toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar) {
 
 void SongRoll::handleInput(SDL_Event& e) {
     
+
     toggleKey(e, SDL_SCANCODE_LSHIFT, isShiftPressed);
     toggleKey(e, SDL_SCANCODE_LCTRL, isCtrlPressed);
     toggleKey(e, SDL_SCANCODE_LALT, isAltPressed);
@@ -88,30 +94,9 @@ void SongRoll::handleInput(SDL_Event& e) {
 
 
 
-        case SDL_EVENT_MOUSE_BUTTON_DOWN:
-            if (e.button.button == SDL_BUTTON_LEFT) {
-                lmb = true;
+        
 
-            }
-            if (e.button.button == SDL_BUTTON_RIGHT) {
-                rmb = true;
-            }
-            break;
-        case SDL_EVENT_MOUSE_BUTTON_UP:
-            if (e.button.button == SDL_BUTTON_LEFT) {
-                lmb = false;
-            }
-            if (e.button.button == SDL_BUTTON_RIGHT) {
-                rmb = false;
-            }
-            break;       
 
-        case SDL_EVENT_MOUSE_MOTION:
-            SDL_GetMouseState(&mouseX, &mouseY);
-
-            
-
-            break;
 
 
         // Optionally handle other events you might need:
@@ -147,4 +132,77 @@ void SongRoll::RenderGridTexture() {
     }
 
 
+}
+
+void SongRoll::renderRegions() {
+    for(size_t i = 0; i<project->regions.size(); i++) {
+        renderRegion(i);
+    }
+}
+
+void SongRoll::renderRegion(int r) {
+    if(hoveredRegion == r) {
+        SDL_SetRenderDrawColor(renderer, 90,90,100,127);
+    } else {
+        SDL_SetRenderDrawColor(renderer, 20,20,100,127);
+    }
+
+    Region region = project->regions[r];
+
+    float topLeftCornerX = region.startTime*barWidth;
+    float topLeftCornerY = region.y*cellHeight;
+    regionRect = {topLeftCornerX, topLeftCornerY, region.length*barWidth, cellHeight};
+    SDL_SetRenderTarget(renderer, regionTexture);
+
+    SDL_RenderFillRect(renderer, &regionRect);
+}
+
+void SongRoll::getHoveredRegion() {
+    for(size_t i = 0; i<project->regions.size(); i++) {
+        Region region = project->regions[i];
+        if(
+            mouseX > region.startTime*barWidth &&
+            mouseX < (region.length+region.startTime)*barWidth &&
+            mouseY > region.y*cellHeight &&
+            mouseY < (region.y+1) * cellHeight
+        ) {
+            hoveredRegion = i;
+            return;
+        } else {
+            hoveredRegion = -1;
+        }
+    }
+}
+
+
+void SongRoll::moveMouse(float x, float y) {
+    mouseX = x;
+    mouseY = y;
+    getHoveredRegion();
+}
+
+void SongRoll::clickMouse(SDL_Event& e) {
+    switch(e.type) {
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            if (e.button.button == SDL_BUTTON_LEFT) {
+                lmb = true;
+                if(hoveredRegion != -1) {
+                    windowHandler->createPianoRoll(project->regions[hoveredRegion]);
+                    hoveredRegion = -1;
+                }
+
+            }
+            if (e.button.button == SDL_BUTTON_RIGHT) {
+                rmb = true;
+            }
+            break;
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+            if (e.button.button == SDL_BUTTON_LEFT) {
+                lmb = false;
+            }
+            if (e.button.button == SDL_BUTTON_RIGHT) {
+                rmb = false;
+            }
+            break;       
+    }
 }

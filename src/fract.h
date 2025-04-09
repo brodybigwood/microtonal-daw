@@ -45,6 +45,19 @@ struct fract {
         return result;
     }
 
+    fract operator-(const fract& other) const {
+        // Find common denominator
+        int common_den = den * other.den;
+
+        // Adjust numerators to have the common denominator
+        int new_num = (num * other.den) - (other.num * den);
+
+        // Return the simplified result
+        fract result(new_num, common_den);
+        result.simplify();
+        return result;
+    }
+
     // Overload the '+' operator to add a fract and a double
     fract operator+(double value) const {
         // Convert fract to double and add to the given value

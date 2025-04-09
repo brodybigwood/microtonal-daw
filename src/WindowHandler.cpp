@@ -181,3 +181,4 @@ PianoRoll* WindowHandler::findWindow() {
     }
     return nullptr;
 }
+

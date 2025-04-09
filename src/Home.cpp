@@ -12,16 +12,17 @@ Home::Home(Project* project, WindowHandler* windowHandler) {
     controls = new ControlArea(controlsHeight, windowWidth, renderer);
 
 
-    Button playButton("edit region 1", 250,controlsHeight+50, 50,50,renderer);
 
-    Button playButton2("edit region 2", 350,controlsHeight+50, 50,50,renderer);
-
-    buttons.push_back(playButton);
-    buttons.push_back(playButton2);
 
     insts = new InstrumentList(controlsHeight, instWidth, windowHeight, renderer);
 
-    song = new SongRoll(instWidth, controlsHeight, windowWidth-instWidth, windowHeight-controlsHeight-mixerHeight, renderer);
+    song = new SongRoll(
+        instWidth, controlsHeight, 
+        windowWidth-instWidth, 
+        windowHeight-controlsHeight-mixerHeight, 
+        renderer, 
+        project, 
+        windowHandler);
 }
 
 
@@ -50,27 +51,34 @@ void Home::tick() {
 }
 
 bool Home::handleInput(SDL_Event& e) {
-    
+
+
     switch(e.type) {
         
         case SDL_EVENT_MOUSE_MOTION:
             SDL_GetMouseState(&mouseX, &mouseY);
+            song->moveMouse(mouseX-instWidth,mouseY-controlsHeight);
             hoverButtons();
             return true;
             break;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
-        std::cout<<"ss"<<std::endl;
+        if(mouseOnSong()) {
+            song->clickMouse(e);
+            return true;
+            break;
+        } 
             if(e.button.button == SDL_BUTTON_LEFT) {
                 std::cout<<"ss"<<std::endl;
                 if(hoveredButton != nullptr) {
                     if(hoveredButton->title == "edit region 1") {
-                        windowHandler->createPianoRoll(project->midiRegion1);
+                        windowHandler->createPianoRoll(project->regions[0]);
                         hoveredButton->hovered = false;
                         hoveredButton = nullptr;
                         return true;
                     }
                     if(hoveredButton->title == "edit region 2") {
-                        windowHandler->createPianoRoll(project->midiRegion2);
+                        //windowHandler->createPianoRoll(project->regions[1]);
+                        project->createRegion(fract(5,4),7);
                         hoveredButton->hovered = false;
                         hoveredButton = nullptr;
                         return true;
@@ -82,11 +90,12 @@ bool Home::handleInput(SDL_Event& e) {
 
 
 
-        default:
-        return false;
+
 
                 
             }
+            default:
+            return false;
     }
 
 }
@@ -110,4 +119,20 @@ void Home::hoverButtons() {
         }
     }
 
+}
+
+
+
+bool Home::mouseOnSong() {
+    if(
+        mouseX > instWidth &&
+        mouseX < windowWidth &&
+        mouseY > controlsHeight &&
+        mouseY < windowHeight-mixerHeight
+    ) {
+        return true;
+    } else {
+        return false;
+    }
+    
 }

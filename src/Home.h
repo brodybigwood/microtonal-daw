@@ -56,6 +56,8 @@ class Home {
 
         ControlArea* controls;
 
+        bool mouseOnSong();
+
 
 };
 
