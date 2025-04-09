@@ -393,10 +393,10 @@ void PianoRoll::handleInput(SDL_Event& e) {
 
                 if(std::abs(dX) >= cellWidth) {
                     moveNote(movingNote, std::ceil(dirX*dX)/dX,0);
-                    last_lmb_x += dX;
+                    last_lmb_x += cellWidth*dirX;
                 } if (std::abs(dY) >= cellHeight) {
                     moveNote(movingNote, 0,std::ceil(dirY*dY)/dY);
-                    last_lmb_y += dY;
+                    last_lmb_y += cellHeight*dirY;
                 }
                 
 
