@@ -28,6 +28,8 @@
     <FILE id="gOeua4" name="Note.h" compile="0" resource="0" file="src/Note.h"/>
     <FILE id="LxQdBO" name="PianoRoll.cpp" compile="1" resource="0" file="src/PianoRoll.cpp"/>
     <FILE id="sfjbvZ" name="PianoRoll.h" compile="0" resource="0" file="src/PianoRoll.h"/>
+    <FILE id="XwJ3mP" name="Playhead.cpp" compile="1" resource="0" file="src/Playhead.cpp"/>
+    <FILE id="yvHfF2" name="Playhead.h" compile="0" resource="0" file="src/Playhead.h"/>
     <FILE id="ToCBKC" name="Plugin.cpp" compile="1" resource="0" file="src/Plugin.cpp"/>
     <FILE id="rJUKXQ" name="Plugin.h" compile="0" resource="0" file="src/Plugin.h"/>
     <FILE id="xG8IDl" name="Project.cpp" compile="1" resource="0" file="src/Project.cpp"/>

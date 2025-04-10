@@ -33,19 +33,25 @@ void play();
 
 void stop();
 
-fract lastTime = fract(0,1);
+
+fract playHeadStart;
+fract playHeadPos = fract(0,1);
+
+
+tracktion_engine::Engine engine { ProjectInfo::projectName };
+
+tracktion_engine::Edit* edit;
+
+enum class PlayState {
+    Play,
+    Stop
+};
+
+PlayState playState { PlayState::Stop };
+
+
 
 private:
-    tracktion_engine::Engine engine { ProjectInfo::projectName };
-
-    tracktion_engine::Edit* edit;
-
-    enum class PlayState {
-        Play,
-        Stop
-    };
-
-    PlayState playState { PlayState::Stop };
 
 };
 

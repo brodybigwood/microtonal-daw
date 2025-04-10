@@ -5,6 +5,7 @@
 #include "Project.h"
 #include <iostream>
 #include "WindowHandler.h"
+#include "Playhead.h"
 
 #ifndef SONGROLL_H
 #define SONGROLL_H
@@ -35,6 +36,7 @@ class SongRoll {
         SDL_Texture* texture;
         SDL_Texture* gridTexture;
         SDL_Texture* regionTexture;
+        SDL_Texture* playHeadTexture;
 
         SDL_FRect dstRect;
 
@@ -72,6 +74,8 @@ class SongRoll {
         void moveMouse(float, float);
 
         void clickMouse(SDL_Event& e);
+
+        Playhead* playHead;
 };
 
 #endif

@@ -15,17 +15,20 @@ SongRoll::SongRoll(int x, int y, int width, int height, SDL_Renderer* renderer, 
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
     gridTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
     regionTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
+    playHeadTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
 
     dstRect = {x, y, width, height};
 
 
-
+    playHead = new Playhead(renderer, playHeadTexture, project, windowHandler);
     
 }
 
 void SongRoll::render() {
     RenderGridTexture();
     renderRegions();
+    playHead->render(barWidth);
+    
     SDL_SetRenderTarget(renderer,texture);
     SDL_SetRenderDrawColor(renderer, colors.background[0], colors.background[1], colors.background[2], colors.background[3]);
     SDL_RenderClear(renderer);
@@ -34,6 +37,8 @@ void SongRoll::render() {
 
     SDL_RenderTexture(renderer,gridTexture,nullptr, &dstRect);
     SDL_RenderTexture(renderer,regionTexture,nullptr, &dstRect);
+
+    SDL_RenderTexture(renderer,playHeadTexture,nullptr, &dstRect);
 }
 
 

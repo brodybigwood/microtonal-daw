@@ -39,6 +39,7 @@ void Project::createRegion(fract x, int y) {
 
 void Project::play() {
     if(playState == PlayState::Stop) {
+        playHeadStart = playHeadPos;
         playState = PlayState::Play;
         edit->getTransport().play(false);
     }

@@ -22,6 +22,7 @@ struct ColorCodes{
 
     uint8_t pianoSeparator[4];
     
+    uint8_t playHead[4];
 };
 
 extern int lineWidth;
