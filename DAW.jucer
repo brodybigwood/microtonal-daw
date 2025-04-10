@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<JUCERPROJECT id="f9pDuC" name="tracktion_juce" projectType="guiapp" useAppConfig="0"
+              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" cppLanguageStandard="20"
+              binaryDataNamespace="BinaryData" includeBinaryInJuceHeader="0">
+  <MAINGROUP id="Oh9tJ1" name="tracktion_juce">
+    <FILE id="rUOKSv" name="Arial.ttf" compile="0" resource="1" file="assets/fonts/Arial.ttf"/>
+  </MAINGROUP>
+  <MODULES>
+    <MODULE id="juce_audio_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_audio_devices" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_audio_formats" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_audio_processors" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_audio_utils" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_core" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_data_structures" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_dsp" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_events" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_graphics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_gui_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_gui_extra" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_osc" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="tracktion_engine" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="tracktion_graph" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+  </MODULES>
+  <JUCEOPTIONS JUCE_STRICT_REFCOUNTEDPOINTER="1"/>
+  <EXPORTFORMATS>
+    <LINUX_MAKE targetFolder="build" linuxExtraPkgConfig="sdl3 sdl3-ttf" enableGNUExtensions="0"
+                extraCompilerFlags="-I/usr/include/SDL3_ttf/">
+      <CONFIGURATIONS>
+        <CONFIGURATION isDebug="1" name="Debug" targetName="NewProject"/>
+        <CONFIGURATION isDebug="0" name="Release" targetName="NewProject"/>
+      </CONFIGURATIONS>
+      <MODULEPATHS>
+        <MODULEPATH id="juce_dsp" path="../../../../../../../home/brody/Desktop/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="../../../../../../../home/brody/Desktop/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_basics" path="../../../../../../../home/brody/Desktop/JUCE/modules"/>
+        <MODULEPATH id="juce_core" path="../../../../../../../home/brody/Desktop/JUCE/modules"/>
+        <MODULEPATH id="tracktion_engine" path="submodules/tracktion_engine/modules/tracktion_engine"/>
+        <MODULEPATH id="juce_audio_devices" path="../../../../../../../home/brody/Desktop/JUCE/modules"/>
+        <MODULEPATH id="juce_events" path="../../../../../../../home/brody/Desktop/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_utils" path="../../../../../../../home/brody/Desktop/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors" path="../../../../../../../home/brody/Desktop/JUCE/modules"/>
+        <MODULEPATH id="juce_gui_basics" path="../../../../../../../home/brody/Desktop/JUCE/modules"/>
+        <MODULEPATH id="juce_graphics" path="../../../../../../../home/brody/Desktop/JUCE/modules"/>
+        <MODULEPATH id="juce_data_structures" path="../../../../../../../home/brody/Desktop/JUCE/modules"/>
+        <MODULEPATH id="juce_osc" path="../../../../../../../home/brody/Desktop/JUCE/modules"/>
+        <MODULEPATH id="juce_gui_extra" path="../../../../../../../home/brody/Desktop/JUCE/modules"/>
+        <MODULEPATH id="tracktion_graph" path="submodules/tracktion_engine/modules"/>
+      </MODULEPATHS>
+    </LINUX_MAKE>
+  </EXPORTFORMATS>
+</JUCERPROJECT>

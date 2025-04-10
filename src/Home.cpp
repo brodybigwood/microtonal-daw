@@ -5,6 +5,9 @@
 Home::Home(Project* project, WindowHandler* windowHandler) {
     this->project = project;
     this->windowHandler = windowHandler;
+    
+    std::cout<<windowWidth<<std::endl;
+
     window = SDL_CreateWindow("Piano Roll", windowWidth, windowHeight, SDL_WINDOW_RESIZABLE);
 
     renderer = SDL_CreateRenderer(window, NULL);

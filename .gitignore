@@ -1,4 +1,4 @@
-build/
-lib/
-lib/vst3sdk
+build/build/
 old-html/
+submodules/tracktion_engine/*
+!submodules/tracktion_engine/.git

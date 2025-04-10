@@ -21,8 +21,11 @@ WindowHandler::~WindowHandler() {
 void WindowHandler::createPianoRoll(Region& region) {
     std::cout<<"creating"<<std::endl;
     editor = new PianoRoll(800, 600, region);
+    
     SDL_SetWindowParent(editor->window, home->window); 
+    
     windows->push_back(editor);
+    
 }
 
 void WindowHandler::loop() {
