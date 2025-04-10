@@ -1,17 +1,23 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "WindowHandler.h"
+#include "Project.h"
+#include <juce_core/juce_core.h>
+#include <juce_gui_basics/juce_gui_basics.h>
 
+#include <iostream>
+//#include "vars.h"
 //==============================================================================
 /*
     This component lives inside our window, and this is where you should put all
     your controls and content.
 */
-class MainComponent  : public juce::AudioAppComponent
+class MainComponent  : public juce::AudioAppComponent, juce::Timer
 {
 public:
     //==============================================================================
-    MainComponent();
+    MainComponent(Project* project);
     ~MainComponent() override;
 
     //==============================================================================
@@ -23,6 +29,18 @@ public:
     void paint (juce::Graphics& g) override;
     void resized() override;
 
+    WindowHandler* gui;
+
+    Project* project;
+
+    void timerCallback() override {
+        if(!gui->tick()) {
+            juce::JUCEApplicationBase::getInstance()->quit();
+
+        }
+    }
+    
+
 private:
     //==============================================================================
     // Your private member variables go here...
@@ -30,3 +48,5 @@ private:
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };
+
+

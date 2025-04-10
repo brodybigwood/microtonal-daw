@@ -5,17 +5,24 @@
 Home::Home(Project* project, WindowHandler* windowHandler) {
     this->project = project;
     this->windowHandler = windowHandler;
+
+    this->window = windowHandler->mainWindow;
+    this->windowWidth = windowHandler->windowWidth;
+    this->windowHeight = windowHandler->windowHeight;
     
     std::cout<<windowWidth<<std::endl;
 
-    window = SDL_CreateWindow("Piano Roll", windowWidth, windowHeight, SDL_WINDOW_RESIZABLE);
 
     renderer = SDL_CreateRenderer(window, NULL);
     
     controls = new ControlArea(controlsHeight, windowWidth, renderer);
 
 
+    Button play("play", instWidth + controlsHeight/5, controlsHeight/5, controlsHeight/3, controlsHeight/3, renderer);
+    Button stop("stop", instWidth + 6*controlsHeight/5, controlsHeight/5, controlsHeight/3, controlsHeight/3, renderer);
 
+    buttons.push_back(play);
+    buttons.push_back(stop);
 
     insts = new InstrumentList(controlsHeight, instWidth, windowHeight, renderer);
 
@@ -36,10 +43,11 @@ Home::~Home() {
 }
 
 void Home::tick() {
+    //std::cout<<"tickingnging"<<std::endl;
     SDL_SetRenderDrawColor(renderer, 100,100,100,255);
-    
+    //std::cout<<"tickingnging"<<std::endl;
     SDL_RenderClear(renderer);
-
+    //std::cout<<"tickingnging"<<std::endl;
 
     insts->render();
     controls->render();
@@ -49,7 +57,7 @@ void Home::tick() {
         Button& button = buttons[i];
         button.render(); 
     }
-    
+
     SDL_RenderPresent(renderer);
 }
 
@@ -73,15 +81,15 @@ bool Home::handleInput(SDL_Event& e) {
             if(e.button.button == SDL_BUTTON_LEFT) {
                 std::cout<<"ss"<<std::endl;
                 if(hoveredButton != nullptr) {
-                    if(hoveredButton->title == "edit region 1") {
-                        windowHandler->createPianoRoll(project->regions[0]);
+                    if(hoveredButton->title == "play") {
+                        project->play();
                         hoveredButton->hovered = false;
                         hoveredButton = nullptr;
                         return true;
                     }
-                    if(hoveredButton->title == "edit region 2") {
+                    if(hoveredButton->title == "stop") {
                         //windowHandler->createPianoRoll(project->regions[1]);
-                        project->createRegion(fract(5,4),7);
+                        project->stop();
                         hoveredButton->hovered = false;
                         hoveredButton = nullptr;
                         return true;

@@ -12,7 +12,7 @@ Project::Project(std::string filepath) {
         }
 
         
-
+        edit = new tracktion_engine::Edit { engine, tracktion_engine::Edit::EditRole::forEditing};
 
 }
 
@@ -35,4 +35,18 @@ void Project::save() {
 void Project::createRegion(fract x, int y) {
     Region region(x, y);
     regions.push_back(region);
+}
+
+void Project::play() {
+    if(playState == PlayState::Stop) {
+        playState = PlayState::Play;
+        edit->getTransport().play(false);
+    }
+}
+
+void Project::stop() {
+    if(playState == PlayState::Play) {
+        playState = PlayState::Stop;
+        edit->getTransport().stop(true, false);
+    }
 }

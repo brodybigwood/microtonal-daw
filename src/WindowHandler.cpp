@@ -1,19 +1,27 @@
 #include "WindowHandler.h"
+#include <X11/Xlib.h>
 
 WindowHandler::WindowHandler(Project* project) {
 
-
-    this->project = project;
-
-    home = new Home(project, this);
-    
-   
+    SDL_SetHint(SDL_HINT_APP_NAME, "EDITOR");
+    SDL_SetHint(SDL_HINT_APP_ID, "daw.editor");
 
     SDL_Init(SDL_INIT_VIDEO);
     TTF_Init();
 
+    this->project = project;
+    
+    mainWindow = SDL_CreateWindow("Piano Roll", windowWidth, windowHeight, SDL_WINDOW_RESIZABLE);
+
+    home = new Home(project, this);
+    
+    lastTime = SDL_GetTicks();
+
+
 
 }
+
+
 WindowHandler::~WindowHandler() {
 
 }
@@ -28,29 +36,20 @@ void WindowHandler::createPianoRoll(Region& region) {
     
 }
 
-void WindowHandler::loop() {
-   double fps = 60;
+bool WindowHandler::tick() {
+
+
     
-    double frameTime = 1000/fps;   
-
-
-    Uint32 lastTime = SDL_GetTicks();
 
 
     bool running = true;
 
-    bool usingApp;
 
 
-
-
-
-    while(running) {
                 
         double timeSinceLastFrame = double(SDL_GetTicks())-double(lastTime);
         if(timeSinceLastFrame >= frameTime) {   
             lastTime = double(SDL_GetTicks())-frameTime;
-
             home->tick();
             for(int i = windows->size() - 1; i >= 0; --i) {
 
@@ -122,13 +121,7 @@ void WindowHandler::loop() {
 
 
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-
-
-    }
-    std::cout<<"quitting"<<std::endl;
-    SDL_Quit();
-    TTF_Quit();
+        return running;
 }
 
 

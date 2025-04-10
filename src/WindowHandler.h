@@ -26,11 +26,21 @@ SDL_Event e;
         Home* home;
         PianoRoll* editor;
         PianoRoll* findWindow();
-        void loop();
+        bool tick();
 
         void createPianoRoll(Region&);
 
 
+        Uint32 lastTime;
+
+        double fps = 60;
+    
+        double frameTime = 1000/fps;   
+    
+        SDL_Window* mainWindow;
+
+        int windowWidth = 1920;
+        int windowHeight = 1080;
 
 
 };
