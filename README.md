@@ -1,15 +1,11 @@
 # microtonal-midi
 
 
+Install JUCE & vst3sdk
 Install SDL3/SDL_TTF
 
-clone traktion engine and juce inside, then link in cmakelists
-install juce
+git clone --recursive https://github.com/brodybigwood/microtonal-midi.git
 
-Install vst3sdk and link in cmakelists
-
-mkdir build
-cd build
-cmake ..
-make 
-./DAW
+cd build 
+make
+./build/DAW/NewProject
