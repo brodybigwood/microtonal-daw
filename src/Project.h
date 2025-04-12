@@ -4,6 +4,7 @@
 #include <vector>
 #include "fract.h"
 #include <JuceHeader.h>
+#include "Instrument.h"
 
 #ifndef PROJECT_H
 #define PROJECT_H
@@ -32,6 +33,8 @@ float mouseY;
 void play();
 
 void stop();
+
+std::vector<Instrument> instruments;
 
 
 fract playHeadStart;

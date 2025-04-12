@@ -5,3 +5,4 @@ Instrument::Instrument() {
 Instrument::~Instrument() {
 
 }
+

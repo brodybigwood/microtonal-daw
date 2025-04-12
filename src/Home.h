@@ -42,6 +42,8 @@ class Home {
         SDL_Window* window;
         SDL_Renderer* renderer;
 
+
+
         void tick();
 
         bool handleInput(SDL_Event& e);
@@ -59,6 +61,7 @@ class Home {
         bool mouseOnSong();
 
 
+        bool mouseOnInst();
 
 };
 

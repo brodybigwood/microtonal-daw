@@ -3,6 +3,7 @@
 #include "Instrument.h"
 #include <vector>
 #include <iostream>
+#include "Project.h"
 
 #ifndef INSTRUMENTLIST_H
 #define INSTRUMENTLIST_H
@@ -10,8 +11,10 @@
 class InstrumentList {
 
     public:
-    InstrumentList(int y, int width, int height, SDL_Renderer* renderer);
+    InstrumentList(int y, int width, int height, SDL_Renderer* renderer, Project* project);
         ~InstrumentList();
+
+        Project* project;
 
         int height;
 
@@ -30,9 +33,20 @@ class InstrumentList {
 
         SDL_FRect dstRect;
 
-        std::vector<Instrument*> instruments;
-
         void renderInstrument(int i);
+
+        int hoveredInstrument = -1;
+
+        void moveMouse(float, float);
+
+        void clickMouse(SDL_Event& e);
+
+        float mouseX;
+        float mouseY;
+
+        bool lmb, rmb;
+
+        void getHoveredInstrument();
 };
 
 #endif

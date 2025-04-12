@@ -24,7 +24,7 @@ Home::Home(Project* project, WindowHandler* windowHandler) {
     buttons.push_back(play);
     buttons.push_back(stop);
 
-    insts = new InstrumentList(controlsHeight, instWidth, windowHeight, renderer);
+    insts = new InstrumentList(controlsHeight, instWidth, windowHeight-mixerHeight, renderer, project);
 
     song = new SongRoll(
         instWidth, controlsHeight, 
@@ -69,12 +69,18 @@ bool Home::handleInput(SDL_Event& e) {
         case SDL_EVENT_MOUSE_MOTION:
             SDL_GetMouseState(&mouseX, &mouseY);
             song->moveMouse(mouseX-instWidth,mouseY-controlsHeight);
+            insts->moveMouse(mouseX,mouseY-controlsHeight);
             hoverButtons();
             return true;
             break;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         if(mouseOnSong()) {
             song->clickMouse(e);
+            return true;
+            break;
+        } 
+        if(mouseOnInst()) {
+            insts->clickMouse(e);
             return true;
             break;
         } 
@@ -138,6 +144,21 @@ bool Home::mouseOnSong() {
     if(
         mouseX > instWidth &&
         mouseX < windowWidth &&
+        mouseY > controlsHeight &&
+        mouseY < windowHeight-mixerHeight
+    ) {
+        return true;
+    } else {
+        return false;
+    }
+    
+}
+
+
+bool Home::mouseOnInst() {
+    if(
+        mouseX > 0 &&
+        mouseX < instWidth &&
         mouseY > controlsHeight &&
         mouseY < windowHeight-mixerHeight
     ) {

@@ -10,8 +10,11 @@ Project::Project(std::string filepath) {
             Region midiRegion(pos, i);
             regions.push_back(midiRegion);
         }
+        for(size_t i = 0; i<5; i++) {
 
-        
+            Instrument instrument;
+            instruments.push_back(instrument);
+        }   
         edit = new tracktion_engine::Edit { engine, tracktion_engine::Edit::EditRole::forEditing};
 
 }
@@ -49,5 +52,8 @@ void Project::stop() {
     if(playState == PlayState::Play) {
         playState = PlayState::Stop;
         edit->getTransport().stop(true, false);
+        tracktion::core::TimePosition transPos = tracktion::core::toPosition(tracktion::core::operator""_td(static_cast<long double>(static_cast<double>(playHeadStart))));
+
+        edit->getTransport().setPosition(transPos);
     }
 }
