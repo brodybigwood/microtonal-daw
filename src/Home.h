@@ -8,6 +8,7 @@
 #include "ControlArea.h"
 #include "SongRoll.h"
 #include "Project.h"
+#include "InstrumentMenu.h"
 
 #ifndef HOME_H
 #define HOME_H
@@ -27,6 +28,8 @@ class Home {
 
     int mixerHeight = 200;
 
+    int instMenuWidth = 200;
+
     SongRoll* song;
     
     InstrumentList* insts;
@@ -42,7 +45,9 @@ class Home {
         SDL_Window* window;
         SDL_Renderer* renderer;
 
+        SDL_Texture* instrumentMenuTexture;
 
+        InstrumentMenu* instrumentMenu;
 
         void tick();
 
@@ -62,6 +67,8 @@ class Home {
 
 
         bool mouseOnInst();
+
+        bool mouseOnEditor();
 
 };
 

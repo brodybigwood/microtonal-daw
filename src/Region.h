@@ -2,6 +2,9 @@
 #include <vector>
 #include "Note.h"
 #include "fract.h"
+#include <SDL3/SDL.h>
+#include <SDL_ttf.h>
+#include <string>
 
 #ifndef REGION_H
 #define REGION_H
@@ -12,10 +15,19 @@ class Region {
         
 
     public:
-        Region(fract startTime, int y);
+        Region(fract startTime, float y);
         ~Region();
 
+        std::string name = "MIDI Region FX Rack";
+
+        std::vector<int> outputs;
+        std::string outputType = "Output to Instruments:";
+
+
  std::vector<Note> notes; 
+
+
+
 
  void createNote(fract, fract);
 
@@ -23,7 +35,7 @@ class Region {
 
  fract startTime;
 
- int y;
+ float y;
 
  fract length = fract(4,1);
 
@@ -33,6 +45,11 @@ class Region {
  void moveX(fract);
  void moveY(int);
  void resize(bool, fract);
+
+
+
+
+
 };
 
 

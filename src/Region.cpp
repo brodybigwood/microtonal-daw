@@ -1,9 +1,12 @@
 #include "Region.h"
 
 
-Region::Region(fract startTime, int y) {
+Region::Region(fract startTime, float y) {
     this->startTime = startTime;
     this-> y = y;
+
+
+
 }
 
 Region::~Region() {
@@ -29,3 +32,4 @@ void Region::resize(bool rightSide, fract dS) {
         startTime = startTime + dS;
     }
 }
+

@@ -17,6 +17,7 @@ Home::Home(Project* project, WindowHandler* windowHandler) {
     
     controls = new ControlArea(controlsHeight, windowWidth, renderer);
 
+    instrumentMenuTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, instMenuWidth, windowHeight-mixerHeight-controlsHeight);
 
     Button play("play", instWidth + controlsHeight/5, controlsHeight/5, controlsHeight/3, controlsHeight/3, renderer);
     Button stop("stop", instWidth + 6*controlsHeight/5, controlsHeight/5, controlsHeight/3, controlsHeight/3, renderer);
@@ -28,11 +29,13 @@ Home::Home(Project* project, WindowHandler* windowHandler) {
 
     song = new SongRoll(
         instWidth, controlsHeight, 
-        windowWidth-instWidth, 
+        windowWidth-instWidth-instMenuWidth, 
         windowHeight-controlsHeight-mixerHeight, 
         renderer, 
         project, 
         windowHandler);
+
+        instrumentMenu = new InstrumentMenu(instrumentMenuTexture, renderer, windowWidth-instMenuWidth, controlsHeight, project);
 }
 
 
@@ -52,6 +55,7 @@ void Home::tick() {
     insts->render();
     controls->render();
     song->render();
+    instrumentMenu->render();
 
     for(size_t i = 0; i<buttons.size(); i++) {
         Button& button = buttons[i];
@@ -70,6 +74,7 @@ bool Home::handleInput(SDL_Event& e) {
             SDL_GetMouseState(&mouseX, &mouseY);
             song->moveMouse(mouseX-instWidth,mouseY-controlsHeight);
             insts->moveMouse(mouseX,mouseY-controlsHeight);
+            instrumentMenu->moveMouse(mouseX-instWidth-windowWidth+instMenuWidth ,mouseY-controlsHeight);
             hoverButtons();
             return true;
             break;
@@ -81,6 +86,11 @@ bool Home::handleInput(SDL_Event& e) {
         } 
         if(mouseOnInst()) {
             insts->clickMouse(e);
+            return true;
+            break;
+        } 
+        if(mouseOnEditor()) {
+            instrumentMenu->clickMouse(e);
             return true;
             break;
         } 
@@ -159,6 +169,20 @@ bool Home::mouseOnInst() {
     if(
         mouseX > 0 &&
         mouseX < instWidth &&
+        mouseY > controlsHeight &&
+        mouseY < windowHeight-mixerHeight
+    ) {
+        return true;
+    } else {
+        return false;
+    }
+    
+}
+
+bool Home::mouseOnEditor() {
+    if(
+        mouseX > windowWidth-instMenuWidth &&
+        mouseX < windowWidth &&
         mouseY > controlsHeight &&
         mouseY < windowHeight-mixerHeight
     ) {

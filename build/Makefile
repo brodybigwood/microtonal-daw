@@ -77,6 +77,7 @@ OBJECTS_APP := \
   $(JUCE_OBJDIR)/Home_dfbfc3ee.o \
   $(JUCE_OBJDIR)/Instrument_d18fa376.o \
   $(JUCE_OBJDIR)/InstrumentList_e0baf0b4.o \
+  $(JUCE_OBJDIR)/InstrumentMenu_6c890cf5.o \
   $(JUCE_OBJDIR)/main_f85f73a8.o \
   $(JUCE_OBJDIR)/MainComponent_f71e895f.o \
   $(JUCE_OBJDIR)/MidiRouter_1d819fd9.o \
@@ -156,6 +157,11 @@ $(JUCE_OBJDIR)/Instrument_d18fa376.o: ../src/Instrument.cpp
 $(JUCE_OBJDIR)/InstrumentList_e0baf0b4.o: ../src/InstrumentList.cpp
 	-$(V_AT)mkdir -p $(@D)
 	@echo "Compiling InstrumentList.cpp"
+	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
+
+$(JUCE_OBJDIR)/InstrumentMenu_6c890cf5.o: ../src/InstrumentMenu.cpp
+	-$(V_AT)mkdir -p $(@D)
+	@echo "Compiling InstrumentMenu.cpp"
 	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
 
 $(JUCE_OBJDIR)/main_f85f73a8.o: ../src/main.cpp

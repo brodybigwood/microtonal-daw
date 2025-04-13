@@ -1,6 +1,7 @@
 #include <SDL3/SDL.h>
 #include <SDL_ttf.h>
-
+#include <string>
+#include <vector>
 
 
 #ifndef INSTRUMENT_H
@@ -12,6 +13,12 @@ class Instrument {
     Instrument();
 
         ~Instrument();
+
+
+        std::string name = "Instrument Rack";
+
+        std::vector<int> outputs;
+        std::string outputType = "Output to Mixer Tracks:";
 
 
 };

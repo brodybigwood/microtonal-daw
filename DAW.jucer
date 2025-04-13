@@ -19,6 +19,10 @@
           file="src/InstrumentList.cpp"/>
     <FILE id="k5KdmW" name="InstrumentList.h" compile="0" resource="0"
           file="src/InstrumentList.h"/>
+    <FILE id="hyqWaX" name="InstrumentMenu.cpp" compile="1" resource="0"
+          file="src/InstrumentMenu.cpp"/>
+    <FILE id="wEc3aX" name="InstrumentMenu.h" compile="0" resource="0"
+          file="src/InstrumentMenu.h"/>
     <FILE id="DCpbKz" name="main.cpp" compile="1" resource="0" file="src/main.cpp"/>
     <FILE id="gUmex7" name="MainComponent.cpp" compile="1" resource="0"
           file="src/MainComponent.cpp"/>

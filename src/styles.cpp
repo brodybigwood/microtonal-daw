@@ -2,8 +2,8 @@
 int lineWidth = 1;
 
 ColorCodes colors {
-    {66,84,95,255}, //bg
-    {46,64,75,255}, //grid
+    {84,82,82,255}, //bg
+    {111,155,166,127}, //grid
     {56,74,86,255}, //subgrid
 
     {200,255,211,255}, //note
@@ -19,7 +19,9 @@ ColorCodes colors {
 
     {50,66,76,255},
 
-    {255, 150, 150, 255}
+    {101, 182, 202, 255}, //playhead
+
+    {72, 77, 78, 255} //editor background
 };
 
 Cursors cursors{

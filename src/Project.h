@@ -5,6 +5,7 @@
 #include "fract.h"
 #include <JuceHeader.h>
 #include "Instrument.h"
+#include <iostream>
 
 #ifndef PROJECT_H
 #define PROJECT_H
@@ -15,7 +16,7 @@ class Project {
         ~Project();
 
     std::string filepath = "";
-    std::vector<Region> regions;
+
 
     MidiRouter router;
 
@@ -34,14 +35,28 @@ void play();
 
 void stop();
 
+std::vector<Region> regions;
 std::vector<Instrument> instruments;
+std::vector<Region> files;
+std::vector<Region> recordings;
+std::vector<Region> automations;
 
+struct element {
+    std::string type;
+    int index;
+};
+
+element* viewedElement;
+
+void setViewedElement(std::string type, int index);
 
 fract playHeadStart;
 fract playHeadPos = fract(0,1);
 
 
 tracktion_engine::Engine engine { ProjectInfo::projectName };
+
+
 
 tracktion_engine::Edit* edit;
 
@@ -52,7 +67,7 @@ enum class PlayState {
 
 PlayState playState { PlayState::Stop };
 
-
+void setTime(double);
 
 private:
 

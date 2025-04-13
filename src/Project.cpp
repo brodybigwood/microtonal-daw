@@ -16,7 +16,9 @@ Project::Project(std::string filepath) {
             instruments.push_back(instrument);
         }   
         edit = new tracktion_engine::Edit { engine, tracktion_engine::Edit::EditRole::forEditing};
+        setTime(0);
 
+        
 }
 
 Project::~Project() {
@@ -52,8 +54,19 @@ void Project::stop() {
     if(playState == PlayState::Play) {
         playState = PlayState::Stop;
         edit->getTransport().stop(true, false);
-        tracktion::core::TimePosition transPos = tracktion::core::toPosition(tracktion::core::operator""_td(static_cast<long double>(static_cast<double>(playHeadStart))));
-
-        edit->getTransport().setPosition(transPos);
+        setTime(playHeadStart);
     }
+}
+
+
+
+void Project::setViewedElement(std::string type, int index) {
+    viewedElement = new element(type, index);
+}
+
+
+void Project::setTime(double time) {
+    tracktion::core::TimePosition transPos = tracktion::core::toPosition(tracktion::core::operator""_td(static_cast<long double>(time)));
+
+    edit->getTransport().setPosition(transPos);
 }
