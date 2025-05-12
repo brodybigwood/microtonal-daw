@@ -9,6 +9,7 @@
 #include "SongRoll.h"
 #include "Project.h"
 #include "InstrumentMenu.h"
+#include "Instrument.h"
 
 #ifndef HOME_H
 #define HOME_H

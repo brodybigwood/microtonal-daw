@@ -104,7 +104,6 @@ bool Home::handleInput(SDL_Event& e) {
                         return true;
                     }
                     if(hoveredButton->title == "stop") {
-                        //windowHandler->createPianoRoll(project->regions[1]);
                         project->stop();
                         hoveredButton->hovered = false;
                         hoveredButton = nullptr;
@@ -153,7 +152,7 @@ void Home::hoverButtons() {
 bool Home::mouseOnSong() {
     if(
         mouseX > instWidth &&
-        mouseX < windowWidth &&
+        mouseX < windowWidth-instMenuWidth &&
         mouseY > controlsHeight &&
         mouseY < windowHeight-mixerHeight
     ) {
@@ -186,8 +185,10 @@ bool Home::mouseOnEditor() {
         mouseY > controlsHeight &&
         mouseY < windowHeight-mixerHeight
     ) {
+        DBG("mouse on editor");
         return true;
     } else {
+        DBG("mouse not on editor");
         return false;
     }
     

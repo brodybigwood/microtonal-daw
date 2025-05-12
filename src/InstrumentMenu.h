@@ -60,6 +60,10 @@ class InstrumentMenu {
 SDL_Surface* titleSurface;
 
 SDL_Surface* outputSurface;
+
+Instrument* instrument;
+
+void setInst(Instrument* instrument);
 };
 
 #endif

@@ -9,18 +9,25 @@
 #include "Project.h"
 
 //#include "vars.h"
-
+#include <thread>
 
 
 //==============================================================================
-MainComponent::MainComponent(Project* project)
+MainComponent::MainComponent(Project* project) : project(project)
 {
-
-    this->project = project;
-
-    gui = new WindowHandler(project);
+    
 
 
+
+
+
+
+    std::unique_ptr<std::thread> juceMessageThread;
+    juceMessageThread = std::make_unique<std::thread>([] {
+        //juce::MessageManager::getInstance()->runDispatchLoop();
+    });
+    setAudioChannels (0, 2); // no inputs, two outputs
+    gui = std::make_unique<WindowHandler>(project);
     startTimerHz(1000); // Calls timerCallback() 60 times per second
 
     // Some platforms require permissions to open input channels so request that here

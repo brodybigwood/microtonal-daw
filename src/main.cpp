@@ -12,6 +12,8 @@
 #include "Project.h"
 #include <JuceHeader.h>
 #include "MainComponent.h"
+#include <memory>
+#include <thread>
 //#include "vars.h"
 
 
@@ -35,7 +37,7 @@ public:
     {
 
         mainComponent = std::make_unique<MainComponent>(projectHolder);
-        
+
     }
 
     void shutdown() override

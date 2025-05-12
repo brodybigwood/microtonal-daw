@@ -7,13 +7,14 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <iostream>
+
 //#include "vars.h"
 //==============================================================================
 /*
     This component lives inside our window, and this is where you should put all
     your controls and content.
 */
-class MainComponent  : public juce::AudioAppComponent, juce::Timer
+class MainComponent  : public juce::AudioAppComponent, juce::Timer, public juce::Component
 {
 public:
     //==============================================================================
@@ -29,7 +30,8 @@ public:
     void paint (juce::Graphics& g) override;
     void resized() override;
 
-    WindowHandler* gui;
+    std::unique_ptr<WindowHandler> gui;  // Changed to unique_ptr
+    std::unique_ptr<juce::AudioProcessorEditor> pluginEditor;
 
     Project* project;
 

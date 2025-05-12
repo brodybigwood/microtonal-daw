@@ -112,7 +112,11 @@ void InstrumentMenu::render() {
 
 
 void InstrumentMenu::clickMouse(SDL_Event& e) {
+    DBG("clicked inst menu");
+    instrument = &(project->instruments[project->viewedElement->index]);
 
+
+    
 }
 
 void InstrumentMenu::moveMouse(float x, float y) {
@@ -121,3 +125,7 @@ void InstrumentMenu::moveMouse(float x, float y) {
     //getHoveredInstrument();
 }
 
+
+void InstrumentMenu::setInst(Instrument* instrument) {
+    this->instrument = instrument;
+}

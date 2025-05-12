@@ -4,19 +4,67 @@ Project::Project(std::string filepath) {
         this->filepath = filepath;
         load();
 
+        edit = new tracktion_engine::Edit { engine, tracktion_engine::Edit::EditRole::forEditing};
+        setTime(0);
+
+
+
+
+        juce::AudioDeviceManager::AudioDeviceSetup setup;
+        
+
+
+
+        setup.inputDeviceName = "";
+        setup.outputChannels.setRange(0, 2, true);
+        setup.inputChannels.clear();
+        setup.sampleRate = 44100.0;
+        setup.bufferSize = 256;
+
+
+        
+auto& types = deviceManager.getAvailableDeviceTypes();
+for (auto* type : types)
+{
+    DBG("Trying: " + type->getTypeName());
+    type->scanForDevices();
+    auto names = type->getDeviceNames();
+    for (const auto& name : names)
+    {
+        DBG("  Device: " + name);
+        setup.outputDeviceName = name;
+        auto err = deviceManager.setAudioDeviceSetup(setup, true);
+        DBG("  Result: " + err);
+        if(err.isEmpty()) {
+            break;
+        }
+    }
+}
+
+
+
+
+
+        for(size_t i = 0; i<5; i++) {
+
+            MixerTrack track(this);
+            tracks.push_back(track);
+        }  
+
+        for(size_t i = 0; i<1; i++) {
+
+            Instrument instrument(this);
+            instruments.push_back(instrument);
+        }   
+
+
         for(size_t i = 0; i<5; i++) {
 
             fract pos(0,1);
             Region midiRegion(pos, i);
             regions.push_back(midiRegion);
         }
-        for(size_t i = 0; i<5; i++) {
 
-            Instrument instrument;
-            instruments.push_back(instrument);
-        }   
-        edit = new tracktion_engine::Edit { engine, tracktion_engine::Edit::EditRole::forEditing};
-        setTime(0);
 
         
 }

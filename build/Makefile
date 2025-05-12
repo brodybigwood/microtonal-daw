@@ -39,7 +39,7 @@ ifeq ($(CONFIG),Debug)
     TARGET_ARCH := 
   endif
 
-  JUCE_CPPFLAGS := $(DEPFLAGS) "-DLINUX=1" "-DDEBUG=1" "-D_DEBUG=1" "-DJUCE_PROJUCER_VERSION=0x80006" "-DJUCE_MODULE_AVAILABLE_juce_audio_basics=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_devices=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_formats=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_processors=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_utils=1" "-DJUCE_MODULE_AVAILABLE_juce_core=1" "-DJUCE_MODULE_AVAILABLE_juce_data_structures=1" "-DJUCE_MODULE_AVAILABLE_juce_dsp=1" "-DJUCE_MODULE_AVAILABLE_juce_events=1" "-DJUCE_MODULE_AVAILABLE_juce_graphics=1" "-DJUCE_MODULE_AVAILABLE_juce_gui_basics=1" "-DJUCE_MODULE_AVAILABLE_juce_gui_extra=1" "-DJUCE_MODULE_AVAILABLE_juce_osc=1" "-DJUCE_MODULE_AVAILABLE_tracktion_engine=1" "-DJUCE_MODULE_AVAILABLE_tracktion_graph=1" "-DJUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1" "-DJUCE_STRICT_REFCOUNTEDPOINTER=1" "-DJUCE_STANDALONE_APPLICATION=1" "-DJUCER_LINUX_MAKE_59BC66E=1" "-DJUCE_APP_VERSION=1.0.0" "-DJUCE_APP_VERSION_HEX=0x10000" $(shell $(PKG_CONFIG) --cflags $(shell ($(PKG_CONFIG) --exists webkit2gtk-4.1 && echo webkit2gtk-4.1) || echo webkit2gtk-4.0) alsa freetype2 fontconfig libcurl gtk+-x11-3.0 sdl3 sdl3-ttf x11) -pthread -I../JuceLibraryCode -I/home/brody/Desktop/JUCE/modules -I../submodules/tracktion_engine/modules/tracktion_engine -I../submodules/tracktion_engine/modules $(CPPFLAGS)
+  JUCE_CPPFLAGS := $(DEPFLAGS) "-DLINUX=1" "-DDEBUG=1" "-D_DEBUG=1" "-DJUCE_PROJUCER_VERSION=0x80006" "-DJUCE_MODULE_AVAILABLE_juce_audio_basics=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_devices=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_formats=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_processors=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_utils=1" "-DJUCE_MODULE_AVAILABLE_juce_core=1" "-DJUCE_MODULE_AVAILABLE_juce_data_structures=1" "-DJUCE_MODULE_AVAILABLE_juce_dsp=1" "-DJUCE_MODULE_AVAILABLE_juce_events=1" "-DJUCE_MODULE_AVAILABLE_juce_graphics=1" "-DJUCE_MODULE_AVAILABLE_juce_gui_basics=1" "-DJUCE_MODULE_AVAILABLE_juce_gui_extra=1" "-DJUCE_MODULE_AVAILABLE_juce_osc=1" "-DJUCE_MODULE_AVAILABLE_tracktion_engine=1" "-DJUCE_MODULE_AVAILABLE_tracktion_graph=1" "-DJUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1" "-DJUCE_ASIO=1" "-DJUCE_ALSA=1" "-DJUCE_JACK=1" "-DJUCE_PLUGINHOST_VST=0" "-DJUCE_PLUGINHOST_VST3=1" "-DJUCE_PLUGINHOST_AU=0" "-DJUCE_PLUGINHOST_LADSPA=0" "-DJUCE_PLUGINHOST_LV2=0" "-DJUCE_PLUGINHOST_ARA=0" "-DJUCE_CUSTOM_VST3_SDK=1" "-DJUCE_STRICT_REFCOUNTEDPOINTER=1" "-DJUCE_STANDALONE_APPLICATION=1" "-DJUCER_LINUX_MAKE_59BC66E=1" "-DJUCE_APP_VERSION=1.0.0" "-DJUCE_APP_VERSION_HEX=0x10000" $(shell $(PKG_CONFIG) --cflags $(shell ($(PKG_CONFIG) --exists webkit2gtk-4.1 && echo webkit2gtk-4.1) || echo webkit2gtk-4.0) alsa freetype2 fontconfig libcurl gtk+-x11-3.0 sdl3 sdl3-ttf x11) -pthread -I/mnt/2TB/home/brody/projects/lib/VST_SDK/vst3sdk -I../JuceLibraryCode -I/home/brody/Desktop/JUCE/modules -I../submodules/tracktion_engine/modules/tracktion_engine -I../submodules/tracktion_engine/modules $(CPPFLAGS)
   JUCE_CPPFLAGS_APP :=  "-DJucePlugin_Build_VST=0" "-DJucePlugin_Build_VST3=0" "-DJucePlugin_Build_AU=0" "-DJucePlugin_Build_AUv3=0" "-DJucePlugin_Build_AAX=0" "-DJucePlugin_Build_Standalone=0" "-DJucePlugin_Build_Unity=0" "-DJucePlugin_Build_LV2=0"
   JUCE_TARGET_APP := NewProject
 
@@ -60,7 +60,7 @@ ifeq ($(CONFIG),Release)
     TARGET_ARCH := 
   endif
 
-  JUCE_CPPFLAGS := $(DEPFLAGS) "-DLINUX=1" "-DNDEBUG=1" "-DJUCE_PROJUCER_VERSION=0x80006" "-DJUCE_MODULE_AVAILABLE_juce_audio_basics=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_devices=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_formats=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_processors=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_utils=1" "-DJUCE_MODULE_AVAILABLE_juce_core=1" "-DJUCE_MODULE_AVAILABLE_juce_data_structures=1" "-DJUCE_MODULE_AVAILABLE_juce_dsp=1" "-DJUCE_MODULE_AVAILABLE_juce_events=1" "-DJUCE_MODULE_AVAILABLE_juce_graphics=1" "-DJUCE_MODULE_AVAILABLE_juce_gui_basics=1" "-DJUCE_MODULE_AVAILABLE_juce_gui_extra=1" "-DJUCE_MODULE_AVAILABLE_juce_osc=1" "-DJUCE_MODULE_AVAILABLE_tracktion_engine=1" "-DJUCE_MODULE_AVAILABLE_tracktion_graph=1" "-DJUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1" "-DJUCE_STRICT_REFCOUNTEDPOINTER=1" "-DJUCE_STANDALONE_APPLICATION=1" "-DJUCER_LINUX_MAKE_59BC66E=1" "-DJUCE_APP_VERSION=1.0.0" "-DJUCE_APP_VERSION_HEX=0x10000" $(shell $(PKG_CONFIG) --cflags $(shell ($(PKG_CONFIG) --exists webkit2gtk-4.1 && echo webkit2gtk-4.1) || echo webkit2gtk-4.0) alsa freetype2 fontconfig libcurl gtk+-x11-3.0 sdl3 sdl3-ttf x11) -pthread -I../JuceLibraryCode -I/home/brody/Desktop/JUCE/modules -I../submodules/tracktion_engine/modules/tracktion_engine -I../submodules/tracktion_engine/modules $(CPPFLAGS)
+  JUCE_CPPFLAGS := $(DEPFLAGS) "-DLINUX=1" "-DNDEBUG=1" "-DJUCE_PROJUCER_VERSION=0x80006" "-DJUCE_MODULE_AVAILABLE_juce_audio_basics=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_devices=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_formats=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_processors=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_utils=1" "-DJUCE_MODULE_AVAILABLE_juce_core=1" "-DJUCE_MODULE_AVAILABLE_juce_data_structures=1" "-DJUCE_MODULE_AVAILABLE_juce_dsp=1" "-DJUCE_MODULE_AVAILABLE_juce_events=1" "-DJUCE_MODULE_AVAILABLE_juce_graphics=1" "-DJUCE_MODULE_AVAILABLE_juce_gui_basics=1" "-DJUCE_MODULE_AVAILABLE_juce_gui_extra=1" "-DJUCE_MODULE_AVAILABLE_juce_osc=1" "-DJUCE_MODULE_AVAILABLE_tracktion_engine=1" "-DJUCE_MODULE_AVAILABLE_tracktion_graph=1" "-DJUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1" "-DJUCE_ASIO=1" "-DJUCE_ALSA=1" "-DJUCE_JACK=1" "-DJUCE_PLUGINHOST_VST=0" "-DJUCE_PLUGINHOST_VST3=1" "-DJUCE_PLUGINHOST_AU=0" "-DJUCE_PLUGINHOST_LADSPA=0" "-DJUCE_PLUGINHOST_LV2=0" "-DJUCE_PLUGINHOST_ARA=0" "-DJUCE_CUSTOM_VST3_SDK=1" "-DJUCE_STRICT_REFCOUNTEDPOINTER=1" "-DJUCE_STANDALONE_APPLICATION=1" "-DJUCER_LINUX_MAKE_59BC66E=1" "-DJUCE_APP_VERSION=1.0.0" "-DJUCE_APP_VERSION_HEX=0x10000" $(shell $(PKG_CONFIG) --cflags $(shell ($(PKG_CONFIG) --exists webkit2gtk-4.1 && echo webkit2gtk-4.1) || echo webkit2gtk-4.0) alsa freetype2 fontconfig libcurl gtk+-x11-3.0 sdl3 sdl3-ttf x11) -pthread -I/mnt/2TB/home/brody/projects/lib/VST_SDK/vst3sdk -I../JuceLibraryCode -I/home/brody/Desktop/JUCE/modules -I../submodules/tracktion_engine/modules/tracktion_engine -I../submodules/tracktion_engine/modules $(CPPFLAGS)
   JUCE_CPPFLAGS_APP :=  "-DJucePlugin_Build_VST=0" "-DJucePlugin_Build_VST3=0" "-DJucePlugin_Build_AU=0" "-DJucePlugin_Build_AUv3=0" "-DJucePlugin_Build_AAX=0" "-DJucePlugin_Build_Standalone=0" "-DJucePlugin_Build_Unity=0" "-DJucePlugin_Build_LV2=0"
   JUCE_TARGET_APP := NewProject
 
@@ -81,6 +81,7 @@ OBJECTS_APP := \
   $(JUCE_OBJDIR)/main_f85f73a8.o \
   $(JUCE_OBJDIR)/MainComponent_f71e895f.o \
   $(JUCE_OBJDIR)/MidiRouter_1d819fd9.o \
+  $(JUCE_OBJDIR)/MixerTrack_213fecd1.o \
   $(JUCE_OBJDIR)/Note_5af8bd81.o \
   $(JUCE_OBJDIR)/PianoRoll_e2495981.o \
   $(JUCE_OBJDIR)/Playhead_2aabcea3.o \
@@ -177,6 +178,11 @@ $(JUCE_OBJDIR)/MainComponent_f71e895f.o: ../src/MainComponent.cpp
 $(JUCE_OBJDIR)/MidiRouter_1d819fd9.o: ../src/MidiRouter.cpp
 	-$(V_AT)mkdir -p $(@D)
 	@echo "Compiling MidiRouter.cpp"
+	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
+
+$(JUCE_OBJDIR)/MixerTrack_213fecd1.o: ../src/MixerTrack.cpp
+	-$(V_AT)mkdir -p $(@D)
+	@echo "Compiling MixerTrack.cpp"
 	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
 
 $(JUCE_OBJDIR)/Note_5af8bd81.o: ../src/Note.cpp

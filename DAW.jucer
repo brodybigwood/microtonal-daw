@@ -28,6 +28,8 @@
           file="src/MainComponent.cpp"/>
     <FILE id="Z2nv8f" name="MidiRouter.cpp" compile="1" resource="0" file="src/MidiRouter.cpp"/>
     <FILE id="SVOtjY" name="MidiRouter.h" compile="0" resource="0" file="src/MidiRouter.h"/>
+    <FILE id="WyPfJ6" name="MixerTrack.cpp" compile="1" resource="0" file="src/MixerTrack.cpp"/>
+    <FILE id="kxT8XG" name="MixerTrack.h" compile="0" resource="0" file="src/MixerTrack.h"/>
     <FILE id="KIWxIB" name="Note.cpp" compile="1" resource="0" file="src/Note.cpp"/>
     <FILE id="gOeua4" name="Note.h" compile="0" resource="0" file="src/Note.h"/>
     <FILE id="LxQdBO" name="PianoRoll.cpp" compile="1" resource="0" file="src/PianoRoll.cpp"/>
@@ -66,7 +68,10 @@
     <MODULE id="tracktion_engine" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
     <MODULE id="tracktion_graph" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
   </MODULES>
-  <JUCEOPTIONS JUCE_STRICT_REFCOUNTEDPOINTER="1"/>
+  <JUCEOPTIONS JUCE_STRICT_REFCOUNTEDPOINTER="1" JUCE_PLUGINHOST_VST3="1" JUCE_PLUGINHOST_VST="0"
+               JUCE_CUSTOM_VST3_SDK="1" JUCE_PLUGINHOST_ARA="0" JUCE_PLUGINHOST_LV2="0"
+               JUCE_PLUGINHOST_LADSPA="0" JUCE_PLUGINHOST_AU="0" JUCE_ASIO="1"
+               JUCE_ALSA="1" JUCE_JACK="1"/>
   <EXPORTFORMATS>
     <LINUX_MAKE targetFolder="build" linuxExtraPkgConfig="sdl3 sdl3-ttf x11"
                 enableGNUExtensions="0" extraCompilerFlags="-I/usr/include/SDL3_ttf/&#10;-l/usr/include/X11/&#10;">

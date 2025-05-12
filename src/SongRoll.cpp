@@ -192,7 +192,7 @@ void SongRoll::clickMouse(SDL_Event& e) {
             if (e.button.button == SDL_BUTTON_LEFT) {
                 lmb = true;
                 if(hoveredRegion != -1) {
-                    //windowHandler->createPianoRoll(project->regions[hoveredRegion]);
+                    windowHandler->createPianoRoll(project->regions[hoveredRegion]);
                     project->setViewedElement("region", hoveredRegion);
                     hoveredRegion = -1;
                 }

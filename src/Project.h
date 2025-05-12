@@ -6,9 +6,12 @@
 #include <JuceHeader.h>
 #include "Instrument.h"
 #include <iostream>
+#include "MixerTrack.h"
 
 #ifndef PROJECT_H
 #define PROJECT_H
+
+class Instrument;
 
 class Project {
     public:
@@ -16,7 +19,7 @@ class Project {
         ~Project();
 
     std::string filepath = "";
-
+    juce::AudioDeviceManager deviceManager;
 
     MidiRouter router;
 
@@ -41,6 +44,8 @@ std::vector<Region> files;
 std::vector<Region> recordings;
 std::vector<Region> automations;
 
+std::vector<MixerTrack> tracks;
+
 struct element {
     std::string type;
     int index;
@@ -55,8 +60,6 @@ fract playHeadPos = fract(0,1);
 
 
 tracktion_engine::Engine engine { ProjectInfo::projectName };
-
-
 
 tracktion_engine::Edit* edit;
 
