@@ -1,5 +1,4 @@
 #include "PianoRoll.h"
-#include "BinaryData.h"
 
 #include <cmath>
 
@@ -86,14 +85,18 @@ void PianoRoll::RenderKeys() {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0); // Transparent
     SDL_RenderClear(renderer);
     SDL_Color textColor = {0, 0, 0, 255};
-    //font = TTF_OpenFont("assets/fonts/Arial.ttf", 12);
+
+
+    font = TTF_OpenFont("assets/fonts/Arial.ttf", 12);
+
+/*
     auto fontData = BinaryData::Arial_ttf;
     int fontSize = BinaryData::Arial_ttfSize;
     
     SDL_IOStream* rw = SDL_IOFromConstMem(fontData, fontSize);
     TTF_Font* font = TTF_OpenFontIO(rw, 1, 12);
     
-
+*/
 
 
 

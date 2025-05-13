@@ -1,0 +1,4 @@
+/home/brody/projects/daw/build/CMakeFiles/DAW.dir
+/home/brody/projects/daw/build/CMakeFiles/CopyAssets.dir
+/home/brody/projects/daw/build/CMakeFiles/edit_cache.dir
+/home/brody/projects/daw/build/CMakeFiles/rebuild_cache.dir

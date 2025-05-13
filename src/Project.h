@@ -3,7 +3,6 @@
 #include "MidiRouter.h"
 #include <vector>
 #include "fract.h"
-#include <JuceHeader.h>
 #include "Instrument.h"
 #include <iostream>
 #include "MixerTrack.h"
@@ -19,7 +18,6 @@ class Project {
         ~Project();
 
     std::string filepath = "";
-    juce::AudioDeviceManager deviceManager;
 
     MidiRouter router;
 
@@ -51,7 +49,7 @@ struct element {
     int index;
 };
 
-element* viewedElement;
+element* viewedElement = nullptr;
 
 void setViewedElement(std::string type, int index);
 
@@ -59,18 +57,12 @@ fract playHeadStart;
 fract playHeadPos = fract(0,1);
 
 
-tracktion_engine::Engine engine { ProjectInfo::projectName };
 
-tracktion_engine::Edit* edit;
-
-enum class PlayState {
-    Play,
-    Stop
-};
-
-PlayState playState { PlayState::Stop };
+bool isPlaying = false;
 
 void setTime(double);
+
+double timeSeconds = 0;
 
 private:
 

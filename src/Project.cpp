@@ -3,47 +3,7 @@
 Project::Project(std::string filepath) {
         this->filepath = filepath;
         load();
-
-        edit = new tracktion_engine::Edit { engine, tracktion_engine::Edit::EditRole::forEditing};
         setTime(0);
-
-
-
-
-        juce::AudioDeviceManager::AudioDeviceSetup setup;
-        
-
-
-
-        setup.inputDeviceName = "";
-        setup.outputChannels.setRange(0, 2, true);
-        setup.inputChannels.clear();
-        setup.sampleRate = 44100.0;
-        setup.bufferSize = 256;
-
-
-        
-auto& types = deviceManager.getAvailableDeviceTypes();
-for (auto* type : types)
-{
-    DBG("Trying: " + type->getTypeName());
-    type->scanForDevices();
-    auto names = type->getDeviceNames();
-    for (const auto& name : names)
-    {
-        DBG("  Device: " + name);
-        setup.outputDeviceName = name;
-        auto err = deviceManager.setAudioDeviceSetup(setup, true);
-        DBG("  Result: " + err);
-        if(err.isEmpty()) {
-            break;
-        }
-    }
-}
-
-
-
-
 
         for(size_t i = 0; i<5; i++) {
 
@@ -91,17 +51,14 @@ void Project::createRegion(fract x, int y) {
 }
 
 void Project::play() {
-    if(playState == PlayState::Stop) {
-        playHeadStart = playHeadPos;
-        playState = PlayState::Play;
-        edit->getTransport().play(false);
+    if(!isPlaying) {
+        isPlaying = true;
     }
 }
 
 void Project::stop() {
-    if(playState == PlayState::Play) {
-        playState = PlayState::Stop;
-        edit->getTransport().stop(true, false);
+    if(isPlaying) {
+        isPlaying = false;
         setTime(playHeadStart);
     }
 }
@@ -109,12 +66,10 @@ void Project::stop() {
 
 
 void Project::setViewedElement(std::string type, int index) {
-    viewedElement = new element(type, index);
+    viewedElement = new element{type, index};
 }
 
 
 void Project::setTime(double time) {
-    tracktion::core::TimePosition transPos = tracktion::core::toPosition(tracktion::core::operator""_td(static_cast<long double>(time)));
-
-    edit->getTransport().setPosition(transPos);
+    timeSeconds = time;
 }

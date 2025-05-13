@@ -1,10 +1,8 @@
 #include "Project.h"
 #include "Instrument.h"
 #include <SDL3/SDL.h>
-#include <JuceHeader.h>
 #include <iostream>
 #include <vector>
-#include "BinaryData.h"
 #include "styles.h"
 
 
@@ -17,8 +15,6 @@ class InstrumentMenu {
         ~InstrumentMenu();
 
         Project* project;
-
-        tracktion_engine::Edit* edit;
 
         SDL_Texture* texture;
         SDL_Renderer* renderer;

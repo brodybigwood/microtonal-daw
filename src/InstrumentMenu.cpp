@@ -6,7 +6,6 @@ InstrumentMenu::InstrumentMenu(SDL_Texture* texture, SDL_Renderer* renderer, int
 
     this->project = project;
 
-    this->edit = project->edit;
 
     SDL_GetTextureSize(texture, &width, &height);
     dstRect = {x, y, width, height};
@@ -14,7 +13,7 @@ InstrumentMenu::InstrumentMenu(SDL_Texture* texture, SDL_Renderer* renderer, int
     this->y = y;
 
     TTF_Init();
-
+/*
     auto fontData = BinaryData::Arial_ttf;
     int dataSize = BinaryData::Arial_ttfSize;
     int fontPointSize = 25;
@@ -22,13 +21,12 @@ InstrumentMenu::InstrumentMenu(SDL_Texture* texture, SDL_Renderer* renderer, int
     SDL_IOStream* rw = SDL_IOFromMem(const_cast<void*>(static_cast<const void*>(fontData)), dataSize);
 
     font = TTF_OpenFontIO(rw, 1, fontPointSize);
-
-
+*/
+    font = TTF_OpenFont("assets/fonts/Arial.ttf", 12);
 
     titleDst = {0, 0 + 25, width, 25};  // x and y = screen position
     outputDst = {0, height-100, width, 25};  // x and y = screen position
    
-
 }
 
 
@@ -65,7 +63,6 @@ SDL_RenderTexture(renderer, textTexture, nullptr, &titleDst);
 }
 
 void InstrumentMenu::render() {
-
     SDL_SetRenderDrawColor(
         renderer, 
         colors.editorBackground[0],
@@ -80,10 +77,8 @@ void InstrumentMenu::render() {
     
 
     if(project->viewedElement != nullptr) {
-
         int index = project->viewedElement->index;
         std::string type = project->viewedElement->type;
-
 
         if(type == "region") {
             name = project->regions[index].name;
@@ -92,12 +87,10 @@ void InstrumentMenu::render() {
             name = project->instruments[index].name;
             outputType = project->instruments[index].outputType;
         } else {
-            return;
+            return;     
         }
+
         renderText();
-
-
-
         SDL_RenderTexture(renderer, texture, nullptr, &dstRect);
   
 
@@ -112,11 +105,7 @@ void InstrumentMenu::render() {
 
 
 void InstrumentMenu::clickMouse(SDL_Event& e) {
-    DBG("clicked inst menu");
-    instrument = &(project->instruments[project->viewedElement->index]);
-
-
-    
+    instrument = &(project->instruments[project->viewedElement->index]); 
 }
 
 void InstrumentMenu::moveMouse(float x, float y) {

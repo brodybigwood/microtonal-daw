@@ -17,8 +17,6 @@ WindowHandler::WindowHandler(Project* project) {
     
     lastTime = SDL_GetTicks();
 
-
-
 }
 
 
@@ -38,8 +36,6 @@ void WindowHandler::createPianoRoll(Region& region) {
 
 bool WindowHandler::tick() {
 
-
-    
 
 
     bool running = true;
@@ -114,14 +110,9 @@ bool WindowHandler::tick() {
                 }
             }
 
-
-
-
-
-
-
         }
         return running;
+
 }
 
 

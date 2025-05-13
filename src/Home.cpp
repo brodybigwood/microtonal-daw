@@ -51,7 +51,6 @@ void Home::tick() {
     //std::cout<<"tickingnging"<<std::endl;
     SDL_RenderClear(renderer);
     //std::cout<<"tickingnging"<<std::endl;
-
     insts->render();
     controls->render();
     song->render();
@@ -185,10 +184,8 @@ bool Home::mouseOnEditor() {
         mouseY > controlsHeight &&
         mouseY < windowHeight-mixerHeight
     ) {
-        DBG("mouse on editor");
         return true;
     } else {
-        DBG("mouse not on editor");
         return false;
     }
     

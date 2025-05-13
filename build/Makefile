@@ -1,401 +1,656 @@
-# Automatically generated makefile, created by the Projucer
-# Don't edit this file! Your changes will be overwritten when you re-save the Projucer project!
-
-# build with "V=1" for verbose builds
-ifeq ($(V), 1)
-V_AT =
-else
-V_AT = @
-endif
-
-# (this disables dependency generation if multiple architectures are set)
-DEPFLAGS := $(if $(word 2, $(TARGET_ARCH)), , -MMD)
-
-ifndef PKG_CONFIG
-  PKG_CONFIG=pkg-config
-endif
-
-ifndef STRIP
-  STRIP=strip
-endif
-
-ifndef AR
-  AR=ar
-endif
-
-ifndef CONFIG
-  CONFIG=Debug
-endif
-
-JUCE_ARCH_LABEL := $(shell uname -m)
-
-ifeq ($(CONFIG),Debug)
-  JUCE_BINDIR := build
-  JUCE_LIBDIR := build
-  JUCE_OBJDIR := build/intermediate/Debug
-  JUCE_OUTDIR := build
-
-  ifeq ($(TARGET_ARCH),)
-    TARGET_ARCH := 
-  endif
-
-  JUCE_CPPFLAGS := $(DEPFLAGS) "-DLINUX=1" "-DDEBUG=1" "-D_DEBUG=1" "-DJUCE_PROJUCER_VERSION=0x80006" "-DJUCE_MODULE_AVAILABLE_juce_audio_basics=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_devices=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_formats=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_processors=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_utils=1" "-DJUCE_MODULE_AVAILABLE_juce_core=1" "-DJUCE_MODULE_AVAILABLE_juce_data_structures=1" "-DJUCE_MODULE_AVAILABLE_juce_dsp=1" "-DJUCE_MODULE_AVAILABLE_juce_events=1" "-DJUCE_MODULE_AVAILABLE_juce_graphics=1" "-DJUCE_MODULE_AVAILABLE_juce_gui_basics=1" "-DJUCE_MODULE_AVAILABLE_juce_gui_extra=1" "-DJUCE_MODULE_AVAILABLE_juce_osc=1" "-DJUCE_MODULE_AVAILABLE_tracktion_engine=1" "-DJUCE_MODULE_AVAILABLE_tracktion_graph=1" "-DJUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1" "-DJUCE_ASIO=1" "-DJUCE_ALSA=1" "-DJUCE_JACK=1" "-DJUCE_PLUGINHOST_VST=0" "-DJUCE_PLUGINHOST_VST3=1" "-DJUCE_PLUGINHOST_AU=0" "-DJUCE_PLUGINHOST_LADSPA=0" "-DJUCE_PLUGINHOST_LV2=0" "-DJUCE_PLUGINHOST_ARA=0" "-DJUCE_CUSTOM_VST3_SDK=1" "-DJUCE_STRICT_REFCOUNTEDPOINTER=1" "-DJUCE_STANDALONE_APPLICATION=1" "-DJUCER_LINUX_MAKE_59BC66E=1" "-DJUCE_APP_VERSION=1.0.0" "-DJUCE_APP_VERSION_HEX=0x10000" $(shell $(PKG_CONFIG) --cflags $(shell ($(PKG_CONFIG) --exists webkit2gtk-4.1 && echo webkit2gtk-4.1) || echo webkit2gtk-4.0) alsa freetype2 fontconfig libcurl gtk+-x11-3.0 sdl3 sdl3-ttf x11) -pthread -I/mnt/2TB/home/brody/projects/lib/VST_SDK/vst3sdk -I../JuceLibraryCode -I/home/brody/Desktop/JUCE/modules -I../submodules/tracktion_engine/modules/tracktion_engine -I../submodules/tracktion_engine/modules $(CPPFLAGS)
-  JUCE_CPPFLAGS_APP :=  "-DJucePlugin_Build_VST=0" "-DJucePlugin_Build_VST3=0" "-DJucePlugin_Build_AU=0" "-DJucePlugin_Build_AUv3=0" "-DJucePlugin_Build_AAX=0" "-DJucePlugin_Build_Standalone=0" "-DJucePlugin_Build_Unity=0" "-DJucePlugin_Build_LV2=0"
-  JUCE_TARGET_APP := NewProject
-
-  JUCE_CFLAGS += $(JUCE_CPPFLAGS) $(TARGET_ARCH) -g -ggdb -O0 -I/usr/include/SDL3_ttf/ -l/usr/include/X11/ $(CFLAGS)
-  JUCE_CXXFLAGS += $(JUCE_CFLAGS) -std=c++20 $(CXXFLAGS)
-  JUCE_LDFLAGS += $(TARGET_ARCH) -L$(JUCE_BINDIR) -L$(JUCE_LIBDIR) $(shell $(PKG_CONFIG) --libs alsa freetype2 fontconfig libcurl sdl3 sdl3-ttf x11) -fvisibility=hidden -lrt -ldl -lpthread $(LDFLAGS)
-
-  CLEANCMD = rm -rf $(JUCE_OUTDIR)/$(JUCE_TARGET_APP) $(JUCE_OBJDIR)
-endif
-
-ifeq ($(CONFIG),Release)
-  JUCE_BINDIR := build
-  JUCE_LIBDIR := build
-  JUCE_OBJDIR := build/intermediate/Release
-  JUCE_OUTDIR := build
-
-  ifeq ($(TARGET_ARCH),)
-    TARGET_ARCH := 
-  endif
-
-  JUCE_CPPFLAGS := $(DEPFLAGS) "-DLINUX=1" "-DNDEBUG=1" "-DJUCE_PROJUCER_VERSION=0x80006" "-DJUCE_MODULE_AVAILABLE_juce_audio_basics=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_devices=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_formats=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_processors=1" "-DJUCE_MODULE_AVAILABLE_juce_audio_utils=1" "-DJUCE_MODULE_AVAILABLE_juce_core=1" "-DJUCE_MODULE_AVAILABLE_juce_data_structures=1" "-DJUCE_MODULE_AVAILABLE_juce_dsp=1" "-DJUCE_MODULE_AVAILABLE_juce_events=1" "-DJUCE_MODULE_AVAILABLE_juce_graphics=1" "-DJUCE_MODULE_AVAILABLE_juce_gui_basics=1" "-DJUCE_MODULE_AVAILABLE_juce_gui_extra=1" "-DJUCE_MODULE_AVAILABLE_juce_osc=1" "-DJUCE_MODULE_AVAILABLE_tracktion_engine=1" "-DJUCE_MODULE_AVAILABLE_tracktion_graph=1" "-DJUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1" "-DJUCE_ASIO=1" "-DJUCE_ALSA=1" "-DJUCE_JACK=1" "-DJUCE_PLUGINHOST_VST=0" "-DJUCE_PLUGINHOST_VST3=1" "-DJUCE_PLUGINHOST_AU=0" "-DJUCE_PLUGINHOST_LADSPA=0" "-DJUCE_PLUGINHOST_LV2=0" "-DJUCE_PLUGINHOST_ARA=0" "-DJUCE_CUSTOM_VST3_SDK=1" "-DJUCE_STRICT_REFCOUNTEDPOINTER=1" "-DJUCE_STANDALONE_APPLICATION=1" "-DJUCER_LINUX_MAKE_59BC66E=1" "-DJUCE_APP_VERSION=1.0.0" "-DJUCE_APP_VERSION_HEX=0x10000" $(shell $(PKG_CONFIG) --cflags $(shell ($(PKG_CONFIG) --exists webkit2gtk-4.1 && echo webkit2gtk-4.1) || echo webkit2gtk-4.0) alsa freetype2 fontconfig libcurl gtk+-x11-3.0 sdl3 sdl3-ttf x11) -pthread -I/mnt/2TB/home/brody/projects/lib/VST_SDK/vst3sdk -I../JuceLibraryCode -I/home/brody/Desktop/JUCE/modules -I../submodules/tracktion_engine/modules/tracktion_engine -I../submodules/tracktion_engine/modules $(CPPFLAGS)
-  JUCE_CPPFLAGS_APP :=  "-DJucePlugin_Build_VST=0" "-DJucePlugin_Build_VST3=0" "-DJucePlugin_Build_AU=0" "-DJucePlugin_Build_AUv3=0" "-DJucePlugin_Build_AAX=0" "-DJucePlugin_Build_Standalone=0" "-DJucePlugin_Build_Unity=0" "-DJucePlugin_Build_LV2=0"
-  JUCE_TARGET_APP := NewProject
-
-  JUCE_CFLAGS += $(JUCE_CPPFLAGS) $(TARGET_ARCH) -O3 -I/usr/include/SDL3_ttf/ -l/usr/include/X11/ $(CFLAGS)
-  JUCE_CXXFLAGS += $(JUCE_CFLAGS) -std=c++20 $(CXXFLAGS)
-  JUCE_LDFLAGS += $(TARGET_ARCH) -L$(JUCE_BINDIR) -L$(JUCE_LIBDIR) $(shell $(PKG_CONFIG) --libs alsa freetype2 fontconfig libcurl sdl3 sdl3-ttf x11) -fvisibility=hidden -lrt -ldl -lpthread $(LDFLAGS)
-
-  CLEANCMD = rm -rf $(JUCE_OUTDIR)/$(JUCE_TARGET_APP) $(JUCE_OBJDIR)
-endif
-
-OBJECTS_APP := \
-  $(JUCE_OBJDIR)/Button_ece0641.o \
-  $(JUCE_OBJDIR)/ControlArea_519e3425.o \
-  $(JUCE_OBJDIR)/Home_dfbfc3ee.o \
-  $(JUCE_OBJDIR)/Instrument_d18fa376.o \
-  $(JUCE_OBJDIR)/InstrumentList_e0baf0b4.o \
-  $(JUCE_OBJDIR)/InstrumentMenu_6c890cf5.o \
-  $(JUCE_OBJDIR)/main_f85f73a8.o \
-  $(JUCE_OBJDIR)/MainComponent_f71e895f.o \
-  $(JUCE_OBJDIR)/MidiRouter_1d819fd9.o \
-  $(JUCE_OBJDIR)/MixerTrack_213fecd1.o \
-  $(JUCE_OBJDIR)/Note_5af8bd81.o \
-  $(JUCE_OBJDIR)/PianoRoll_e2495981.o \
-  $(JUCE_OBJDIR)/Playhead_2aabcea3.o \
-  $(JUCE_OBJDIR)/Plugin_e25d65c2.o \
-  $(JUCE_OBJDIR)/Project_fe74cf34.o \
-  $(JUCE_OBJDIR)/Region_82ca5503.o \
-  $(JUCE_OBJDIR)/SongRoll_323447c1.o \
-  $(JUCE_OBJDIR)/styles_8c0243d1.o \
-  $(JUCE_OBJDIR)/WindowHandler_3f69cc55.o \
-  $(JUCE_OBJDIR)/BinaryData_371e9b63.o \
-  $(JUCE_OBJDIR)/include_juce_audio_basics_10901fdb.o \
-  $(JUCE_OBJDIR)/include_juce_audio_devices_a5008791.o \
-  $(JUCE_OBJDIR)/include_juce_audio_formats_57e78a90.o \
-  $(JUCE_OBJDIR)/include_juce_audio_processors_4e18d77.o \
-  $(JUCE_OBJDIR)/include_juce_audio_processors_ara_f0d9d588.o \
-  $(JUCE_OBJDIR)/include_juce_audio_processors_lv2_libs_620ed617.o \
-  $(JUCE_OBJDIR)/include_juce_audio_utils_ac367525.o \
-  $(JUCE_OBJDIR)/include_juce_core_9b13c06c.o \
-  $(JUCE_OBJDIR)/include_juce_core_CompilationTime_58e4dabd.o \
-  $(JUCE_OBJDIR)/include_juce_data_structures_f830b4b2.o \
-  $(JUCE_OBJDIR)/include_juce_dsp_173b875e.o \
-  $(JUCE_OBJDIR)/include_juce_events_29769ee6.o \
-  $(JUCE_OBJDIR)/include_juce_graphics_2525d958.o \
-  $(JUCE_OBJDIR)/include_juce_graphics_Harfbuzz_f0ceb6b1.o \
-  $(JUCE_OBJDIR)/include_juce_graphics_Sheenbidi_b731ee5e.o \
-  $(JUCE_OBJDIR)/include_juce_gui_basics_567cf56.o \
-  $(JUCE_OBJDIR)/include_juce_gui_extra_e29f2629.o \
-  $(JUCE_OBJDIR)/include_juce_osc_5c68e19c.o \
-  $(JUCE_OBJDIR)/include_tracktion_engine_airwindows_1_39aab923.o \
-  $(JUCE_OBJDIR)/include_tracktion_engine_airwindows_2_39b8d0a4.o \
-  $(JUCE_OBJDIR)/include_tracktion_engine_airwindows_3_39c6e825.o \
-  $(JUCE_OBJDIR)/include_tracktion_engine_audio_files_81b72fa0.o \
-  $(JUCE_OBJDIR)/include_tracktion_engine_model_1_b3c8776d.o \
-  $(JUCE_OBJDIR)/include_tracktion_engine_model_2_b3d68eee.o \
-  $(JUCE_OBJDIR)/include_tracktion_engine_playback_89bffd53.o \
-  $(JUCE_OBJDIR)/include_tracktion_engine_plugins_bc7003f2.o \
-  $(JUCE_OBJDIR)/include_tracktion_engine_timestretch_2ee5fd6a.o \
-  $(JUCE_OBJDIR)/include_tracktion_engine_utils_6a056fc3.o \
-  $(JUCE_OBJDIR)/include_tracktion_graph_671a03a9.o \
-
-.PHONY: clean all strip
-
-all : $(JUCE_OUTDIR)/$(JUCE_TARGET_APP)
-
-$(JUCE_OUTDIR)/$(JUCE_TARGET_APP) : $(OBJECTS_APP) $(JUCE_OBJDIR)/execinfo.cmd $(RESOURCES)
-	@command -v $(PKG_CONFIG) >/dev/null 2>&1 || { echo >&2 "pkg-config not installed. Please, install it."; exit 1; }
-	@$(PKG_CONFIG) --print-errors alsa freetype2 fontconfig libcurl sdl3 sdl3-ttf x11
-	@echo Linking "tracktion_juce - App"
-	-$(V_AT)mkdir -p $(JUCE_BINDIR)
-	-$(V_AT)mkdir -p $(JUCE_LIBDIR)
-	-$(V_AT)mkdir -p $(JUCE_OUTDIR)
-	$(V_AT)$(CXX) -o $(JUCE_OUTDIR)/$(JUCE_TARGET_APP) $(OBJECTS_APP) $(JUCE_LDFLAGS) $(shell cat $(JUCE_OBJDIR)/execinfo.cmd) $(JUCE_LDFLAGS_APP) $(RESOURCES) $(TARGET_ARCH)
-
-$(JUCE_OBJDIR)/Button_ece0641.o: ../src/Button.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling Button.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/ControlArea_519e3425.o: ../src/ControlArea.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling ControlArea.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/Home_dfbfc3ee.o: ../src/Home.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling Home.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/Instrument_d18fa376.o: ../src/Instrument.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling Instrument.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/InstrumentList_e0baf0b4.o: ../src/InstrumentList.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling InstrumentList.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/InstrumentMenu_6c890cf5.o: ../src/InstrumentMenu.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling InstrumentMenu.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/main_f85f73a8.o: ../src/main.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling main.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/MainComponent_f71e895f.o: ../src/MainComponent.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling MainComponent.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/MidiRouter_1d819fd9.o: ../src/MidiRouter.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling MidiRouter.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/MixerTrack_213fecd1.o: ../src/MixerTrack.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling MixerTrack.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/Note_5af8bd81.o: ../src/Note.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling Note.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/PianoRoll_e2495981.o: ../src/PianoRoll.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling PianoRoll.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/Playhead_2aabcea3.o: ../src/Playhead.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling Playhead.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/Plugin_e25d65c2.o: ../src/Plugin.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling Plugin.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/Project_fe74cf34.o: ../src/Project.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling Project.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/Region_82ca5503.o: ../src/Region.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling Region.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/SongRoll_323447c1.o: ../src/SongRoll.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling SongRoll.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/styles_8c0243d1.o: ../src/styles.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling styles.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/WindowHandler_3f69cc55.o: ../src/WindowHandler.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling WindowHandler.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/BinaryData_371e9b63.o: ../JuceLibraryCode/BinaryData.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling BinaryData.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_juce_audio_basics_10901fdb.o: ../JuceLibraryCode/include_juce_audio_basics.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_juce_audio_basics.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_juce_audio_devices_a5008791.o: ../JuceLibraryCode/include_juce_audio_devices.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_juce_audio_devices.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_juce_audio_formats_57e78a90.o: ../JuceLibraryCode/include_juce_audio_formats.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_juce_audio_formats.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_juce_audio_processors_4e18d77.o: ../JuceLibraryCode/include_juce_audio_processors.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_juce_audio_processors.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_juce_audio_processors_ara_f0d9d588.o: ../JuceLibraryCode/include_juce_audio_processors_ara.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_juce_audio_processors_ara.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_juce_audio_processors_lv2_libs_620ed617.o: ../JuceLibraryCode/include_juce_audio_processors_lv2_libs.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_juce_audio_processors_lv2_libs.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_juce_audio_utils_ac367525.o: ../JuceLibraryCode/include_juce_audio_utils.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_juce_audio_utils.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_juce_core_9b13c06c.o: ../JuceLibraryCode/include_juce_core.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_juce_core.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_juce_core_CompilationTime_58e4dabd.o: ../JuceLibraryCode/include_juce_core_CompilationTime.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_juce_core_CompilationTime.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_juce_data_structures_f830b4b2.o: ../JuceLibraryCode/include_juce_data_structures.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_juce_data_structures.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_juce_dsp_173b875e.o: ../JuceLibraryCode/include_juce_dsp.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_juce_dsp.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_juce_events_29769ee6.o: ../JuceLibraryCode/include_juce_events.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_juce_events.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_juce_graphics_2525d958.o: ../JuceLibraryCode/include_juce_graphics.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_juce_graphics.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_juce_graphics_Harfbuzz_f0ceb6b1.o: ../JuceLibraryCode/include_juce_graphics_Harfbuzz.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_juce_graphics_Harfbuzz.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_juce_graphics_Sheenbidi_b731ee5e.o: ../JuceLibraryCode/include_juce_graphics_Sheenbidi.c
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_juce_graphics_Sheenbidi.c"
-	$(V_AT)$(CC) $(JUCE_CFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_juce_gui_basics_567cf56.o: ../JuceLibraryCode/include_juce_gui_basics.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_juce_gui_basics.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_juce_gui_extra_e29f2629.o: ../JuceLibraryCode/include_juce_gui_extra.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_juce_gui_extra.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_juce_osc_5c68e19c.o: ../JuceLibraryCode/include_juce_osc.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_juce_osc.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_tracktion_engine_airwindows_1_39aab923.o: ../JuceLibraryCode/include_tracktion_engine_airwindows_1.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_tracktion_engine_airwindows_1.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_tracktion_engine_airwindows_2_39b8d0a4.o: ../JuceLibraryCode/include_tracktion_engine_airwindows_2.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_tracktion_engine_airwindows_2.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_tracktion_engine_airwindows_3_39c6e825.o: ../JuceLibraryCode/include_tracktion_engine_airwindows_3.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_tracktion_engine_airwindows_3.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_tracktion_engine_audio_files_81b72fa0.o: ../JuceLibraryCode/include_tracktion_engine_audio_files.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_tracktion_engine_audio_files.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_tracktion_engine_model_1_b3c8776d.o: ../JuceLibraryCode/include_tracktion_engine_model_1.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_tracktion_engine_model_1.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_tracktion_engine_model_2_b3d68eee.o: ../JuceLibraryCode/include_tracktion_engine_model_2.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_tracktion_engine_model_2.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_tracktion_engine_playback_89bffd53.o: ../JuceLibraryCode/include_tracktion_engine_playback.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_tracktion_engine_playback.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_tracktion_engine_plugins_bc7003f2.o: ../JuceLibraryCode/include_tracktion_engine_plugins.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_tracktion_engine_plugins.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_tracktion_engine_timestretch_2ee5fd6a.o: ../JuceLibraryCode/include_tracktion_engine_timestretch.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_tracktion_engine_timestretch.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_tracktion_engine_utils_6a056fc3.o: ../JuceLibraryCode/include_tracktion_engine_utils.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_tracktion_engine_utils.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/include_tracktion_graph_671a03a9.o: ../JuceLibraryCode/include_tracktion_graph.cpp
-	-$(V_AT)mkdir -p $(@D)
-	@echo "Compiling include_tracktion_graph.cpp"
-	$(V_AT)$(CXX) $(JUCE_CXXFLAGS) $(JUCE_CPPFLAGS_APP) $(JUCE_CFLAGS_APP) -o "$@" -c "$<"
-
-$(JUCE_OBJDIR)/execinfo.cmd:
-	-$(V_AT)mkdir -p $(@D)
-	-@if [ -z "$(V_AT)" ]; then echo "Checking if we need to link libexecinfo"; fi
-	$(V_AT)printf "int main() { return 0; }" | $(CXX) -x c++ -o $(@D)/execinfo.x -lexecinfo - >/dev/null 2>&1 && printf -- "-lexecinfo" > "$@" || touch "$@"
-
-$(JUCE_OBJDIR)/cxxfs.cmd:
-	-$(V_AT)mkdir -p $(@D)
-	-@if [ -z "$(V_AT)" ]; then echo "Checking if we need to link stdc++fs"; fi
-	$(V_AT)printf "int main() { return 0; }" | $(CXX) -x c++ -o $(@D)/cxxfs.x -lstdc++fs - >/dev/null 2>&1 && printf -- "-lstdc++fs" > "$@" || touch "$@"
+# CMAKE generated file: DO NOT EDIT!
+# Generated by "Unix Makefiles" Generator, CMake Version 4.0
 
+# Default target executed when no arguments are given to make.
+default_target: all
+.PHONY : default_target
+
+# Allow only one "make -f Makefile2" at a time, but pass parallelism.
+.NOTPARALLEL:
+
+#=============================================================================
+# Special targets provided by cmake.
+
+# Disable implicit rules so canonical targets will work.
+.SUFFIXES:
+
+# Disable VCS-based implicit rules.
+% : %,v
+
+# Disable VCS-based implicit rules.
+% : RCS/%
+
+# Disable VCS-based implicit rules.
+% : RCS/%,v
+
+# Disable VCS-based implicit rules.
+% : SCCS/s.%
+
+# Disable VCS-based implicit rules.
+% : s.%
+
+.SUFFIXES: .hpux_make_needs_suffix_list
+
+# Command-line flag to silence nested $(MAKE).
+$(VERBOSE)MAKESILENT = -s
+
+#Suppress display of executed commands.
+$(VERBOSE).SILENT:
+
+# A target that is always out of date.
+cmake_force:
+.PHONY : cmake_force
+
+#=============================================================================
+# Set environment variables for the build.
+
+# The shell in which to execute make rules.
+SHELL = /bin/sh
+
+# The CMake executable.
+CMAKE_COMMAND = /usr/bin/cmake
+
+# The command to remove a file.
+RM = /usr/bin/cmake -E rm -f
+
+# Escaping for special characters.
+EQUALS = =
+
+# The top-level source directory on which CMake was run.
+CMAKE_SOURCE_DIR = /home/brody/projects/daw
+
+# The top-level build directory on which CMake was run.
+CMAKE_BINARY_DIR = /home/brody/projects/daw/build
+
+#=============================================================================
+# Targets provided globally by CMake.
+
+# Special rule for the target edit_cache
+edit_cache:
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --cyan "Running CMake cache editor..."
+	/usr/bin/ccmake -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR)
+.PHONY : edit_cache
+
+# Special rule for the target edit_cache
+edit_cache/fast: edit_cache
+.PHONY : edit_cache/fast
+
+# Special rule for the target rebuild_cache
+rebuild_cache:
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --cyan "Running CMake to regenerate build system..."
+	/usr/bin/cmake --regenerate-during-build -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR)
+.PHONY : rebuild_cache
+
+# Special rule for the target rebuild_cache
+rebuild_cache/fast: rebuild_cache
+.PHONY : rebuild_cache/fast
+
+# The main all target
+all: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/brody/projects/daw/build/CMakeFiles /home/brody/projects/daw/build//CMakeFiles/progress.marks
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/brody/projects/daw/build/CMakeFiles 0
+.PHONY : all
+
+# The main clean target
 clean:
-	@echo Cleaning tracktion_juce
-	$(V_AT)$(CLEANCMD)
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 clean
+.PHONY : clean
 
-strip:
-	@echo Stripping tracktion_juce
-	-$(V_AT)$(STRIP) --strip-unneeded $(JUCE_OUTDIR)/$(JUCE_TARGET_APP)
+# The main clean target
+clean/fast: clean
+.PHONY : clean/fast
 
--include $(OBJECTS_APP:%.o=%.d)
+# Prepare targets for installation.
+preinstall: all
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 preinstall
+.PHONY : preinstall
+
+# Prepare targets for installation.
+preinstall/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 preinstall
+.PHONY : preinstall/fast
+
+# clear depends
+depend:
+	$(CMAKE_COMMAND) -P /home/brody/projects/daw/build/CMakeFiles/VerifyGlobs.cmake
+	$(CMAKE_COMMAND) -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR) --check-build-system CMakeFiles/Makefile.cmake 1
+.PHONY : depend
+
+#=============================================================================
+# Target rules for targets named DAW
+
+# Build rule for target.
+DAW: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 DAW
+.PHONY : DAW
+
+# fast build rule for target.
+DAW/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/build
+.PHONY : DAW/fast
+
+#=============================================================================
+# Target rules for targets named CopyAssets
+
+# Build rule for target.
+CopyAssets: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CopyAssets
+.PHONY : CopyAssets
+
+# fast build rule for target.
+CopyAssets/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CopyAssets.dir/build.make CMakeFiles/CopyAssets.dir/build
+.PHONY : CopyAssets/fast
+
+src/Button.o: src/Button.cpp.o
+.PHONY : src/Button.o
+
+# target to build an object file
+src/Button.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Button.cpp.o
+.PHONY : src/Button.cpp.o
+
+src/Button.i: src/Button.cpp.i
+.PHONY : src/Button.i
+
+# target to preprocess a source file
+src/Button.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Button.cpp.i
+.PHONY : src/Button.cpp.i
+
+src/Button.s: src/Button.cpp.s
+.PHONY : src/Button.s
+
+# target to generate assembly for a file
+src/Button.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Button.cpp.s
+.PHONY : src/Button.cpp.s
+
+src/ControlArea.o: src/ControlArea.cpp.o
+.PHONY : src/ControlArea.o
+
+# target to build an object file
+src/ControlArea.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/ControlArea.cpp.o
+.PHONY : src/ControlArea.cpp.o
+
+src/ControlArea.i: src/ControlArea.cpp.i
+.PHONY : src/ControlArea.i
+
+# target to preprocess a source file
+src/ControlArea.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/ControlArea.cpp.i
+.PHONY : src/ControlArea.cpp.i
+
+src/ControlArea.s: src/ControlArea.cpp.s
+.PHONY : src/ControlArea.s
+
+# target to generate assembly for a file
+src/ControlArea.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/ControlArea.cpp.s
+.PHONY : src/ControlArea.cpp.s
+
+src/Home.o: src/Home.cpp.o
+.PHONY : src/Home.o
+
+# target to build an object file
+src/Home.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Home.cpp.o
+.PHONY : src/Home.cpp.o
+
+src/Home.i: src/Home.cpp.i
+.PHONY : src/Home.i
+
+# target to preprocess a source file
+src/Home.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Home.cpp.i
+.PHONY : src/Home.cpp.i
+
+src/Home.s: src/Home.cpp.s
+.PHONY : src/Home.s
+
+# target to generate assembly for a file
+src/Home.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Home.cpp.s
+.PHONY : src/Home.cpp.s
+
+src/Instrument.o: src/Instrument.cpp.o
+.PHONY : src/Instrument.o
+
+# target to build an object file
+src/Instrument.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Instrument.cpp.o
+.PHONY : src/Instrument.cpp.o
+
+src/Instrument.i: src/Instrument.cpp.i
+.PHONY : src/Instrument.i
+
+# target to preprocess a source file
+src/Instrument.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Instrument.cpp.i
+.PHONY : src/Instrument.cpp.i
+
+src/Instrument.s: src/Instrument.cpp.s
+.PHONY : src/Instrument.s
+
+# target to generate assembly for a file
+src/Instrument.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Instrument.cpp.s
+.PHONY : src/Instrument.cpp.s
+
+src/InstrumentList.o: src/InstrumentList.cpp.o
+.PHONY : src/InstrumentList.o
+
+# target to build an object file
+src/InstrumentList.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/InstrumentList.cpp.o
+.PHONY : src/InstrumentList.cpp.o
+
+src/InstrumentList.i: src/InstrumentList.cpp.i
+.PHONY : src/InstrumentList.i
+
+# target to preprocess a source file
+src/InstrumentList.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/InstrumentList.cpp.i
+.PHONY : src/InstrumentList.cpp.i
+
+src/InstrumentList.s: src/InstrumentList.cpp.s
+.PHONY : src/InstrumentList.s
+
+# target to generate assembly for a file
+src/InstrumentList.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/InstrumentList.cpp.s
+.PHONY : src/InstrumentList.cpp.s
+
+src/InstrumentMenu.o: src/InstrumentMenu.cpp.o
+.PHONY : src/InstrumentMenu.o
+
+# target to build an object file
+src/InstrumentMenu.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/InstrumentMenu.cpp.o
+.PHONY : src/InstrumentMenu.cpp.o
+
+src/InstrumentMenu.i: src/InstrumentMenu.cpp.i
+.PHONY : src/InstrumentMenu.i
+
+# target to preprocess a source file
+src/InstrumentMenu.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/InstrumentMenu.cpp.i
+.PHONY : src/InstrumentMenu.cpp.i
+
+src/InstrumentMenu.s: src/InstrumentMenu.cpp.s
+.PHONY : src/InstrumentMenu.s
+
+# target to generate assembly for a file
+src/InstrumentMenu.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/InstrumentMenu.cpp.s
+.PHONY : src/InstrumentMenu.cpp.s
+
+src/MidiRouter.o: src/MidiRouter.cpp.o
+.PHONY : src/MidiRouter.o
+
+# target to build an object file
+src/MidiRouter.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/MidiRouter.cpp.o
+.PHONY : src/MidiRouter.cpp.o
+
+src/MidiRouter.i: src/MidiRouter.cpp.i
+.PHONY : src/MidiRouter.i
+
+# target to preprocess a source file
+src/MidiRouter.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/MidiRouter.cpp.i
+.PHONY : src/MidiRouter.cpp.i
+
+src/MidiRouter.s: src/MidiRouter.cpp.s
+.PHONY : src/MidiRouter.s
+
+# target to generate assembly for a file
+src/MidiRouter.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/MidiRouter.cpp.s
+.PHONY : src/MidiRouter.cpp.s
+
+src/MixerTrack.o: src/MixerTrack.cpp.o
+.PHONY : src/MixerTrack.o
+
+# target to build an object file
+src/MixerTrack.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/MixerTrack.cpp.o
+.PHONY : src/MixerTrack.cpp.o
+
+src/MixerTrack.i: src/MixerTrack.cpp.i
+.PHONY : src/MixerTrack.i
+
+# target to preprocess a source file
+src/MixerTrack.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/MixerTrack.cpp.i
+.PHONY : src/MixerTrack.cpp.i
+
+src/MixerTrack.s: src/MixerTrack.cpp.s
+.PHONY : src/MixerTrack.s
+
+# target to generate assembly for a file
+src/MixerTrack.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/MixerTrack.cpp.s
+.PHONY : src/MixerTrack.cpp.s
+
+src/Note.o: src/Note.cpp.o
+.PHONY : src/Note.o
+
+# target to build an object file
+src/Note.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Note.cpp.o
+.PHONY : src/Note.cpp.o
+
+src/Note.i: src/Note.cpp.i
+.PHONY : src/Note.i
+
+# target to preprocess a source file
+src/Note.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Note.cpp.i
+.PHONY : src/Note.cpp.i
+
+src/Note.s: src/Note.cpp.s
+.PHONY : src/Note.s
+
+# target to generate assembly for a file
+src/Note.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Note.cpp.s
+.PHONY : src/Note.cpp.s
+
+src/PianoRoll.o: src/PianoRoll.cpp.o
+.PHONY : src/PianoRoll.o
+
+# target to build an object file
+src/PianoRoll.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/PianoRoll.cpp.o
+.PHONY : src/PianoRoll.cpp.o
+
+src/PianoRoll.i: src/PianoRoll.cpp.i
+.PHONY : src/PianoRoll.i
+
+# target to preprocess a source file
+src/PianoRoll.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/PianoRoll.cpp.i
+.PHONY : src/PianoRoll.cpp.i
+
+src/PianoRoll.s: src/PianoRoll.cpp.s
+.PHONY : src/PianoRoll.s
+
+# target to generate assembly for a file
+src/PianoRoll.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/PianoRoll.cpp.s
+.PHONY : src/PianoRoll.cpp.s
+
+src/Playhead.o: src/Playhead.cpp.o
+.PHONY : src/Playhead.o
+
+# target to build an object file
+src/Playhead.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Playhead.cpp.o
+.PHONY : src/Playhead.cpp.o
+
+src/Playhead.i: src/Playhead.cpp.i
+.PHONY : src/Playhead.i
+
+# target to preprocess a source file
+src/Playhead.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Playhead.cpp.i
+.PHONY : src/Playhead.cpp.i
+
+src/Playhead.s: src/Playhead.cpp.s
+.PHONY : src/Playhead.s
+
+# target to generate assembly for a file
+src/Playhead.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Playhead.cpp.s
+.PHONY : src/Playhead.cpp.s
+
+src/Plugin.o: src/Plugin.cpp.o
+.PHONY : src/Plugin.o
+
+# target to build an object file
+src/Plugin.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Plugin.cpp.o
+.PHONY : src/Plugin.cpp.o
+
+src/Plugin.i: src/Plugin.cpp.i
+.PHONY : src/Plugin.i
+
+# target to preprocess a source file
+src/Plugin.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Plugin.cpp.i
+.PHONY : src/Plugin.cpp.i
+
+src/Plugin.s: src/Plugin.cpp.s
+.PHONY : src/Plugin.s
+
+# target to generate assembly for a file
+src/Plugin.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Plugin.cpp.s
+.PHONY : src/Plugin.cpp.s
+
+src/Project.o: src/Project.cpp.o
+.PHONY : src/Project.o
+
+# target to build an object file
+src/Project.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Project.cpp.o
+.PHONY : src/Project.cpp.o
+
+src/Project.i: src/Project.cpp.i
+.PHONY : src/Project.i
+
+# target to preprocess a source file
+src/Project.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Project.cpp.i
+.PHONY : src/Project.cpp.i
+
+src/Project.s: src/Project.cpp.s
+.PHONY : src/Project.s
+
+# target to generate assembly for a file
+src/Project.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Project.cpp.s
+.PHONY : src/Project.cpp.s
+
+src/Region.o: src/Region.cpp.o
+.PHONY : src/Region.o
+
+# target to build an object file
+src/Region.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Region.cpp.o
+.PHONY : src/Region.cpp.o
+
+src/Region.i: src/Region.cpp.i
+.PHONY : src/Region.i
+
+# target to preprocess a source file
+src/Region.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Region.cpp.i
+.PHONY : src/Region.cpp.i
+
+src/Region.s: src/Region.cpp.s
+.PHONY : src/Region.s
+
+# target to generate assembly for a file
+src/Region.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/Region.cpp.s
+.PHONY : src/Region.cpp.s
+
+src/SongRoll.o: src/SongRoll.cpp.o
+.PHONY : src/SongRoll.o
+
+# target to build an object file
+src/SongRoll.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/SongRoll.cpp.o
+.PHONY : src/SongRoll.cpp.o
+
+src/SongRoll.i: src/SongRoll.cpp.i
+.PHONY : src/SongRoll.i
+
+# target to preprocess a source file
+src/SongRoll.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/SongRoll.cpp.i
+.PHONY : src/SongRoll.cpp.i
+
+src/SongRoll.s: src/SongRoll.cpp.s
+.PHONY : src/SongRoll.s
+
+# target to generate assembly for a file
+src/SongRoll.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/SongRoll.cpp.s
+.PHONY : src/SongRoll.cpp.s
+
+src/WindowHandler.o: src/WindowHandler.cpp.o
+.PHONY : src/WindowHandler.o
+
+# target to build an object file
+src/WindowHandler.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/WindowHandler.cpp.o
+.PHONY : src/WindowHandler.cpp.o
+
+src/WindowHandler.i: src/WindowHandler.cpp.i
+.PHONY : src/WindowHandler.i
+
+# target to preprocess a source file
+src/WindowHandler.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/WindowHandler.cpp.i
+.PHONY : src/WindowHandler.cpp.i
+
+src/WindowHandler.s: src/WindowHandler.cpp.s
+.PHONY : src/WindowHandler.s
+
+# target to generate assembly for a file
+src/WindowHandler.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/WindowHandler.cpp.s
+.PHONY : src/WindowHandler.cpp.s
+
+src/main.o: src/main.cpp.o
+.PHONY : src/main.o
+
+# target to build an object file
+src/main.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/main.cpp.o
+.PHONY : src/main.cpp.o
+
+src/main.i: src/main.cpp.i
+.PHONY : src/main.i
+
+# target to preprocess a source file
+src/main.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/main.cpp.i
+.PHONY : src/main.cpp.i
+
+src/main.s: src/main.cpp.s
+.PHONY : src/main.s
+
+# target to generate assembly for a file
+src/main.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/main.cpp.s
+.PHONY : src/main.cpp.s
+
+src/styles.o: src/styles.cpp.o
+.PHONY : src/styles.o
+
+# target to build an object file
+src/styles.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/styles.cpp.o
+.PHONY : src/styles.cpp.o
+
+src/styles.i: src/styles.cpp.i
+.PHONY : src/styles.i
+
+# target to preprocess a source file
+src/styles.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/styles.cpp.i
+.PHONY : src/styles.cpp.i
+
+src/styles.s: src/styles.cpp.s
+.PHONY : src/styles.s
+
+# target to generate assembly for a file
+src/styles.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/DAW.dir/build.make CMakeFiles/DAW.dir/src/styles.cpp.s
+.PHONY : src/styles.cpp.s
+
+# Help Target
+help:
+	@echo "The following are some of the valid targets for this Makefile:"
+	@echo "... all (the default if no target is provided)"
+	@echo "... clean"
+	@echo "... depend"
+	@echo "... edit_cache"
+	@echo "... rebuild_cache"
+	@echo "... CopyAssets"
+	@echo "... DAW"
+	@echo "... src/Button.o"
+	@echo "... src/Button.i"
+	@echo "... src/Button.s"
+	@echo "... src/ControlArea.o"
+	@echo "... src/ControlArea.i"
+	@echo "... src/ControlArea.s"
+	@echo "... src/Home.o"
+	@echo "... src/Home.i"
+	@echo "... src/Home.s"
+	@echo "... src/Instrument.o"
+	@echo "... src/Instrument.i"
+	@echo "... src/Instrument.s"
+	@echo "... src/InstrumentList.o"
+	@echo "... src/InstrumentList.i"
+	@echo "... src/InstrumentList.s"
+	@echo "... src/InstrumentMenu.o"
+	@echo "... src/InstrumentMenu.i"
+	@echo "... src/InstrumentMenu.s"
+	@echo "... src/MidiRouter.o"
+	@echo "... src/MidiRouter.i"
+	@echo "... src/MidiRouter.s"
+	@echo "... src/MixerTrack.o"
+	@echo "... src/MixerTrack.i"
+	@echo "... src/MixerTrack.s"
+	@echo "... src/Note.o"
+	@echo "... src/Note.i"
+	@echo "... src/Note.s"
+	@echo "... src/PianoRoll.o"
+	@echo "... src/PianoRoll.i"
+	@echo "... src/PianoRoll.s"
+	@echo "... src/Playhead.o"
+	@echo "... src/Playhead.i"
+	@echo "... src/Playhead.s"
+	@echo "... src/Plugin.o"
+	@echo "... src/Plugin.i"
+	@echo "... src/Plugin.s"
+	@echo "... src/Project.o"
+	@echo "... src/Project.i"
+	@echo "... src/Project.s"
+	@echo "... src/Region.o"
+	@echo "... src/Region.i"
+	@echo "... src/Region.s"
+	@echo "... src/SongRoll.o"
+	@echo "... src/SongRoll.i"
+	@echo "... src/SongRoll.s"
+	@echo "... src/WindowHandler.o"
+	@echo "... src/WindowHandler.i"
+	@echo "... src/WindowHandler.s"
+	@echo "... src/main.o"
+	@echo "... src/main.i"
+	@echo "... src/main.s"
+	@echo "... src/styles.o"
+	@echo "... src/styles.i"
+	@echo "... src/styles.s"
+.PHONY : help
+
+
+
+#=============================================================================
+# Special targets to cleanup operation of make.
+
+# Special rule to run CMake to check the build system integrity.
+# No rule that depends on this can have commands that come from listfiles
+# because they might be regenerated.
+cmake_check_build_system:
+	$(CMAKE_COMMAND) -P /home/brody/projects/daw/build/CMakeFiles/VerifyGlobs.cmake
+	$(CMAKE_COMMAND) -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR) --check-build-system CMakeFiles/Makefile.cmake 0
+.PHONY : cmake_check_build_system
+

@@ -4,7 +4,6 @@
 #define WINDOWHANDLER_H
 #include <vector>
 #include "PianoRoll.h"
-
 #include "Home.h"
 #include <thread>
 #include <algorithm>
