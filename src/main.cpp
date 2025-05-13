@@ -1,6 +1,7 @@
 #include "Project.h"
 #include "WindowHandler.h"
 #include <thread>
+#include <RtAudio.h>
 
 
 int main() {

@@ -47,15 +47,25 @@ add_custom_target(CopyAssets ALL
 add_dependencies(DAW CopyAssets)  # Ensure assets are copied before running
 
 
-# Existing code for SDL3 and SDL3_ttf
 include_directories(/usr/include/SDL3_ttf/)
 
 find_package(SDL3 REQUIRED)
-find_package(SDL3_ttf REQUIRED)  # Add SDL3_ttf
+find_package(SDL3_ttf REQUIRED)
 
-target_link_libraries(DAW PRIVATE SDL3::SDL3 SDL3_ttf::SDL3_ttf)
-target_include_directories(DAW PRIVATE ${SDL2_INCLUDE_DIRS})
-target_link_libraries(DAW PRIVATE ${SDL2_LIBRARIES})
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(RTAUDIO REQUIRED rtaudio)
+
+target_include_directories(DAW PRIVATE
+    ${SDL2_INCLUDE_DIRS}
+    ${RTAUDIO_INCLUDE_DIRS}
+)
+
+target_link_libraries(DAW PRIVATE
+    SDL3::SDL3
+    SDL3_ttf::SDL3_ttf
+    ${SDL2_LIBRARIES}
+    ${RTAUDIO_LIBRARIES}
+)
 
 
 if(FALSE)
