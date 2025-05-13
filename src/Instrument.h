@@ -4,8 +4,8 @@
 #include <vector>
 #include "MixerTrack.h"
 #include <iostream>
-
-
+#include "Rack.h"
+#include "Plugin.h"
 
 #ifndef INSTRUMENT_H
 #define INSTRUMENT_H
@@ -21,10 +21,18 @@ class Instrument {
 
         std::vector<MixerTrack*> outputs;
 
+        Project* project;
+
         std::string name = "Instrument Rack";
 
         //std::vector<int> outputs;
         std::string outputType = "Output to Mixer Tracks:";
+
+        Rack rack;
+
+        void process(float* outputBuffer, int bufferSize);
+
+        void addDestination(int trackIndex);
 
 };
 

@@ -21,24 +21,18 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
     // Fill the output buffer with a simple sine wave (or your own audio data processing)
     Project* project = audioManager->project;
 
-    std::cout<<project->isPlaying<<std::endl;
 
     if(project->isPlaying) {
         project->timeSeconds += static_cast<double>(bufferSize) / audioManager->sampleRate;
 
 
-        for (unsigned int i = 0; i < bufferSize; ++i) {
-            float sample = 0.5f * sin(2.0 * M_PI * 440.0 * streamTimeSeconds);  // 440Hz sine wave
-            outBuffer[i] = sample;
-            std::cout<<outBuffer[i]<<std::endl;
-        }
+        project->tracks[0].process(outBuffer, bufferSize);
 
 
     } else {
         for (unsigned int i = 0; i < bufferSize; ++i) {
             float sample = 0;
             outBuffer[i] = sample;
-            std::cout<<outBuffer[i]<<std::endl;
         }
     }
     return 0;  // Return 0 to indicate successful processing

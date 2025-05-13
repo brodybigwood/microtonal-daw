@@ -84,8 +84,8 @@ void InstrumentMenu::render() {
             name = project->regions[index].name;
             outputType = project->regions[index].outputType;
         } else if (type == "instrument") {
-            name = project->instruments[index].name;
-            outputType = project->instruments[index].outputType;
+            name = project->instruments[index]->name;
+            outputType = project->instruments[index]->outputType;
         } else {
             return;     
         }
@@ -105,7 +105,7 @@ void InstrumentMenu::render() {
 
 
 void InstrumentMenu::clickMouse(SDL_Event& e) {
-    instrument = &(project->instruments[project->viewedElement->index]); 
+    instrument = (project->instruments[project->viewedElement->index]); 
 }
 
 void InstrumentMenu::moveMouse(float x, float y) {

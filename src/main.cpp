@@ -1,6 +1,7 @@
 #include "Project.h"
 #include "WindowHandler.h"
 #include "AudioManager.h"
+#include "EventManager.h"
 
 #include <thread>
 
@@ -11,7 +12,8 @@ int main() {
 
     WindowHandler* windowHandler = new WindowHandler(project);
 
-
+    EventManager* eventManager = new EventManager(project);
+    
     if (!audioManager->start()) {
         std::cout << "audiomanager failed" << std::endl;
         return -1;

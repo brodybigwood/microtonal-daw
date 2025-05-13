@@ -5,7 +5,7 @@ Project::Project(std::string filepath) {
         load();
         setTime(0);
 
-        for(size_t i = 0; i<5; i++) {
+        for(size_t i = 0; i<1; i++) {
 
             MixerTrack track(this);
             tracks.push_back(track);
@@ -13,20 +13,16 @@ Project::Project(std::string filepath) {
 
         for(size_t i = 0; i<1; i++) {
 
-            Instrument instrument(this);
-            instruments.push_back(instrument);
+            instruments.push_back(new Instrument(this));
         }   
 
 
-        for(size_t i = 0; i<5; i++) {
+        for(size_t i = 0; i<1; i++) {
 
             fract pos(0,1);
             Region midiRegion(pos, i);
             regions.push_back(midiRegion);
         }
-
-
-        
 }
 
 Project::~Project() {
@@ -73,3 +69,4 @@ void Project::setViewedElement(std::string type, int index) {
 void Project::setTime(double time) {
     timeSeconds = time;
 }
+

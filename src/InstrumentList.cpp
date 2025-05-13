@@ -54,7 +54,7 @@ void InstrumentList::renderInstrument(int i) {
     SDL_SetRenderDrawColor(renderer, 20,20,20,255);
     SDL_RenderLine(renderer, 0, (i+1)*instrumentHeight-1+y, width, (i+1)*instrumentHeight-1+y);
 
-    Instrument instrument = project->instruments[i];
+    Instrument* instrument = project->instruments[i];
 
 }
 
@@ -68,7 +68,7 @@ void InstrumentList::moveMouse(float x, float y) {
 void InstrumentList::getHoveredInstrument() {
 
     for(size_t i = 0; i<project->instruments.size(); i++) {
-        Instrument inst = project->instruments[i];
+        Instrument* inst = project->instruments[i];
         if(
             mouseX > 0 &&
             mouseX < width &&

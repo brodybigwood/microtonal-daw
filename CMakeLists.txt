@@ -3,6 +3,13 @@ project(MySDL2WebApp)
 
 set(CMAKE_GENERATOR_PLATFORM x64)  # Forces x64 architecture for MSVC
 
+# Enable AddressSanitizer
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fno-omit-frame-pointer")
+
+# Set the sanitizer runtime
+set(CMAKE_LINKER_FLAGS "${CMAKE_LINKER_FLAGS} -fsanitize=address")
+
+
 
 file(GLOB SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 
@@ -47,6 +54,15 @@ add_custom_target(CopyAssets ALL
 add_dependencies(DAW CopyAssets)  # Ensure assets are copied before running
 
 
+
+
+set(VST3_SDK_PATH "${CMAKE_SOURCE_DIR}/lib/VST_SDK/vst3sdk")
+
+include_directories(${VST3_SDK_PATH})
+
+
+
+
 include_directories(/usr/include/SDL3_ttf/)
 
 find_package(SDL3 REQUIRED)
@@ -65,31 +81,7 @@ target_link_libraries(DAW PRIVATE
     SDL3_ttf::SDL3_ttf
     ${SDL2_LIBRARIES}
     ${RTAUDIO_LIBRARIES}
+    ${VST3_SDK_PATH}/build/lib/Debug/libsdk_hosting.a
 )
 
 
-if(FALSE)
-# Correct the path to include the public.sdk directory
-target_include_directories(DAW PRIVATE 
-    ${CMAKE_SOURCE_DIR}/lib/vst3sdk
-)
-
-# If you're linking to static libraries, link the appropriate ones
-link_directories(${CMAKE_SOURCE_DIR}/lib/vst3sdk/build/lib)
-
-# Link libraries for VST3 SDK
-#target_link_libraries(DAW PRIVATE sdk vst3 vstgui vstgui_support)
-
-target_link_libraries(DAW PRIVATE
-    ${CMAKE_SOURCE_DIR}/lib/vst3sdk/build/lib/libsdk_hosting.a
-    ${CMAKE_SOURCE_DIR}/lib/vst3sdk/build/lib/libsdk.a
-    ${CMAKE_SOURCE_DIR}/lib/vst3sdk/build/lib/libsdk_common.a
-    ${CMAKE_SOURCE_DIR}/lib/vst3sdk/build/lib/libpluginterfaces.a
-    ${CMAKE_SOURCE_DIR}/lib/vst3sdk/build/lib/libvstgui_standalone.a
-    ${CMAKE_SOURCE_DIR}/lib/vst3sdk/build/lib/libvstgui_support.a
-    ${CMAKE_SOURCE_DIR}/lib/vst3sdk/build/lib/libvstgui_uidescription.a
-    ${CMAKE_SOURCE_DIR}/lib/vst3sdk/build/lib/libvstgui.a
-    ${CMAKE_SOURCE_DIR}/lib/vst3sdk/build/lib/libbase.a
-)
-
-endif()

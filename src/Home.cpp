@@ -9,8 +9,6 @@ Home::Home(Project* project, WindowHandler* windowHandler) {
     this->window = windowHandler->mainWindow;
     this->windowWidth = windowHandler->windowWidth;
     this->windowHeight = windowHandler->windowHeight;
-    
-    std::cout<<windowWidth<<std::endl;
 
 
     renderer = SDL_CreateRenderer(window, NULL);
@@ -94,7 +92,6 @@ bool Home::handleInput(SDL_Event& e) {
             break;
         } 
             if(e.button.button == SDL_BUTTON_LEFT) {
-                std::cout<<"ss"<<std::endl;
                 if(hoveredButton != nullptr) {
                     if(hoveredButton->title == "play") {
                         project->play();

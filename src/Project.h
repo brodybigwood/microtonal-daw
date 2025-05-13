@@ -17,54 +17,54 @@ class Project {
     Project(std::string filepath = "");
         ~Project();
 
-    std::string filepath = "";
+        std::string filepath = "";
 
-    MidiRouter router;
+        MidiRouter router;
 
-    float tempo = 120;
+        float tempo = 120;
 
-void load();
+        void load();
 
-void save();
+        void save();
 
-void createRegion(fract x, int y);
+        void createRegion(fract x, int y);
 
-float mouseX;
-float mouseY;
+        float mouseX;
+        float mouseY;
 
-void play();
+        void play();
 
-void stop();
+        void stop();
 
-std::vector<Region> regions;
-std::vector<Instrument> instruments;
-std::vector<Region> files;
-std::vector<Region> recordings;
-std::vector<Region> automations;
+        std::vector<Region> regions;
+        std::vector<Instrument*> instruments;
+        std::vector<Region> files;
+        std::vector<Region> recordings;
+        std::vector<Region> automations;
 
-std::vector<MixerTrack> tracks;
+        std::vector<MixerTrack> tracks;
 
-struct element {
-    std::string type;
-    int index;
-};
+        struct element {
+            std::string type;
+            int index;
+        };
 
-element* viewedElement = nullptr;
+        element* viewedElement = nullptr;
 
-void setViewedElement(std::string type, int index);
+        void setViewedElement(std::string type, int index);
 
-fract playHeadStart;
-fract playHeadPos = fract(0,1);
+        fract playHeadStart;
+        fract playHeadPos = fract(0,1);
 
 
 
-bool isPlaying = false;
+        bool isPlaying = false;
 
-void setTime(double);
+        void setTime(double);
 
-double timeSeconds = 0;
+        double timeSeconds = 0;
 
-private:
+    private:
 
 };
 
