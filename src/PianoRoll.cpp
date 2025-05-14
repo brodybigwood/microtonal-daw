@@ -7,7 +7,7 @@
 
 
 
-PianoRoll::PianoRoll(int windowWidth, int windowHeight, Region& region) : region(region) {
+PianoRoll::PianoRoll(int windowWidth, int windowHeight, Region* region) : region(region) {
 
     SDL_SetCursor(cursors.grabber);
     this->windowWidth = windowWidth;
@@ -34,7 +34,6 @@ PianoRoll::~PianoRoll() {
     for(int i = 0; i<4; i++) {
         SDL_DestroyTexture(layers[i]);
     }
-
 
 }
 
@@ -80,24 +79,19 @@ fract PianoRoll::getHoveredCell() {
 }
 
 void PianoRoll::RenderKeys() {
+
+    if (fonts.mainFont) {
+    } else {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Error: mainFont is NULL in PianoRoll::RenderKeys!\n");
+        return;
+    }
+
+
         SDL_Texture* KeyTexture;
         SDL_SetRenderTarget(renderer, PianoTexture);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0); // Transparent
     SDL_RenderClear(renderer);
     SDL_Color textColor = {0, 0, 0, 255};
-
-
-    font = TTF_OpenFont("assets/fonts/Arial.ttf", 12);
-
-/*
-    auto fontData = BinaryData::Arial_ttf;
-    int fontSize = BinaryData::Arial_ttfSize;
-    
-    SDL_IOStream* rw = SDL_IOFromConstMem(fontData, fontSize);
-    TTF_Font* font = TTF_OpenFontIO(rw, 1, 12);
-    
-*/
-
 
 
             SDL_FRect backgroundRect = {0, 0, keyLength, windowHeight};
@@ -117,9 +111,10 @@ SDL_RenderLine(renderer, keyLength+1,0,keyLength+1,windowHeight);
 
         double noteNum = std::abs(getNoteName(y)-1);
         
-        const char* noteNumStr = std::to_string(noteNum).c_str();
-
-        SDL_Surface* textSurface = TTF_RenderText_Solid(font, noteNumStr, 3, textColor);  // textColor is an SDL_Color
+        std::string noteNumStrTemp = std::to_string(noteNum);
+        const char* noteNumStr = noteNumStrTemp.c_str();
+        
+        SDL_Surface* textSurface = TTF_RenderText_Solid(fonts.mainFont, noteNumStr, 3, textColor);  // textColor is an SDL_Color
 
         KeyTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
 
@@ -138,7 +133,6 @@ SDL_RenderLine(renderer, keyLength+1,0,keyLength+1,windowHeight);
         
 
 
-    TTF_CloseFont(font);
 }
 
 
@@ -353,7 +347,7 @@ void PianoRoll::handleInput(SDL_Event& e) {
                     if(hoveredNote == -1) {
                         createNote(getHoveredTime(), getHoveredCell());
                     } else {
-                        notesPerOctave = region.notes[hoveredNote].temperament;
+                        notesPerOctave = region->notes[hoveredNote].temperament;
                         UpdateGrid();
                         Scroll();
                         movingNote = hoveredNote;
@@ -433,7 +427,7 @@ void PianoRoll::handleInput(SDL_Event& e) {
 
 void PianoRoll::createNote(fract start, fract pitch) {
         
-        region.notes.push_back(Note(start, lastLength + start, pitch, notesPerOctave));
+        region->notes.push_back(Note(start, lastLength + start, pitch, notesPerOctave));
 
         refreshGrid = true;
 }
@@ -444,8 +438,8 @@ void PianoRoll::RenderNotes() {
     SDL_SetRenderDrawColor(renderer,0,0,0,0);
     SDL_RenderClear(renderer);
 
-    for(int i = 0; i<region.notes.size(); i++) {
-        Note& note = region.notes[i];
+    for(int i = 0; i<region->notes.size(); i++) {
+        Note& note = region->notes[i];
 
             float noteX = getNotePosX(note) +1;
             float noteY = getY(note.num) -1 ;
@@ -474,8 +468,8 @@ SDL_RenderTexture(renderer, NotesTexture, NULL, NULL);
 void PianoRoll::getExistingNote() {
     hoveredNote = -1; // Default to -1, in case no note is found
 
-    for (int i = 0; i < region.notes.size(); i++) {
-        Note& note = region.notes[i];
+    for (int i = 0; i < region->notes.size(); i++) {
+        Note& note = region->notes[i];
         
         // Get the required positions and size once per iteration
         const int notePosX = getNotePosX(note);
@@ -507,7 +501,7 @@ float PianoRoll::getNoteHeight(Note& note) {
 
 void PianoRoll::deleteNote(int index) {
     if(index != -1) {
-        region.notes.erase(region.notes.begin() + index); 
+        region->notes.erase(region->notes.begin() + index); 
 
         Scroll();
     }
@@ -537,7 +531,7 @@ void PianoRoll::moveNote(int noteIndex, int moveX, int moveY) {
     fract x = fract(moveX,notesPerBar);
     fract y = fract(-moveY*12,notesPerOctave);
 
-    Note& note = region.notes[noteIndex];
+    Note& note = region->notes[noteIndex];
     note.start = note.start + x;
     note.end = note.end + x;
     note.num = note.num + y;

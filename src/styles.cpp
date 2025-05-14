@@ -30,3 +30,20 @@ Cursors cursors{
     SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_MOVE),
     SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT),
 };
+
+Fonts fonts{
+    nullptr
+};
+
+bool initFonts() {
+    if(TTF_Init() == -1){
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "TTF_Init failed in styles.cpp: %s\n", SDL_GetError());
+        return false;
+    }
+    if (fonts.mainFont = TTF_OpenFont("assets/fonts/Arial.ttf", 12)) {
+        return true;
+    } else {
+        return false;
+    }
+    
+}

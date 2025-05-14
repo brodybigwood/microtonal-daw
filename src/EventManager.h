@@ -9,7 +9,7 @@ class EventManager {
         EventManager(Project* project);
         ~EventManager();
         Project* project;
-        std::vector<Region>* regions;
+        std::vector<Region*>* regions;
         std::vector<Instrument*>* instruments;
         std::vector<Region>* files;
         std::vector<Region>* recordings;

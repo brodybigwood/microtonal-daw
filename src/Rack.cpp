@@ -27,7 +27,7 @@ void Rack::process(
 
 }
 
-bool Rack::addPlugin() {
-    plugins.push_back(new Plugin);
+bool Rack::addPlugin(char* filepath) {
+    plugins.push_back(new Plugin(filepath));
     return true;
 }

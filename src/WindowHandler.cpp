@@ -7,7 +7,7 @@ WindowHandler::WindowHandler(Project* project) {
     SDL_SetHint(SDL_HINT_APP_ID, "daw.editor");
 
     SDL_Init(SDL_INIT_VIDEO);
-    TTF_Init();
+
 
     this->project = project;
     
@@ -24,7 +24,7 @@ WindowHandler::~WindowHandler() {
 
 }
 
-void WindowHandler::createPianoRoll(Region& region) {
+void WindowHandler::createPianoRoll(Region* region) {
     std::cout<<"creating"<<std::endl;
     editor = new PianoRoll(800, 600, region);
     

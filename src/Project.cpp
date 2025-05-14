@@ -19,8 +19,7 @@ Project::Project(std::string filepath) {
         for(size_t i = 0; i<1; i++) {
 
             fract pos(0,1);
-            Region midiRegion(pos, i);
-            regions.push_back(midiRegion);
+            regions.push_back(new Region(pos, i));
         }
 }
 
@@ -41,8 +40,7 @@ void Project::save() {
 }
 
 void Project::createRegion(fract x, int y) {
-    Region region(x, y);
-    regions.push_back(region);
+    regions.push_back(new Region(x, y));
 }
 
 void Project::play() {

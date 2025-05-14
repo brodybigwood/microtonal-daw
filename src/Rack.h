@@ -22,6 +22,6 @@ class Rack {
         int bufferSize
     );
   
-    bool addPlugin();
+    bool addPlugin(char* filepath);
 };
 #endif

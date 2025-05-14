@@ -8,7 +8,10 @@
 
 
 int main() {
-
+    
+    if(!initFonts()) {
+        return -1;
+    }
 
     Project* project = new Project();
     AudioManager* audioManager = new AudioManager(project); 

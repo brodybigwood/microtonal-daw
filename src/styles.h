@@ -1,4 +1,5 @@
 #include <SDL3/SDL.h>
+#include <SDL_ttf.h>
 
 #ifndef STYLES_H
 #define STYLES_H
@@ -39,5 +40,13 @@ struct Cursors{
 };
 
 extern Cursors cursors;
+
+struct Fonts{
+    TTF_Font* mainFont;
+};
+
+extern Fonts fonts;
+
+bool initFonts();
 
 #endif // STYLES_H

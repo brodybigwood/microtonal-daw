@@ -8,7 +8,7 @@
 
 class Plugin {
     public:
-        Plugin(const char* filepath  = "/usr/lib/vst3/Vital.vst3/Contents/x86_64-linux/Vital.so");
+        Plugin(const char* filepath);
         ~Plugin();
 
          void load();

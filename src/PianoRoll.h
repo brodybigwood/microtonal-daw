@@ -14,7 +14,7 @@ class PianoRoll {
 
 
 
-    PianoRoll(int, int, Region&);
+    PianoRoll(int, int, Region*);
     virtual ~PianoRoll();
     
         SDL_Window* window;
@@ -25,13 +25,11 @@ class PianoRoll {
         SDL_Texture* NotesTexture;
         SDL_Texture* KeyTexture;
 
-
-        TTF_Font* font;
         SDL_FRect textRect;
 
         SDL_Texture* keys[128];
 
-        Region& region;
+        Region* region;
 
         float keyLength = 40;
 

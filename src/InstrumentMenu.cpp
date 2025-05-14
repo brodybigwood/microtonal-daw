@@ -13,16 +13,6 @@ InstrumentMenu::InstrumentMenu(SDL_Texture* texture, SDL_Renderer* renderer, int
     this->y = y;
 
     TTF_Init();
-/*
-    auto fontData = BinaryData::Arial_ttf;
-    int dataSize = BinaryData::Arial_ttfSize;
-    int fontPointSize = 25;
-    
-    SDL_IOStream* rw = SDL_IOFromMem(const_cast<void*>(static_cast<const void*>(fontData)), dataSize);
-
-    font = TTF_OpenFontIO(rw, 1, fontPointSize);
-*/
-    font = TTF_OpenFont("assets/fonts/Arial.ttf", 12);
 
     titleDst = {0, 0 + 25, width, 25};  // x and y = screen position
     outputDst = {0, height-100, width, 25};  // x and y = screen position
@@ -36,10 +26,15 @@ InstrumentMenu::~InstrumentMenu() {
 
 
 void InstrumentMenu::renderText() {
- 
+    if (fonts.mainFont) {
 
-    titleSurface = TTF_RenderText_Solid(font, name.c_str(), 24, color);
-    outputSurface = TTF_RenderText_Solid(font, outputType.c_str(), 24, color);
+    } else {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Error: mainFont is NULL in PianoRoll::RenderKeys!\n");
+        // Handle the error (e.g., return, don't render)
+    }
+
+    titleSurface = TTF_RenderText_Solid(fonts.mainFont, name.c_str(), 24, color);
+    outputSurface = TTF_RenderText_Solid(fonts.mainFont, outputType.c_str(), 24, color);
 
 
     
@@ -81,8 +76,8 @@ void InstrumentMenu::render() {
         std::string type = project->viewedElement->type;
 
         if(type == "region") {
-            name = project->regions[index].name;
-            outputType = project->regions[index].outputType;
+            name = project->regions[index]->name;
+            outputType = project->regions[index]->outputType;
         } else if (type == "instrument") {
             name = project->instruments[index]->name;
             outputType = project->instruments[index]->outputType;

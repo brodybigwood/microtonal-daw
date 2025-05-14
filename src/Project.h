@@ -36,7 +36,7 @@ class Project {
 
         void stop();
 
-        std::vector<Region> regions;
+        std::vector<Region*> regions;
         std::vector<Instrument*> instruments;
         std::vector<Region> files;
         std::vector<Region> recordings;

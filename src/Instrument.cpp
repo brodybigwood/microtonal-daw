@@ -7,7 +7,7 @@ Instrument::Instrument(Project* project) {
     this->project = project;
 
     addDestination(0);
-    rack.addPlugin();
+    rack.addPlugin("/usr/lib/vst3/Vital.vst3/Contents/x86_64-linux/Vital.so");
 
 }
 Instrument::~Instrument() {

@@ -152,11 +152,11 @@ void SongRoll::renderRegion(int r) {
         SDL_SetRenderDrawColor(renderer, 20,20,100,127);
     }
 
-    Region region = project->regions[r];
+    Region* region = project->regions[r];
 
-    float topLeftCornerX = region.startTime*barWidth;
-    float topLeftCornerY = region.y*cellHeight;
-    regionRect = {topLeftCornerX, topLeftCornerY, region.length*barWidth, cellHeight};
+    float topLeftCornerX = region->startTime*barWidth;
+    float topLeftCornerY = region->y*cellHeight;
+    regionRect = {topLeftCornerX, topLeftCornerY, region->length*barWidth, cellHeight};
     SDL_SetRenderTarget(renderer, regionTexture);
 
     SDL_RenderFillRect(renderer, &regionRect);
@@ -164,12 +164,12 @@ void SongRoll::renderRegion(int r) {
 
 void SongRoll::getHoveredRegion() {
     for(size_t i = 0; i<project->regions.size(); i++) {
-        Region region = project->regions[i];
+        Region* region = project->regions[i];
         if(
-            mouseX > region.startTime*barWidth &&
-            mouseX < (region.length+region.startTime)*barWidth &&
-            mouseY > region.y*cellHeight &&
-            mouseY < (region.y+1) * cellHeight
+            mouseX > region->startTime*barWidth &&
+            mouseX < (region->length+region->startTime)*barWidth &&
+            mouseY > region->y*cellHeight &&
+            mouseY < (region->y+1) * cellHeight
         ) {
             hoveredRegion = i;
             return;
