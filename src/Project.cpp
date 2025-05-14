@@ -7,8 +7,7 @@ Project::Project(std::string filepath) {
 
         for(size_t i = 0; i<1; i++) {
 
-            MixerTrack track(this);
-            tracks.push_back(track);
+            tracks.push_back(new MixerTrack(this));
         }  
 
         for(size_t i = 0; i<1; i++) {

@@ -7,8 +7,7 @@ Instrument::Instrument(Project* project) {
     this->project = project;
 
     addDestination(0);
-
-    auto filepath = "/usr/lib/vst3/Vital.vst3/Contents/x86_64-linux/Vital.so";
+    rack.addPlugin();
 
 }
 Instrument::~Instrument() {
@@ -16,9 +15,9 @@ Instrument::~Instrument() {
 }
 
 void Instrument::addDestination(int trackIndex) {
-    outputs.push_back(&project->tracks[0]);
+    outputs.push_back(project->tracks[0]);
 
-    project->tracks[0].childInstruments.push_back(this);
+    project->tracks[0]->childInstruments.push_back(this);
 }
 
 void Instrument::process(float* outputBuffer, int bufferSize) {

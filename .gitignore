@@ -2,3 +2,5 @@ build/
 old-html/
 submodules/tracktion_engine/*
 !submodules/tracktion_engine/.git
+.clangd
+compile_commands.json

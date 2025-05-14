@@ -2,7 +2,6 @@
 
 
 Rack::Rack() {
-    addPlugin();
 }
 
 Rack::~Rack() {

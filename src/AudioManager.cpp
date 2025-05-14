@@ -26,7 +26,7 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
         project->timeSeconds += static_cast<double>(bufferSize) / audioManager->sampleRate;
 
 
-        project->tracks[0].process(outBuffer, bufferSize);
+        project->tracks[0]->process(outBuffer, bufferSize);
 
 
     } else {
@@ -43,10 +43,10 @@ bool AudioManager::start() {
     std::vector<unsigned int> deviceIds = rtaudio.getDeviceIds();
 
     for (unsigned int i = 0; i < deviceIds.size(); ++i) {
-        RtAudio::DeviceInfo info = rtaudio.getDeviceInfo(deviceIds[i]);
-        std::cout << "Device " << i << ": " << info.name << std::endl;
-        std::cout << "  Input channels: " << info.inputChannels << ", Output channels: " << info.outputChannels << std::endl;
-        std::cout << "  Default rate: " << info.preferredSampleRate << std::endl;
+       // RtAudio::DeviceInfo info = rtaudio.getDeviceInfo(deviceIds[i]);
+       // std::cout << "Device " << i << ": " << info.name << std::endl;
+       // std::cout << "  Input channels: " << info.inputChannels << ", Output channels: " << info.outputChannels << std::endl;
+        //std::cout << "  Default rate: " << info.preferredSampleRate << std::endl;
     }
 
     auto defaultDevice = rtaudio.getDefaultOutputDevice();
@@ -61,9 +61,9 @@ bool AudioManager::start() {
 
     bufferSize = 512; 
 
-    std::cout << "Using default sample rate: " << sampleRate << std::endl;
-    std::cout << "Using buffer size: " << bufferSize << std::endl;
-    std::cout << "Using output channels: " << outputChannels << std::endl;
+    //std::cout << "Using default sample rate: " << sampleRate << std::endl;
+    //std::cout << "Using buffer size: " << bufferSize << std::endl;
+    //std::cout << "Using output channels: " << outputChannels << std::endl;
 
     try {
 

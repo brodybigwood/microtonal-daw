@@ -42,7 +42,7 @@ class Project {
         std::vector<Region> recordings;
         std::vector<Region> automations;
 
-        std::vector<MixerTrack> tracks;
+        std::vector<MixerTrack*> tracks;
 
         struct element {
             std::string type;
