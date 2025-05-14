@@ -3,10 +3,19 @@
 #define PLUGIN_H
 
 #include "pluginterfaces/base/ustring.h"
-#include "pluginterfaces/vst/ivstcomponent.h"
-#include "pluginterfaces/vst/ivsteditcontroller.h"
 #include "pluginterfaces/vst/vstpresetkeys.h"
+
+#include "pluginterfaces/vst/ivstcomponent.h"
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
+
+
+#include "pluginterfaces/vst/ivsteditcontroller.h"
+#include "pluginterfaces/vst/ivstparameterchanges.h"
+#include "pluginterfaces/vst/ivstevents.h"
+#include "pluginterfaces/vst/ivstplugview.h"
+
+#include "pluginterfaces/gui/iplugview.h"
+
 #include <string>
 
 class Plugin {
@@ -14,12 +23,16 @@ class Plugin {
         Plugin(const char* filepath);
         ~Plugin();
 
-         void load();
+         bool getID();
+
+         bool instantiate();
          
          void process(
             float* thrubuffer,
             int bufferSize
         );
+
+        Steinberg::TUID componentCID;
 
         const char* filepath;
 
@@ -34,6 +47,15 @@ class Plugin {
 
         void showWindow();
 
+        Steinberg::FUnknownPtr<Steinberg::Vst::IComponent> component;
+
+        Steinberg::FUnknownPtr<Steinberg::Vst::IAudioProcessor> audioProcessor;
+        Steinberg::FUnknownPtr<Steinberg::Vst::IEditController> editController;
+        Steinberg::FUnknownPtr<Steinberg::Vst::IParameterChanges> parameterChanges;
+        Steinberg::FUnknownPtr<Steinberg::Vst::IEventList> eventList;
+        /*
+        Steinberg::FUnknownPtr<Steinberg::Vst::class> className;
+        */
 };
 
 #endif

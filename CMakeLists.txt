@@ -55,6 +55,7 @@ set(VST3_INTERFACE_SRC
     ${VST3_SDK_PATH}/pluginterfaces/base/coreiids.cpp
     ${VST3_SDK_PATH}/pluginterfaces/base/funknown.cpp
     ${VST3_SDK_PATH}/pluginterfaces/base/ustring.cpp
+    ${VST3_SDK_PATH}/pluginterfaces/base/conststringtable.cpp
 )
 
 

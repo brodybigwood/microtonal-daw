@@ -71,30 +71,18 @@ Plugin::Plugin(const char* filepath) {
         std::cerr << "Error: Could not get IPluginFactory interface." << std::endl;
     }
 
-    showWindow();
+    if(!getID()) {
+        std::cerr << "couldnt get id of plugin";
+    }
+    instantiate();
     
 }
 
 Plugin::~Plugin() {
 
 }
-void Plugin::load() {
+bool Plugin::getID() {
 
-    
-}
-
-void Plugin::process(
-    float* thrubuffer,
-    int bufferSize
-) {
-
-    for (unsigned int i = 0; i < bufferSize; ++i) {
-        float sample = 0.5f * sin(2.0 * M_PI * 440.0 * bufferSize/1000 * i);  // 440Hz sine wave
-        thrubuffer[i] = sample;
-    }
-}
-
-void Plugin::showWindow() {
     const char* mainComponentCategories[] = {
         "Audio Module Class",
         "ComponentClass",
@@ -107,7 +95,7 @@ void Plugin::showWindow() {
     size_t numMainComponentCategories = sizeof(mainComponentCategories) / sizeof(mainComponentCategories[0]);
 
 
-    Steinberg::TUID componentCID;
+
     Steinberg::PClassInfo classInfo;
 
     int smallestMatch = numMainComponentCategories;
@@ -128,8 +116,6 @@ void Plugin::showWindow() {
                 }
 
                 std::cout << "Found potential main component Class ID." << std::endl;
-
-
                 break;
             }
         }
@@ -142,30 +128,102 @@ void Plugin::showWindow() {
 
 
     if(componentCID == NULL) {
-        return;
+        return false;
     }
+
+    return true;
+}
+
+void Plugin::process(
+    float* thrubuffer,
+    int bufferSize
+) {
+
+    for (unsigned int i = 0; i < bufferSize; ++i) {
+        float sample = 0.5f * sin(2.0 * M_PI * 440.0 * bufferSize/1000 * i);  // 440Hz sine wave
+        thrubuffer[i] = sample;
+    }
+}
+
+bool Plugin::instantiate() {
+
 
     Steinberg::FUnknown* componentUnknown = nullptr;
     Steinberg::tresult result = pluginFactory->createInstance(
         componentCID, Steinberg::Vst::IComponent::iid, (void**)&componentUnknown
     );
     if (result == Steinberg::kResultTrue && componentUnknown) {
-        Steinberg::FUnknownPtr<Steinberg::Vst::IComponent> component(componentUnknown);
+        component = Steinberg::FUnknownPtr<Steinberg::Vst::IComponent>(componentUnknown);
         if (component) {
             std::cout << "Successfully created main component instance." << std::endl;
 
-            Steinberg::FUnknownPtr<Steinberg::Vst::IAudioProcessor> audioProcessor(componentUnknown);
+/*
+            className = Steinberg::FUnknownPtr<Steinberg::Vst::class>(componentUnknown);
+            if (className) {
+                std::cout << "Component also implements class." << std::endl;
+            }
+*/
+
+
+
+            audioProcessor = Steinberg::FUnknownPtr<Steinberg::Vst::IAudioProcessor>(componentUnknown);
             if (audioProcessor) {
                 std::cout << "Component also implements IAudioProcessor." << std::endl;
                 // Proceed with audio processing setup
             }
 
+            eventList = Steinberg::FUnknownPtr<Steinberg::Vst::IEventList>(componentUnknown);
+            if (eventList) {
+                std::cout << "Component also implements IEventList." << std::endl;
+            }
+
+            parameterChanges = Steinberg::FUnknownPtr<Steinberg::Vst::IParameterChanges>(componentUnknown);
+            if (parameterChanges) {
+                std::cout << "Component also implements IParameterChanges." << std::endl;
+                // Now you can use the parameterChanges interface to interact with parameters
+            }
 
         } else {
-            std::cout << "Failed to create main component instance." << std::endl;       
+            std::cout << "Failed to create main component instance." << std::endl;   
+            return false;    
         }
     } else {
         std::cout << "result was false" << std::endl;
+        return false;
     }
 
+    if (component->getControllerClassId(componentCID) == Steinberg::kResultTrue) {
+        Steinberg::FUnknown* controllerUnknown = nullptr;
+        Steinberg::tresult controllerResult = pluginFactory->createInstance(
+            componentCID, Steinberg::Vst::IEditController::iid, (void**)&controllerUnknown
+        );
+        if (controllerResult == Steinberg::kResultTrue && controllerUnknown) {
+            Steinberg::FUnknownPtr<Steinberg::Vst::IEditController> editController(controllerUnknown);
+            if (editController) {
+                // Proceed to create the view
+                Steinberg::IPlugView* plugView = editController->createView(Steinberg::Vst::ViewType::kEditor);
+                if (plugView) {
+                    std::cout << "Successfully created the IPlugView." << std::endl;
+                    // Now you can use the plugView pointer to get the GUI handle, etc.
+                    // Remember to release the IPlugView interface when you are done with it:
+                    // plugView->release();
+                } else {
+                    std::cerr << "Error: createView() returned a null pointer." << std::endl;
+                }
+            } else {
+                std::cerr << "Error: Could not get IEditController interface." << std::endl;
+                return false; // Or handle the error appropriately
+            }
+            controllerUnknown->release();
+        } else {
+            std::cerr << "Error creating Edit Controller instance." << std::endl;
+        }
+
+    } else {
+        std::cout << "Failed to create controller instance." << std::endl;   
+        return false;    
+    }
+
+
+    return true;
 }
