@@ -42,6 +42,8 @@ set(VST3_HOSTING_SRC
     ${VST3_SDK_PATH}/public.sdk/source/vst/hosting/module.cpp
     ${VST3_SDK_PATH}/public.sdk/source/vst/moduleinfo/moduleinfocreator.cpp
     ${VST3_SDK_PATH}/public.sdk/source/vst/moduleinfo/moduleinfoparser.cpp
+
+    ${VST3_SDK_PATH}/public.sdk/source/common/commoniids.cpp
 )
 
 set(VST3_BASE_SRC

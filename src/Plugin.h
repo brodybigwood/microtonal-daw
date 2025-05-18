@@ -13,17 +13,19 @@
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 #include "pluginterfaces/vst/ivstevents.h"
 #include "pluginterfaces/vst/ivstplugview.h"
-
+#include "pluginterfaces/vst/ivsthostapplication.h"
 #include "pluginterfaces/gui/iplugview.h"
 
 #include <string>
+
+#include "EditorHostFrame.h"
 
 class Plugin {
     public:
         Plugin(const char* filepath);
         ~Plugin();
 
-         bool getID();
+
 
          bool instantiate();
          
@@ -56,6 +58,15 @@ class Plugin {
         /*
         Steinberg::FUnknownPtr<Steinberg::Vst::class> className;
         */
+
+        private:
+        void loadPluginLibrary();
+        void fetchPluginFactoryInfo();
+        bool getID();
+        bool instantiatePlugin();
+        bool createEditControllerAndPlugView();
+
+
 };
 
 #endif
