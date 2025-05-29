@@ -199,14 +199,15 @@ void PianoRoll::RenderGridTexture() {
 }
 
 bool PianoRoll::tick() {
-
+    //refreshGrid = true;
     //handleInput(e);
     if(refreshGrid) {
+        refreshGrid = false;
         RenderGridTexture();  
 
         RenderKeys();
         RenderNotes();  
-        refreshGrid = false;
+        
 
    
         RenderRoll();
@@ -293,7 +294,7 @@ void PianoRoll::toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar) {
 
 void PianoRoll::handleInput(SDL_Event& e) {
     
-    refreshGrid = false;
+
     toggleKey(e, SDL_SCANCODE_LSHIFT, isShiftPressed);
     toggleKey(e, SDL_SCANCODE_LCTRL, isCtrlPressed);
     toggleKey(e, SDL_SCANCODE_LALT, isAltPressed);
@@ -362,6 +363,7 @@ void PianoRoll::handleInput(SDL_Event& e) {
 
             }
             handleMouse();
+            refreshGrid = true;
             break;
         case SDL_EVENT_MOUSE_BUTTON_UP:
             if (e.button.button == SDL_BUTTON_LEFT) {
@@ -393,7 +395,7 @@ void PianoRoll::handleInput(SDL_Event& e) {
 
             
             if(lmb && movingNote != -1) {
-
+                refreshGrid = true;
                 float dX = mouseX - last_lmb_x;
                 float dirX = std::abs(dX)/dX;
 
@@ -421,6 +423,7 @@ void PianoRoll::handleInput(SDL_Event& e) {
 
         // Optionally handle other events you might need:
         default:
+            refreshGrid = false;
             break;
     }
 }
