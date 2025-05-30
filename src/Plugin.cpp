@@ -4,7 +4,9 @@
 #include <iostream>
 #include <dlfcn.h>
 
-// Forward declaration
+
+#include "EditorHostFrame.h"
+
 class EditorHostFrame;
 
 Plugin::Plugin(const char* filepath) : filepath(filepath), pluginLibraryHandle(nullptr), pluginFactory(nullptr) {

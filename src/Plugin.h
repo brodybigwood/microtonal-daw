@@ -2,8 +2,6 @@
 #ifndef PLUGIN_H
 #define PLUGIN_H
 
-#include "pluginterfaces/base/ustring.h"
-#include "pluginterfaces/vst/vstpresetkeys.h"
 
 #include "pluginterfaces/vst/ivstcomponent.h"
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
@@ -12,13 +10,10 @@
 #include "pluginterfaces/vst/ivsteditcontroller.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 #include "pluginterfaces/vst/ivstevents.h"
-#include "pluginterfaces/vst/ivstplugview.h"
-#include "pluginterfaces/vst/ivsthostapplication.h"
-#include "pluginterfaces/gui/iplugview.h"
+
 
 #include <string>
 
-#include "EditorHostFrame.h"
 
 class Plugin {
     public:
