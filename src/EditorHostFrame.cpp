@@ -28,10 +28,34 @@ Steinberg::uint32 PLUGIN_API EditorHostFrame::release () {
 Steinberg::tresult PLUGIN_API EditorHostFrame::queryInterface (const Steinberg::TUID _iid, void** obj) {
     if (Steinberg::FUnknownPrivate::iidEqual (_iid, Steinberg::IPlugFrame::iid) ||
         Steinberg::FUnknownPrivate::iidEqual (_iid, Steinberg::FUnknown::iid)) {
-        *obj = this;
-        addRef ();
-        return Steinberg::kResultTrue;
-    }
-    *obj = nullptr;
-    return Steinberg::kNoInterface;
+        *obj = static_cast<Steinberg::IPlugFrame*>(this);
+    addRef ();
+    return Steinberg::kResultTrue;
+        }
+
+        if (Steinberg::FUnknownPrivate::iidEqual (_iid, Steinberg::Vst::IComponentHandler::iid)) {
+            *obj = static_cast<Steinberg::Vst::IComponentHandler*>(this);
+            addRef();
+            return Steinberg::kResultTrue;
+        }
+
+        *obj = nullptr;
+        return Steinberg::kNoInterface;
 }
+
+Steinberg::tresult PLUGIN_API EditorHostFrame::beginEdit(Steinberg::Vst::ParamID id) {
+    return Steinberg::kResultOk;
+}
+
+Steinberg::tresult PLUGIN_API EditorHostFrame::performEdit(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue value) {
+    return Steinberg::kResultOk;
+}
+
+Steinberg::tresult PLUGIN_API EditorHostFrame::endEdit(Steinberg::Vst::ParamID id) {
+    return Steinberg::kResultOk;
+}
+
+Steinberg::tresult PLUGIN_API EditorHostFrame::restartComponent(Steinberg::int32 flags) {
+    return Steinberg::kResultOk;
+}
+
