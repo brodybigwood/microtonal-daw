@@ -28,14 +28,12 @@ file(GLOB SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 set(VST3_SDK_PATH "${CMAKE_SOURCE_DIR}/lib/VST_SDK/vst3sdk")
 
 set(VST3_HOSTING_SRC
-    ${VST3_SDK_PATH}/public.sdk/source/vst/hosting/module.cpp
     ${VST3_SDK_PATH}/public.sdk/source/vst/hosting/plugprovider.cpp
     ${VST3_SDK_PATH}/public.sdk/source/vst/hosting/hostclasses.cpp
     ${VST3_SDK_PATH}/public.sdk/source/vst/utility/stringconvert.cpp
-    ${VST3_SDK_PATH}/public.sdk/source/common/commonstringconvert.cpp
     ${VST3_SDK_PATH}/public.sdk/source/main/pluginfactory.cpp
     ${VST3_SDK_PATH}/public.sdk/source/vst/utility/testing.cpp
-    ${VST3_SDK_PATH}/public.sdk/samples/vst-hosting/validator/source/validator.cpp
+   # ${VST3_SDK_PATH}/public.sdk/samples/vst-hosting/validator/source/validator.cpp
     ${VST3_SDK_PATH}/public.sdk/source/vst/hosting/test/hostclassestest.cpp
     ${VST3_SDK_PATH}/public.sdk/source/vst/hosting/pluginterfacesupport.cpp
     ${VST3_SDK_PATH}/public.sdk/source/vst/vstinitiids.cpp
@@ -43,7 +41,10 @@ set(VST3_HOSTING_SRC
     ${VST3_SDK_PATH}/public.sdk/source/vst/moduleinfo/moduleinfocreator.cpp
     ${VST3_SDK_PATH}/public.sdk/source/vst/moduleinfo/moduleinfoparser.cpp
 
+    ${VST3_SDK_PATH}/public.sdk/source/vst/hosting/connectionproxy.cpp
+
     ${VST3_SDK_PATH}/public.sdk/source/common/commoniids.cpp
+    ${VST3_SDK_PATH}/public.sdk/source/common/commonstringconvert.cpp
 )
 
 set(VST3_BASE_SRC
@@ -65,6 +66,7 @@ if(UNIX)
     add_compile_definitions(SMTG_OS_LINUX LINUX)
     list(APPEND VST3_HOSTING_SRC
         "${VST3_SDK_PATH}/public.sdk/source/vst/hosting/module_linux.cpp"
+        "${VST3_SDK_PATH}/public.sdk/source/common/threadchecker_linux.cpp"
     )
 endif()
 
