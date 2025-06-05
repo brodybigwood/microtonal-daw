@@ -16,6 +16,7 @@
 #include <string>
 
 #include "EditorHostFrame.h"
+#include "EditorWindowHost.h"
 
 class EditorHostFrame;
 
@@ -26,6 +27,7 @@ class Plugin {
         ~Plugin();
 
         EditorHostFrame* hostFrame;
+        std::unique_ptr<EditorWindowHost> editorHost;
         Steinberg::Vst::IComponentHandler* componentHandler;
 
          bool instantiate();
@@ -47,6 +49,8 @@ class Plugin {
 
         const char* filepath;
 
+        const char* name;
+
         void* pluginLibraryHandle;
 
         Steinberg::FUnknownPtr<Steinberg::IPluginFactory> pluginFactory;
@@ -60,6 +64,9 @@ class Plugin {
 
         void showWindow();
 
+        Steinberg::IPlugView* view;
+        Steinberg::ViewRect viewRect;
+
         Steinberg::FUnknownPtr<Steinberg::Vst::IComponent> component;
 
         Steinberg::FUnknownPtr<Steinberg::Vst::IAudioProcessor> audioProcessor;
@@ -70,6 +77,8 @@ class Plugin {
         Steinberg::FUnknownPtr<Steinberg::Vst::class> className;
         */
 
+
+        bool editorTick();
         private:
         void loadPluginLibrary();
         void fetchPluginFactoryInfo();
@@ -77,6 +86,7 @@ class Plugin {
         bool instantiatePlugin();
         bool createEditControllerAndPlugView(const Steinberg::TUID
         controllerCID);
+
 
         void makeConnection();
 

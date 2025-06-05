@@ -4,7 +4,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE BOOL "Export compile_commands.json fo
 
 project(MySDL2WebApp)
 
-set(CMAKE_GENERATOR_PLATFORM x64)  # Forces x64 architecture for MSVC
+
 
 set(CMAKE_CXX_STANDARD 17) # Or 14
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -130,10 +130,14 @@ find_package(SDL3_ttf REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(RTAUDIO REQUIRED rtaudio)
 
+find_package(X11 REQUIRED)
+
+
 target_include_directories(DAW PRIVATE
 
     ${SDL2_INCLUDE_DIRS}
     ${RTAUDIO_INCLUDE_DIRS}
+    ${X11_INCLUDE_DIR}
 )
 
 target_link_libraries(DAW PRIVATE
@@ -142,6 +146,7 @@ target_link_libraries(DAW PRIVATE
     ${SDL2_LIBRARIES}
     ${RTAUDIO_LIBRARIES}
     vst3
+    ${X11_LIBRARIES}
 )
 
 

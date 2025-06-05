@@ -22,6 +22,9 @@ Plugin::Plugin(const char* filepath) : filepath(filepath), pluginLibraryHandle(n
 }
 
 Plugin::~Plugin() {
+    if (view){
+        view->release();
+    }
     if (pluginLibraryHandle) {
         dlclose(pluginLibraryHandle);
         std::cout << "Plugin library unloaded." << std::endl;
@@ -136,6 +139,14 @@ bool Plugin::getID() {
 
 
 void Plugin::process(float* thrubuffer, int bufferSize) {
+
+    if(editorHost->windowOpen) {
+      editorHost->tick();
+      view->onSize(&viewRect);
+
+    }
+
+
     for (unsigned int i = 0; i < bufferSize; ++i) {
         float sample = 0.5f * sin(2.0 * M_PI * 440.0 * bufferSize / 1000.0f * i); 
         thrubuffer[i] = sample;
@@ -155,7 +166,10 @@ bool Plugin::instantiatePlugin() {
 
     component = Steinberg::FUnknownPtr<Steinberg::Vst::IComponent>(componentUnknown);
 
-    return createEditControllerAndPlugView(controllerCID);
+    if(createEditControllerAndPlugView(controllerCID)) {
+        showWindow();
+        return true;
+    }
 
 
 }
@@ -169,7 +183,7 @@ bool Plugin::createEditControllerAndPlugView(const Steinberg::TUID controllerCID
         return false;
     }
 
-    Steinberg::FUnknownPtr<Steinberg::Vst::IEditController> editController(controllerUnknown);
+    editController = Steinberg::FUnknownPtr<Steinberg::Vst::IEditController>(controllerUnknown);
     if (!editController) {
         std::cerr << "Error: Could not get IEditController interface." << std::endl;
         return false;
@@ -193,7 +207,7 @@ bool Plugin::createEditControllerAndPlugView(const Steinberg::TUID controllerCID
 
 
 
-    auto view = owned(editController->createView("editor"));
+    view = editController->createView("editor");
 
     if (!view) {
         std::cerr << "Failed to create editor view." << std::endl;
@@ -202,7 +216,48 @@ bool Plugin::createEditControllerAndPlugView(const Steinberg::TUID controllerCID
 
     std::cout << "Editor view created successfully." << std::endl;
 
+
     return true;
+}
+
+void Plugin::showWindow() {
+    editorHost = EditorWindowHost::create();
+    if (!editorHost) {
+        std::cerr << "Failed to create editor host window." << std::endl;
+        return;
+    }
+
+    auto nativeHandle = editorHost->getNativeWindowHandle();
+    const char* platformType = editorHost->getPlatformType();
+
+    if (view->isPlatformTypeSupported(platformType)) {
+
+
+
+        auto result = view->attached(nativeHandle, platformType);
+        std::cout << "Attach result: " << result << std::endl;
+
+        if (result) {
+            view->getSize(&viewRect);
+            std::cout << "Attached view. Size: "
+            << viewRect.right - viewRect.left << "x"
+            << viewRect.bottom - viewRect.top << std::endl;
+
+            editorHost->resize(viewRect.right - viewRect.left, viewRect.bottom - viewRect.top);
+
+             view->onSize(&viewRect);
+             view->onWheel(nullptr);
+
+
+        } else {
+            std::cout << "nativeHandle pointer: " << nativeHandle << std::endl;
+            std::cerr << "Failed to attach view" << std::endl;
+        }
+    } else {
+        std::cerr << "Platform type not supported: " << platformType << std::endl;
+    }
+
+
 }
 
 void Plugin::makeConnection() {
