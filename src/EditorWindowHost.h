@@ -18,9 +18,7 @@ public:
 
     const char* name;
 
-    void setName(const char* name) {
-        this->name = name;
-    }
+    virtual bool setName(const char* name) = 0;
 
     static std::unique_ptr<EditorWindowHost> create();
 };

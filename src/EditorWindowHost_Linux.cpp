@@ -41,6 +41,14 @@ public:
         XFlush(display);
     }
 
+    bool setName(const char* name) override {
+        if (!display || !window) return false;
+        XStoreName(display, window, name);
+        XFlush(display);  // Ensure the name change is processed
+        return true;
+    }
+
+
     bool tick() override {
         if (!display) {
             std::cerr << "Display is null." << std::endl;
@@ -81,13 +89,13 @@ public:
         std::cout << "X11 Window ID: " << window << std::endl;
 
 
-        return &window;
+        return reinterpret_cast<void*>(window);
     }
 
 
     const char* getPlatformType() override {
-        //return Steinberg::kPlatformTypeX11EmbedWindowID;
-        return "x11embedwindowid";
+        return Steinberg::kPlatformTypeX11EmbedWindowID;
+        //return "x11embedwindowid";
     }
 
 private:

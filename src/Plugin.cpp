@@ -7,7 +7,8 @@
 
 
 Plugin::Plugin(const char* filepath) : filepath(filepath), pluginLibraryHandle(nullptr), pluginFactory(nullptr) {
-    this->filepath = "/home/brody/Downloads/TAL-NoiseMaker_64_linux/TAL-NoiseMaker/TAL-NoiseMaker.vst3/Contents/x86_64-linux/TAL-NoiseMaker.so";
+    //this->filepath = "/home/brody/Downloads/TAL-NoiseMaker_64_linux/TAL-NoiseMaker/TAL-NoiseMaker.vst3/Contents/x86_64-linux/TAL-NoiseMaker.so";
+    //this->filepath = "/home/brody/Downloads/surge-xt-linux-x86_64-1.3.4/lib/vst3/Surge XT.vst3/Contents/x86_64-linux/Surge XT.so";
     loadPluginLibrary();
 // //
     if (pluginFactory) {
@@ -72,6 +73,9 @@ void Plugin::fetchPluginFactoryInfo() {
             email = factoryInfo.email;
             flags = factoryInfo.flags;
 
+            name = vendor.c_str();
+
+
             std::cout << "pluginFactory raw ptr: " << pluginFactory << std::endl;
             std::cout << "--- Plugin Factory Info ---" << std::endl;
             std::cout << "Vendor:  " << vendor << std::endl;
@@ -132,8 +136,6 @@ bool Plugin::getID() {
         std::cerr << "Could not find controller Class ID." << std::endl;
 
 
-
-
     return foundComponent && foundController;
 }
 
@@ -160,6 +162,7 @@ bool Plugin::instantiatePlugin() {
         componentCID, Steinberg::Vst::IComponent::iid, (void**)&componentUnknown
     );
 
+
     if (result != Steinberg::kResultTrue || !componentUnknown) {
         std::cout << "Error creating main component instance." << std::endl;
         return false;
@@ -168,7 +171,9 @@ bool Plugin::instantiatePlugin() {
     component = Steinberg::FUnknownPtr<Steinberg::Vst::IComponent>(componentUnknown);
 
     if(createEditControllerAndPlugView(controllerCID)) {
+
         showWindow();
+
         return true;
     }
 
@@ -207,8 +212,7 @@ bool Plugin::createEditControllerAndPlugView(const Steinberg::TUID controllerCID
     }
 
 
-
-    view = editController->createView("editor");
+    view = editController->createView(Steinberg::Vst::ViewType::kEditor);
 
     if (!view) {
         std::cerr << "Failed to create editor view." << std::endl;
@@ -229,16 +233,20 @@ void Plugin::showWindow() {
     }
 
     auto nativeHandle = editorHost->getNativeWindowHandle();
-    const char* platformType = editorHost->getPlatformType();
+    auto platformType = editorHost->getPlatformType();
 
-    if (view->isPlatformTypeSupported(platformType)) {
+    if (view->isPlatformTypeSupported(platformType) == Steinberg::kResultTrue) {
 
+        std::cout<<"test"<<std::endl;
 
 
         auto result = view->attached(nativeHandle, platformType);
-        std::cout << "Attach result: " << result << std::endl;
 
-        if (result) {
+                std::cout << "Attach result: " << result << std::endl;
+        editorHost->setName(name);
+
+
+        if (result == Steinberg::kResultTrue) {
             view->getSize(&viewRect);
             std::cout << "Attached view. Size: "
             << viewRect.right - viewRect.left << "x"
@@ -252,6 +260,7 @@ void Plugin::showWindow() {
         } else {
             std::cout << "nativeHandle pointer: " << nativeHandle << std::endl;
             std::cerr << "Failed to attach view" << std::endl;
+            exit(0);
         }
     } else {
         std::cerr << "Platform type not supported: " << platformType << std::endl;
