@@ -137,15 +137,16 @@ bool Plugin::getID() {
     return foundComponent && foundController;
 }
 
+bool Plugin::editorTick() {
+    if(editorHost->windowOpen) {
+        editorHost->tick();
+        return true;
+    }
+    return false;
+}
+
 
 void Plugin::process(float* thrubuffer, int bufferSize) {
-
-    if(editorHost->windowOpen) {
-      editorHost->tick();
-      view->onSize(&viewRect);
-
-    }
-
 
     for (unsigned int i = 0; i < bufferSize; ++i) {
         float sample = 0.5f * sin(2.0 * M_PI * 440.0 * bufferSize / 1000.0f * i); 
@@ -246,7 +247,6 @@ void Plugin::showWindow() {
             editorHost->resize(viewRect.right - viewRect.left, viewRect.bottom - viewRect.top);
 
              view->onSize(&viewRect);
-             view->onWheel(nullptr);
 
 
         } else {

@@ -1,5 +1,5 @@
 #include "Rack.h"
-
+#include "PluginManager.h"
 
 Rack::Rack() {
 }
@@ -28,6 +28,9 @@ void Rack::process(
 }
 
 bool Rack::addPlugin(char* filepath) {
-    plugins.push_back(new Plugin(filepath));
+    Plugin* p = new Plugin(filepath);
+    plugins.push_back(p);
+    PluginManager::instance().addPlugin(p);
     return true;
 }
+

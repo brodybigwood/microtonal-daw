@@ -1,6 +1,6 @@
 #include "WindowHandler.h"
 #include <X11/Xlib.h>
-
+#include "PluginManager.h"
 WindowHandler::WindowHandler(Project* project) {
 
     SDL_SetHint(SDL_HINT_APP_NAME, "EDITOR");
@@ -44,7 +44,7 @@ bool WindowHandler::tick() {
 
                 
         double timeSinceLastFrame = double(SDL_GetTicks())-double(lastTime);
-        if(timeSinceLastFrame >= frameTime) {   
+        if(timeSinceLastFrame >= frameTime) {
             lastTime = double(SDL_GetTicks())-frameTime;
             home->tick();
             for(int i = windows->size() - 1; i >= 0; --i) {
@@ -52,6 +52,9 @@ bool WindowHandler::tick() {
                     (*windows)[i]->tick();
                 
             }
+
+            PluginManager::instance().tickAll();
+
             
 
             while (SDL_PollEvent(&e)) {

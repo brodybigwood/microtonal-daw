@@ -49,6 +49,8 @@ set(VST3_HOSTING_SRC
 
 set(VST3_BASE_SRC
     ${VST3_SDK_PATH}/base/source/fobject.cpp
+    ${VST3_SDK_PATH}/base/source/fdebug.cpp
+    ${VST3_SDK_PATH}/base/thread/source/flock.cpp
     ${VST3_SDK_PATH}/base/source/fstring.cpp
     ${VST3_SDK_PATH}/base/source/updatehandler.cpp
 

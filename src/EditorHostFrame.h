@@ -3,8 +3,9 @@
 
 #include "pluginterfaces/gui/iplugview.h"
 #include "pluginterfaces/vst/ivsteditcontroller.h"
+#include "base/source/fobject.h"
 
-class EditorHostFrame : public Steinberg::IPlugFrame, public Steinberg::Vst::IComponentHandler {
+class EditorHostFrame : public Steinberg::FObject, public Steinberg::IPlugFrame, public Steinberg::Vst::IComponentHandler {
 public:
     // IPlugFrame
     Steinberg::tresult PLUGIN_API resizeView (Steinberg::IPlugView* view, Steinberg::ViewRect* newSize) override;
