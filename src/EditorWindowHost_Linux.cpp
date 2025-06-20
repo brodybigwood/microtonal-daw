@@ -6,6 +6,9 @@
 
 class LinuxEditorWindowHost : public EditorWindowHost {
 public:
+
+    Atom wmDeleteMessage;
+
     LinuxEditorWindowHost() {
         display = XOpenDisplay(nullptr);
         if (!display) {
@@ -26,22 +29,35 @@ public:
         XMapWindow(display, window);
         XFlush(display);
         windowOpen = 1;
+
+
+        wmDeleteMessage = XInternAtom(display, "WM_DELETE_WINDOW", False);
+        XSetWMProtocols(display, window, &wmDeleteMessage, 1);
+
     }
 
     ~LinuxEditorWindowHost() override {
+        std::cout << "~LinuxEditorWindowHost destructor called" << std::endl;
         if (display && window) {
             XDestroyWindow(display, window);
+            window = 0;  // Invalidate handle
+        }
+        if (display) {
             XCloseDisplay(display);
+            display = nullptr;
         }
     }
 
 
+
     void resize(int w, int h) override {
+        std::cout << "resizing" <<std::endl;
         XResizeWindow(display, window, w, h);
         XFlush(display);
     }
 
     bool setName(const char* name) override {
+        std::cout << "naming" <<std::endl;
         if (!display || !window) return false;
         XStoreName(display, window, name);
         XFlush(display);  // Ensure the name change is processed
@@ -50,22 +66,39 @@ public:
 
 
     bool tick() override {
-        if (!display) {
-            std::cerr << "Display is null." << std::endl;
-            return 0;
+        std::cout << "ticking" <<std::endl;
+        if (!display || !windowOpen) {
+            std::cerr << "Display is null or window is closed" << std::endl;
+            return false;
         }
 
 
         while (XPending(display) > 0) {
             XEvent e;
             XNextEvent(display, &e);
-        std::cout << "ticking" <<std::endl;
+            if (e.type == ConfigureNotify) {
+                Steinberg::ViewRect newRect;
+                newRect.left = 0;
+                newRect.top = 0;
+                newRect.right = e.xconfigure.width;
+                newRect.bottom = e.xconfigure.height;
+                view->onSize(&newRect);
+            }
+
+            if (e.type == ClientMessage && (Atom)e.xclient.data.l[0] == wmDeleteMessage) {
+                std::cout << "closing" << std::endl;
+
+                windowOpen = false;
+                return false;
+            }
+
         }
 
         return 1;
     }
 
     void* getNativeWindowHandle() override {
+        std::cout << "getNativeWindowHandle" <<std::endl;
         if (window == 0) {
             std::cerr << "Window handle is null." << std::endl;
             return nullptr;
@@ -94,6 +127,7 @@ public:
 
 
     const char* getPlatformType() override {
+        std::cout << "getPlatformType" <<std::endl;
         return Steinberg::kPlatformTypeX11EmbedWindowID;
         //return "x11embedwindowid";
     }

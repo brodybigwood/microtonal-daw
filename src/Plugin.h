@@ -8,6 +8,8 @@
 
 #include "public.sdk/source/vst/hosting/plugprovider.h"
 
+#include "PlugLib.h"
+
 #include "pluginterfaces/vst/ivsteditcontroller.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 #include "pluginterfaces/vst/ivstevents.h"
@@ -18,6 +20,8 @@
 #include "EditorHostFrame.h"
 #include "EditorWindowHost.h"
 
+#include "PluginManager.h"
+
 class EditorHostFrame;
 
 
@@ -26,7 +30,7 @@ class Plugin {
         Plugin(const char* filepath);
         ~Plugin();
 
-        EditorHostFrame* hostFrame;
+        std::unique_ptr<EditorHostFrame> hostFrame;
         std::unique_ptr<EditorWindowHost> editorHost;
         Steinberg::Vst::IComponentHandler* componentHandler;
 
@@ -36,6 +40,8 @@ class Plugin {
             float* thrubuffer,
             int bufferSize
         );
+
+        PlugLib* lib;
 
         Steinberg::TUID componentCID;
         Steinberg::TUID controllerCID;
@@ -50,8 +56,6 @@ class Plugin {
         const char* filepath;
 
         const char* name;
-
-        void* pluginLibraryHandle;
 
         Steinberg::FUnknownPtr<Steinberg::IPluginFactory> pluginFactory;
         std::unique_ptr<VST3::Hosting::PluginFactory> factoryWrapper;
@@ -73,14 +77,12 @@ class Plugin {
         Steinberg::FUnknownPtr<Steinberg::Vst::IEditController> editController;
         Steinberg::FUnknownPtr<Steinberg::Vst::IParameterChanges> parameterChanges;
         Steinberg::FUnknownPtr<Steinberg::Vst::IEventList> eventList;
-        /*
-        Steinberg::FUnknownPtr<Steinberg::Vst::class> className;
-        */
 
+        bool windowOpen = false;
 
         bool editorTick();
         private:
-        void loadPluginLibrary();
+
         void fetchPluginFactoryInfo();
         bool getID();
         bool instantiatePlugin();

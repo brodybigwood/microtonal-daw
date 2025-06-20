@@ -21,4 +21,6 @@ public:
     virtual bool setName(const char* name) = 0;
 
     static std::unique_ptr<EditorWindowHost> create();
+
+     Steinberg::IPlugView* view;
 };

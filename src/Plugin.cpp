@@ -6,61 +6,31 @@
 
 
 
-Plugin::Plugin(const char* filepath) : filepath(filepath), pluginLibraryHandle(nullptr), pluginFactory(nullptr) {
-    //this->filepath = "/home/brody/Downloads/TAL-NoiseMaker_64_linux/TAL-NoiseMaker/TAL-NoiseMaker.vst3/Contents/x86_64-linux/TAL-NoiseMaker.so";
-    //this->filepath = "/home/brody/Downloads/surge-xt-linux-x86_64-1.3.4/lib/vst3/Surge XT.vst3/Contents/x86_64-linux/Surge XT.so";
-    loadPluginLibrary();
-// //
+Plugin::Plugin(const char* filepath) : filepath(filepath), pluginFactory(nullptr) {
+
+    lib = PluginManager::instance().load(filepath);
+    if (!lib) {
+        std::cerr << "Failed to load plugin library.\n";
+        return;
+    }
+
+    pluginFactory = lib->getFactory();
+    factoryWrapper = std::make_unique<VST3::Hosting::PluginFactory>(*lib->getFactoryWrapper());
+
     if (pluginFactory) {
         fetchPluginFactoryInfo();
-
         if (!getID()) {
             std::cerr << "couldnt get id of plugin" << std::endl;
         }
-
         instantiatePlugin();
     }
+
 }
 
 Plugin::~Plugin() {
     if (view){
         view->release();
     }
-    if (pluginLibraryHandle) {
-        dlclose(pluginLibraryHandle);
-        std::cout << "Plugin library unloaded." << std::endl;
-    }
-}
-
-void Plugin::loadPluginLibrary() {
-    pluginLibraryHandle = dlopen(filepath, RTLD_NOW);
-    if (!pluginLibraryHandle) {
-        std::cerr << "Error loading plugin: " << dlerror() << std::endl;
-        return;
-    }
-    std::cout << "Plugin library loaded successfully." << std::endl;
-
-    typedef Steinberg::FUnknown* (*GetPluginFactoryProc)();
-    GetPluginFactoryProc getPluginFactory = (GetPluginFactoryProc)dlsym(pluginLibraryHandle, "GetPluginFactory");
-
-    if (!getPluginFactory) {
-        std::cerr << "Error finding GetPluginFactory: " << dlerror() << std::endl;
-        dlclose(pluginLibraryHandle);
-        pluginLibraryHandle = nullptr;
-        return;
-    }
-    std::cout << "GetPluginFactory found." << std::endl;
-
-    Steinberg::FUnknown* factoryRaw = getPluginFactory();
-    if (!factoryRaw) {
-        std::cerr << "Error getting IPluginFactory." << std::endl;
-        dlclose(pluginLibraryHandle);
-        pluginLibraryHandle = nullptr;
-        return;
-    }
-    std::cout << "IPluginFactory obtained." << std::endl;
-    pluginFactory = Steinberg::FUnknownPtr<Steinberg::IPluginFactory>(factoryRaw);
-    factoryWrapper = std::make_unique<VST3::Hosting::PluginFactory>(pluginFactory);
 }
 
 void Plugin::fetchPluginFactoryInfo() {
@@ -140,12 +110,25 @@ bool Plugin::getID() {
 }
 
 bool Plugin::editorTick() {
-    if(editorHost->windowOpen) {
-        editorHost->tick();
-        return true;
+
+
+    if (!windowOpen || !editorHost) return false;
+
+    std::cout << "window open" << std::endl;
+    if (!editorHost->tick()) {
+        if (view) {
+            view->removed();
+        }
+
+        editorHost.reset();
+        windowOpen = false;
+        std::cout << "window closed" << std::endl;
+        return false;
     }
-    return false;
+
+    return true;
 }
+
 
 
 void Plugin::process(float* thrubuffer, int bufferSize) {
@@ -204,9 +187,10 @@ bool Plugin::createEditControllerAndPlugView(const Steinberg::TUID controllerCID
 
 
 
-    hostFrame = new EditorHostFrame();
+    hostFrame = std::make_unique<EditorHostFrame>();
     // Cast to IComponentHandler, the expected interface
-    componentHandler = hostFrame;
+    componentHandler = hostFrame.get();
+
     if (editController->setComponentHandler(componentHandler) != Steinberg::kResultTrue) {
         std::cerr << "Failed to set component handler." << std::endl;
     }
@@ -232,6 +216,8 @@ void Plugin::showWindow() {
         return;
     }
 
+    editorHost->view = view;
+
     auto nativeHandle = editorHost->getNativeWindowHandle();
     auto platformType = editorHost->getPlatformType();
 
@@ -255,6 +241,8 @@ void Plugin::showWindow() {
             editorHost->resize(viewRect.right - viewRect.left, viewRect.bottom - viewRect.top);
 
              view->onSize(&viewRect);
+
+             windowOpen = true;
 
 
         } else {

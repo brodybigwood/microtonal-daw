@@ -14,6 +14,9 @@ public:
     Steinberg::tresult PLUGIN_API queryInterface (const Steinberg::TUID _iid, void** obj) override;
 
     // IComponentHandler
+
+    Steinberg::Vst::IComponentHandler* componentHandler = nullptr;
+
     Steinberg::tresult PLUGIN_API beginEdit (Steinberg::Vst::ParamID id) override;
     Steinberg::tresult PLUGIN_API performEdit (Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue value) override;
     Steinberg::tresult PLUGIN_API endEdit (Steinberg::Vst::ParamID id) override;
