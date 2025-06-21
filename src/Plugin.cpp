@@ -4,6 +4,7 @@
 #include <iostream>
 #include <dlfcn.h>
 
+#include "AudioManager.h"
 
 
 Plugin::Plugin(const char* filepath) : filepath(filepath), pluginFactory(nullptr) {
@@ -82,12 +83,36 @@ bool Plugin::editorTick() {
 
 
 void Plugin::process(float* thrubuffer, int bufferSize) {
+    if (!audioProcessor) return;
 
-    for (unsigned int i = 0; i < bufferSize; ++i) {
-        float sample = 0.5f * sin(2.0 * M_PI * 440.0 * bufferSize / 1000.0f * i); 
-        thrubuffer[i] = sample;
+    std::vector<float> tempBuffer(bufferSize);
+    std::memcpy(tempBuffer.data(), thrubuffer, bufferSize * sizeof(float));
+
+    for (int i = 0; i < outputBuses.size(); ++i) {
+        auto& bus = outputBuses[i];
+        for (int ch = 0; ch < bus.numChannels; ++ch) {
+            // For mono output: all channels point to thrubuffer
+            bus.channelBuffers32[ch] = tempBuffer.data();
+        }
+    }
+
+    data.numSamples = bufferSize;
+    data.outputs = outputBuses.data();
+    data.numOutputs = static_cast<Steinberg::int32>(outputBuses.size());
+
+    data.inputs = inputBuses.data();
+    data.numInputs = static_cast<Steinberg::int32>(inputBuses.size());
+
+    audioProcessor->process(data);
+
+    for (int s = 0; s < bufferSize; ++s) {
+        thrubuffer[s] += tempBuffer[s];
+        std::cout<< tempBuffer[s] <<std::endl;
     }
 }
+
+
+
 
 bool Plugin::instantiatePlugin() {
 
@@ -109,10 +134,102 @@ bool Plugin::instantiatePlugin() {
 
     component = Steinberg::FUnknownPtr<Steinberg::Vst::IComponent>(componentUnknown);
 
+    Steinberg::FUnknown* processorUnknown = nullptr;
+    auto res = component->queryInterface(Steinberg::Vst::IAudioProcessor::iid, (void**)&processorUnknown);
+    if (res == Steinberg::kResultTrue && processorUnknown) {
+        audioProcessor = Steinberg::FUnknownPtr<Steinberg::Vst::IAudioProcessor>(processorUnknown);
+        std::cout << "Got audio processor" << std::endl;
+    } else {
+        std::cerr << "Failed to get IAudioProcessor interface." << std::endl;
+        return false;
+    }
+
+    if (audioProcessor) {
+        Steinberg::Vst::ProcessSetup setup{};
+
+        AudioManager* am = AudioManager::instance();
+
+        setup.sampleRate = am->sampleRate;
+        setup.maxSamplesPerBlock = am->bufferSize;
+        setup.processMode = Steinberg::Vst::kRealtime;
+        setup.symbolicSampleSize = Steinberg::Vst::kSample32;
+
+
+        if (component->setActive(true) != Steinberg::kResultTrue) {
+            std::cerr << "Failed to activate component." << std::endl;
+            return false;
+        }
+
+
+        if (audioProcessor->setupProcessing(setup) != Steinberg::kResultTrue) {
+            std::cerr << "Failed to setup audio processor." << std::endl;
+            return false;
+        }
+
+        if (audioProcessor->setProcessing(true) != Steinberg::kResultTrue) {
+            std::cerr << "Failed to set audio processor to processing state" << std::endl;
+            return false;
+        }
+
+
+
+        std::cout << "activated component" << std::endl;
+
+        Steinberg::int32 numInputs = component->getBusCount(Steinberg::Vst::kAudio, Steinberg::Vst::kInput);
+        Steinberg::int32 numOutputs = component->getBusCount(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput);
+
+        for (Steinberg::int32 i = 0; i < numInputs; ++i) {
+            Steinberg::Vst::BusInfo bus{};
+            if (component->getBusInfo(Steinberg::Vst::kAudio, Steinberg::Vst::kInput, i, bus) == Steinberg::kResultTrue) {
+                Steinberg::Vst::AudioBusBuffers buf{};
+                buf.channelBuffers32 = new float*[bus.channelCount]();
+                buf.numChannels = bus.channelCount;
+                buf.silenceFlags = 0;
+                inputBuses.push_back(buf);
+            }
+        }
+
+        for (Steinberg::int32 i = 0; i < numOutputs; ++i) {
+            Steinberg::Vst::BusInfo bus{};
+            if (component->getBusInfo(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput, i, bus) == Steinberg::kResultTrue) {
+                Steinberg::Vst::AudioBusBuffers buf{};
+                buf.channelBuffers32 = new float*[bus.channelCount]();
+                buf.numChannels = bus.channelCount;
+                buf.silenceFlags = 0;
+                outputBuses.push_back(buf);
+            }
+        }
+
+
+        data.processMode = Steinberg::Vst::kRealtime;
+        data.symbolicSampleSize = Steinberg::Vst::kSample32;
+        data.numSamples = am->bufferSize;
+        data.numInputs = static_cast<Steinberg::int32>(inputBuses.size());
+        data.numOutputs = static_cast<Steinberg::int32>(outputBuses.size());
+
+        data.inputs = inputBuses.data();
+        data.outputs = outputBuses.data();
+        data.inputParameterChanges = nullptr;
+        data.outputParameterChanges = nullptr;
+        data.inputEvents = nullptr;
+        data.outputEvents = nullptr;
+
+        std::cout << "ProcessData - mode: " << data.processMode
+        << ", sampleSize: " << data.symbolicSampleSize
+        << ", numSamples: " << data.numSamples
+        << ", numInputs: " << data.numInputs
+        << ", numOutputs: " << data.numOutputs << std::endl;
+
+
+    }
+
+
+
+
     if(createEditControllerAndPlugView(controllerCID)) {
 
+        std::cout << "window is ready to show" <<std::endl;
         showWindow();
-
         return true;
     }
 

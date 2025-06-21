@@ -8,7 +8,8 @@ Instrument::Instrument(Project* project) {
 
     addDestination(0);
     rack.addPlugin("/usr/lib/vst3/Vital.vst3/Contents/x86_64-linux/Vital.so");
-    //rack.addPlugin("/home/brody/Downloads/Podolski_123_12092_Linux/Podolski-12092/Podolski/Podolski.64.so");
+
+    rack.addPlugin("/home/brody/Downloads/surge-xt-linux-x86_64-1.3.4/lib/vst3/Surge XT.vst3/Contents/x86_64-linux/Surge XT.so");
 }
 Instrument::~Instrument() {
 

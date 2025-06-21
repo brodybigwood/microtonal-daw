@@ -41,6 +41,9 @@ class Plugin {
             int bufferSize
         );
 
+        std::vector<Steinberg::Vst::AudioBusBuffers> inputBuses, outputBuses;
+        Steinberg::Vst::ProcessData data{};
+
         PlugLib* lib;
 
         Steinberg::TUID componentCID;
@@ -84,7 +87,6 @@ class Plugin {
         private:
 
         void fetchPluginFactoryInfo();
-        bool getID();
         bool instantiatePlugin();
         bool createEditControllerAndPlugView(const Steinberg::TUID
         controllerCID);
