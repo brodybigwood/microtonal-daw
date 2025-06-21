@@ -26,6 +26,10 @@ public:
 
     std::unique_ptr<VST3::Hosting::PluginFactory>& getFactoryWrapper() { return factoryWrapper; }
 
+    std::unique_ptr<Steinberg::Vst::PlugProvider> plugProvider;
+
+    bool getProvider();
+
 private:
     void* handle = nullptr;
     Steinberg::FUnknownPtr<Steinberg::IPluginFactory> factory;

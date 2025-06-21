@@ -19,9 +19,6 @@ Plugin::Plugin(const char* filepath) : filepath(filepath), pluginFactory(nullptr
 
     if (pluginFactory) {
         fetchPluginFactoryInfo();
-        if (!getID()) {
-            std::cerr << "couldnt get id of plugin" << std::endl;
-        }
         instantiatePlugin();
     }
 
@@ -62,53 +59,6 @@ void Plugin::fetchPluginFactoryInfo() {
     }
 }
 
-bool Plugin::getID() {
-    bool foundComponent = false;
-    bool foundController = false;
-
-    if (!pluginFactory) {
-        std::cerr << "pluginFactory is null!" << std::endl;
-        return false;
-    }
-
-    for (Steinberg::int32 i = 0; i<2; ++i) {
-        Steinberg::PClassInfo pClassInfo{};
-
-        auto res = pluginFactory->getClassInfo(i, &pClassInfo);
-        if (res != Steinberg::kResultTrue)
-            break;
-        std::cout << "Class[" << i << "] category: " << pClassInfo.category << std::endl;
-        if (!foundComponent && strcmp(pClassInfo.category, "Audio Module Class") == 0) {
-            std::memcpy(componentCID, pClassInfo.cid, sizeof(Steinberg::TUID));
-            foundComponent = true;
-
-            VST3::Hosting::ClassInfo classInfo(pClassInfo);
-
-            plugProvider = std::make_unique<Steinberg::Vst::PlugProvider>(*factoryWrapper, classInfo, true);
-
-
-            if (!plugProvider->initialize())
-            {
-                std::cerr << "Failed to initialize plug provider." << std::endl;
-            } else {
-                std::cout << "initialized plug provider" << std::endl;
-            }
-        }
-        if (!foundController && strcmp(pClassInfo.category, "Component Controller Class") == 0) {
-            std::memcpy(controllerCID, pClassInfo.cid, sizeof(Steinberg::TUID));
-            foundController = true;
-        }
-    }
-
-    if (!foundComponent)
-        std::cerr << "Could not find component Class ID." << std::endl;
-    if (!foundController)
-        std::cerr << "Could not find controller Class ID." << std::endl;
-
-
-    return foundComponent && foundController;
-}
-
 bool Plugin::editorTick() {
 
 
@@ -140,6 +90,12 @@ void Plugin::process(float* thrubuffer, int bufferSize) {
 }
 
 bool Plugin::instantiatePlugin() {
+
+    std::memcpy(componentCID, lib->getComponentCID(), sizeof(Steinberg::TUID));
+    std::memcpy(controllerCID, lib->getControllerCID(), sizeof(Steinberg::TUID));
+
+
+
     Steinberg::FUnknown* componentUnknown = nullptr;
     auto result = pluginFactory->createInstance(
         componentCID, Steinberg::Vst::IComponent::iid, (void**)&componentUnknown

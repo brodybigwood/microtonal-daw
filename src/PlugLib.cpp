@@ -54,7 +54,10 @@ bool PlugLib::fetchClassIDs() {
 
         if (!foundComponent && std::strcmp(info.category, "Audio Module Class") == 0) {
             std::memcpy(componentCID, info.cid, sizeof(Steinberg::TUID));
-            foundComponent = true;
+            VST3::Hosting::ClassInfo classInfo(info);
+            plugProvider = std::make_unique<Steinberg::Vst::PlugProvider>(*factoryWrapper, classInfo, true);
+
+            foundComponent = plugProvider->initialize();
         }
 
         if (!foundController && std::strcmp(info.category, "Component Controller Class") == 0) {
@@ -72,3 +75,4 @@ bool PlugLib::fetchClassIDs() {
 
     return true;
 }
+
