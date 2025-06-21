@@ -14,7 +14,9 @@ int main() {
     }
 
     Project* project = new Project();
-    AudioManager* audioManager = new AudioManager(project); 
+    AudioManager* audioManager = AudioManager::instance();
+
+    audioManager->setProject(project);
 
     WindowHandler* windowHandler = new WindowHandler(project);
 
@@ -23,7 +25,10 @@ int main() {
     if (!audioManager->start()) {
         std::cout << "audiomanager failed" << std::endl;
         return -1;
-    }   
+    }
+
+    project->load();
+
     while (windowHandler->tick()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5)); // 1000ms / 200Hz = 5ms
     }

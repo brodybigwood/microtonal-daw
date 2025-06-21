@@ -7,7 +7,7 @@
 
 class AudioManager {
     public:
-        AudioManager(Project* project);
+        AudioManager();
         ~AudioManager();
 
         Project* project;
@@ -21,6 +21,10 @@ class AudioManager {
         bool stop();
 
         static int callback(void *outputBuffer, void *inputBuffer, unsigned int bufferSize, double streamTimeSeconds, RtAudioStreamStatus status, void* userData);
+
+        static AudioManager* instance();
+
+        void setProject(Project* project);
 
     private:
 

@@ -14,7 +14,7 @@ class Instrument;
 
 class Project {
     public:
-    Project(std::string filepath = "");
+    Project();
         ~Project();
 
         std::string filepath = "";
@@ -23,7 +23,7 @@ class Project {
 
         float tempo = 120;
 
-        void load();
+        void load(std::string filepath = "");
 
         void save();
 

@@ -1,12 +1,21 @@
 #include "AudioManager.h"
 #include <cmath>
 
-AudioManager::AudioManager(Project* project) {
-    this->project = project;
+AudioManager::AudioManager() {
+
 }
 
 AudioManager::~AudioManager() {
     stop();
+}
+
+AudioManager* AudioManager::instance() {
+    static AudioManager am;
+    return &am;
+}
+
+void AudioManager::setProject(Project* project) {
+    this->project = project;
 }
 
 int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int bufferSize, double streamTimeSeconds, RtAudioStreamStatus status, void* userData) {
@@ -85,6 +94,8 @@ bool AudioManager::start() {
     audioThreadHandle = std::thread(&AudioManager::audioThread, this);
 
     std::cout << "Audio stream started successfully!" << std::endl;
+
+    std::cout << "AudioManager data: samplerate: " <<sampleRate << ", buff size: " <<bufferSize <<std::endl;
     return true;
 
 }
