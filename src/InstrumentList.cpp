@@ -90,7 +90,7 @@ void InstrumentList::clickMouse(SDL_Event& e) {
             if (e.button.button == SDL_BUTTON_LEFT) {
                 lmb = true;
                 if(hoveredInstrument != -1) {
-                    project->setViewedElement("instrument", hoveredInstrument);
+                    InstrumentMenu::instance()->setViewedElement("instrument", hoveredInstrument);
                     hoveredInstrument = -1;
                 }
 

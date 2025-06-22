@@ -21,12 +21,17 @@ Button::Button(std::string title, float x, float y, int width = 50, int height =
 }
 
 void Button::render() {
-    hover();
-    SDL_SetRenderTarget(renderer,texture);
-    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-    SDL_RenderClear(renderer);
-    SDL_SetRenderTarget(renderer,NULL);
-    SDL_RenderTexture(renderer, texture, nullptr, &dstRect);
+
+
+
+
+    if(hovered) {
+        SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
+    } else {
+        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+    }
+
+    SDL_RenderFillRect(renderer, &dstRect);
 }
 
 
@@ -35,10 +40,5 @@ Button::~Button() {
 }
 
 void Button::hover() {
-    if(hovered) {
-        color = {20,20,20,255};
-    } else {
-        color = {255, 255, 255, 255};
-    }
 
 }

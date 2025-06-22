@@ -229,7 +229,7 @@ bool Plugin::instantiatePlugin() {
     if(createEditControllerAndPlugView(controllerCID)) {
 
         std::cout << "window is ready to show" <<std::endl;
-        showWindow();
+
         return true;
     }
 

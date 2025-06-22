@@ -61,9 +61,6 @@ void Project::stop() {
 
 
 
-void Project::setViewedElement(std::string type, int index) {
-    viewedElement = new element{type, index};
-}
 
 
 void Project::setTime(double time) {

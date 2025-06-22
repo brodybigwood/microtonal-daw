@@ -4,6 +4,7 @@
 #include <vector>
 #include <iostream>
 #include "Project.h"
+#include "InstrumentMenu.h"
 
 #ifndef INSTRUMENTLIST_H
 #define INSTRUMENTLIST_H

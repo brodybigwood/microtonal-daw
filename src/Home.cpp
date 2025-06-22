@@ -33,7 +33,8 @@ Home::Home(Project* project, WindowHandler* windowHandler) {
         project, 
         windowHandler);
 
-        instrumentMenu = new InstrumentMenu(instrumentMenuTexture, renderer, windowWidth-instMenuWidth, controlsHeight, project);
+        instrumentMenu = InstrumentMenu::instance();
+        instrumentMenu->create(instrumentMenuTexture, renderer, windowWidth-instMenuWidth, controlsHeight, project);
 }
 
 
@@ -71,7 +72,7 @@ bool Home::handleInput(SDL_Event& e) {
             SDL_GetMouseState(&mouseX, &mouseY);
             song->moveMouse(mouseX-instWidth,mouseY-controlsHeight);
             insts->moveMouse(mouseX,mouseY-controlsHeight);
-            instrumentMenu->moveMouse(mouseX-instWidth-windowWidth+instMenuWidth ,mouseY-controlsHeight);
+            instrumentMenu->moveMouse(mouseX,mouseY);
             hoverButtons();
             return true;
             break;

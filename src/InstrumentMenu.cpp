@@ -1,6 +1,9 @@
 #include "InstrumentMenu.h"
+#include <SDL3/SDL_oldnames.h>
 
-InstrumentMenu::InstrumentMenu(SDL_Texture* texture, SDL_Renderer* renderer, int x, int y, Project* project) {
+InstrumentMenu::InstrumentMenu() {}
+
+void InstrumentMenu::create(SDL_Texture* texture, SDL_Renderer* renderer, int x, int y, Project* project) {
     this->texture = texture;
     this->renderer = renderer;
 
@@ -16,7 +19,14 @@ InstrumentMenu::InstrumentMenu(SDL_Texture* texture, SDL_Renderer* renderer, int
 
     titleDst = {0, 0 + 25, width, 25};  // x and y = screen position
     outputDst = {0, height-100, width, 25};  // x and y = screen position
-   
+
+    rackRect = new SDL_FRect{ x + width / 4.0f, y + height / 4.0f, width / 2.0f, (height-y) * 0.75f };
+
+}
+
+InstrumentMenu* InstrumentMenu::instance() {
+    static InstrumentMenu menu;
+    return &menu;
 }
 
 
@@ -57,6 +67,16 @@ SDL_RenderTexture(renderer, textTexture, nullptr, &titleDst);
 
 }
 
+
+
+void InstrumentMenu::setViewedElement(std::string type, int index) {
+    viewedElement = new element{type, index};
+
+    if(type == "instrument") {
+        setInst(project->instruments[index]);
+    }
+}
+
 void InstrumentMenu::render() {
     SDL_SetRenderDrawColor(
         renderer, 
@@ -71,9 +91,9 @@ void InstrumentMenu::render() {
 
     
 
-    if(project->viewedElement != nullptr) {
-        int index = project->viewedElement->index;
-        std::string type = project->viewedElement->type;
+    if(viewedElement != nullptr) {
+        int index = viewedElement->index;
+        std::string type = viewedElement->type;
 
         if(type == "region") {
             name = project->regions[index]->name;
@@ -81,8 +101,20 @@ void InstrumentMenu::render() {
         } else if (type == "instrument") {
             name = project->instruments[index]->name;
             outputType = project->instruments[index]->outputType;
+
+            SDL_SetRenderDrawColor(renderer,50,50,50,255);
+            SDL_RenderFillRect(renderer, rackRect);
+
+
+
+
+
         } else {
             return;     
+        }
+
+        for(auto button : buttons) {
+            button->render();
         }
 
         renderText();
@@ -97,19 +129,66 @@ void InstrumentMenu::render() {
 
 }
 
+bool inside(float px, float py, float x, float y, float w, float h) {
+    return px > x && px < x + w && py > y && py < y + h;
+}
+
 
 
 void InstrumentMenu::clickMouse(SDL_Event& e) {
-    instrument = (project->instruments[project->viewedElement->index]); 
+    for (size_t i = 0; i < buttons.size(); ++i) {
+        auto& btn = buttons[i];
+        if (inside(mouseX, mouseY, btn->x, btn->y, btn->width, btn->height)) {
+            instrument->rack.plugins[i]->showWindow();
+            return;
+        }
+    }
+
 }
 
 void InstrumentMenu::moveMouse(float x, float y) {
     mouseX = x;
     mouseY = y;
-    //getHoveredInstrument();
+    hover();
+}
+
+void InstrumentMenu::hover() {
+    for(Button* btn : buttons) {
+        if(
+            mouseX > btn->x &&
+            mouseX < btn->x + btn->width &&
+            mouseY > btn->y &&
+            mouseY < btn->y + btn->height
+        ) {
+            btn->hovered = true;
+            return;
+        } else {
+            btn->hovered = false;
+        }
+    }
 }
 
 
 void InstrumentMenu::setInst(Instrument* instrument) {
     this->instrument = instrument;
+
+    pluginHeight = (rackRect->h - plugMarginY)  / instrument->rack.plugins.size();
+    float pluginY = rackRect->y;
+
+    std::cout << "setting inst" <<std::endl;
+    for(auto& plugin : instrument->rack.plugins) {
+
+        Button* btn = new Button(plugin->name, rackRect->x + plugMarginX, pluginY + plugMarginY, rackRect->w  - (2 * plugMarginX), pluginHeight - plugMarginY, renderer);
+
+
+        btn->color = {80,90,80,255};
+
+        buttons.push_back(btn);
+
+        std::cout << "created btn" <<std::endl;
+        pluginY += pluginHeight;
+    }
+
+
+
 }

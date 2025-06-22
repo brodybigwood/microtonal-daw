@@ -4,6 +4,7 @@
 #include <iostream>
 #include <vector>
 #include "styles.h"
+#include "Button.h"
 
 
 #ifndef INSTRUMENTMENU_H
@@ -11,10 +12,17 @@
 
 class InstrumentMenu {
     public:
-        InstrumentMenu(SDL_Texture* texture, SDL_Renderer* renderer, int x, int y, Project* project);
+        InstrumentMenu();
+
+        void create(SDL_Texture* texture, SDL_Renderer* renderer, int x, int y, Project* project);
+
         ~InstrumentMenu();
 
+        static InstrumentMenu* instance();
+
         Project* project;
+
+        void hover();
 
         SDL_Texture* texture;
         SDL_Renderer* renderer;
@@ -23,7 +31,24 @@ class InstrumentMenu {
         std::string outputType;
         std::vector<int> outputs;
 
+        std::vector<Button*> buttons;
+
+        float plugMarginX = 20.0f;
+        float plugMarginY = 20.0f;
+
+        SDL_FRect* rackRect;
+        float pluginHeight;
+
         float width, height;
+
+        struct element {
+            std::string type;
+            int index;
+        };
+
+        element* viewedElement = nullptr;
+
+        void setViewedElement(std::string type, int index);
 
         void render();
 

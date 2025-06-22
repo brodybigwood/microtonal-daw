@@ -44,14 +44,7 @@ class Project {
 
         std::vector<MixerTrack*> tracks;
 
-        struct element {
-            std::string type;
-            int index;
-        };
 
-        element* viewedElement = nullptr;
-
-        void setViewedElement(std::string type, int index);
 
         fract playHeadStart;
         fract playHeadPos = fract(0,1);
