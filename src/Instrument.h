@@ -6,6 +6,7 @@
 #include <iostream>
 #include "Rack.h"
 #include "Plugin.h"
+#include "EventList.h"
 
 #ifndef INSTRUMENT_H
 #define INSTRUMENT_H
@@ -20,6 +21,8 @@ class Instrument {
         ~Instrument();
 
         std::vector<MixerTrack*> outputs;
+
+        EventList eventList;
 
         Project* project;
 

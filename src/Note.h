@@ -11,16 +11,18 @@ class Note {
         ~Note();
 
         fract num;  // Frequency or pitch of the note
-        fract start;
+        fract start; //bars
         fract end;
+
+        SDL_Color customColor;
+
+        bool dispatched = false;
 
         int midiNum, pitchBend, modX, modY, modZ;  // Modulation parameters
 
         double temperament;
 
         int destinationTracks[16];  // Array for destination tracks (might be useful in your design)
-
-        void play();  
         
         void move(fract x, fract y);
 };

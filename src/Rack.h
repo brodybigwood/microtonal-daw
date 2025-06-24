@@ -2,7 +2,7 @@
 #include <vector>
 #include <iostream>
 #include <memory>
-
+#include "EventList.h"
 
 #ifndef RACK_H
 #define RACK_H
@@ -19,7 +19,8 @@ class Rack {
     void process(
         float* tempBuffer,
         float* outputBuffer,
-        int bufferSize
+        int bufferSize,
+        EventList* eventList = nullptr
     );
   
     bool addPlugin(char* filepath);

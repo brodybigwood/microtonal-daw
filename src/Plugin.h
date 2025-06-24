@@ -46,7 +46,8 @@ class Plugin {
          
          void process(
             float* thrubuffer,
-            int bufferSize
+            int bufferSize,
+            EventList* eventList
         );
 
          Project* project;
@@ -64,9 +65,6 @@ class Plugin {
 
 
         std::unique_ptr<Steinberg::Vst::PlugProvider> plugProvider;
-
-        EventList* eventList = new EventList;
-
 
         const char* filepath;
 

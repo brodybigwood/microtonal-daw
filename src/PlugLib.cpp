@@ -6,7 +6,7 @@
 PlugLib::PlugLib(std::string path) : path(std::move(path)) {
 
     //this->path = "/home/brody/Downloads/TAL-NoiseMaker_64_linux/TAL-NoiseMaker/TAL-NoiseMaker.vst3/Contents/x86_64-linux/TAL-NoiseMaker.so";
-    this->path = "/home/brody/Downloads/surge-xt-linux-x86_64-1.3.4/lib/vst3/Surge XT.vst3/Contents/x86_64-linux/Surge XT.so";
+    //this->path = "/home/brody/Downloads/surge-xt-linux-x86_64-1.3.4/lib/vst3/Surge XT.vst3/Contents/x86_64-linux/Surge XT.so";
 
     //this->path = "/home/brody/Downloads/VitalInstaller(3)/VitalBinaries/Vital.vst3/Contents/x86_64-linux/Vital.so";
     //this->path = "/home/brody/Downloads/TAL-BassLine-101_64_linux/TAL-BassLine-101/TAL-BassLine-101.vst3/Contents/x86_64-linux/TAL-BassLine-101.so";

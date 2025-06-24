@@ -20,10 +20,6 @@ int main() {
 
     WindowHandler* windowHandler = new WindowHandler(project);
 
-    EventManager* eventManager = new EventManager(project);
-
-
-
     if (!audioManager->start()) {
         std::cout << "audiomanager failed" << std::endl;
         return -1;

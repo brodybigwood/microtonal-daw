@@ -1,4 +1,5 @@
 #include "Plugin.h"
+#include "EventList.h"
 #include <cmath>
 #include <cstddef>
 #include <iostream>
@@ -84,7 +85,7 @@ bool Plugin::editorTick() {
 
 
 
-void Plugin::process(float* thrubuffer, int bufferSize) {
+void Plugin::process(float* thrubuffer, int bufferSize, EventList* eventList) {
 
     if (!audioProcessor) return;
 
@@ -129,41 +130,20 @@ void Plugin::process(float* thrubuffer, int bufferSize) {
 
     data.processContext = &context;
 
-
-    std::cout << "--- ProcessData ---\n";
-    std::cout << "numSamples: " << data.numSamples << "\n";
-    std::cout << "symbolicSampleSize: " << data.symbolicSampleSize << "\n";
-    std::cout << "numInputs: " << data.numInputs << "\n";
-    std::cout << "numOutputs: " << data.numOutputs << "\n";
-    std::cout << "inputs: " << data.inputs << "\n";
-    std::cout << "outputs: " << data.outputs << "\n";
-    std::cout << "inputEvents: " << data.inputEvents << "\n";
-    std::cout << "processContext: " << data.processContext << "\n";
-
     for (int i = 0; i < data.numInputs; ++i) {
-        std::cout << "Input bus " << i << ": " << inputBuses[i].numChannels << " channels\n";
         for (int ch = 0; ch < inputBuses[i].numChannels; ++ch) {
-            std::cout << "  ch[" << ch << "] ptr: " << inputBuses[i].channelBuffers32[ch] << "\n";
         }
     }
 
     for (int i = 0; i < data.numOutputs; ++i) {
-        std::cout << "Output bus " << i << ": " << outputBuses[i].numChannels << " channels\n";
         for (int ch = 0; ch < outputBuses[i].numChannels; ++ch) {
-            std::cout << "  ch[" << ch << "] ptr: " << outputBuses[i].channelBuffers32[ch] << "\n";
         }
     }
-    std::cout << "--- End ProcessData ---\n";
 
-
-
-
-
-
+    data.inputEvents = eventList;
 
 
     audioProcessor->process(data);
-    eventList->events.clear();
 
     for (int s = 0; s < bufferSize; ++s) {
         float mixed = 0.0f;
@@ -313,8 +293,6 @@ bool Plugin::instantiatePlugin() {
 
         data.inputs = inputBuses.data();
         data.numInputs = static_cast<Steinberg::int32>(inputBuses.size());
-
-        data.inputEvents = eventList;
 
 
         if (component->setActive(true) != Steinberg::kResultTrue) {

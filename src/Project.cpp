@@ -1,7 +1,9 @@
 #include "Project.h"
+#include "Plugin.h"
 
 Project::Project() {
-
+    em.project = this;
+    em.start();
 }
 
 Project::~Project() {
@@ -35,7 +37,9 @@ void Project::load(std::string filepath) {
     for(size_t i = 0; i<1; i++) {
 
         fract pos(0,1);
-        regions.push_back(new Region(pos, i));
+        Region* reg = new Region(pos, i);
+        reg->outputs.push_back(0);
+        regions.push_back(reg);
     }
 }
 
@@ -65,7 +69,9 @@ void Project::stop() {
 }
 
 
-
+void Project::tick() {
+    em.getEvents();
+}
 
 
 void Project::setTime(double time) {

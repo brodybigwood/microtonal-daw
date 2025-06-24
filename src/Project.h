@@ -7,8 +7,11 @@
 #include <iostream>
 #include "MixerTrack.h"
 
+
 #ifndef PROJECT_H
 #define PROJECT_H
+
+#include "EventManager.h"
 
 class Instrument;
 
@@ -48,12 +51,12 @@ class Project {
 
         std::vector<MixerTrack*> tracks;
 
-
+        void tick();
 
         fract playHeadStart;
         fract playHeadPos = fract(0,1);
 
-
+        EventManager em;
 
         bool isPlaying = false;
 

@@ -22,7 +22,3 @@ Note::Note(fract start, fract end, fract num, double temperament) {
 Note::~Note() {
     // Destructor logic, if any is needed in future
 }
-
-void Note::play() {
-    // Implement play functionality here (optional)
-}

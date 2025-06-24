@@ -21,7 +21,7 @@ class Region {
         std::string name = "MIDI Region FX Rack";
 
         std::vector<int> outputs;
-        std::string outputType = "Output to Instruments:";
+        std::string outputType = "Instruments";
 
 
  std::vector<Note> notes; 
