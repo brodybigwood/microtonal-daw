@@ -16,6 +16,8 @@ class AudioManager {
         unsigned int inputChannels;
         unsigned int outputChannels;
 
+        double streamTimeSeconds;
+
         bool start();
 
         bool stop();

@@ -13,7 +13,7 @@ int main() {
         return -1;
     }
 
-    Project* project = new Project();
+    Project* project = Project::instance();
     AudioManager* audioManager = AudioManager::instance();
 
     audioManager->setProject(project);
@@ -21,12 +21,13 @@ int main() {
     WindowHandler* windowHandler = new WindowHandler(project);
 
     EventManager* eventManager = new EventManager(project);
-    
+
+
+
     if (!audioManager->start()) {
         std::cout << "audiomanager failed" << std::endl;
         return -1;
     }
-
     project->load();
 
     while (windowHandler->tick()) {

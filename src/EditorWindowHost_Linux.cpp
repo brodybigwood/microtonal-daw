@@ -66,7 +66,6 @@ public:
 
 
     bool tick() override {
-        std::cout << "ticking" <<std::endl;
         if (!display || !windowOpen) {
             std::cerr << "Display is null or window is closed" << std::endl;
             return false;

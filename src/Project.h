@@ -17,6 +17,10 @@ class Project {
     Project();
         ~Project();
 
+        static Project* instance();
+
+        int sampleTime = 0;
+
         std::string filepath = "";
 
         MidiRouter router;

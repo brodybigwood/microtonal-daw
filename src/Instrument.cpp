@@ -7,7 +7,7 @@ Instrument::Instrument(Project* project) {
     this->project = project;
 
     addDestination(0);
-    rack.addPlugin("/usr/lib/vst3/Vital.vst3/Contents/x86_64-linux/Vital.so");
+    //rack.addPlugin("/usr/lib/vst3/Vital.vst3/Contents/x86_64-linux/Vital.so");
 
     rack.addPlugin("/home/brody/Downloads/surge-xt-linux-x86_64-1.3.4/lib/vst3/Surge XT.vst3/Contents/x86_64-linux/Surge XT.so");
 }

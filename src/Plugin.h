@@ -21,9 +21,15 @@
 #include "EditorWindowHost.h"
 
 #include "PluginManager.h"
+#include "AudioManager.h"
+
+#include "EventList.h"
+
+#include "Project.h"
 
 class EditorHostFrame;
 
+class Project;
 
 class Plugin {
     public:
@@ -35,11 +41,15 @@ class Plugin {
         Steinberg::Vst::IComponentHandler* componentHandler;
 
          bool instantiate();
+
+         AudioManager* am;
          
          void process(
             float* thrubuffer,
             int bufferSize
         );
+
+         Project* project;
 
         std::vector<Steinberg::Vst::AudioBusBuffers> inputBuses, outputBuses;
         Steinberg::Vst::ProcessData data{};
@@ -54,6 +64,8 @@ class Plugin {
 
 
         std::unique_ptr<Steinberg::Vst::PlugProvider> plugProvider;
+
+        EventList* eventList = new EventList;
 
 
         const char* filepath;
@@ -79,7 +91,6 @@ class Plugin {
         Steinberg::FUnknownPtr<Steinberg::Vst::IAudioProcessor> audioProcessor;
         Steinberg::FUnknownPtr<Steinberg::Vst::IEditController> editController;
         Steinberg::FUnknownPtr<Steinberg::Vst::IParameterChanges> parameterChanges;
-        Steinberg::FUnknownPtr<Steinberg::Vst::IEventList> eventList;
 
         bool windowOpen = false;
 

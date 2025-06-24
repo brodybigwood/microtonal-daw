@@ -22,29 +22,34 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
 
     AudioManager *audioManager = static_cast<AudioManager *>(userData);
 
-    // Process the audio data (this is just an example of processing the output buffer)
+    Project* project = audioManager->project;
+
+    project->sampleTime += bufferSize;
+
+    if(project->isPlaying) {
+        project->timeSeconds += static_cast<double>(bufferSize) / audioManager->sampleRate;
+    }
+
+    AudioManager::instance()->streamTimeSeconds += static_cast<double>(bufferSize) / audioManager->sampleRate;
+
+    unsigned int numChannels = audioManager->outputChannels;
+    std::vector<float> mono(bufferSize, 0.0f);
+
+    memset(outputBuffer, 0, bufferSize * numChannels * sizeof(float));
+
     float *outBuffer = static_cast<float *>(outputBuffer);
     float *inBuffer = static_cast<float *>(inputBuffer);
 
 
-    // Fill the output buffer with a simple sine wave (or your own audio data processing)
-    Project* project = audioManager->project;
+    project->tracks[0]->process(mono.data(), bufferSize);
 
 
-    if(project->isPlaying) {
-        project->timeSeconds += static_cast<double>(bufferSize) / audioManager->sampleRate;
-
-
-        project->tracks[0]->process(outBuffer, bufferSize);
-
-
-    } else {
-        for (unsigned int i = 0; i < bufferSize; ++i) {
-            float sample = 0;
-            outBuffer[i] = sample;
+    for (unsigned int i = 0; i < bufferSize; ++i) {
+        for (unsigned int ch = 0; ch < numChannels; ++ch) {
+            outBuffer[i * numChannels + ch] = mono[i];
         }
     }
-    return 0;  // Return 0 to indicate successful processing
+    return 0;
 }
 
 bool AudioManager::start() {
@@ -68,7 +73,7 @@ bool AudioManager::start() {
     outputParams.nChannels = outputChannels;
     outputParams.firstChannel = 0; 
 
-    bufferSize = 512; 
+    bufferSize = 512;
 
     //std::cout << "Using default sample rate: " << sampleRate << std::endl;
     //std::cout << "Using buffer size: " << bufferSize << std::endl;

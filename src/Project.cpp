@@ -8,6 +8,11 @@ Project::~Project() {
 save();
 }
 
+Project* Project::instance() {
+    static Project proj;
+    return &proj;
+}
+
 void Project::load(std::string filepath) {
     if(filepath != "") {
 

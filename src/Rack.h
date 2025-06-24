@@ -1,13 +1,13 @@
-
-
-#ifndef RACK_H
-#define RACK_H
-
 #include "Plugin.h"
 #include <vector>
 #include <iostream>
 #include <memory>
 
+
+#ifndef RACK_H
+#define RACK_H
+
+class Plugin;
 
 class Rack {
     public:
