@@ -20,18 +20,37 @@ Button::Button(std::string title, float x, float y, int width = 50, int height =
     
 }
 
+void Button::setColor(SDL_Color& color) {
+    SDL_SetRenderDrawColor(renderer,
+                           color.r,
+                           color.g,
+                           color.b,
+                           color.a
+    );
+}
+
+void Button::toggleState() {
+    activated = !activated;
+}
+
 void Button::render() {
-
-
-
-
-    if(hovered) {
-        SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
+    if(activated) {
+        if(hovered) {
+            setColor(active_hover);
+        } else {
+            setColor(active);
+        }
     } else {
-        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+        if(hovered) {
+            setColor(inactive_hover);
+        } else {
+            setColor(inactive);
+        }
     }
-
     SDL_RenderFillRect(renderer, &dstRect);
+
+    setColor(border);
+    SDL_RenderRect(renderer, &dstRect);
 }
 
 

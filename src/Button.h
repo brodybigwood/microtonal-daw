@@ -25,6 +25,8 @@ class Button {
         void render(); 
         void handleInput(SDL_Event& e);  
 
+        void setColor(SDL_Color& color);
+
         SDL_Texture* texture;
         ControlArea* sector;
 
@@ -32,9 +34,18 @@ class Button {
 
         void hover();
 
-        SDL_Color color = {255, 255, 255, 255};
-
         bool hovered = false;
+
+        void toggleState();
+        bool activated = false;
+
+        SDL_Color inactive = {30, 30, 30, 255};
+        SDL_Color inactive_hover = {40, 40, 40, 255};
+
+        SDL_Color active = {160, 80, 60, 255};
+        SDL_Color active_hover = {160, 120, 140, 255};
+
+        SDL_Color border = {0,0,0,255};
 
         std::string title;
 

@@ -31,12 +31,18 @@ class InstrumentMenu {
         std::string outputType;
         std::vector<int> outputs;
 
-        std::vector<Button*> buttons;
+        std::vector<Button*> plugins;
+        std::vector<Button*> pluginToggles;
 
         float plugMarginX = 20.0f;
         float plugMarginY = 20.0f;
 
         SDL_FRect* rackRect;
+        SDL_FRect* rackTitleRect;
+
+        SDL_FRect* rackTitleTextRect;
+        SDL_FRect* outRect;
+
         float pluginHeight;
 
         float width, height;
@@ -71,10 +77,7 @@ class InstrumentMenu {
 
         SDL_Texture* textTexture;
 
-        SDL_FRect titleDst;
-        SDL_FRect outputDst;
-
-        SDL_Color color = {255, 255, 255};  // white
+        SDL_Color color = {255, 255, 255, 255};  // white
 
         TTF_Font* font;
         

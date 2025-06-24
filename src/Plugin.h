@@ -52,6 +52,10 @@ class Plugin {
 
          Project* project;
 
+         bool processing = false;
+
+         void toggle();
+
         std::vector<Steinberg::Vst::AudioBusBuffers> inputBuses, outputBuses;
         Steinberg::Vst::ProcessData data{};
 

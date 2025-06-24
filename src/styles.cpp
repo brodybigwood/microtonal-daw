@@ -40,7 +40,7 @@ bool initFonts() {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "TTF_Init failed in styles.cpp: %s\n", SDL_GetError());
         return false;
     }
-    if (fonts.mainFont = TTF_OpenFont("assets/fonts/Arial.ttf", 12)) {
+    if (fonts.mainFont = TTF_OpenFont("assets/fonts/SprinturaDemo.ttf", 12)) {
         return true;
     } else {
         return false;

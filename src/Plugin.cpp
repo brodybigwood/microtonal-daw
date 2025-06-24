@@ -35,6 +35,11 @@ Plugin::~Plugin() {
     }
 }
 
+void Plugin::toggle() {
+    processing = !processing;
+    audioProcessor->setProcessing(processing);
+}
+
 void Plugin::fetchPluginFactoryInfo() {
     if (pluginFactory) {
         Steinberg::PFactoryInfo factoryInfo;
@@ -88,6 +93,8 @@ bool Plugin::editorTick() {
 void Plugin::process(float* thrubuffer, int bufferSize, EventList* eventList) {
 
     if (!audioProcessor) return;
+
+    if(!processing) return;
 
     const int totalInputChannels = std::accumulate(
         inputBuses.begin(), inputBuses.end(), 0,
@@ -309,6 +316,8 @@ bool Plugin::instantiatePlugin() {
             std::cerr << "Failed to set audio processor to processing state" << std::endl;
             return false;
         }
+
+        processing = true;
 
     }
 
