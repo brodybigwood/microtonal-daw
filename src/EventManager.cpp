@@ -46,7 +46,7 @@ void EventManager::getEvents() {
 
         for(Note& note :region->notes) {
 
-            if(!note.dispatched && note.start < time+window) {
+            if(!note.dispatched && note.start < time+window && note.start >= time) {
 
                 Steinberg::Vst::Event e{};
                 e.type = Steinberg::Vst::Event::kNoteOnEvent;
@@ -62,7 +62,7 @@ void EventManager::getEvents() {
                 std::cout<<"noteon "<<note.num<<std::endl;
                 note.dispatched = true;
 
-            } else if(note.dispatched && note.end < time+window) {
+            } else if(note.dispatched && note.end < time+window && note.end >= time) {
 
                 Steinberg::Vst::Event e{};
                 e.type = Steinberg::Vst::Event::kNoteOffEvent;
