@@ -46,23 +46,7 @@ void EventManager::getEvents() {
 
         for(Note& note :region->notes) {
 
-            if(!note.dispatched && note.start < time+window && note.start >= time) {
-
-                Steinberg::Vst::Event e{};
-                e.type = Steinberg::Vst::Event::kNoteOnEvent;
-                e.noteOn.channel = 0;
-                e.noteOn.pitch = note.num;
-                e.noteOn.velocity = 1.0f;
-                e.noteOn.noteId = -1;
-                e.noteOn.length = 0;
-                e.sampleOffset = AudioManager::instance()->sampleRate * 60.0f * (note.start - time)/project->tempo;
-
-                events.push_back(e);
-
-                std::cout<<"noteon "<<note.num<<std::endl;
-                note.dispatched = true;
-
-            } else if(note.dispatched && note.end < time+window && note.end >= time) {
+            if(note.dispatched && note.end < time+window && note.end >= time) {
 
                 Steinberg::Vst::Event e{};
                 e.type = Steinberg::Vst::Event::kNoteOffEvent;
@@ -77,6 +61,22 @@ void EventManager::getEvents() {
 
                 std::cout<<"noteoff "<<note.num<<std::endl;
                 note.dispatched = false;
+
+            } else if(!note.dispatched && note.start < time+window && note.start >= time) {
+
+                Steinberg::Vst::Event e{};
+                e.type = Steinberg::Vst::Event::kNoteOnEvent;
+                e.noteOn.channel = 0;
+                e.noteOn.pitch = note.num;
+                e.noteOn.velocity = 1.0f;
+                e.noteOn.noteId = -1;
+                e.noteOn.length = 0;
+                e.sampleOffset = AudioManager::instance()->sampleRate * 60.0f * (note.start - time)/project->tempo;
+
+                events.push_back(e);
+
+                std::cout<<"noteon "<<note.num<<std::endl;
+                note.dispatched = true;
 
             }
         }
