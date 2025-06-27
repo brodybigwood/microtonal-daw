@@ -53,6 +53,8 @@ class Project {
 
         void tick();
 
+        void setup();
+
         fract playHeadStart;
         fract playHeadPos = fract(0,1);
 

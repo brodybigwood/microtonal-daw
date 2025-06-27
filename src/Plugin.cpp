@@ -38,6 +38,7 @@ Plugin::~Plugin() {
 void Plugin::toggle() {
     processing = !processing;
     audioProcessor->setProcessing(processing);
+    std::cout<<"processing: "<<processing<<std::endl;
 }
 
 void Plugin::fetchPluginFactoryInfo() {
@@ -195,16 +196,7 @@ bool Plugin::instantiatePlugin() {
     }
 
     if (audioProcessor) {
-        Steinberg::Vst::ProcessSetup setup{};
 
-        setup.sampleRate = am->sampleRate;
-        setup.maxSamplesPerBlock = am->bufferSize;
-        setup.processMode = Steinberg::Vst::kRealtime;
-        setup.symbolicSampleSize = Steinberg::Vst::kSample32;
-
-        if (audioProcessor->canProcessSampleSize(setup.symbolicSampleSize) != Steinberg::kResultTrue){
-            std::cerr << "sample size invalid ." << std::endl;
-    }
 
         if(component->initialize(nullptr) != Steinberg::kResultTrue) {
             std::cerr << "Error initializing ." << std::endl;
@@ -307,18 +299,6 @@ bool Plugin::instantiatePlugin() {
             return false;
         }
 
-        if (audioProcessor->setupProcessing(setup) != Steinberg::kResultTrue) {
-            std::cerr << "Failed to setup audio processor." << std::endl;
-            return false;
-        }
-
-        if (audioProcessor->setProcessing(true) != Steinberg::kResultTrue) {
-            std::cerr << "Failed to set audio processor to processing state" << std::endl;
-            return false;
-        }
-
-        processing = true;
-
     }
 
 
@@ -332,6 +312,31 @@ bool Plugin::instantiatePlugin() {
     }
 
 
+}
+
+void Plugin::setup() {
+    Steinberg::Vst::ProcessSetup setup{};
+
+    setup.sampleRate = am->sampleRate;
+    setup.maxSamplesPerBlock = am->bufferSize;
+    setup.processMode = Steinberg::Vst::kRealtime;
+    setup.symbolicSampleSize = Steinberg::Vst::kSample32;
+
+    if (audioProcessor->canProcessSampleSize(setup.symbolicSampleSize) != Steinberg::kResultTrue){
+        std::cerr << "sample size invalid ." << std::endl;
+    }
+
+    if (audioProcessor->setupProcessing(setup) != Steinberg::kResultTrue) {
+        std::cerr << "Failed to setup audio processor." << std::endl;
+        return;
+    }
+
+    if (audioProcessor->setProcessing(true) != Steinberg::kResultTrue) {
+        std::cerr << "Failed to set audio processor to processing state" << std::endl;
+        return;
+    }
+
+    processing = true;
 }
 
 bool Plugin::createEditControllerAndPlugView(const Steinberg::TUID controllerCID) {

@@ -50,6 +50,8 @@ class Plugin {
             EventList* eventList
         );
 
+         void setup();
+
          Project* project;
 
          bool processing = false;

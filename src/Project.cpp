@@ -73,6 +73,21 @@ void Project::tick() {
     em.getEvents();
 }
 
+void Project::setup() {
+    for(auto& inst : instruments) {
+        auto& rack = inst->rack;
+        for(auto& plug : rack.plugins) {
+            plug->setup();
+        }
+    }
+    for(auto& track : tracks) {
+        auto& rack = track->rack;
+        for(auto& plug : rack.plugins) {
+            plug->setup();
+        }
+    }
+}
+
 
 void Project::setTime(double time) {
     timeSeconds = time;
