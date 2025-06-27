@@ -28,6 +28,8 @@ class AudioManager {
 
         void setProject(Project* project);
 
+        unsigned int latency;
+
     private:
 
         void audioThread();

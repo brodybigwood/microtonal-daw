@@ -1,6 +1,5 @@
 #include "Region.h"
 #include "Note.h"
-#include "MidiRouter.h"
 #include <vector>
 #include "fract.h"
 #include "Instrument.h"
@@ -25,8 +24,6 @@ class Project {
         int sampleTime = 0;
 
         std::string filepath = "";
-
-        MidiRouter router;
 
         float tempo = 120;
 
@@ -67,6 +64,8 @@ class Project {
         void setTime(double);
 
         double timeSeconds = 0;
+
+        double effectiveTime = 0;
 
     private:
 

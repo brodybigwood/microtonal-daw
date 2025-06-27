@@ -38,5 +38,5 @@ void Playhead::render(float barWidth) {
 
 void Playhead::getTimePx(float barWidth) {
     
-    timePx = project->tempo * project->timeSeconds / 60 * barWidth;
+    timePx = project->tempo * (double)project->effectiveTime / 60 * barWidth;
 }
