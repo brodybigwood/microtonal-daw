@@ -58,6 +58,8 @@ void EventManager::injectMPE(std::vector<Steinberg::Vst::Event>& events, Note& n
     e.midiCCOut.value2 = (bendValue >> 7) & 0x7F;
 
     events.push_back(e);
+
+    std::cout<<"mpe "<<note.channel<<std::endl;
 }
 
 
@@ -72,11 +74,6 @@ void EventManager::getEvents() {
         std::vector<Steinberg::Vst::Event> events;
 
         for(Note& note :region->notes) {
-
-
-
-
-
 
             int offset = AudioManager::instance()->sampleRate * 60.0f * (note.end - time)/project->tempo;
 
@@ -104,9 +101,6 @@ void EventManager::getEvents() {
 
 
             } else if(!note.dispatched && note.start < time+window && note.start >= time) {
-
-                note.channel = 3;
-                note.id = 3;
 
                 Steinberg::Vst::Event e{};
                 e.type = Steinberg::Vst::Event::kNoteOnEvent;

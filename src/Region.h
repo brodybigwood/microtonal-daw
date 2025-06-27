@@ -26,7 +26,7 @@ class Region {
 
  std::vector<Note> notes; 
 
-
+bool updateNoteChannel(Note&);
 
 
  void createNote(fract, fract);

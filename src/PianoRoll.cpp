@@ -7,6 +7,7 @@
 
 
 
+
 PianoRoll::PianoRoll(int windowWidth, int windowHeight, Region* region) : region(region) {
 
     SDL_SetCursor(cursors.grabber);
@@ -430,9 +431,16 @@ void PianoRoll::handleInput(SDL_Event& e) {
 
 void PianoRoll::createNote(fract start, fract pitch) {
         
-        region->notes.push_back(Note(start, lastLength + start, pitch, notesPerOctave));
+    Note n(start, lastLength + start, pitch, notesPerOctave);
 
-        refreshGrid = true;
+    static int nextId = 0;
+    n.id = nextId++;
+
+    region->updateNoteChannel(n);
+
+    region->notes.push_back(n);
+
+    refreshGrid = true;
 }
 
 void PianoRoll::RenderNotes() {
@@ -538,5 +546,7 @@ void PianoRoll::moveNote(int noteIndex, int moveX, int moveY) {
     note.start = note.start + x;
     note.end = note.end + x;
     note.num = note.num + y;
+
+    region->updateNoteChannel(note);
     Scroll();
 }
