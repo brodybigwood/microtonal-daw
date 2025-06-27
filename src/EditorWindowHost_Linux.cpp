@@ -3,6 +3,7 @@
 #include <X11/Xutil.h>
 #include <memory>
 #include <iostream>
+#include "Project.h"
 
 class LinuxEditorWindowHost : public EditorWindowHost {
 public:
@@ -24,7 +25,7 @@ public:
 
         XStoreName(display, window, "VST3 Editor Window");
 
-        XSelectInput(display, window, ExposureMask | StructureNotifyMask);
+        XSelectInput(display, window, ExposureMask | StructureNotifyMask | KeyPressMask | KeyReleaseMask);
 
         XMapWindow(display, window);
         XFlush(display);
@@ -74,7 +75,16 @@ public:
 
         while (XPending(display) > 0) {
             XEvent e;
+
             XNextEvent(display, &e);
+
+            if (e.type == KeyPress) {
+                KeySym key = XLookupKeysym(&e.xkey, 0);
+                if (key == XK_space) {
+                    Project::instance()->togglePlaying();
+                }
+            }
+
             if (e.type == ConfigureNotify) {
                 Steinberg::ViewRect newRect;
                 newRect.left = 0;
