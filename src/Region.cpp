@@ -1,6 +1,8 @@
 #include "Region.h"
 #include <set>
 
+using namespace DAW;
+
 Region::Region(fract startTime, float y) {
     this->startTime = startTime;
     this-> y = y;

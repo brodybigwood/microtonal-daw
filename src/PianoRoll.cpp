@@ -9,7 +9,7 @@
 
 
 
-PianoRoll::PianoRoll(int windowWidth, int windowHeight, Region* region) : region(region) {
+PianoRoll::PianoRoll(int windowWidth, int windowHeight, DAW::Region* region) : region(region) {
 
     SDL_SetCursor(cursors.grabber);
     this->windowWidth = windowWidth;

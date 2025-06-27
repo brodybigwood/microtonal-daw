@@ -20,7 +20,7 @@ EventManager::~EventManager() {
 }
 
 void EventManager::clearEvents() {
-    for (Region* region : project->regions) {
+    for (DAW::Region* region : project->regions) {
         for (Note& note : region->notes) {
             if (note.dispatched) {
                 Steinberg::Vst::Event e{};
@@ -69,7 +69,7 @@ void EventManager::injectMPE(std::vector<Steinberg::Vst::Event>& events, Note& n
 void EventManager::getEvents() {
 
 
-    for(Region* region :project->regions) {
+    for(DAW::Region* region :project->regions) {
 
         std::vector<Steinberg::Vst::Event> events;
 

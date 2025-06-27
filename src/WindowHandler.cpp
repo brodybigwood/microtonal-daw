@@ -24,7 +24,7 @@ WindowHandler::~WindowHandler() {
 
 }
 
-void WindowHandler::createPianoRoll(Region* region) {
+void WindowHandler::createPianoRoll(DAW::Region* region) {
     std::cout<<"creating"<<std::endl;
     editor = new PianoRoll(800, 600, region);
     

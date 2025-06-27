@@ -9,6 +9,7 @@
 #ifndef REGION_H
 #define REGION_H
 
+namespace DAW {
 
 class Region {
     private:
@@ -52,5 +53,6 @@ bool updateNoteChannel(Note&);
 
 };
 
+}
 
 #endif

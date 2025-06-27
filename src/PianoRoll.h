@@ -15,7 +15,7 @@ class PianoRoll {
 
 
 
-    PianoRoll(int, int, Region*);
+    PianoRoll(int, int, DAW::Region*);
     virtual ~PianoRoll();
     
         SDL_Window* window;
@@ -30,7 +30,7 @@ class PianoRoll {
 
         SDL_Texture* keys[128];
 
-        Region* region;
+        DAW::Region* region;
 
         float keyLength = 40;
 

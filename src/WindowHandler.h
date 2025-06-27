@@ -27,7 +27,7 @@ SDL_Event e;
         PianoRoll* findWindow();
         bool tick();
 
-        void createPianoRoll(Region*);
+        void createPianoRoll(DAW::Region*);
 
 
         Uint32 lastTime;

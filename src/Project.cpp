@@ -37,7 +37,7 @@ void Project::load(std::string filepath) {
     for(size_t i = 0; i<1; i++) {
 
         fract pos(0,1);
-        Region* reg = new Region(pos, i);
+        DAW::Region* reg = new DAW::Region(pos, i);
         reg->outputs.push_back(0);
         regions.push_back(reg);
     }
@@ -52,7 +52,7 @@ void Project::save() {
 }
 
 void Project::createRegion(fract x, int y) {
-    regions.push_back(new Region(x, y));
+    regions.push_back(new DAW::Region(x, y));
 }
 
 void Project::play() {

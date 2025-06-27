@@ -45,11 +45,11 @@ class Project {
 
         void stop();
 
-        std::vector<Region*> regions;
+        std::vector<DAW::Region*> regions;
         std::vector<Instrument*> instruments;
-        std::vector<Region> files;
-        std::vector<Region> recordings;
-        std::vector<Region> automations;
+        std::vector<DAW::Region> files;
+        std::vector<DAW::Region> recordings;
+        std::vector<DAW::Region> automations;
 
         std::vector<MixerTrack*> tracks;
 
