@@ -61,6 +61,15 @@ void Project::play() {
     }
 }
 
+void Project::togglePlaying() {
+    if(!isPlaying) {
+        isPlaying = true;
+    } else {
+        isPlaying = false;
+        setTime(playHeadStart);
+    }
+}
+
 void Project::stop() {
     if(isPlaying) {
         isPlaying = false;

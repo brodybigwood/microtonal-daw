@@ -1,5 +1,6 @@
 #include "PianoRoll.h"
 
+#include <SDL3/SDL_scancode.h>
 #include <cmath>
 
 #include "Region.h"
@@ -18,7 +19,7 @@ PianoRoll::PianoRoll(int windowWidth, int windowHeight, Region* region) : region
 
         renderer = SDL_CreateRenderer(window, NULL);
 
-
+    this->project = Project::instance();
 
     UpdateGrid();
 
@@ -304,7 +305,7 @@ void PianoRoll::handleInput(SDL_Event& e) {
     
     switch (e.type) {
 
-            
+
 
         case SDL_EVENT_MOUSE_WHEEL:
             if (isCtrlPressed) {
@@ -379,14 +380,21 @@ void PianoRoll::handleInput(SDL_Event& e) {
 
         case SDL_EVENT_KEY_DOWN:
 
-            if (e.key.scancode == SDLK_MINUS) {
-                notesPerOctave -= 1;
-                UpdateGrid();
-            } else if (e.key.scancode == 46) {
-                notesPerOctave += 1;
-                UpdateGrid();
-            } 
+            switch (e.key.scancode) {
+                case SDL_SCANCODE_MINUS:
+                    notesPerOctave -= 1;
+                    UpdateGrid();
+                    break;
+                case SDL_SCANCODE_EQUALS:
+                    notesPerOctave += 1;
+                    UpdateGrid();
+                    break;
+                case SDL_SCANCODE_SPACE:
+                    project->togglePlaying();
+                    break;
+            }
             break;
+
         
 
         case SDL_EVENT_MOUSE_MOTION:

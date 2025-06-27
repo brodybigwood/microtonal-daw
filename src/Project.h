@@ -41,6 +41,8 @@ class Project {
 
         void play();
 
+        void togglePlaying();
+
         void stop();
 
         std::vector<Region*> regions;

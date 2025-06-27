@@ -4,6 +4,7 @@
 #include "Note.h"
 #include "fract.h" 
 #include "styles.h"
+#include "Project.h"
 
 #ifndef PIANOROLL_H
 #define PIANOROLL_H
@@ -33,7 +34,7 @@ class PianoRoll {
 
         float keyLength = 40;
 
-        
+        Project* project;
 
         void setRenderColor(SDL_Renderer*, uint8_t*);
 
