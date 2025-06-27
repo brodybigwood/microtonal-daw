@@ -14,6 +14,9 @@ class Note {
         fract start; //bars
         fract end;
 
+        int id;
+        int channel;
+
         SDL_Color customColor;
 
         bool dispatched = false;

@@ -5,6 +5,7 @@
 #include <thread>
 #include <atomic>
 #include "EventList.h"
+#include "Note.h"
 
 class Project;
 
@@ -28,6 +29,8 @@ class EventManager {
 private:
     std::thread eventThread;
     std::atomic<bool> running = false;
+
+    void injectMPE(std::vector<Steinberg::Vst::Event>& events, Note& note, int& sampleOffset);
 
 };
 #endif
