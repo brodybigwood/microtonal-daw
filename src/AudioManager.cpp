@@ -51,6 +51,7 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
     }
 
     project->effectiveTime = project->timeSeconds -  static_cast<double>(audioManager->latency) / audioManager->sampleRate;
+
     return 0;
 }
 
@@ -110,7 +111,6 @@ bool AudioManager::start() {
     int bufferedFrames = 2;
 
     latency += bufferSize * bufferedFrames;
-
 
     std::cout<<"audio stream latency: "<<latency<<std::endl;
 
