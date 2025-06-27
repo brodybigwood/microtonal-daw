@@ -49,6 +49,8 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
             outBuffer[i * numChannels + ch] = mono[i];
         }
     }
+
+    project->effectiveTime = project->timeSeconds;
     return 0;
 }
 
