@@ -21,7 +21,8 @@ ColorCodes colors {
 
     {101, 182, 202, 255}, //playhead
 
-    {72, 77, 78, 255} //editor background
+    {72, 77, 78, 255}, //editor background
+    {56, 56, 56, 255}
 };
 
 Cursors cursors{

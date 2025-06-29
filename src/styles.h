@@ -26,6 +26,7 @@ struct ColorCodes{
     uint8_t playHead[4];
 
     uint8_t editorBackground[4];
+    SDL_Color controlsBackground;
 };
 
 extern int lineWidth;

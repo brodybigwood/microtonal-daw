@@ -17,12 +17,6 @@ Home::Home(Project* project, WindowHandler* windowHandler) {
 
     instrumentMenuTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, instMenuWidth, windowHeight-mixerHeight-controlsHeight);
 
-    Button play("play", instWidth + controlsHeight/5, controlsHeight/5, controlsHeight/3, controlsHeight/3, renderer);
-    Button stop("stop", instWidth + 6*controlsHeight/5, controlsHeight/5, controlsHeight/3, controlsHeight/3, renderer);
-
-    buttons.push_back(play);
-    buttons.push_back(stop);
-
     insts = new InstrumentList(controlsHeight, instWidth, windowHeight-mixerHeight, renderer, project);
 
     song = new SongRoll(
@@ -55,11 +49,6 @@ void Home::tick() {
     song->render();
     instrumentMenu->render();
 
-    for(size_t i = 0; i<buttons.size(); i++) {
-        Button& button = buttons[i];
-        button.render(); 
-    }
-
     SDL_RenderPresent(renderer);
 }
 
@@ -73,6 +62,7 @@ bool Home::handleInput(SDL_Event& e) {
             song->moveMouse(mouseX-instWidth,mouseY-controlsHeight);
             insts->moveMouse(mouseX,mouseY-controlsHeight);
             instrumentMenu->moveMouse(mouseX,mouseY);
+            controls->moveMouse(mouseX, mouseY);
             hoverButtons();
             return true;
             break;
@@ -92,31 +82,15 @@ bool Home::handleInput(SDL_Event& e) {
             return true;
             break;
         } 
-            if(e.button.button == SDL_BUTTON_LEFT) {
-                if(hoveredButton != nullptr) {
-                    if(hoveredButton->title == "play") {
-                        project->play();
-                        hoveredButton->hovered = false;
-                        hoveredButton = nullptr;
-                        return true;
-                    }
-                    if(hoveredButton->title == "stop") {
-                        project->stop();
-                        hoveredButton->hovered = false;
-                        hoveredButton = nullptr;
-                        return true;
-                    }
-                    return false;
-                } else {
-                    return false;
-                }
 
+        if(
+            mouseY < controlsHeight
+        ) {
+            controls->handleInput(e);
+            return true;
+            break;
+        }
 
-
-
-
-                
-            }
             default:
             return false;
     }
@@ -124,23 +98,7 @@ bool Home::handleInput(SDL_Event& e) {
 }
 
 void Home::hoverButtons() {
-    for(size_t i = 0; i<buttons.size(); i++) {
-        Button& button = buttons[i];
-        if(
-            mouseX >= button.x &&
-            mouseX <= button.x+button.width &&
-            mouseY >= button.y &&
-            mouseY <= button.y+button.height
-        ) {
-            
-            hoveredButton = &button;
-            hoveredButton->hovered = true;
-            break;
-        } else {
-            button.hovered = false;
-            hoveredButton = nullptr;
-        }
-    }
+
 
 }
 
@@ -186,5 +144,5 @@ bool Home::mouseOnEditor() {
     } else {
         return false;
     }
-    
 }
+
