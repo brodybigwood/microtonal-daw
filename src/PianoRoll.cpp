@@ -1,6 +1,7 @@
 #include "PianoRoll.h"
 
 #include <SDL3/SDL_scancode.h>
+#include <SDL3/SDL_stdinc.h>
 #include <cmath>
 
 #include "Region.h"
@@ -474,9 +475,21 @@ void PianoRoll::RenderNotes() {
     SDL_SetRenderDrawColor(renderer,0,0,0,0);
     SDL_RenderClear(renderer);
 
-    for(int i = 0; i<region->notes.size(); i++) {
-        Note& note = region->notes[i];
+    //backgrounds first
+    for(Note& note : region->notes) {
 
+        float noteX = getNotePosX(note) +1;
+        float noteY = getY(note.num);
+        float noteEnd = getNoteEnd(note) -2;
+        float noteTop = noteY + getNoteHeight(note);
+
+
+        setRenderColor(renderer, colors.noteBackground);
+        SDL_FRect noteBGRect = { noteX, noteY, noteEnd - noteX, noteTop-noteY};
+        SDL_RenderFillRect(renderer, &noteBGRect);
+    }
+
+    for(Note& note : region->notes) {
             float noteX = getNotePosX(note) +1;
             float noteY = getY(note.num);
             float noteEnd = getNoteEnd(note) -2;

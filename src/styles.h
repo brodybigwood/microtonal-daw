@@ -14,6 +14,7 @@ struct ColorCodes{
     uint8_t noteSelected[4];
     uint8_t noteBorder[4];
     uint8_t noteSelectedBorder[4];
+    uint8_t noteBackground[4];
 
     uint8_t keyText[4];
     uint8_t keyWhite[4];
