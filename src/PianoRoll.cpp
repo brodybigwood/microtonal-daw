@@ -5,7 +5,7 @@
 
 #include "Region.h"
 #include "Note.h"
-
+#include "Playhead.h"
 
 
 
@@ -20,6 +20,8 @@ PianoRoll::PianoRoll(int windowWidth, int windowHeight, DAW::Region* region) : r
         renderer = SDL_CreateRenderer(window, NULL);
 
     this->project = Project::instance();
+
+    this->playHead = new Playhead(this->project, &gridRect);
 
     UpdateGrid();
 
@@ -208,20 +210,16 @@ bool PianoRoll::tick() {
         RenderGridTexture();  
 
         RenderKeys();
-        RenderNotes();  
-        
-
-   
-        RenderRoll();
+        RenderNotes();
 
     }
 
+    SDL_SetRenderTarget(renderer, NULL);
+    SDL_RenderTexture(renderer, NotesTexture, NULL, NULL);
 
+    RenderRoll();
 
-
-
-
-
+    playHead->render(renderer, barWidth);
 
     SDL_RenderPresent(renderer);  
     return running;
@@ -237,6 +235,13 @@ void PianoRoll::setRenderColor(SDL_Renderer* theRenderer, uint8_t code[4]) {
 }
 
 void PianoRoll::initWindow() {
+
+    this->gridRect = {
+        keyLength,
+        menuHeight,
+        windowWidth-keyLength,
+        windowWidth-menuHeight
+    };
 
     SDL_DestroyTexture(backgroundTexture);
     SDL_DestroyTexture(gridTexture);
@@ -478,9 +483,6 @@ void PianoRoll::RenderNotes() {
             SDL_RenderLine(renderer, noteX, noteTop, noteEnd, noteTop);
 
     }
-
-    SDL_SetRenderTarget(renderer, NULL);
-SDL_RenderTexture(renderer, NotesTexture, NULL, NULL);
 
 }
 

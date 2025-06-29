@@ -9,6 +9,8 @@
 #ifndef PIANOROLL_H
 #define PIANOROLL_H
 
+class Playhead;
+
 class PianoRoll {
 
     public:
@@ -31,8 +33,6 @@ class PianoRoll {
         SDL_Texture* keys[128];
 
         DAW::Region* region;
-
-        float keyLength = 40;
 
         Project* project;
 
@@ -137,6 +137,12 @@ class PianoRoll {
 
         void moveNote(int, int, int);
         
+    private:
+        Playhead* playHead;
+        SDL_FRect gridRect;
+
+        float keyLength = 40;
+        float menuHeight = 0;
 };
 
 #endif
