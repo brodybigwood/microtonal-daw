@@ -19,6 +19,8 @@ class Project {
     Project();
         ~Project();
 
+        bool processing = false;
+
         static Project* instance();
 
         int sampleTime = 0;

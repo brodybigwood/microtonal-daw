@@ -114,6 +114,8 @@ bool AudioManager::start() {
 
     std::cout<<"audio stream latency: "<<latency<<std::endl;
 
+    this->project->processing = true;
+
     return true;
 
 }
