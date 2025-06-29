@@ -10,27 +10,24 @@
 class WindowHandler;
 class Playhead {
     public:
-        Playhead(SDL_Renderer* renderer, 
-            SDL_Texture* ntexture, 
-            Project* project, 
-            WindowHandler* windowHandler
-        );
+        Playhead(Project* project, SDL_FRect* rect);
         ~Playhead();
 
-        SDL_Texture* ntexture;
-        SDL_Renderer* renderer;
         Project* project;
         WindowHandler* windowHandler;
         fract pos = fract(0,1);
 
-        void render(float barWidth);
+        void render(SDL_Renderer* renderer, float barWidth);
 
         void setTime(fract);
 
         float timePx;
 
         void getTimePx(float barWidth);
-        float width, height;
+        float* x;
+        float* y;
+        float* w;
+        float* h;
 };
 
 #endif

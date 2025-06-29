@@ -1,4 +1,5 @@
 #include "SongRoll.h"
+#include "Home.h"
 
 
 SongRoll::SongRoll(int x, int y, int width, int height, SDL_Renderer* renderer, Project* project, WindowHandler* windowHandler) {
@@ -19,15 +20,13 @@ SongRoll::SongRoll(int x, int y, int width, int height, SDL_Renderer* renderer, 
 
     dstRect = {x, y, width, height};
 
-
-    playHead = new Playhead(renderer, playHeadTexture, project, windowHandler);
-    
+    playHead = new Playhead(project, &dstRect);
 }
 
 void SongRoll::render() {
     RenderGridTexture();
     renderRegions();
-    playHead->render(barWidth);
+
     
     SDL_SetRenderTarget(renderer,texture);
     SDL_SetRenderDrawColor(renderer, colors.background[0], colors.background[1], colors.background[2], colors.background[3]);
@@ -38,7 +37,9 @@ void SongRoll::render() {
     SDL_RenderTexture(renderer,gridTexture,nullptr, &dstRect);
     SDL_RenderTexture(renderer,regionTexture,nullptr, &dstRect);
 
-    SDL_RenderTexture(renderer,playHeadTexture,nullptr, &dstRect);
+    if(project->processing) {
+        playHead->render(renderer, barWidth);
+    }
 }
 
 
@@ -111,10 +112,6 @@ void SongRoll::handleInput(SDL_Event& e) {
 }
 
 void SongRoll::RenderGridTexture() {
-
-
-
-
     SDL_SetRenderTarget(renderer, gridTexture);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0); // Transparent
     SDL_RenderClear(renderer);

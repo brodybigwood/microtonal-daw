@@ -1,14 +1,13 @@
 #include "Playhead.h"
 
 
-Playhead::Playhead(SDL_Renderer* renderer, SDL_Texture* ntexture, Project* project, WindowHandler* windowHandler) {
-    this->windowHandler = windowHandler;
+Playhead::Playhead(Project* project, SDL_FRect* rect) {
     this->project = project;
-    this->renderer = renderer;
-    this->ntexture = ntexture;
 
-
-    SDL_GetTextureSize(ntexture, &width, &height);
+    this->x = &(rect->x);
+    this->y = &(rect->y);
+    this->w = &(rect->w);
+    this->h = &(rect->h);
     
 }
 
@@ -22,22 +21,16 @@ void Playhead::setTime(fract time) {
     pos = time;
 }
 
-void Playhead::render(float barWidth) {
+void Playhead::render(SDL_Renderer* renderer, float barWidth) {
 
     getTimePx(barWidth);
-
-    SDL_SetRenderTarget(renderer, ntexture);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-    SDL_RenderClear(renderer);
-
-
     SDL_SetRenderDrawColor(renderer, colors.playHead[0], colors.playHead[1], colors.playHead[2], colors.playHead[3]);
-    SDL_RenderLine(renderer, timePx, 0, timePx, height);
+    SDL_RenderLine(renderer, timePx + *x, *y, timePx + *x, *y + *h);
 
 }
 
 void Playhead::getTimePx(float barWidth) {
     
-    timePx = project->tempo * (double)project->effectiveTime / 60 * barWidth;
+    timePx = project->tempo * (double)project->effectiveTime / 60 * barWidth + 2;
 
 }
