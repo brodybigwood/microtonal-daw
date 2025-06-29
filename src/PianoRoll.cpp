@@ -408,7 +408,23 @@ void PianoRoll::handleInput(SDL_Event& e) {
             handleMouse();
 
             
-            if(lmb && movingNote != -1) {
+            if(stretchingNote != nullptr) {
+                if(!lmb) {
+                    isStretchingNote = false;
+                    stretchingNote = nullptr;
+                } else {
+                    refreshGrid = true;
+                    float dX = mouseX - last_lmb_x;
+                    if(dX >= cellWidth) {
+                        stretchNote(1);
+                        last_lmb_x += cellWidth;
+                    } else if(dX <= -cellWidth) {
+                        stretchNote(-1);
+                        last_lmb_x -= cellWidth;
+                    }
+                }
+
+            } else if(lmb && movingNote != -1) {
                 refreshGrid = true;
                 float dX = mouseX - last_lmb_x;
                 float dirX = std::abs(dX)/dX;
@@ -424,9 +440,6 @@ void PianoRoll::handleInput(SDL_Event& e) {
                     last_lmb_y += cellHeight*dirY;
                 }
                 
-
-
-
             } else {
                 last_lmb_x = mouseX;
                 last_lmb_y = mouseY;
@@ -466,7 +479,7 @@ void PianoRoll::RenderNotes() {
         Note& note = region->notes[i];
 
             float noteX = getNotePosX(note) +1;
-            float noteY = getY(note.num) -1 ;
+            float noteY = getY(note.num) -1;
             float noteEnd = getNoteEnd(note) -2;
             float noteTop = noteY + getNoteHeight(note) +2;
 
@@ -486,9 +499,8 @@ void PianoRoll::RenderNotes() {
 
 }
 
-void PianoRoll::getExistingNote() {
-    hoveredNote = -1; // Default to -1, in case no note is found
-
+bool PianoRoll::getExistingNote() {
+    hoveredNote = -1;
     for (int i = 0; i < region->notes.size(); i++) {
         Note& note = region->notes[i];
         
@@ -502,9 +514,10 @@ void PianoRoll::getExistingNote() {
         if (mouseX >= notePosX && mouseX <= noteEnd &&
             mouseY <= noteY && mouseY >= (noteY + noteHeight)) {
             hoveredNote = i; // Found the hovered note
-            return; // Exit early
+            return true; // Exit early
         }
     }
+    return false;
 }
 
 
@@ -531,7 +544,9 @@ void PianoRoll::deleteNote(int index) {
 
 
 void PianoRoll::handleMouse() {
+    getStretchingNote();
     getExistingNote();
+
     if(rmb) {
         SDL_SetCursor(cursors.pencil);
         if(hoveredNote != -1) {
@@ -544,6 +559,46 @@ void PianoRoll::handleMouse() {
             SDL_SetCursor(cursors.selector);
         }
     }
+}
+
+bool PianoRoll::getStretchingNote() {
+    if(isStretchingNote) {
+        return true;
+    }
+    for (Note& note : region->notes) {
+        const int notePosX = getNotePosX(note);
+        const int noteEnd = getNoteEnd(note);
+        const int noteY = getY(note.num);
+
+        if ((mouseY >= noteY - selectThresholdY/2 && mouseY <= (noteY + selectThresholdY/2))) {
+            if(mouseX >= notePosX - selectThresholdX/2 && mouseX <= notePosX + selectThresholdX/2) {
+                stretchingNote = &note;
+                resizeDir = -1;
+                isStretchingNote = true;
+                return true;
+            } else if (mouseX >= noteEnd - selectThresholdX/2 && mouseX <= noteEnd + selectThresholdX/2) {
+                stretchingNote = &note;
+                resizeDir = 1;
+                isStretchingNote = true;
+                return true;
+            }
+        }
+    }
+    stretchingNote = nullptr;
+    return false;
+}
+
+void PianoRoll::stretchNote(int amount) {
+    if(stretchingNote == nullptr) {
+        return;
+    }
+    if(resizeDir == -1) {
+        stretchingNote->start = stretchingNote->start + fract(amount,notesPerBar);
+    } else if(resizeDir == 1) {
+        stretchingNote->end = stretchingNote->end + fract(amount,notesPerBar);
+    }
+    lastLength = stretchingNote->end - stretchingNote->start;
+    Scroll();
 }
 
 

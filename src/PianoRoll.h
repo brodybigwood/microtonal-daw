@@ -62,7 +62,7 @@ class PianoRoll {
         float last_lmb_x, last_lmb_y;
 
         double scrollX = 0;
-        double scrollY = 300; 
+        double scrollY = 800;
 
         double scaleX = 1;
         double scaleY = 1;
@@ -115,7 +115,7 @@ class PianoRoll {
 
         void deleteNote(int);
 
-        void getExistingNote();
+        bool getExistingNote();
 
         double getNoteName(double);
         double getY(double);
@@ -143,6 +143,16 @@ class PianoRoll {
 
         float keyLength = 40;
         float menuHeight = 0;
+
+        bool getStretchingNote();
+        void stretchNote(int amount);
+
+        float selectThresholdX = 5.0f;
+        float selectThresholdY = 5.0f;
+
+        Note* stretchingNote = nullptr;
+        int resizeDir;
+        bool isStretchingNote = false;
 };
 
 #endif
