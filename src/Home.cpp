@@ -54,7 +54,6 @@ void Home::tick() {
 
 bool Home::handleInput(SDL_Event& e) {
 
-
     switch(e.type) {
         
         case SDL_EVENT_MOUSE_MOTION:
@@ -67,31 +66,42 @@ bool Home::handleInput(SDL_Event& e) {
             return true;
             break;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
-        if(mouseOnSong()) {
-            song->clickMouse(e);
-            return true;
-            break;
-        } 
-        if(mouseOnInst()) {
-            insts->clickMouse(e);
-            return true;
-            break;
-        } 
-        if(mouseOnEditor()) {
-            instrumentMenu->clickMouse(e);
-            return true;
-            break;
-        } 
+            if(mouseOnSong()) {
+                song->clickMouse(e);
+                return true;
+                break;
+            }
+            if(mouseOnInst()) {
+                insts->clickMouse(e);
+                return true;
+                break;
+            }
+            if(mouseOnEditor()) {
+                instrumentMenu->clickMouse(e);
+                return true;
+                break;
+            }
 
-        if(
-            mouseY < controlsHeight
-        ) {
-            controls->handleInput(e);
-            return true;
-            break;
-        }
+            if(
+                mouseY < controlsHeight
+            ) {
+                controls->handleInput(e);
+                return true;
+                break;
+            }
 
-            default:
+
+        case SDL_EVENT_KEY_DOWN:
+            switch (e.key.scancode) {
+                case SDL_SCANCODE_SPACE:
+                    project->togglePlaying();
+                    return true;
+                    break;
+            }
+            break;
+
+
+        default:
             return false;
     }
 
