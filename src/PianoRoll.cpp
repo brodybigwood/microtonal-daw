@@ -76,8 +76,8 @@ double PianoRoll::getY(double noteMidiNum) {
     return -cellHeight12*((noteMidiNum-129)+(scrollY/cellHeight12)) - lineWidth;
 }
 
-fract PianoRoll::getHoveredCell() {
-    fract result = fract((notesPerOctave*128)-std::ceil(numCellsDown+((mouseY+yMin)/cellHeight))*12,notesPerOctave) + fract(1,1);
+fract PianoRoll::getHoveredLine() {
+    fract result = fract((notesPerOctave*128)-std::round(numCellsDown+((mouseY+yMin)/cellHeight))*12,notesPerOctave) + fract(1,1);
 
     return result;
 }
@@ -91,27 +91,23 @@ void PianoRoll::RenderKeys() {
     }
 
 
-        SDL_Texture* KeyTexture;
-        SDL_SetRenderTarget(renderer, PianoTexture);
+    SDL_Texture* KeyTexture;
+    SDL_SetRenderTarget(renderer, PianoTexture);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0); // Transparent
     SDL_RenderClear(renderer);
     SDL_Color textColor = {0, 0, 0, 255};
 
 
-            SDL_FRect backgroundRect = {0, 0, keyLength, windowHeight};
+    SDL_FRect backgroundRect = {0, 0, keyLength, windowHeight};
 
-        setRenderColor(renderer, colors.keyWhite);
-SDL_RenderFillRect(renderer, &backgroundRect); 
-SDL_SetRenderDrawColor(renderer,0,0,0,255);
-SDL_RenderLine(renderer, keyLength+1,0,keyLength+1,windowHeight);
+    setRenderColor(renderer, colors.keyWhite);
+    SDL_RenderFillRect(renderer, &backgroundRect);
+    SDL_SetRenderDrawColor(renderer,0,0,0,255);
+    SDL_RenderLine(renderer, keyLength+1,0,keyLength+1,windowHeight);
 
-        SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255); 
+    SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
 
     for (double y = yOffset12-cellHeight12; y < windowHeight+cellHeight12; y += cellHeight12) {
-
-
-             SDL_RenderLine(renderer, 0, y, keyLength, y);
-
 
         double noteNum = std::abs(getNoteName(y)-1);
         
@@ -122,15 +118,18 @@ SDL_RenderLine(renderer, keyLength+1,0,keyLength+1,windowHeight);
 
         KeyTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
 
-        SDL_FRect textRect = {0, (int)y, textSurface->w, textSurface->h};  // Position at x, y
-        SDL_DestroySurface(textSurface);  // Free the surface after creating the texture
-        // Render the text directly onto PianoTexture
+        SDL_FRect textRect = {
+            0,
+            static_cast<float>(y + cellHeight12) - static_cast<float>(textSurface->h)/2,
+            static_cast<float>(textSurface->w),
+            static_cast<float>(textSurface->h)
+        };
 
+        SDL_RenderLine(renderer, textSurface->w, y, keyLength, y);
+        SDL_DestroySurface(textSurface);
 
         SDL_RenderTexture(renderer, KeyTexture, NULL, &textRect);
 
-        // Destroy the text texture after use
-        //
     }
 
     SDL_DestroyTexture(KeyTexture);
@@ -353,7 +352,7 @@ void PianoRoll::handleInput(SDL_Event& e) {
                 lmb = true;
                 if(mouseX > keyLength) {
                     if(hoveredNote == -1) {
-                        createNote(getHoveredTime(), getHoveredCell());
+                        createNote(getHoveredTime(), getHoveredLine());
                     } else {
                         notesPerOctave = region->notes[hoveredNote].temperament;
                         UpdateGrid();
@@ -479,21 +478,19 @@ void PianoRoll::RenderNotes() {
         Note& note = region->notes[i];
 
             float noteX = getNotePosX(note) +1;
-            float noteY = getY(note.num) -1;
+            float noteY = getY(note.num);
             float noteEnd = getNoteEnd(note) -2;
-            float noteTop = noteY + getNoteHeight(note) +2;
+            float noteTop = noteY + getNoteHeight(note);
+
+            //noteRadius = (noteTop - noteY)/2;
 
             setRenderColor(renderer, colors.note);
-            SDL_FRect noteRect = { noteX, noteY, noteEnd - noteX, noteTop - noteY};
+            SDL_FRect noteRect = { noteX, noteY - noteRadius, noteEnd - noteX, 2*noteRadius};
             SDL_RenderFillRect(renderer, &noteRect);
 
             setRenderColor(renderer, colors.noteBorder);
 
-            SDL_RenderLine(renderer, noteX, noteY, noteEnd, noteY);
-            SDL_RenderLine(renderer, noteX, noteTop, noteEnd, noteTop);
-
-            SDL_RenderLine(renderer, noteEnd, noteY, noteEnd, noteTop);
-            SDL_RenderLine(renderer, noteX, noteTop, noteEnd, noteTop);
+            SDL_RenderRect(renderer, &noteRect);
 
     }
 
@@ -508,11 +505,10 @@ bool PianoRoll::getExistingNote() {
         const int notePosX = getNotePosX(note);
         const int noteEnd = getNoteEnd(note);
         const int noteY = getY(note.num);
-        const int noteHeight = getNoteHeight(note);
         
         // Check if mouse is within note bounds
         if (mouseX >= notePosX && mouseX <= noteEnd &&
-            mouseY <= noteY && mouseY >= (noteY + noteHeight)) {
+            mouseY <= noteY + noteRadius && mouseY >= (noteY - noteRadius)) {
             hoveredNote = i; // Found the hovered note
             return true; // Exit early
         }

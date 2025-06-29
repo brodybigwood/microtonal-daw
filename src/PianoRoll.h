@@ -128,7 +128,7 @@ class PianoRoll {
 
         SDL_Texture* layers[4]; 
 
-        fract getHoveredCell();
+        fract getHoveredLine();
         void handleMouse();
 
         float getNotePosX(Note&);
@@ -153,6 +153,8 @@ class PianoRoll {
         Note* stretchingNote = nullptr;
         int resizeDir;
         bool isStretchingNote = false;
+
+        float noteRadius = 5;
 };
 
 #endif
