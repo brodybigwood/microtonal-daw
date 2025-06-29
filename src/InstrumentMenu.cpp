@@ -169,20 +169,15 @@ bool inside(float px, float py, float x, float y, float w, float h) {
 
 
 void InstrumentMenu::clickMouse(SDL_Event& e) {
-    for (size_t i = 0; i < plugins.size(); ++i) {
-        auto& plug = plugins[i];
-        if (inside(mouseX, mouseY, plug->x, plug->y, plug->width, plug->height)) {
-            instrument->rack.plugins[i]->showWindow();
-            return;
+    for (auto plug : plugins) {
+        if(plug->hover()) {
+            plug->onClick();
         }
     }
 
-    for (size_t i = 0; i < pluginToggles.size(); ++i) {
-        auto& tog = pluginToggles[i];
-        if (inside(mouseX, mouseY, tog->x, tog->y, tog->width, tog->height)) {
-            instrument->rack.plugins[i]->toggle();
-            tog->toggleState();
-            return;
+    for (auto tog : pluginToggles) {
+        if(tog->hover()) {
+            tog->onClick();
         }
     }
 
@@ -195,22 +190,7 @@ void InstrumentMenu::moveMouse(float x, float y) {
 }
 
 void InstrumentMenu::hover() {
-    for(Button* plug : plugins) {
-        if (inside(mouseX, mouseY, plug->x, plug->y, plug->width, plug->height)) {
-            plug->hovered = true;
-            break;
-        } else {
-            plug->hovered = false;
-        }
-    }
-    for(Button* tog : pluginToggles) {
-        if(inside(mouseX, mouseY, tog->x, tog->y, tog->width, tog->height)) {
-            tog->hovered = true;
-            break;
-        } else {
-            tog->hovered = false;
-        }
-    }
+
 }
 
 
@@ -221,6 +201,8 @@ void InstrumentMenu::setInst(Instrument* instrument) {
     float pluginY = rackRect->y + rackTitleRect->h;
 
     std::cout << "setting inst" <<std::endl;
+    int i = 0;
+
     for(auto& plugin : instrument->rack.plugins) {
 
         Button* plug = new Button(
@@ -232,6 +214,21 @@ void InstrumentMenu::setInst(Instrument* instrument) {
             renderer
         );
 
+        plug->onClick = [this,i] {
+            this->instrument->rack.plugins[i]->showWindow();
+        };
+
+        plug->hover = [this, plug] {
+            if (inside(this->mouseX, this->mouseY, plug->x, plug->y, plug->width, plug->height)) {
+                return true;
+            } else {
+                return false;
+            }
+        };
+
+        plug->activated = [this,i] {
+            return this->instrument->rack.plugins[i]->windowOpen;
+        };
 
         Button* tog = new Button(
             plugin->name,
@@ -242,12 +239,29 @@ void InstrumentMenu::setInst(Instrument* instrument) {
             renderer
         );
 
+        tog->onClick = [this,i,tog] {
+            this->instrument->rack.plugins[i]->toggle();
+        };
+
+        tog->hover = [this, tog] {
+            if (inside(this->mouseX, this->mouseY, tog->x, tog->y, tog->width, tog->height)) {
+                return true;
+            } else {
+                return false;
+            }
+        };
+
+        tog->activated = [this,i] {
+            return this->instrument->rack.plugins[i]->processing;
+        };
+
         pluginToggles.push_back(tog);
-        tog->toggleState();
 
         plugins.push_back(plug);
 
         pluginY += pluginHeight;
+
+        i++;
     }
 
 

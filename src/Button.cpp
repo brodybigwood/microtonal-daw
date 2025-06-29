@@ -29,19 +29,15 @@ void Button::setColor(SDL_Color& color) {
     );
 }
 
-void Button::toggleState() {
-    activated = !activated;
-}
-
 void Button::render() {
-    if(activated) {
-        if(hovered) {
+    if(activated()) {
+        if(hover()) {
             setColor(active_hover);
         } else {
             setColor(active);
         }
     } else {
-        if(hovered) {
+        if(hover()) {
             setColor(inactive_hover);
         } else {
             setColor(inactive);
@@ -55,9 +51,5 @@ void Button::render() {
 
 
 Button::~Button() {
-
-}
-
-void Button::hover() {
 
 }

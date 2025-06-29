@@ -30,11 +30,9 @@ class ControlArea {
 
         SDL_FRect dstRect;
 
-        std::vector<Button> buttons;
+        std::vector<Button*> buttons;
 
         void moveMouse(float mouseX, float mouseY);
-
-        void hoverButtons();
 
         void handleInput(SDL_Event& e);
 

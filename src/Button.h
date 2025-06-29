@@ -15,6 +15,10 @@ class Button {
         
         SDL_Renderer* renderer;
 
+        std::function<bool()> activated;
+
+        std::function<bool()> hover;
+        std::function<void()> onClick;
 
         float x;
         float y;
@@ -31,13 +35,6 @@ class Button {
         ControlArea* sector;
 
         SDL_FRect dstRect;
-
-        void hover();
-
-        bool hovered = false;
-
-        void toggleState();
-        bool activated = false;
 
         SDL_Color inactive = {30, 30, 30, 255};
         SDL_Color inactive_hover = {40, 40, 40, 255};

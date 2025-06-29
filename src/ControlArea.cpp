@@ -7,19 +7,42 @@
 ControlArea::ControlArea(int height, int width, SDL_Renderer* renderer) {
 
     this->renderer = renderer;
+    this->project = Project::instance();
 
     this->height = height;
     this->width = width;
 
     dstRect = {x, y, width, height};
 
-    Button play("play", 200 + 50.0f/5, 50.0f/5, 50.0f/3, 50.0f/3, renderer);
-    Button stop("stop", 200 + 6*50.0f/5, 50.0f/5, 50.0f/3, 50.0f/3, renderer);
+    Button* play = new Button("play", 200 + 50.0f/5, 50.0f/5, 50.0f/3, 50.0f/3, renderer);
+    Button* stop = new Button("stop", 200 + 6*50.0f/5, 50.0f/5, 50.0f/3, 50.0f/3, renderer);
+
+    play->onClick = [this] {
+        this->project->play();
+    };
+    stop->onClick = [this] {
+        this->project->stop();
+    };
+
+    play->activated = [this] {
+        return this->project->isPlaying;
+    };
+    stop->activated = [this] {
+        return !this->project->processing;
+    };
 
     buttons.push_back(play);
     buttons.push_back(stop);
 
-    this->project = Project::instance();
+    for (Button* btn : buttons) {
+
+        btn->hover = [this, btn] {
+            return (
+                this->mouseX >= btn->x && this->mouseX <= btn->x + btn->width &&
+                this->mouseY >= btn->y && this->mouseY <= btn->y + btn->height
+            );
+        };
+    }
 
 }
 ControlArea::~ControlArea() {
@@ -32,28 +55,8 @@ void ControlArea::render() {
     SDL_SetRenderDrawColor(renderer, colors.controlsBackground.r, colors.controlsBackground.g, colors.controlsBackground.b, colors.controlsBackground.a);
     SDL_RenderFillRect(renderer, &dstRect);
 
-
-    for(auto& button : buttons) {
-        button.render();
-    }
-
-}
-
-void ControlArea::hoverButtons() {
-    for(Button& button : buttons) {
-        if(
-            mouseX >= button.x &&
-            mouseX <= button.x+button.width &&
-            mouseY >= button.y &&
-            mouseY <= button.y+button.height
-        ) {
-            hoveredButton = &button;
-            hoveredButton->hovered = true;
-            break;
-        } else {
-            button.hovered = false;
-            hoveredButton = nullptr;
-        }
+    for(auto button : buttons) {
+        button->render();
     }
 
 }
@@ -61,29 +64,16 @@ void ControlArea::hoverButtons() {
 void ControlArea::moveMouse(float mouseX, float mouseY) {
     this->mouseX = mouseX;
     this->mouseY = mouseY;
-
-    hoverButtons();
 }
 
 
 void ControlArea::handleInput(SDL_Event& e) {
-    if(e.button.button == SDL_BUTTON_LEFT) {
-        if(hoveredButton != nullptr) {
-            if(hoveredButton->title == "play") {
-                project->play();
-                hoveredButton->hovered = false;
-                hoveredButton = nullptr;
-                return;
+    if (e.button.button == SDL_BUTTON_LEFT) {
+        for (auto* btn : buttons) {
+            if (btn->hover && btn->hover()) {
+                if (btn->onClick) btn->onClick();
+                break;
             }
-            if(hoveredButton->title == "stop") {
-                project->stop();
-                hoveredButton->hovered = false;
-                hoveredButton = nullptr;
-                return;
-            }
-            return;
-        } else {
-            return;
         }
     }
 }
