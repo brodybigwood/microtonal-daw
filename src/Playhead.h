@@ -17,7 +17,7 @@ class Playhead {
         WindowHandler* windowHandler;
         fract pos = fract(0,1);
 
-        void render(SDL_Renderer* renderer, float barWidth);
+        void render(SDL_Renderer* renderer, float barWidth, float scrollX);
 
         void setTime(fract);
 

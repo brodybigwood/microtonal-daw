@@ -219,7 +219,7 @@ bool PianoRoll::tick() {
 
     RenderRoll();
 
-    playHead->render(renderer, barWidth);
+    playHead->render(renderer, barWidth, scrollX);
 
     SDL_RenderPresent(renderer);  
     return running;

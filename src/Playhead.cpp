@@ -21,11 +21,11 @@ void Playhead::setTime(fract time) {
     pos = time;
 }
 
-void Playhead::render(SDL_Renderer* renderer, float barWidth) {
+void Playhead::render(SDL_Renderer* renderer, float barWidth, float scrollX) {
 
     getTimePx(barWidth);
     SDL_SetRenderDrawColor(renderer, colors.playHead[0], colors.playHead[1], colors.playHead[2], colors.playHead[3]);
-    SDL_RenderLine(renderer, timePx + *x, *y, timePx + *x, *y + *h);
+    SDL_RenderLine(renderer, timePx + *x - scrollX, *y, timePx + *x - scrollX, *y + *h);
 
 }
 

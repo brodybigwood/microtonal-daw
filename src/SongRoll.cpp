@@ -38,7 +38,7 @@ void SongRoll::render() {
     SDL_RenderTexture(renderer,regionTexture,nullptr, &dstRect);
 
     if(project->processing) {
-        playHead->render(renderer, barWidth);
+        playHead->render(renderer, barWidth, scrollX);
     }
 }
 
