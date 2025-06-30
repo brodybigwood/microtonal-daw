@@ -6,9 +6,6 @@ WindowHandler::WindowHandler(Project* project) {
     SDL_SetHint(SDL_HINT_APP_NAME, "EDITOR");
     SDL_SetHint(SDL_HINT_APP_ID, "daw.editor");
 
-    SDL_Init(SDL_INIT_VIDEO);
-
-
     this->project = project;
     
     mainWindow = SDL_CreateWindow("Piano Roll", windowWidth, windowHeight, SDL_WINDOW_RESIZABLE);

@@ -39,6 +39,7 @@ struct Cursors{
     SDL_Cursor* pencil;
     SDL_Cursor* mover;
     SDL_Cursor* selector;
+    SDL_Cursor* resize;
 };
 
 extern Cursors cursors;
@@ -50,5 +51,7 @@ struct Fonts{
 extern Fonts fonts;
 
 bool initFonts();
+
+void createCursors();
 
 #endif // STYLES_H

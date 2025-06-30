@@ -1,4 +1,5 @@
 #include "styles.h"
+#include <SDL3/SDL_mouse.h>
 int lineWidth = 1;
 
 ColorCodes colors {
@@ -26,23 +27,27 @@ ColorCodes colors {
     {56, 56, 56, 255}
 };
 
-Cursors cursors{
-    SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER),
-    SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_TEXT),
-    SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_MOVE),
-    SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT),
-};
+Cursors cursors{};
+
+void createCursors() {
+    cursors.grabber = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER);
+    cursors.pencil = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_TEXT);
+    cursors.mover = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_MOVE);
+    cursors.selector = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
+    cursors.resize = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_EW_RESIZE);
+}
 
 Fonts fonts{
     nullptr
 };
 
 bool initFonts() {
-    if(TTF_Init() == -1){
+    if(!TTF_Init()){
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "TTF_Init failed in styles.cpp: %s\n", SDL_GetError());
         return false;
     }
-    if (fonts.mainFont = TTF_OpenFont("assets/fonts/SprinturaDemo.ttf", 12)) {
+    fonts.mainFont = TTF_OpenFont("assets/fonts/SprinturaDemo.ttf", 12);
+    if (fonts.mainFont) {
         return true;
     } else {
         return false;

@@ -10,8 +10,16 @@
 int main() {
     
     if(!initFonts()) {
+        std::cerr << "ttf init failed failed" << std::endl;
         return -1;
     }
+
+    if(!SDL_Init(SDL_INIT_VIDEO)) {
+        std::cerr << "sdl init failed failed" << std::endl;
+        return -1;
+    }
+
+    createCursors();
 
     Project* project = Project::instance();
     AudioManager* audioManager = AudioManager::instance();
