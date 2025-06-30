@@ -34,12 +34,9 @@ PianoRoll::PianoRoll(int windowWidth, int windowHeight, DAW::Region* region) : r
 }
 
 PianoRoll::~PianoRoll() {
-    if (renderer) SDL_DestroyRenderer(renderer);
-    if (window) SDL_DestroyWindow(window);
     for(int i = 0; i<4; i++) {
         SDL_DestroyTexture(layers[i]);
     }
-
 }
 
 
@@ -204,7 +201,7 @@ void PianoRoll::RenderGridTexture() {
 
 bool PianoRoll::tick() {
     //refreshGrid = true;
-    //handleInput(e);
+    //handleCustomInput(e);
     if(refreshGrid) {
         refreshGrid = false;
         RenderGridTexture();  
@@ -223,15 +220,6 @@ bool PianoRoll::tick() {
 
     SDL_RenderPresent(renderer);  
     return running;
-}
-
-void PianoRoll::setRenderColor(SDL_Renderer* theRenderer, uint8_t code[4]) {
-    SDL_SetRenderDrawColor(theRenderer,
-        code[0],
-        code[1],
-        code[2],
-        code[3]
-    );  
 }
 
 void PianoRoll::initWindow() {
@@ -286,31 +274,9 @@ void PianoRoll::initWindow() {
 
 }
 
-void PianoRoll::toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar) {
-    if (e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_KEY_UP) {
-        if (e.key.scancode == keycode) {
-            if (e.type == SDL_EVENT_KEY_DOWN) {
-                keyVar = true;  // Shift key is pressed
-            } else if (e.type == SDL_EVENT_KEY_UP) {
-                keyVar = false;  // Shift key is released
-            }
-        }
-    }
-}
-
-
-void PianoRoll::handleInput(SDL_Event& e) {
-    
-
-    toggleKey(e, SDL_SCANCODE_LSHIFT, isShiftPressed);
-    toggleKey(e, SDL_SCANCODE_LCTRL, isCtrlPressed);
-    toggleKey(e, SDL_SCANCODE_LALT, isAltPressed);
- 
-    // Handle different events with a switch statement
+void PianoRoll::handleCustomInput(SDL_Event& e) {
     
     switch (e.type) {
-
-
 
         case SDL_EVENT_MOUSE_WHEEL:
             if (isCtrlPressed) {

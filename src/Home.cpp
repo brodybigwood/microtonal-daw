@@ -54,11 +54,12 @@ void Home::tick() {
 
 bool Home::handleInput(SDL_Event& e) {
 
+    song->handleInput(e);
+
     switch(e.type) {
         
         case SDL_EVENT_MOUSE_MOTION:
             SDL_GetMouseState(&mouseX, &mouseY);
-            song->moveMouse(mouseX-instWidth,mouseY-controlsHeight);
             insts->moveMouse(mouseX,mouseY-controlsHeight);
             instrumentMenu->moveMouse(mouseX,mouseY);
             controls->moveMouse(mouseX, mouseY);
@@ -66,11 +67,6 @@ bool Home::handleInput(SDL_Event& e) {
             return true;
             break;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
-            if(mouseOnSong()) {
-                song->clickMouse(e);
-                return true;
-                break;
-            }
             if(mouseOnInst()) {
                 insts->clickMouse(e);
                 return true;
@@ -89,6 +85,7 @@ bool Home::handleInput(SDL_Event& e) {
                 return true;
                 break;
             }
+            return false;
 
 
         case SDL_EVENT_KEY_DOWN:
@@ -110,22 +107,6 @@ bool Home::handleInput(SDL_Event& e) {
 void Home::hoverButtons() {
 
 
-}
-
-
-
-bool Home::mouseOnSong() {
-    if(
-        mouseX > instWidth &&
-        mouseX < windowWidth-instMenuWidth &&
-        mouseY > controlsHeight &&
-        mouseY < windowHeight-mixerHeight
-    ) {
-        return true;
-    } else {
-        return false;
-    }
-    
 }
 
 

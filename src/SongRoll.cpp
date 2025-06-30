@@ -1,5 +1,6 @@
 #include "SongRoll.h"
 #include "Home.h"
+#include <SDL3/SDL_events.h>
 
 
 SongRoll::SongRoll(int x, int y, int width, int height, SDL_Renderer* renderer, Project* project, WindowHandler* windowHandler) {
@@ -47,32 +48,9 @@ SongRoll::~SongRoll() {
 
 }
 
-void SongRoll::toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar) {
-    if (e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_KEY_UP) {
-        if (e.key.scancode == keycode) {
-            if (e.type == SDL_EVENT_KEY_DOWN) {
-                keyVar = true;  // Shift key is pressed
-            } else if (e.type == SDL_EVENT_KEY_UP) {
-                keyVar = false;  // Shift key is released
-            }
-        }
-    }
-}
-
-
-void SongRoll::handleInput(SDL_Event& e) {
-    
-
-    toggleKey(e, SDL_SCANCODE_LSHIFT, isShiftPressed);
-    toggleKey(e, SDL_SCANCODE_LCTRL, isCtrlPressed);
-    toggleKey(e, SDL_SCANCODE_LALT, isAltPressed);
- 
-    // Handle different events with a switch statement
+void SongRoll::handleCustomInput(SDL_Event& e) {
     
     switch (e.type) {
-
-            
-
         case SDL_EVENT_MOUSE_WHEEL:
             if (isCtrlPressed) {
                 barWidth *= std::pow(scaleSensitivity, e.wheel.y);
@@ -98,14 +76,12 @@ void SongRoll::handleInput(SDL_Event& e) {
 
             break;
 
+         case SDL_EVENT_MOUSE_BUTTON_DOWN:
+             clickMouse(e);
+             break;
 
-
-        
-
-
-
-
-        // Optionally handle other events you might need:
+         case SDL_EVENT_MOUSE_MOTION:
+            moveMouse();
         default:
             break;
     }
@@ -177,9 +153,10 @@ void SongRoll::getHoveredRegion() {
 }
 
 
-void SongRoll::moveMouse(float x, float y) {
-    mouseX = x;
-    mouseY = y;
+void SongRoll::moveMouse() {
+    SDL_GetMouseState(&mouseX, &mouseY);
+    mouseX -= x;
+    mouseY -= y;
     getHoveredRegion();
 }
 
@@ -206,6 +183,6 @@ void SongRoll::clickMouse(SDL_Event& e) {
             if (e.button.button == SDL_BUTTON_RIGHT) {
                 rmb = false;
             }
-            break;       
+            break;
     }
 }

@@ -64,9 +64,6 @@ class Home {
 
         ControlArea* controls;
 
-        bool mouseOnSong();
-
-
         bool mouseOnInst();
 
         bool mouseOnEditor();

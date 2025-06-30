@@ -1,5 +1,6 @@
 
 #include <SDL_ttf.h>
+#include "GridView.h"
 #include "Region.h"
 #include "Note.h"
 #include "fract.h" 
@@ -9,9 +10,7 @@
 #ifndef PIANOROLL_H
 #define PIANOROLL_H
 
-class Playhead;
-
-class PianoRoll {
+class PianoRoll : public GridView {
 
     public:
 
@@ -20,8 +19,6 @@ class PianoRoll {
     PianoRoll(int, int, DAW::Region*);
     virtual ~PianoRoll();
     
-        SDL_Window* window;
-        SDL_Renderer* renderer;
         SDL_Texture* backgroundTexture;
         SDL_Texture* gridTexture;
         SDL_Texture* PianoTexture;
@@ -34,11 +31,6 @@ class PianoRoll {
 
         DAW::Region* region;
 
-        Project* project;
-
-        void setRenderColor(SDL_Renderer*, uint8_t*);
-
-        double barWidth = 80;
         double octaveHeight = 200;
 
         double referenceOffset;
@@ -54,32 +46,13 @@ class PianoRoll {
         double cellWidth;
         double cellHeight;
 
-        int windowWidth;
-        int windowHeight;
-
-        float mouseX, mouseY;
-
-        float last_lmb_x, last_lmb_y;
-
-        double scrollX = 0;
-        double scrollY = 800;
-
-        double scaleX = 1;
-        double scaleY = 1;
-
-        int scrollSensitivity = 10;
-        float scaleSensitivity = 1.1;
         double numCellsRight;
         double numCellsDown;
 
  
-        bool isShiftPressed = false;
-        bool isCtrlPressed = false;
-        bool isAltPressed = false;
+
         bool refreshGrid = false; 
         bool refreshNotes = false;
-        bool lmb = false; 
-        bool rmb = false;
 
         int yOffset;
         int xOffset;    SDL_Event e;
@@ -93,6 +66,7 @@ class PianoRoll {
         int hoveredNote;
         int movingNote;
 
+        int scrollY = 800;
 
         bool tick();
 
@@ -105,7 +79,7 @@ class PianoRoll {
         void RenderKeys();
         void RenderNotes();
         double getMidiNum();
-        void handleInput(SDL_Event&);
+        void handleCustomInput(SDL_Event&) override;
         void toggleKey(SDL_Event&, SDL_Scancode, bool&);
         void initWindow();
 
@@ -138,7 +112,6 @@ class PianoRoll {
         void moveNote(int, int, int);
         
     private:
-        Playhead* playHead;
         SDL_FRect gridRect;
 
         float keyLength = 40;
