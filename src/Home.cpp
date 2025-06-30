@@ -94,6 +94,8 @@ bool Home::handleInput(SDL_Event& e) {
                     project->togglePlaying();
                     return true;
                     break;
+                default:
+                    return false;
             }
             break;
 
