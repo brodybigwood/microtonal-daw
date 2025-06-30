@@ -351,7 +351,7 @@ void PianoRoll::handleInput(SDL_Event& e) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             if (e.button.button == SDL_BUTTON_LEFT) {
                 lmb = true;
-                if(mouseX > keyLength) {
+                if(mouseX > keyLength && stretchingNote == nullptr) {
                     if(hoveredNote == -1) {
                         createNote(getHoveredTime(), getHoveredLine());
                     } else {
@@ -364,7 +364,7 @@ void PianoRoll::handleInput(SDL_Event& e) {
             }
             if (e.button.button == SDL_BUTTON_RIGHT) {
                 rmb = true;
-                if(mouseX > keyLength) {
+                if(mouseX > keyLength && stretchingNote == nullptr) {
                     deleteNote(hoveredNote);
                 }
 
@@ -411,7 +411,6 @@ void PianoRoll::handleInput(SDL_Event& e) {
             if(stretchingNote != nullptr) {
                 if(!lmb) {
                     isStretchingNote = false;
-                    stretchingNote = nullptr;
                 } else {
                     refreshGrid = true;
                     float dX = mouseX - last_lmb_x;
@@ -562,7 +561,9 @@ void PianoRoll::handleMouse() {
             deleteNote(hoveredNote);
         } 
     } else {
-        if(hoveredNote != -1) {
+        if (stretchingNote != nullptr) {
+            SDL_SetCursor(cursors.resize);
+        } else if(hoveredNote != -1) {
             SDL_SetCursor(cursors.mover);
         } else {
             SDL_SetCursor(cursors.selector);
@@ -579,7 +580,7 @@ bool PianoRoll::getStretchingNote() {
         const int noteEnd = getNoteEnd(note);
         const int noteY = getY(note.num);
 
-        if ((mouseY >= noteY - selectThresholdY/2 && mouseY <= (noteY + selectThresholdY/2))) {
+        if ((mouseY >= noteY - noteRadius && mouseY <= (noteY + noteRadius))) {
             if(mouseX >= notePosX - selectThresholdX/2 && mouseX <= notePosX + selectThresholdX/2) {
                 stretchingNote = &note;
                 resizeDir = -1;
@@ -594,6 +595,7 @@ bool PianoRoll::getStretchingNote() {
         }
     }
     stretchingNote = nullptr;
+    isStretchingNote = false;
     return false;
 }
 
