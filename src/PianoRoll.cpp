@@ -608,6 +608,10 @@ void PianoRoll::stretchNote(int amount) {
     } else if(resizeDir == 1) {
         stretchingNote->end = stretchingNote->end + fract(amount,notesPerBar);
     }
+
+    if(stretchingNote->end < stretchingNote->start) {
+        stretchingNote->end = stretchingNote->start;
+    }
     lastLength = stretchingNote->end - stretchingNote->start;
     Scroll();
 }
