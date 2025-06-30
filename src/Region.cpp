@@ -1,5 +1,8 @@
 #include "Region.h"
 #include <set>
+#include <functional>
+#include "EventManager.h"
+#include "Project.h"
 
 using namespace DAW;
 
@@ -38,8 +41,13 @@ void Region::resize(bool rightSide, fract dS) {
 bool Region::updateNoteChannel(Note& n) {
     std::set<int> usedChannels;
 
+    static std::function<int(fract)> toMS = [](fract f) {
+        return static_cast<int>(60000.0 * f.num / f.den / Project::instance()->tempo);
+    };
+
+
     for (const auto& other : notes) {
-        bool overlap = !(n.end <= other.start || n.start >= other.end);
+        bool overlap = !(toMS(n.end) + releaseMS <= toMS(other.start) || toMS(n.start) >= toMS(other.end) + releaseMS);
         if (overlap) {
             usedChannels.insert(other.channel);
         }

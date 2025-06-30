@@ -47,7 +47,7 @@ bool updateNoteChannel(Note&);
  void moveY(int);
  void resize(bool, fract);
 
-
+int releaseMS = 1000;
 
 
 
