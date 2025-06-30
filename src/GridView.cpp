@@ -42,3 +42,7 @@ void GridView::toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar) {
         }
     }
 }
+
+fract GridView::getHoveredTime() {
+    return fract(std::floor((mouseX+scrollX)/cellWidth),notesPerBar);
+}

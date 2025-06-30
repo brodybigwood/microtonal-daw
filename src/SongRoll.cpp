@@ -1,6 +1,7 @@
 #include "SongRoll.h"
 #include "Home.h"
 #include <SDL3/SDL_events.h>
+#include "Region.h"
 
 
 SongRoll::SongRoll(int x, int y, int width, int height, SDL_Renderer* renderer, Project* project, WindowHandler* windowHandler) {
@@ -185,4 +186,16 @@ void SongRoll::clickMouse(SDL_Event& e) {
             }
             break;
     }
+}
+
+int SongRoll::getHoveredTrack() {
+    return (int)mouseY/cellHeight;
+}
+
+void SongRoll::createElement() {
+    fract time = getHoveredTime();
+    int track = getHoveredTrack();
+    DAW::Region* reg = new DAW::Region(time, track);
+    reg->outputs.push_back(track);
+    project->regions.push_back(reg);
 }

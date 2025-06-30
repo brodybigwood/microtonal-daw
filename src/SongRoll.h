@@ -53,6 +53,10 @@ class SongRoll : public GridView{
         void moveMouse();
 
         void clickMouse(SDL_Event& e);
+
+        void createElement() override;
+
+        int getHoveredTrack();
 };
 
 #endif

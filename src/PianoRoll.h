@@ -36,15 +36,11 @@ class PianoRoll : public GridView {
         double referenceOffset;
 
         double notesPerOctave = 12;
-        double notesPerBar = 4;
         double cellHeight12;
 
         double yOffset12;
 
         double numCellsDown12;
-
-        double cellWidth;
-        double cellHeight;
 
         double numCellsRight;
         double numCellsDown;
@@ -66,8 +62,6 @@ class PianoRoll : public GridView {
         int hoveredNote;
         int movingNote;
 
-        int scrollY = 800;
-
         bool tick();
 
         void UpdateGrid();
@@ -85,7 +79,7 @@ class PianoRoll : public GridView {
 
         void Scroll();
 
-        void createNote(fract, fract);
+        void createElement() override;
 
         void deleteNote(int);
 
@@ -94,7 +88,6 @@ class PianoRoll : public GridView {
         double getNoteName(double);
         double getY(double);
 
-        fract getHoveredTime();
         double getX(double);
 
         

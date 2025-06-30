@@ -24,6 +24,8 @@ PianoRoll::PianoRoll(int windowWidth, int windowHeight, DAW::Region* region) : r
 
     this->playHead = new Playhead(this->project, &gridRect);
 
+    scrollY = 800;
+
     UpdateGrid();
 
 
@@ -56,10 +58,6 @@ void PianoRoll::UpdateGrid() {
     yMax = cellHeight12*69 - std::floor(cellHeight12*69/cellHeight)*cellHeight;
 
     Scroll();
-}
-
-fract PianoRoll::getHoveredTime() {
-    return fract(std::floor((mouseX+scrollX)/cellWidth),notesPerBar);
 }
 
 double PianoRoll::getX(double grid) {
@@ -319,7 +317,7 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                 lmb = true;
                 if(mouseX > keyLength && stretchingNote == nullptr) {
                     if(hoveredNote == -1) {
-                        createNote(getHoveredTime(), getHoveredLine());
+                        createElement();
                     } else {
                         notesPerOctave = region->notes[hoveredNote].temperament;
                         UpdateGrid();
@@ -420,8 +418,9 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
     }
 }
 
-void PianoRoll::createNote(fract start, fract pitch) {
-        
+void PianoRoll::createElement() {
+    fract start = getHoveredTime();
+    fract pitch = getHoveredLine();
     Note n(start, lastLength + start, pitch, notesPerOctave);
 
     static int nextId = 0;

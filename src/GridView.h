@@ -4,6 +4,7 @@
 
 class Playhead;
 class Project;
+class fract;
 
 class GridView {
     public:
@@ -18,9 +19,11 @@ class GridView {
         Playhead* playHead;
         Project* project;
 
-        int cellHeight;
-        int cellWidth;
+        double cellHeight;
+        double cellWidth;
         double barWidth = 80;
+
+        double notesPerBar = 4;
 
         float width;
         float height;
@@ -59,4 +62,8 @@ class GridView {
         void toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar);
 
         virtual void handleCustomInput(SDL_Event&) {};
+
+        virtual void createElement() {};
+
+        fract getHoveredTime();
 };
