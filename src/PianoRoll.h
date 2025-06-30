@@ -31,8 +31,6 @@ class PianoRoll : public GridView {
 
         DAW::Region* region;
 
-        double octaveHeight = 200;
-
         double referenceOffset;
 
         double notesPerOctave = 12;
@@ -45,9 +43,6 @@ class PianoRoll : public GridView {
         double numCellsRight;
         double numCellsDown;
 
- 
-
-        bool refreshGrid = false; 
         bool refreshNotes = false;
 
         int yOffset;
@@ -59,21 +54,23 @@ class PianoRoll : public GridView {
         
         bool running = true;
 
-        int hoveredNote;
         int movingNote;
 
         bool tick();
 
-        void UpdateGrid();
+        void UpdateGrid() override;
         void RenderGridTexture();
         
 
         void createKeys();
         void RenderRoll();
-        void RenderKeys();
+        void RenderDestinations();
         void RenderNotes();
         double getMidiNum();
         void handleCustomInput(SDL_Event&) override;
+
+        void clickMouse(SDL_Event&) override;
+
         void toggleKey(SDL_Event&, SDL_Scancode, bool&);
         void initWindow();
 
@@ -81,14 +78,12 @@ class PianoRoll : public GridView {
 
         void createElement() override;
 
-        void deleteNote(int);
+        void deleteElement() override;
 
         bool getExistingNote();
 
         double getNoteName(double);
         double getY(double);
-
-        double getX(double);
 
         
         fract lastLength = fract(1, 1);
@@ -105,13 +100,12 @@ class PianoRoll : public GridView {
         void moveNote(int, int, int);
         
     private:
-        SDL_FRect gridRect;
 
         float keyLength = 40;
         float menuHeight = 0;
 
         bool getStretchingNote();
-        void stretchNote(int amount);
+        void stretchElement(int amount);
 
         float selectThresholdX = 5.0f;
         float selectThresholdY = 5.0f;

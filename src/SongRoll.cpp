@@ -4,25 +4,28 @@
 #include "Region.h"
 
 
-SongRoll::SongRoll(int x, int y, int width, int height, SDL_Renderer* renderer, Project* project, WindowHandler* windowHandler) {
+SongRoll::SongRoll(SDL_FRect* rect, int instWidth, SDL_Renderer* renderer, Project* project, WindowHandler* windowHandler) {
 
     this->windowHandler = windowHandler;
     this->project = project;
-    this->width = width;
-    this->height = height;
+    this->width = rect->w;
+    this->height = rect->h;
     this->renderer = renderer;
 
-    this->x = x;
-    this->y = y;
+    this->x = rect->x;
+    this->y = rect->y;
 
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
     gridTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
     regionTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
     playHeadTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
 
-    dstRect = {x, y, width, height};
 
-    playHead = new Playhead(project, &dstRect);
+    this->gridRect = {rect->x + instWidth, rect->y, rect->w, rect->h};
+
+    cellHeight = 50;
+    cellWidth = 20;
+
 }
 
 void SongRoll::render() {
@@ -34,10 +37,10 @@ void SongRoll::render() {
     SDL_SetRenderDrawColor(renderer, colors.background[0], colors.background[1], colors.background[2], colors.background[3]);
     SDL_RenderClear(renderer);
     SDL_SetRenderTarget(renderer,NULL);
-    SDL_RenderTexture(renderer, texture, nullptr, &dstRect);
+    SDL_RenderTexture(renderer, texture, nullptr, &gridRect);
 
-    SDL_RenderTexture(renderer,gridTexture,nullptr, &dstRect);
-    SDL_RenderTexture(renderer,regionTexture,nullptr, &dstRect);
+    SDL_RenderTexture(renderer,gridTexture,nullptr, &gridRect);
+    SDL_RenderTexture(renderer,regionTexture,nullptr, &gridRect);
 
     if(project->processing) {
         playHead->render(renderer, barWidth, scrollX);
@@ -52,31 +55,6 @@ SongRoll::~SongRoll() {
 void SongRoll::handleCustomInput(SDL_Event& e) {
     
     switch (e.type) {
-        case SDL_EVENT_MOUSE_WHEEL:
-            if (isCtrlPressed) {
-                barWidth *= std::pow(scaleSensitivity, e.wheel.y);
-                if (barWidth <= 4) {
-                    barWidth = 4;
-                }
-                double gridAtX = (mouseX / cellWidth) + (scrollX / cellWidth);
-                scrollX = gridAtX * cellWidth - mouseX;
-            } else
-            if (isAltPressed) {
-                cellHeight *= std::pow(scaleSensitivity, e.wheel.y);
-                if (cellHeight < height * 12 / 128 || cellHeight <= 0) {
-                    cellHeight = height * 12 / 128;
-                }
-
-                double gridAtY = (mouseY / cellHeight) + (scrollY / cellHeight);
-                scrollY = gridAtY * cellHeight - mouseY;
-            } else if (isShiftPressed) {
-                scrollX -= e.wheel.y * scrollSensitivity;
-            } else {
-                scrollY -= e.wheel.y * scrollSensitivity;  // Adjust scroll amount based on mouse wheel
-            }
-
-            break;
-
          case SDL_EVENT_MOUSE_BUTTON_DOWN:
              clickMouse(e);
              break;
@@ -120,7 +98,7 @@ void SongRoll::renderRegions() {
 }
 
 void SongRoll::renderRegion(int r) {
-    if(hoveredRegion == r) {
+    if(hoveredElement == r) {
         SDL_SetRenderDrawColor(renderer, 90,90,100,127);
     } else {
         SDL_SetRenderDrawColor(renderer, 20,20,100,127);
@@ -145,10 +123,10 @@ void SongRoll::getHoveredRegion() {
             mouseY > region->y*cellHeight &&
             mouseY < (region->y+1) * cellHeight
         ) {
-            hoveredRegion = i;
+            hoveredElement = i;
             return;
         } else {
-            hoveredRegion = -1;
+            hoveredElement = -1;
         }
     }
 }
@@ -156,7 +134,7 @@ void SongRoll::getHoveredRegion() {
 
 void SongRoll::moveMouse() {
     SDL_GetMouseState(&mouseX, &mouseY);
-    mouseX -= x;
+    mouseX -= gridRect.x;
     mouseY -= y;
     getHoveredRegion();
 }
@@ -166,10 +144,10 @@ void SongRoll::clickMouse(SDL_Event& e) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             if (e.button.button == SDL_BUTTON_LEFT) {
                 lmb = true;
-                if(hoveredRegion != -1) {
-                    windowHandler->createPianoRoll(project->regions[hoveredRegion]);
-                    InstrumentMenu::instance()->setViewedElement("region", hoveredRegion);
-                    hoveredRegion = -1;
+                if(hoveredElement != -1) {
+                    windowHandler->createPianoRoll(project->regions[hoveredElement]);
+                    InstrumentMenu::instance()->setViewedElement("region", hoveredElement);
+                    hoveredElement = -1;
                 }
 
             }
@@ -198,4 +176,15 @@ void SongRoll::createElement() {
     DAW::Region* reg = new DAW::Region(time, track);
     reg->outputs.push_back(track);
     project->regions.push_back(reg);
+}
+
+void SongRoll::deleteElement() {
+    if(hoveredElement != -1) {
+        project->regions.erase(project->regions.begin() + hoveredElement);
+
+    }
+}
+
+void SongRoll::UpdateGrid() {
+
 }

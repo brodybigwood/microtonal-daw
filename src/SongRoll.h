@@ -17,15 +17,11 @@ class WindowHandler;  // forward declaration
 class SongRoll : public GridView{
 
     public:
-    SongRoll(int x, int y, int width, int height, SDL_Renderer* renderer, Project* project, WindowHandler* windowHandler);
+    SongRoll(SDL_FRect* rect, int instWidth, SDL_Renderer* renderer, Project* project, WindowHandler* windowHandler);
         ~SongRoll();
         
         WindowHandler* windowHandler;
         SDL_Renderer* renderer;
-
-        int cellHeight = 50;
-        int cellWidth = 20;
-
 
         void render();
 
@@ -33,8 +29,6 @@ class SongRoll : public GridView{
         SDL_Texture* gridTexture;
         SDL_Texture* regionTexture;
         SDL_Texture* playHeadTexture;
-
-        SDL_FRect dstRect;
 
         SDL_FRect regionRect;
 
@@ -48,15 +42,16 @@ class SongRoll : public GridView{
 
         void getHoveredRegion();
 
-        int hoveredRegion = -1;
-
         void moveMouse();
 
-        void clickMouse(SDL_Event& e);
+        void clickMouse(SDL_Event& e) override;
 
         void createElement() override;
+        void deleteElement() override;
 
         int getHoveredTrack();
+
+        void UpdateGrid() override;
 };
 
 #endif

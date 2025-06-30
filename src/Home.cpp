@@ -19,10 +19,16 @@ Home::Home(Project* project, WindowHandler* windowHandler) {
 
     insts = new InstrumentList(controlsHeight, instWidth, windowHeight-mixerHeight, renderer, project);
 
+    songRect = new SDL_FRect{
+        0,
+        controlsHeight,
+        windowWidth-instWidth-instMenuWidth,
+        windowHeight-controlsHeight-mixerHeight
+    };
+
     song = new SongRoll(
-        instWidth, controlsHeight, 
-        windowWidth-instWidth-instMenuWidth, 
-        windowHeight-controlsHeight-mixerHeight, 
+        songRect,
+        instWidth,
         renderer, 
         project, 
         windowHandler);

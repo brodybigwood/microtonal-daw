@@ -16,8 +16,15 @@ class GridView {
         SDL_Renderer* renderer;
         void setRenderColor(SDL_Renderer*, uint8_t*);
 
+        bool refreshGrid = false;
+        virtual void UpdateGrid() {};
+
         Playhead* playHead;
         Project* project;
+
+        double divHeight;
+
+        SDL_FRect gridRect;
 
         double cellHeight;
         double cellWidth;
@@ -37,6 +44,8 @@ class GridView {
 
         //mouse
         float mouseX, mouseY;
+
+        int hoveredElement;
 
         int scrollX = 0;
         int scrollY = 0;
@@ -62,8 +71,11 @@ class GridView {
         void toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar);
 
         virtual void handleCustomInput(SDL_Event&) {};
+        virtual void clickMouse(SDL_Event&) {};
 
         virtual void createElement() {};
+        virtual void deleteElement() {};
 
         fract getHoveredTime();
+
 };

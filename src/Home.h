@@ -31,6 +31,7 @@ class Home {
 
     int instMenuWidth = 200;
 
+    SDL_FRect* songRect;
     SongRoll* song;
     
     InstrumentList* insts;

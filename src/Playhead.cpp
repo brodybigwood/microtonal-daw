@@ -1,13 +1,10 @@
 #include "Playhead.h"
 
 
-Playhead::Playhead(Project* project, SDL_FRect* rect) {
-    this->project = project;
+Playhead::Playhead(SDL_FRect* rect) {
+    this->project = Project::instance();
 
-    this->x = &(rect->x);
-    this->y = &(rect->y);
-    this->w = &(rect->w);
-    this->h = &(rect->h);
+    this->rect = rect;
     
 }
 
@@ -25,7 +22,7 @@ void Playhead::render(SDL_Renderer* renderer, float barWidth, float scrollX) {
 
     getTimePx(barWidth);
     SDL_SetRenderDrawColor(renderer, colors.playHead[0], colors.playHead[1], colors.playHead[2], colors.playHead[3]);
-    SDL_RenderLine(renderer, timePx + *x - scrollX, *y, timePx + *x - scrollX, *y + *h);
+    SDL_RenderLine(renderer, timePx + rect->x - scrollX, rect->y, timePx + rect->x - scrollX, rect->y + rect->h);
 
 }
 

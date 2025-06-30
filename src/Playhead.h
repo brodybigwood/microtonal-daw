@@ -10,7 +10,7 @@
 class WindowHandler;
 class Playhead {
     public:
-        Playhead(Project* project, SDL_FRect* rect);
+        Playhead(SDL_FRect* rect);
         ~Playhead();
 
         Project* project;
@@ -24,10 +24,8 @@ class Playhead {
         float timePx;
 
         void getTimePx(float barWidth);
-        float* x;
-        float* y;
-        float* w;
-        float* h;
+
+        SDL_FRect* rect;
 };
 
 #endif

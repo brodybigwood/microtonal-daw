@@ -2,7 +2,7 @@
 #include "Playhead.h"
 
 GridView::GridView() {
-
+    this->playHead = new Playhead(&gridRect);
 }
 
 GridView::~GridView() {
@@ -16,7 +16,38 @@ void GridView::handleInput(SDL_Event& e) {
     toggleKey(e, SDL_SCANCODE_LCTRL, isCtrlPressed);
     toggleKey(e, SDL_SCANCODE_LALT, isAltPressed);
 
+    switch (e.type) {
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            clickMouse(e);
+            break;
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+            clickMouse(e);
+            break;
+        case SDL_EVENT_MOUSE_WHEEL:
+            if (isCtrlPressed) {
+                barWidth *= std::pow(scaleSensitivity, e.wheel.y);
+                if (barWidth <= 4) {
+                    barWidth = 4;
+                }
+                double gridAtX = (mouseX / cellWidth) + (scrollX / cellWidth);
+                UpdateGrid();
+                scrollX = gridAtX * cellWidth - mouseX;
+            } else
+                if (isAltPressed) {
+                    divHeight *= std::pow(scaleSensitivity, e.wheel.y);
+                    if (divHeight < height * 12 / 128 || divHeight <= 0) {
+                        divHeight = height * 12 / 128;
+                    }
 
+                    double gridAtY = (mouseY / cellHeight) + (scrollY / cellHeight);
+                    UpdateGrid();
+                    scrollY = gridAtY * cellHeight - mouseY;
+                } else if (isShiftPressed) {
+                    scrollX += e.wheel.y * scrollSensitivity;
+                } else {
+                    scrollY -= e.wheel.y * scrollSensitivity;  // Adjust scroll amount based on mouse wheel
+                }
+    }
 
     handleCustomInput(e);
 }
