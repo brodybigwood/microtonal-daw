@@ -1,19 +1,14 @@
 #include "SongRoll.h"
+#include "GridView.h"
 #include "Home.h"
 #include <SDL3/SDL_events.h>
 #include "Region.h"
 
 
-SongRoll::SongRoll(SDL_FRect* rect, int instWidth, SDL_Renderer* renderer, Project* project, WindowHandler* windowHandler) {
+SongRoll::SongRoll(SDL_FRect* rect, int instWidth, SDL_Renderer* renderer, Project* project, WindowHandler* windowHandler) : GridView(false, rect){
 
-    this->windowHandler = windowHandler;
-    this->project = project;
-    this->width = rect->w;
-    this->height = rect->h;
-    this->renderer = renderer;
-
-    this->x = rect->x;
-    this->y = rect->y;
+    this->windowHandler = WindowHandler::instance();
+    this->project = Project::instance();
 
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
     gridTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
@@ -55,12 +50,9 @@ SongRoll::~SongRoll() {
 void SongRoll::handleCustomInput(SDL_Event& e) {
     
     switch (e.type) {
-         case SDL_EVENT_MOUSE_BUTTON_DOWN:
-             clickMouse(e);
-             break;
 
          case SDL_EVENT_MOUSE_MOTION:
-            moveMouse();
+            getHoveredRegion();
         default:
             break;
     }
@@ -131,21 +123,13 @@ void SongRoll::getHoveredRegion() {
     }
 }
 
-
-void SongRoll::moveMouse() {
-    SDL_GetMouseState(&mouseX, &mouseY);
-    mouseX -= gridRect.x;
-    mouseY -= y;
-    getHoveredRegion();
-}
-
 void SongRoll::clickMouse(SDL_Event& e) {
     switch(e.type) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             if (e.button.button == SDL_BUTTON_LEFT) {
                 lmb = true;
                 if(hoveredElement != -1) {
-                    windowHandler->createPianoRoll(project->regions[hoveredElement]);
+                    windowHandler->createPianoRoll(project->regions[hoveredElement], &(windowHandler->home->pianoRollRect));
                     InstrumentMenu::instance()->setViewedElement("region", hoveredElement);
                     hoveredElement = -1;
                 }

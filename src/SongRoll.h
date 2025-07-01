@@ -21,7 +21,6 @@ class SongRoll : public GridView{
         ~SongRoll();
         
         WindowHandler* windowHandler;
-        SDL_Renderer* renderer;
 
         void render();
 
@@ -41,8 +40,6 @@ class SongRoll : public GridView{
         void renderRegion(int);
 
         void getHoveredRegion();
-
-        void moveMouse();
 
         void clickMouse(SDL_Event& e) override;
 

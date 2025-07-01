@@ -4,21 +4,19 @@
 #include <SDL3/SDL_stdinc.h>
 #include <cmath>
 
+#include "GridView.h"
 #include "Region.h"
 #include "Note.h"
 #include "Playhead.h"
 
 
 
-PianoRoll::PianoRoll(int windowWidth, int windowHeight, DAW::Region* region) : region(region) {
+PianoRoll::PianoRoll(SDL_FRect* rect, DAW::Region* region, bool detached) : region(region), GridView(detached, rect) {
 
+    if(!detached) {
+        WindowHandler::instance()->home->pianoRoll = this;
+    }
     SDL_SetCursor(cursors.grabber);
-    this->width = windowWidth;
-    this->height = windowHeight;
-
-    window = SDL_CreateWindow("Piano Roll", width, height, SDL_WINDOW_RESIZABLE | SDL_WINDOW_UTILITY);
-
-        renderer = SDL_CreateRenderer(window, NULL);
 
     this->project = Project::instance();
 
@@ -28,11 +26,9 @@ PianoRoll::PianoRoll(int windowWidth, int windowHeight, DAW::Region* region) : r
 
     UpdateGrid();
 
-
     Scroll();
-    
-    initWindow();
 
+    initWindow();
 }
 
 PianoRoll::~PianoRoll() {
@@ -135,7 +131,7 @@ void PianoRoll::RenderRoll() {
     SDL_SetRenderTarget(renderer, NULL);
 
     for(int i = 0; i<4; i++) {
-        SDL_RenderTexture(renderer, layers[i], NULL, NULL);
+        SDL_RenderTexture(renderer, layers[i], NULL, dstRect);
     }
 
 }
@@ -206,13 +202,17 @@ bool PianoRoll::tick() {
     }
 
     SDL_SetRenderTarget(renderer, NULL);
-    SDL_RenderTexture(renderer, NotesTexture, NULL, NULL);
 
     RenderRoll();
 
-    playHead->render(renderer, barWidth, scrollX);
+    playHead->render(renderer, barWidth, scrollX - dstRect->x);
 
-    SDL_RenderPresent(renderer);  
+    if(detached){
+
+        SDL_RenderPresent(renderer);
+    } else {
+        SDL_SetRenderTarget(renderer, NULL);
+    }
     return running;
 }
 
@@ -309,7 +309,6 @@ void PianoRoll::clickMouse(SDL_Event& e) {
 }
 
 void PianoRoll::handleCustomInput(SDL_Event& e) {
-    
     switch (e.type) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             break;
@@ -339,8 +338,7 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                     notesPerOctave += 1;
                     UpdateGrid();
                     break;
-                case SDL_SCANCODE_SPACE:
-                    project->togglePlaying();
+                default:
                     break;
             }
             break;
@@ -348,7 +346,7 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
         
 
         case SDL_EVENT_MOUSE_MOTION:
-            SDL_GetMouseState(&mouseX, &mouseY);
+            moveMouse();
 
             handleMouse();
 

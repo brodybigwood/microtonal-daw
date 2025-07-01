@@ -1,9 +1,36 @@
 #include "GridView.h"
 #include "Playhead.h"
 
-GridView::GridView() {
+GridView::GridView(bool detached, SDL_FRect* rect) : detached(detached) {
+
     this->playHead = new Playhead(&gridRect);
+
+    if(rect != nullptr) {
+        dstRect = rect;
+    } else {
+        dstRect = new SDL_FRect{
+            0,
+            0,
+            800,
+            600
+        };
+    }
+
+    this->width = dstRect->w;
+    this->height = dstRect->h;
+    this->x = dstRect->x;
+    this->y = dstRect->y;
+
+
+    if(detached) {
+        window = SDL_CreateWindow("Piano Roll", width, height, SDL_WINDOW_RESIZABLE | SDL_WINDOW_UTILITY);
+
+        renderer = SDL_CreateRenderer(window, NULL);
+    } else {
+        renderer = Home::get()->renderer;
+    }
 }
+
 
 GridView::~GridView() {
     delete playHead;
@@ -17,6 +44,9 @@ void GridView::handleInput(SDL_Event& e) {
     toggleKey(e, SDL_SCANCODE_LALT, isAltPressed);
 
     switch (e.type) {
+        case SDL_EVENT_MOUSE_MOTION:
+            moveMouse();
+            break;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             clickMouse(e);
             break;
@@ -47,9 +77,27 @@ void GridView::handleInput(SDL_Event& e) {
                 } else {
                     scrollY -= e.wheel.y * scrollSensitivity;  // Adjust scroll amount based on mouse wheel
                 }
+
+        case SDL_EVENT_KEY_DOWN:
+            switch (e.key.scancode) {
+                case SDL_SCANCODE_SPACE:
+                    project->togglePlaying();
+                    break;
+                default:
+                    break;
+            }
+            break;
+        default:
+            break;
     }
 
     handleCustomInput(e);
+}
+
+void GridView::moveMouse() {
+    SDL_GetMouseState(&mouseX, &mouseY);
+    mouseX -= gridRect.x + dstRect->x;
+    mouseY -= dstRect->y;
 }
 
 void GridView::setRenderColor(SDL_Renderer* theRenderer, uint8_t code[4]) {

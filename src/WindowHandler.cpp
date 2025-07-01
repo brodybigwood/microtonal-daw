@@ -1,19 +1,22 @@
 #include "WindowHandler.h"
 #include <X11/Xlib.h>
 #include "PluginManager.h"
-WindowHandler::WindowHandler(Project* project) {
+WindowHandler::WindowHandler() {
 
     SDL_SetHint(SDL_HINT_APP_NAME, "EDITOR");
     SDL_SetHint(SDL_HINT_APP_ID, "daw.editor");
 
-    this->project = project;
-    
     mainWindow = SDL_CreateWindow("Piano Roll", windowWidth, windowHeight, SDL_WINDOW_RESIZABLE);
 
-    home = new Home(project, this);
+    renderer = SDL_CreateRenderer(mainWindow, NULL);
     
     lastTime = SDL_GetTicks();
 
+}
+
+void WindowHandler::createHome(Project* project) {
+    home = Home::get();
+    home->createRoll(0);
 }
 
 
@@ -21,14 +24,19 @@ WindowHandler::~WindowHandler() {
 
 }
 
-void WindowHandler::createPianoRoll(DAW::Region* region) {
+WindowHandler* WindowHandler::instance() {
+    static WindowHandler w;
+    return &w;
+}
+
+void WindowHandler::createPianoRoll(DAW::Region* region, SDL_FRect* pRect) {
     std::cout<<"creating"<<std::endl;
-    editor = new PianoRoll(800, 600, region);
-    
-    SDL_SetWindowParent(editor->window, home->window); 
-    
+
+    editor = new PianoRoll(pRect, region, false);
+
+    SDL_SetWindowParent(editor->window, home->window);
+
     windows->push_back(editor);
-    
 }
 
 bool WindowHandler::tick() {
@@ -50,19 +58,13 @@ bool WindowHandler::tick() {
                 
             }
 
-            PluginManager::instance().tickAll();
+            SDL_RenderPresent(renderer);
 
-            
+            PluginManager::instance().tickAll();
 
             while (SDL_PollEvent(&e)) {
                 
                 switch (e.type) {
-
-
-
-
-
-
                             case SDL_EVENT_QUIT:
                             running = false;
                             break;

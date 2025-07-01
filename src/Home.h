@@ -20,6 +20,9 @@ class Home {
 
     public:
 
+    SDL_FRect pianoRollRect = {200,200,800,600};
+    PianoRoll* pianoRoll = nullptr;
+
     int windowHeight = 1080;
     int windowWidth = 1920;
 
@@ -31,14 +34,20 @@ class Home {
 
     int instMenuWidth = 200;
 
+    bool mouseOn(SDL_FRect*);
+
+    bool sendInput(SDL_Event&);
+
     SDL_FRect* songRect;
     SongRoll* song;
     
     InstrumentList* insts;
 
+        static Home* get();
 
+        void createRoll(bool);
 
-        Home(Project* project, WindowHandler* windowHandler);
+        Home(Project* project);
         ~Home();
 
         Project* project;

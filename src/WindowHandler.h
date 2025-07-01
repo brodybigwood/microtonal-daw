@@ -14,8 +14,14 @@ class WindowHandler {
     SDL_Window* focusedWindow;
 std::vector<PianoRoll*>* windows = new std::vector<PianoRoll*>();
 SDL_Event e;
-        WindowHandler(Project* project);
+        WindowHandler();
         ~WindowHandler();
+
+        void createHome(Project* project);
+
+        SDL_Renderer* renderer;
+
+        static WindowHandler* instance();
 
         bool handleKeyboard();
         bool handleMouse();
@@ -27,7 +33,7 @@ SDL_Event e;
         PianoRoll* findWindow();
         bool tick();
 
-        void createPianoRoll(DAW::Region*);
+        void createPianoRoll(DAW::Region*, SDL_FRect*);
 
 
         Uint32 lastTime;

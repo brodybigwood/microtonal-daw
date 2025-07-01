@@ -16,7 +16,7 @@ class PianoRoll : public GridView {
 
 
 
-    PianoRoll(int, int, DAW::Region*);
+    PianoRoll(SDL_FRect*, DAW::Region*, bool);
     virtual ~PianoRoll();
     
         SDL_Texture* backgroundTexture;
@@ -43,16 +43,8 @@ class PianoRoll : public GridView {
         double numCellsRight;
         double numCellsDown;
 
-        bool refreshNotes = false;
-
-        int yOffset;
-        int xOffset;    SDL_Event e;
-
         double yMin;
-
         double yMax;
-        
-        bool running = true;
 
         int movingNote;
 

@@ -1,17 +1,21 @@
 #include "Home.h"
 
+Home* Home::get() {
+    static Home h(Project::instance());
+    return &h;
+}
 
-
-Home::Home(Project* project, WindowHandler* windowHandler) {
+Home::Home(Project* project) {
     this->project = project;
-    this->windowHandler = windowHandler;
+
+    WindowHandler* windowHandler = WindowHandler::instance();
 
     this->window = windowHandler->mainWindow;
     this->windowWidth = windowHandler->windowWidth;
     this->windowHeight = windowHandler->windowHeight;
 
 
-    renderer = SDL_CreateRenderer(window, NULL);
+    renderer = windowHandler->renderer;
     
     controls = new ControlArea(controlsHeight, windowWidth, renderer);
 
@@ -25,23 +29,22 @@ Home::Home(Project* project, WindowHandler* windowHandler) {
         windowWidth-instWidth-instMenuWidth,
         windowHeight-controlsHeight-mixerHeight
     };
-
-    song = new SongRoll(
-        songRect,
-        instWidth,
-        renderer, 
-        project, 
-        windowHandler);
-
-        instrumentMenu = InstrumentMenu::instance();
-        instrumentMenu->create(instrumentMenuTexture, renderer, windowWidth-instMenuWidth, controlsHeight, project);
 }
-
-
-
 
 Home::~Home() {
 
+}
+
+void Home::createRoll(bool detached) {
+    song = new SongRoll(
+        songRect,
+        instWidth,
+        renderer,
+        project,
+        windowHandler);
+
+    instrumentMenu = InstrumentMenu::instance();
+    instrumentMenu->create(instrumentMenuTexture, renderer, windowWidth-instMenuWidth, controlsHeight, project);
 }
 
 void Home::tick() {
@@ -55,17 +58,35 @@ void Home::tick() {
     song->render();
     instrumentMenu->render();
 
-    SDL_RenderPresent(renderer);
+}
+
+bool Home::sendInput(SDL_Event& e) {
+    if(pianoRoll != nullptr && mouseOn(&pianoRollRect)) {
+        pianoRoll->handleInput(e);
+        return true;
+    }
+    if(song != nullptr && mouseOn(songRect)) {
+        song->handleInput(e);
+
+        return true;
+    }
+    return false;
 }
 
 bool Home::handleInput(SDL_Event& e) {
 
-    song->handleInput(e);
+    const auto* windowHandler = WindowHandler::instance();
 
+    if(e.type == SDL_EVENT_MOUSE_MOTION) {
+        SDL_GetMouseState(&mouseX, &mouseY);
+    }
+
+    if(sendInput(e)) {
+        return true;
+    }
     switch(e.type) {
         
         case SDL_EVENT_MOUSE_MOTION:
-            SDL_GetMouseState(&mouseX, &mouseY);
             insts->moveMouse(mouseX,mouseY-controlsHeight);
             instrumentMenu->moveMouse(mouseX,mouseY);
             controls->moveMouse(mouseX, mouseY);
@@ -145,3 +166,15 @@ bool Home::mouseOnEditor() {
     }
 }
 
+bool Home::mouseOn(SDL_FRect* rect) {
+    if(
+        mouseX > rect->x &&
+        mouseX < rect->x + rect->w &&
+        mouseY > rect->y &&
+        mouseY < rect->y + rect->h
+    ) {
+        return true;
+    } else {
+        return false;
+    }
+}

@@ -26,7 +26,9 @@ int main() {
 
     audioManager->setProject(project);
 
-    WindowHandler* windowHandler = new WindowHandler(project);
+    WindowHandler* windowHandler = WindowHandler::instance();
+
+    windowHandler->createHome(project);
 
     project->load();
 
