@@ -16,7 +16,7 @@ class PianoRoll : public GridView {
 
 
 
-    PianoRoll(SDL_FRect*, DAW::Region*, bool);
+    PianoRoll(SDL_FRect*, DAW::Region*, bool*);
     virtual ~PianoRoll();
     
         SDL_Texture* backgroundTexture;
@@ -48,7 +48,7 @@ class PianoRoll : public GridView {
 
         int movingNote;
 
-        bool tick();
+        bool customTick() override;
 
         void UpdateGrid() override;
         void RenderGridTexture();
@@ -92,9 +92,6 @@ class PianoRoll : public GridView {
         void moveNote(int, int, int);
         
     private:
-
-        float keyLength = 40;
-        float menuHeight = 0;
 
         bool getStretchingNote();
         void stretchElement(int amount);

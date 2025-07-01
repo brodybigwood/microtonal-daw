@@ -5,29 +5,27 @@
 #include "Region.h"
 
 
-SongRoll::SongRoll(SDL_FRect* rect, int instWidth, SDL_Renderer* renderer, Project* project, WindowHandler* windowHandler) : GridView(false, rect){
-
+SongRoll::SongRoll(SDL_FRect* rect, SDL_Renderer* renderer, bool* detached) : GridView(detached, rect, 200) {
     this->windowHandler = WindowHandler::instance();
     this->project = Project::instance();
 
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
-    gridTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
-    regionTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
-    playHeadTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
-
-
-    this->gridRect = {rect->x + instWidth, rect->y, rect->w, rect->h};
+    gridTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, gridRect.w, gridRect.h);
+    regionTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, gridRect.w, gridRect.h);
+    playHeadTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, gridRect.w, gridRect.h);
 
     cellHeight = 50;
     cellWidth = 20;
 
+
+
 }
 
-void SongRoll::render() {
+bool SongRoll::customTick() {
     RenderGridTexture();
     renderRegions();
 
-    
+
     SDL_SetRenderTarget(renderer,texture);
     SDL_SetRenderDrawColor(renderer, colors.background[0], colors.background[1], colors.background[2], colors.background[3]);
     SDL_RenderClear(renderer);
@@ -40,6 +38,8 @@ void SongRoll::render() {
     if(project->processing) {
         playHead->render(renderer, barWidth, scrollX);
     }
+
+    return true;
 }
 
 
@@ -110,8 +110,8 @@ void SongRoll::getHoveredRegion() {
     for(size_t i = 0; i<project->regions.size(); i++) {
         DAW::Region* region = project->regions[i];
         if(
-            mouseX > region->startTime*barWidth &&
-            mouseX < (region->length+region->startTime)*barWidth &&
+            mouseX > region->startTime*barWidth + leftMargin &&
+            mouseX < (region->length+region->startTime)*barWidth + leftMargin &&
             mouseY > region->y*cellHeight &&
             mouseY < (region->y+1) * cellHeight
         ) {

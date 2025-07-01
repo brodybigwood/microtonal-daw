@@ -17,12 +17,12 @@ class WindowHandler;  // forward declaration
 class SongRoll : public GridView{
 
     public:
-    SongRoll(SDL_FRect* rect, int instWidth, SDL_Renderer* renderer, Project* project, WindowHandler* windowHandler);
+    SongRoll(SDL_FRect* rect, SDL_Renderer* renderer, bool* detached);
         ~SongRoll();
         
         WindowHandler* windowHandler;
 
-        void render();
+        bool customTick() override;
 
         SDL_Texture* texture;
         SDL_Texture* gridTexture;

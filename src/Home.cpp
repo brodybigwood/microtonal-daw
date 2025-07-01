@@ -1,4 +1,5 @@
 #include "Home.h"
+#include "SDL_Events.h"
 
 Home* Home::get() {
     static Home h(Project::instance());
@@ -23,31 +24,38 @@ Home::Home(Project* project) {
 
     insts = new InstrumentList(controlsHeight, instWidth, windowHeight-mixerHeight, renderer, project);
 
-    songRect = new SDL_FRect{
+
+    songRect = SDL_FRect{
         0,
-        controlsHeight,
-        windowWidth-instWidth-instMenuWidth,
-        windowHeight-controlsHeight-mixerHeight
+        (float)controlsHeight,
+       (float) windowWidth-instMenuWidth,
+        (float)windowHeight-controlsHeight-mixerHeight
     };
+
+
 }
 
 Home::~Home() {
 
 }
 
-void Home::createRoll(bool detached) {
+void Home::createRoll() {
+    if(song) {
+        return;
+    }
     song = new SongRoll(
-        songRect,
-        instWidth,
+        &songRect,
         renderer,
-        project,
-        windowHandler);
+        &songRollDetached
+    );
 
     instrumentMenu = InstrumentMenu::instance();
     instrumentMenu->create(instrumentMenuTexture, renderer, windowWidth-instMenuWidth, controlsHeight, project);
+
 }
 
-void Home::tick() {
+bool Home::tick() {
+
     //std::cout<<"tickingnging"<<std::endl;
     SDL_SetRenderDrawColor(renderer, 100,100,100,255);
     //std::cout<<"tickingnging"<<std::endl;
@@ -55,23 +63,46 @@ void Home::tick() {
     //std::cout<<"tickingnging"<<std::endl;
     insts->render();
     controls->render();
-    song->render();
     instrumentMenu->render();
 
+
+    if(song != nullptr) {
+        if(!song->tick()) {
+            delete song;
+            song = nullptr;
+        }
+    }
+    if(pianoRoll != nullptr) {
+        if(!pianoRoll->tick()) {
+            delete pianoRoll;
+            pianoRoll = nullptr;
+        }
+    }
+
+    uint32_t id = SDL_GetWindowID(window);
+    SDL_Event e;
+    while (SDL_PollEvent(&e)) {
+        if (isEventForWindow(e, id)) {
+            if(!handleInput(e)) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 bool Home::sendInput(SDL_Event& e) {
-    if(pianoRoll != nullptr && mouseOn(&pianoRollRect)) {
+    if (pianoRoll && !pianoRollDetached && mouseOn(&pianoRollRect)) {
         pianoRoll->handleInput(e);
         return true;
     }
-    if(song != nullptr && mouseOn(songRect)) {
+    if (song && !songRollDetached && mouseOn(&songRect)) {
         song->handleInput(e);
-
         return true;
     }
     return false;
 }
+
 
 bool Home::handleInput(SDL_Event& e) {
 
@@ -112,7 +143,7 @@ bool Home::handleInput(SDL_Event& e) {
                 return true;
                 break;
             }
-            return false;
+            return true;
 
 
         case SDL_EVENT_KEY_DOWN:
@@ -122,13 +153,18 @@ bool Home::handleInput(SDL_Event& e) {
                     return true;
                     break;
                 default:
-                    return false;
+                    return true;
             }
             break;
 
+        case SDL_EVENT_QUIT:
+            return false;
+        case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+            return false;
+
 
         default:
-            return false;
+            return true;
     }
 
 }

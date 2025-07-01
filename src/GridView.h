@@ -8,15 +8,17 @@ class fract;
 
 class GridView {
     public:
-        GridView(bool, SDL_FRect*);
+        GridView(bool*, SDL_FRect*, float leftMargin);
 
         ~GridView();
 
         //rendering
         SDL_Renderer* renderer;
         void setRenderColor(SDL_Renderer*, uint8_t*);
+        bool tick();
+        virtual bool customTick() {};
 
-        bool detached;
+        bool* detached;
 
         bool refreshGrid = false;
         virtual void UpdateGrid() {};
@@ -30,6 +32,9 @@ class GridView {
         Project* project;
 
         double divHeight;
+
+        float leftMargin;
+        float topMargin;
 
         SDL_FRect gridRect;
         SDL_FRect* dstRect;
@@ -76,7 +81,7 @@ class GridView {
 
 
         void moveMouse();
-        void handleInput(SDL_Event&);
+        bool handleInput(SDL_Event&);
         void toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar);
 
         virtual void handleCustomInput(SDL_Event&) {};

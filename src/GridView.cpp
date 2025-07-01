@@ -1,11 +1,9 @@
 #include "GridView.h"
 #include "Playhead.h"
+#include "SDL_Events.h"
+GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin) : detached(detached), leftMargin(leftMargin) {
 
-GridView::GridView(bool detached, SDL_FRect* rect) : detached(detached) {
-
-    this->playHead = new Playhead(&gridRect);
-
-    if(rect != nullptr) {
+    if(rect != nullptr && !*detached) {
         dstRect = rect;
     } else {
         dstRect = new SDL_FRect{
@@ -16,21 +14,30 @@ GridView::GridView(bool detached, SDL_FRect* rect) : detached(detached) {
         };
     }
 
+    this->gridRect = {
+        dstRect->x+leftMargin,
+        dstRect->y+topMargin,
+        dstRect->w-leftMargin,
+        dstRect->h-topMargin
+    };
+
+
+    this->playHead = new Playhead(&gridRect, dstRect, detached);
+
     this->width = dstRect->w;
     this->height = dstRect->h;
     this->x = dstRect->x;
     this->y = dstRect->y;
 
-
-    if(detached) {
+    if(*detached) {
         window = SDL_CreateWindow("Piano Roll", width, height, SDL_WINDOW_RESIZABLE | SDL_WINDOW_UTILITY);
 
         renderer = SDL_CreateRenderer(window, NULL);
     } else {
+        window = Home::get()->window;
         renderer = Home::get()->renderer;
     }
 }
-
 
 GridView::~GridView() {
     delete playHead;
@@ -38,10 +45,29 @@ GridView::~GridView() {
     if (window) SDL_DestroyWindow(window);
 }
 
-void GridView::handleInput(SDL_Event& e) {
+bool GridView::tick() {
+    if (*detached && window != nullptr) {
+        uint32_t id = SDL_GetWindowID(window);
+        SDL_Event e;
+        while (SDL_PollEvent(&e)) {
+            if (isEventForWindow(e, id)) {
+                if(!handleInput(e)) {
+                    return false;
+                }
+            }
+        }
+    }
+    return customTick();
+}
+
+
+bool GridView::handleInput(SDL_Event& e) {
+
     toggleKey(e, SDL_SCANCODE_LSHIFT, isShiftPressed);
     toggleKey(e, SDL_SCANCODE_LCTRL, isCtrlPressed);
     toggleKey(e, SDL_SCANCODE_LALT, isAltPressed);
+
+    bool running = true;
 
     switch (e.type) {
         case SDL_EVENT_MOUSE_MOTION:
@@ -87,16 +113,30 @@ void GridView::handleInput(SDL_Event& e) {
                     break;
             }
             break;
+
+        case SDL_EVENT_QUIT:
+            running =  false;
+        case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+            running = false;
         default:
             break;
     }
 
     handleCustomInput(e);
+
+    if(*detached) {
+        if(!running) {
+            return false;
+        }
+    }
+    return true;
+
+
 }
 
 void GridView::moveMouse() {
     SDL_GetMouseState(&mouseX, &mouseY);
-    mouseX -= gridRect.x + dstRect->x;
+    mouseX -= dstRect->x;
     mouseY -= dstRect->y;
 }
 

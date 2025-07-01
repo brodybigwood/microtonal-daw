@@ -38,14 +38,17 @@ class Home {
 
     bool sendInput(SDL_Event&);
 
-    SDL_FRect* songRect;
+    SDL_FRect songRect;
     SongRoll* song;
+
+    bool pianoRollDetached = true;
+    bool songRollDetached = false;
     
     InstrumentList* insts;
 
         static Home* get();
 
-        void createRoll(bool);
+        void createRoll();
 
         Home(Project* project);
         ~Home();
@@ -60,7 +63,7 @@ class Home {
 
         InstrumentMenu* instrumentMenu;
 
-        void tick();
+        bool tick();
 
         bool handleInput(SDL_Event& e);
 

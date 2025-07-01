@@ -16,7 +16,7 @@ WindowHandler::WindowHandler() {
 
 void WindowHandler::createHome(Project* project) {
     home = Home::get();
-    home->createRoll(0);
+    home->createRoll();
 }
 
 
@@ -30,9 +30,14 @@ WindowHandler* WindowHandler::instance() {
 }
 
 void WindowHandler::createPianoRoll(DAW::Region* region, SDL_FRect* pRect) {
+    if(editor) {
+        return;
+    }
     std::cout<<"creating"<<std::endl;
 
-    editor = new PianoRoll(pRect, region, false);
+    editor = new PianoRoll(pRect, region, &(home->pianoRollDetached));
+
+    home->pianoRoll = editor;
 
     SDL_SetWindowParent(editor->window, home->window);
 
@@ -41,79 +46,18 @@ void WindowHandler::createPianoRoll(DAW::Region* region, SDL_FRect* pRect) {
 
 bool WindowHandler::tick() {
 
-
-
     bool running = true;
-
-
-
                 
-        double timeSinceLastFrame = double(SDL_GetTicks())-double(lastTime);
-        if(timeSinceLastFrame >= frameTime) {
-            lastTime = double(SDL_GetTicks())-frameTime;
-            home->tick();
-            for(int i = windows->size() - 1; i >= 0; --i) {
+    double timeSinceLastFrame = double(SDL_GetTicks())-double(lastTime);
+    if(timeSinceLastFrame >= frameTime) {
+        lastTime = double(SDL_GetTicks())-frameTime;
 
-                    (*windows)[i]->tick();
-                
-            }
+        PluginManager::instance().tickAll();
 
-            SDL_RenderPresent(renderer);
-
-            PluginManager::instance().tickAll();
-
-            while (SDL_PollEvent(&e)) {
-                
-                switch (e.type) {
-                            case SDL_EVENT_QUIT:
-                            running = false;
-                            break;
-                            
-                            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-                            {
-                                // Find the window that triggered the close request
-                                PianoRoll* window = findWindow();
-
-                                if(window == nullptr) {
-                                    running = false;
-                                    break;
-                                }
-                                
-                                if (window) {
-                                    std::cout << "Window found. Closing it..." << std::endl;
-                                    
-                                    // Clean up the window (this should call the destructor and free resources)
-                                    delete window;
-                                    
-                                    // Optional: Remove the window from the vector of active windows
-                                    auto it = std::find(windows->begin(), windows->end(), window);
-                                    if (it != windows->end()) {
-                                        windows->erase(it);
-                                    }
-                                } else {
-                                    std::cout << "No window found for close request." << std::endl;
-                                }
-                                
-                                break;
-                            }
-                            
-
-
-
-
-
-                    case SDL_EVENT_MOUSE_BUTTON_DOWN:
-                        handleMouse();
-                        break;
-                    default:
-                    handleKeyboard();
-
-                        break;
-                }
-            }
-
-        }
-        return running;
+        running = home->tick();
+        SDL_RenderPresent(renderer);
+    }
+    return running;
 
 }
 
@@ -124,9 +68,10 @@ bool WindowHandler::handleKeyboard() {
     if (focusedWindow != nullptr) {
 
         if(focusedWindow == home->window) {
-            
+
             return home->handleInput(e);
         } else {
+            return false;
             for (PianoRoll* window : *windows) {
                 // Assuming that the PianoRoll class has a method to get the SDL_Window* for that window
                 if (window->window == focusedWindow) {
@@ -137,7 +82,7 @@ bool WindowHandler::handleKeyboard() {
         }
         // Iterate through the windows to find the corresponding PianoRoll object
 
-    } 
+    }
     return false;
 }
 
@@ -149,6 +94,7 @@ bool WindowHandler::handleMouse() {
         if(focusedWindow == home->window) {
             return home->handleInput(e);
         } else {
+            return false;
         // Iterate through the windows to find the corresponding PianoRoll object
             for (PianoRoll* window : *windows) {
                 // Assuming that the PianoRoll class has a method to get the SDL_Window* for that window

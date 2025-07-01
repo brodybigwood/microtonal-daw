@@ -11,7 +11,7 @@
 
 
 
-PianoRoll::PianoRoll(SDL_FRect* rect, DAW::Region* region, bool detached) : region(region), GridView(detached, rect) {
+PianoRoll::PianoRoll(SDL_FRect* rect, DAW::Region* region, bool* detached) : region(region), GridView(detached, rect, 40) {
 
     if(!detached) {
         WindowHandler::instance()->home->pianoRoll = this;
@@ -86,12 +86,12 @@ void PianoRoll::RenderDestinations() {
     SDL_Color textColor = {0, 0, 0, 255};
 
 
-    SDL_FRect backgroundRect = {0, 0, keyLength, height};
+    SDL_FRect backgroundRect = {0, 0, leftMargin, height};
 
     setRenderColor(renderer, colors.keyWhite);
     SDL_RenderFillRect(renderer, &backgroundRect);
     SDL_SetRenderDrawColor(renderer,0,0,0,255);
-    SDL_RenderLine(renderer, keyLength+1,0,keyLength+1,height);
+    SDL_RenderLine(renderer, leftMargin+1,0,leftMargin+1,height);
 
     SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
 
@@ -113,7 +113,7 @@ void PianoRoll::RenderDestinations() {
             static_cast<float>(textSurface->h)
         };
 
-        SDL_RenderLine(renderer, textSurface->w, y, keyLength, y);
+        SDL_RenderLine(renderer, textSurface->w, y, leftMargin, y);
         SDL_DestroySurface(textSurface);
 
         SDL_RenderTexture(renderer, KeyTexture, NULL, &textRect);
@@ -189,7 +189,7 @@ void PianoRoll::RenderGridTexture() {
 
 }
 
-bool PianoRoll::tick() {
+bool PianoRoll::customTick() {
     //refreshGrid = true;
     //handleCustomInput(e);
     if(refreshGrid) {
@@ -205,7 +205,7 @@ bool PianoRoll::tick() {
 
     RenderRoll();
 
-    playHead->render(renderer, barWidth, scrollX - dstRect->x);
+    playHead->render(renderer, barWidth, scrollX);
 
     if(detached){
 
@@ -213,16 +213,16 @@ bool PianoRoll::tick() {
     } else {
         SDL_SetRenderTarget(renderer, NULL);
     }
-    return running;
+    return true;
 }
 
 void PianoRoll::initWindow() {
 
     this->gridRect = {
-        keyLength,
-        menuHeight,
-        width-keyLength,
-        width-menuHeight
+        dstRect->x+leftMargin,
+        dstRect->y+topMargin,
+        dstRect->w-leftMargin,
+        dstRect->h-topMargin
     };
 
     SDL_DestroyTexture(backgroundTexture);
@@ -274,7 +274,7 @@ void PianoRoll::clickMouse(SDL_Event& e) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             if (e.button.button == SDL_BUTTON_LEFT) {
                 lmb = true;
-                if(mouseX > keyLength && stretchingNote == nullptr) {
+                if(mouseX > leftMargin && stretchingNote == nullptr) {
                     if(hoveredElement == -1) {
                         createElement();
                     } else {
@@ -287,7 +287,7 @@ void PianoRoll::clickMouse(SDL_Event& e) {
             }
             if (e.button.button == SDL_BUTTON_RIGHT) {
                 rmb = true;
-                if(mouseX > keyLength && stretchingNote == nullptr) {
+                if(mouseX > leftMargin && stretchingNote == nullptr) {
                     deleteElement();
                 }
 
