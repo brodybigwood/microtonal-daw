@@ -127,21 +127,10 @@ void PianoRoll::RenderDestinations() {
 }
 
 
-void PianoRoll::RenderRoll() {
-    SDL_SetRenderTarget(renderer, NULL);
-
-    for(int i = 0; i<4; i++) {
-        SDL_RenderTexture(renderer, layers[i], NULL, dstRect);
-    }
-
-}
-
-
-
 void PianoRoll::Scroll() {
 
 
-    numCellsRight = scrollX/cellWidth; 
+    numCellsRight = (scrollX)/cellWidth;
     numCellsDown = (scrollY-yMin)/cellHeight;
     numCellsDown12 = scrollY/cellHeight12;
     if((scrollY-yMin - cellHeight12) <= 0) {
@@ -177,12 +166,12 @@ void PianoRoll::RenderGridTexture() {
 
 
     
-    for (double x = xOffset; x < width; x += cellWidth) {
+    for (double x = xOffset + leftMargin; x < width + leftMargin; x += cellWidth) {
         SDL_RenderLine(renderer, x, 0, x, height);
     }
 
     
-    for (double y = yOffset; y < height; y += cellHeight) {
+    for (double y = yOffset + topMargin; y < height + topMargin; y += cellHeight) {
         SDL_RenderLine(renderer, 0, y, width, y);
     }
 
@@ -203,15 +192,16 @@ bool PianoRoll::customTick() {
 
     SDL_SetRenderTarget(renderer, NULL);
 
-    RenderRoll();
+    SDL_RenderTexture(renderer, backgroundTexture, NULL, NULL);
+    SDL_RenderTexture(renderer, gridTexture, NULL, NULL);
+    SDL_RenderTexture(renderer, NotesTexture, NULL, NULL);
+    SDL_RenderTexture(renderer, PianoTexture, NULL, NULL);
 
     playHead->render(renderer, barWidth, scrollX);
 
     if(detached){
 
         SDL_RenderPresent(renderer);
-    } else {
-        SDL_SetRenderTarget(renderer, NULL);
     }
     return true;
 }
@@ -262,9 +252,6 @@ void PianoRoll::initWindow() {
     RenderDestinations();
     
     RenderNotes();
-    
-    RenderRoll();
-    
 
 }
 

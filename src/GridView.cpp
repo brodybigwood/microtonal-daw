@@ -77,9 +77,9 @@ bool GridView::handleInput(SDL_Event& e) {
                 if (barWidth <= 4) {
                     barWidth = 4;
                 }
-                double gridAtX = (mouseX / cellWidth) + (scrollX / cellWidth);
+                double gridAtX = (mouseX + scrollX - leftMargin) / cellWidth;
                 UpdateGrid();
-                scrollX = gridAtX * cellWidth - mouseX;
+                scrollX = gridAtX * cellWidth - mouseX + leftMargin;
             } else
                 if (isAltPressed) {
                     divHeight *= std::pow(scaleSensitivity, e.wheel.y);
@@ -87,9 +87,9 @@ bool GridView::handleInput(SDL_Event& e) {
                         divHeight = height * 12 / 128;
                     }
 
-                    double gridAtY = (mouseY / cellHeight) + (scrollY / cellHeight);
+                    double gridAtY = (mouseY + scrollY - topMargin)/ cellHeight;
                     UpdateGrid();
-                    scrollY = gridAtY * cellHeight - mouseY;
+                    scrollY = gridAtY * cellHeight - mouseY + topMargin;
                 } else if (isShiftPressed) {
                     scrollX += e.wheel.y * scrollSensitivity;
                 } else {

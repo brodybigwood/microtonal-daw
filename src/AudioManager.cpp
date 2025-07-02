@@ -50,7 +50,11 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
         }
     }
 
-    project->effectiveTime = project->timeSeconds -  static_cast<double>(audioManager->latency) / audioManager->sampleRate;
+    if(project->isPlaying) {
+        project->effectiveTime = project->timeSeconds -  static_cast<double>(audioManager->latency) / audioManager->sampleRate;
+    } else {
+        project->effectiveTime = project->timeSeconds;
+    }
 
     return 0;
 }
