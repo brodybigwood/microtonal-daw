@@ -18,7 +18,7 @@ ControlArea::ControlArea(int height, int width, SDL_Renderer* renderer) {
     Button* stop = new Button("stop", 200 + 6*50.0f/5, 50.0f/5, 50.0f/3, 50.0f/3, renderer);
 
     play->onClick = [this] {
-        this->project->play();
+        this->project->togglePlaying();
     };
     stop->onClick = [this] {
         this->project->stop();

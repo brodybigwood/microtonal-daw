@@ -38,8 +38,6 @@ class Project {
         float mouseX;
         float mouseY;
 
-        void play();
-
         void togglePlaying();
 
         void stop();
@@ -62,8 +60,6 @@ class Project {
         EventManager em;
 
         bool isPlaying = false;
-
-        void setTime(double);
 
         double timeSeconds = 0;
 

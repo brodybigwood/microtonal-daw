@@ -21,7 +21,7 @@ void Project::load(std::string filepath) {
     }
 
     this->filepath = filepath;
-    setTime(0);
+    timeSeconds = 0;
 
     for(size_t i = 0; i<1; i++) {
 
@@ -55,25 +55,22 @@ void Project::createRegion(fract x, int y) {
     regions.push_back(new DAW::Region(x, y));
 }
 
-void Project::play() {
-    if(!isPlaying) {
-        isPlaying = true;
-    }
-}
-
 void Project::togglePlaying() {
-    if(!isPlaying) {
+    if (!isPlaying) {
+        const double epsilon = static_cast<double>(AudioManager::instance()->latency) / AudioManager::instance()->sampleRate;
+        timeSeconds = playHeadStart - epsilon;
         isPlaying = true;
     } else {
         isPlaying = false;
-        setTime(playHeadStart);
+        timeSeconds = playHeadStart;
     }
 }
+
 
 void Project::stop() {
     if(isPlaying) {
         isPlaying = false;
-        setTime(playHeadStart);
+        timeSeconds = playHeadStart;
     }
 }
 
@@ -96,9 +93,3 @@ void Project::setup() {
         }
     }
 }
-
-
-void Project::setTime(double time) {
-    timeSeconds = time;
-}
-
