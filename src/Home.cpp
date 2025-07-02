@@ -22,9 +22,6 @@ Home::Home(Project* project) {
 
     instrumentMenuTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, instMenuWidth, windowHeight-mixerHeight-controlsHeight);
 
-    insts = new InstrumentList(controlsHeight, instWidth, windowHeight-mixerHeight, renderer, project);
-
-
     songRect = SDL_FRect{
         0,
         (float)controlsHeight,
@@ -93,7 +90,6 @@ bool Home::tick() {
     //std::cout<<"tickingnging"<<std::endl;
     SDL_RenderClear(renderer);
     //std::cout<<"tickingnging"<<std::endl;
-    insts->render();
     controls->render();
     instrumentMenu->render();
 
@@ -134,18 +130,12 @@ bool Home::handleInput(SDL_Event& e) {
     switch(e.type) {
         
         case SDL_EVENT_MOUSE_MOTION:
-            insts->moveMouse(mouseX,mouseY-controlsHeight);
             instrumentMenu->moveMouse(mouseX,mouseY);
             controls->moveMouse(mouseX, mouseY);
             hoverButtons();
             return true;
             break;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
-            if(mouseOnInst()) {
-                insts->clickMouse(e);
-                return true;
-                break;
-            }
             if(mouseOnEditor()) {
                 instrumentMenu->clickMouse(e);
                 return true;
@@ -188,21 +178,6 @@ bool Home::handleInput(SDL_Event& e) {
 void Home::hoverButtons() {
 
 
-}
-
-
-bool Home::mouseOnInst() {
-    if(
-        mouseX > 0 &&
-        mouseX < instWidth &&
-        mouseY > controlsHeight &&
-        mouseY < windowHeight-mixerHeight
-    ) {
-        return true;
-    } else {
-        return false;
-    }
-    
 }
 
 bool Home::mouseOnEditor() {

@@ -27,9 +27,6 @@ class Home {
     int windowWidth = 1920;
 
     int controlsHeight = 50;
-
-    int instWidth = 200;
-
     int mixerHeight = 200;
 
     int instMenuWidth = 200;

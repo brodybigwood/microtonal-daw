@@ -7,7 +7,7 @@ InstrumentList::InstrumentList(int y, int width, int height, SDL_Renderer* rende
     this->renderer = renderer;
     this->width = width;
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
-    dstRect = {0, 0, width, height};
+    dstRect = {0, y, width, height};
     noteTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
 
 
@@ -38,7 +38,7 @@ void InstrumentList::render() {
 void InstrumentList::renderInstrument(int i) {
 
     int xPos = 0;
-    int yPos = i*instrumentHeight + y;
+    int yPos = i*instrumentHeight;
 
     SDL_FRect instPos = {0, yPos, width, instrumentHeight};
     if(i == hoveredInstrument) {
@@ -52,7 +52,7 @@ void InstrumentList::renderInstrument(int i) {
 
 
     SDL_SetRenderDrawColor(renderer, 20,20,20,255);
-    SDL_RenderLine(renderer, 0, (i+1)*instrumentHeight-1+y, width, (i+1)*instrumentHeight-1+y);
+    SDL_RenderRect(renderer, &instPos);
 
     Instrument* instrument = project->instruments[i];
 

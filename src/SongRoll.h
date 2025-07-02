@@ -22,6 +22,10 @@ class SongRoll : public GridView{
         
         WindowHandler* windowHandler;
 
+        InstrumentList* insts;
+
+        void renderMargins();
+
         bool customTick() override;
 
         SDL_Texture* texture;

@@ -17,8 +17,7 @@ SongRoll::SongRoll(SDL_FRect* rect, SDL_Renderer* renderer, bool* detached) : Gr
     cellHeight = 50;
     cellWidth = 20;
 
-
-
+    insts = new InstrumentList(dstRect->y, leftMargin, dstRect->h, this->renderer, project);
 }
 
 bool SongRoll::customTick() {
@@ -39,7 +38,13 @@ bool SongRoll::customTick() {
         playHead->render(renderer, barWidth, scrollX);
     }
 
+    renderMargins();
+
     return true;
+}
+
+void SongRoll::renderMargins() {
+    insts->render();
 }
 
 
@@ -51,8 +56,12 @@ void SongRoll::handleCustomInput(SDL_Event& e) {
     
     switch (e.type) {
 
-         case SDL_EVENT_MOUSE_MOTION:
+        case SDL_EVENT_MOUSE_MOTION:
             getHoveredRegion();
+            insts->moveMouse(mouseX, mouseY);
+            break;
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            insts->clickMouse(e);
         default:
             break;
     }
