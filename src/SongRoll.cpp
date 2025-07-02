@@ -75,19 +75,17 @@ void SongRoll::renderRegions() {
     SDL_SetRenderTarget(renderer, regionTexture);
     SDL_SetRenderDrawColor(renderer, 0,0,0,0);
     SDL_RenderClear(renderer);
-    for(size_t i = 0; i<project->regions.size(); i++) {
-        renderRegion(i);
+    for(auto region :project->regions) {
+        renderRegion(region);
     }
 }
 
-void SongRoll::renderRegion(int r) {
-    if(hoveredElement == r) {
+void SongRoll::renderRegion(DAW::Region* region) {
+    if(hoveredElement == region->id) {
         SDL_SetRenderDrawColor(renderer, 90,90,100,127);
     } else {
         SDL_SetRenderDrawColor(renderer, 20,20,100,127);
     }
-
-    DAW::Region* region = project->regions[r];
 
     float topLeftCornerX = region->startTime*barWidth + leftMargin;
     float topLeftCornerY = region->index*divHeight + topMargin;

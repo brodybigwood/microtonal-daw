@@ -199,6 +199,17 @@ void InstrumentMenu::setInst(Instrument* instrument) {
     pluginHeight = rackRect->h / 10.0f;
     float pluginY = rackRect->y + rackTitleRect->h;
 
+    for (auto* plug : plugins) {
+        delete plug;
+    }
+    plugins.clear();
+
+    for (auto* tog : pluginToggles) {
+        delete tog;
+    }
+    pluginToggles.clear();
+
+
     std::cout << "setting inst" <<std::endl;
     int i = 0;
 

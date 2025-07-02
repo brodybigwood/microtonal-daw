@@ -43,7 +43,7 @@ class SongRoll : public GridView{
         void handleCustomInput(SDL_Event& e) override;
 
         void renderRegions();
-        void renderRegion(int);
+        void renderRegion(DAW::Region*);
 
         void getHoveredRegion();
 
