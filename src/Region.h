@@ -9,6 +9,8 @@
 #ifndef REGION_H
 #define REGION_H
 
+class Instrument;
+
 namespace DAW {
 
 class Region {
@@ -16,14 +18,10 @@ class Region {
         
 
     public:
-        Region(fract startTime, float y);
+        Region(fract startTime, Instrument* inst);
         ~Region();
 
         std::string name = "MIDI Region FX Rack";
-
-        std::vector<int> outputs;
-        std::string outputType = "Instruments";
-
 
  std::vector<Note> notes; 
 
@@ -36,7 +34,11 @@ bool updateNoteChannel(Note&);
 
  fract startTime;
 
- float y;
+Instrument* inst;
+
+int& index;
+
+int id;
 
  fract length = fract(4,1);
 
@@ -44,7 +46,6 @@ bool updateNoteChannel(Note&);
  bool userSetLeft = false;
 
  void moveX(fract);
- void moveY(int);
  void resize(bool, fract);
 
 int releaseMS = 1000;

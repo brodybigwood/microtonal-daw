@@ -10,7 +10,7 @@
 class WindowHandler;
 class Playhead {
     public:
-        Playhead(SDL_FRect*, SDL_FRect*, bool*);
+        Playhead(SDL_FRect*, SDL_FRect*, bool*, fract* startTime);
         ~Playhead();
 
         bool* detached;
@@ -19,11 +19,12 @@ class Playhead {
         WindowHandler* windowHandler;
         fract pos = fract(0,1);
 
-        void render(SDL_Renderer* renderer, float barWidth, float scrollX);
+        void render(SDL_Renderer* renderer, float barWidth, float offset);
 
         void setTime(fract);
 
         float timePx;
+        fract* startTime;
 
         void getTimePx(float barWidth);
 

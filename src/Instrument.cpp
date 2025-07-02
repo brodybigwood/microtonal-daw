@@ -3,7 +3,7 @@
 #include "Project.h"
 #include <cmath>
 
-Instrument::Instrument(Project* project) {
+Instrument::Instrument(Project* project, int index) : index(index) {
 
     this->project = project;
 

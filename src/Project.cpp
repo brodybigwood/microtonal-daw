@@ -30,15 +30,14 @@ void Project::load(std::string filepath) {
 
     for(size_t i = 0; i<1; i++) {
 
-        instruments.push_back(new Instrument(this));
+        instruments.push_back(new Instrument(this, i));
     }
 
 
-    for(size_t i = 0; i<1; i++) {
+    for(size_t i = 0; i<0; i++) {
 
         fract pos(0,1);
-        DAW::Region* reg = new DAW::Region(pos, i);
-        reg->outputs.push_back(0);
+        DAW::Region* reg = new DAW::Region(pos, instruments[i]);
         regions.push_back(reg);
     }
 }
@@ -51,8 +50,12 @@ void Project::save() {
 
 }
 
-void Project::createRegion(fract x, int y) {
-    regions.push_back(new DAW::Region(x, y));
+void Project::createRegion(fract x, Instrument* inst) {
+    regions.push_back(new DAW::Region(x, inst));
+}
+
+void Project::createInstrument() {
+    instruments.push_back(new Instrument(this, instruments.size()));
 }
 
 void Project::togglePlaying() {

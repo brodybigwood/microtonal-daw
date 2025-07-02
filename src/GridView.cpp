@@ -1,7 +1,7 @@
 #include "GridView.h"
 #include "Playhead.h"
 #include "SDL_Events.h"
-GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin) : detached(detached), leftMargin(leftMargin) {
+GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin, fract* startTime) : detached(detached), leftMargin(leftMargin), startTime(startTime) {
 
     if(rect != nullptr && !*detached) {
         dstRect = rect;
@@ -22,7 +22,7 @@ GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin) : detached
     };
 
 
-    this->playHead = new Playhead(&gridRect, dstRect, detached);
+    this->playHead = new Playhead(&gridRect, dstRect, detached, startTime);
 
     this->width = dstRect->w;
     this->height = dstRect->h;

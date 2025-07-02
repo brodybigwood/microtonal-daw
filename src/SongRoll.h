@@ -25,6 +25,11 @@ class SongRoll : public GridView{
         InstrumentList* insts;
 
         void renderMargins();
+        void createElement() override;
+
+        std::vector<Instrument*>* instruments;
+
+        float getY();
 
         bool customTick() override;
 
@@ -44,10 +49,7 @@ class SongRoll : public GridView{
 
         void clickMouse(SDL_Event& e) override;
 
-        void createElement() override;
         void deleteElement() override;
-
-        int getHoveredTrack();
 
         void UpdateGrid() override;
 };

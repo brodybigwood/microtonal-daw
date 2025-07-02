@@ -8,9 +8,7 @@ struct fract {
     int den;  // Denominator
 
     // Constructor to initialize the fraction
-    fract(int n, int d) : num(n), den(d) {
-
-    }
+    fract(int n, int d) : num(n), den(d == 0 ? 1 : d) {}
 
     double operator*(double factor) const {
         return factor*double(num)/den;

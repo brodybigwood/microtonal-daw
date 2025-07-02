@@ -11,7 +11,7 @@
 
 
 
-PianoRoll::PianoRoll(SDL_FRect* rect, DAW::Region* region, bool* detached) : region(region), GridView(detached, rect, 40) {
+PianoRoll::PianoRoll(SDL_FRect* rect, DAW::Region* region, bool* detached) : region(region), GridView(detached, rect, 40, &(region->startTime)) {
 
     if(!detached) {
         WindowHandler::instance()->home->pianoRoll = this;
@@ -172,7 +172,7 @@ bool PianoRoll::customTick() {
     SDL_RenderTexture(renderer, NotesTexture, nullptr, dstRect);
 
     if(project->processing) {
-        playHead->render(renderer, barWidth, scrollX);
+        playHead->render(renderer, barWidth, scrollX + region->startTime);
     }
 
     SDL_RenderTexture(renderer, PianoTexture, nullptr, dstRect);
@@ -186,7 +186,10 @@ bool PianoRoll::customTick() {
 
 void PianoRoll::initWindow() {
 
-    this->gridRect = {
+    dstRect->w = width;
+    dstRect->h = height;
+
+    gridRect = {
         dstRect->x+leftMargin,
         dstRect->y+topMargin,
         dstRect->w-leftMargin,
@@ -285,10 +288,16 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
             break;
 
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-
-
             width = e.window.data1;  // New width
             height = e.window.data2; // New height
+
+            initWindow();
+            break;
+
+        case SDL_EVENT_WINDOW_RESIZED:
+            width = e.window.data1;  // New width
+            height = e.window.data2; // New height
+
             initWindow();
             break;
 

@@ -33,7 +33,10 @@ class Project {
 
         void save();
 
-        void createRegion(fract x, int y);
+        void createRegion(fract x, Instrument* inst);
+        void createInstrument();
+
+        fract startTime;
 
         float mouseX;
         float mouseY;

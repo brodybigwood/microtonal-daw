@@ -3,15 +3,13 @@
 #include <functional>
 #include "EventManager.h"
 #include "Project.h"
+#include "fract.h"
 
 using namespace DAW;
 
-Region::Region(fract startTime, float y) {
-    this->startTime = startTime;
-    this-> y = y;
-
-
-
+Region::Region(fract startTime, Instrument* inst) :startTime(startTime), inst(inst), index(inst->index) {
+    static int lastId = 0;
+    id = lastId++;
 }
 
 Region::~Region() {
@@ -20,10 +18,6 @@ Region::~Region() {
 
 void Region::moveX(fract dx) {
     startTime = startTime + dx;
-}
-
-void Region::moveY(int dy) {
-    y = y + dy;
 }
 
 void Region::resize(bool rightSide, fract dS) {

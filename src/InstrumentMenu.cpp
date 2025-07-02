@@ -94,7 +94,7 @@ SDL_RenderTexture(renderer, textTexture, nullptr, rackTitleTextRect);
 
 void InstrumentMenu::setViewedElement(std::string type, int index) {
     viewedElement = new element{type, index};
-
+    this->type = type;
     if(type == "instrument") {
         setInst(project->instruments[index]);
     }
@@ -116,14 +116,13 @@ void InstrumentMenu::render() {
 
     if(viewedElement != nullptr) {
         int index = viewedElement->index;
-        std::string type = viewedElement->type;
 
         if(type == "region") {
             name = project->regions[index]->name;
-            outputType = project->regions[index]->outputType;
+            outputType = "region outputs";
         } else if (type == "instrument") {
             name = project->instruments[index]->name;
-            outputType = project->instruments[index]->outputType;
+            outputType = "instrument outputs";
 
 
         } else {

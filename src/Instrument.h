@@ -16,13 +16,15 @@ class Project;
 class Instrument {
 
     public:
-    Instrument(Project* project);
+    Instrument(Project* project, int index);
 
         ~Instrument();
 
         std::vector<MixerTrack*> outputs;
 
         EventList eventList;
+
+        int index;
 
         Project* project;
 

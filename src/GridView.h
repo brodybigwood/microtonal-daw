@@ -1,14 +1,14 @@
 #pragma once
 
 #include <SDL_ttf.h>
+#include "fract.h"
 
 class Playhead;
 class Project;
-class fract;
 
 class GridView {
     public:
-        GridView(bool*, SDL_FRect*, float leftMargin);
+        GridView(bool*, SDL_FRect*, float leftMargin, fract* startTime);
 
         ~GridView();
 
@@ -51,6 +51,7 @@ class GridView {
         float barWidth = 80;
 
         double notesPerBar = 4;
+        fract* startTime = new fract;
 
         float width;
         float height;

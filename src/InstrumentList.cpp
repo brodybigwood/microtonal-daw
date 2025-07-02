@@ -92,6 +92,13 @@ void InstrumentList::clickMouse(SDL_Event& e) {
                 if(hoveredInstrument != -1) {
                     InstrumentMenu::instance()->setViewedElement("instrument", hoveredInstrument);
                     hoveredInstrument = -1;
+                } else if(
+                    mouseX > 0 &&
+                    mouseX < width &&
+                    mouseY > 0 &&
+                    mouseY < height
+                ){
+                    project->createInstrument();
                 }
 
             }

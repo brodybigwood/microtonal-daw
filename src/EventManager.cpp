@@ -31,12 +31,8 @@ void EventManager::clearEvents() {
                 e.noteOff.noteId = note.id;
                 e.sampleOffset = 0;
 
-                for (auto index : region->outputs) {
-                    if (index < project->instruments.size()) {
-                        auto* inst = project->instruments[index];
-                        inst->eventList.addEvent(e);
-                    }
-                }
+                region->inst->eventList.addEvent(e);
+
                 note.dispatched = false;
             }
         }
@@ -71,13 +67,17 @@ void EventManager::getEvents() {
 
     for(DAW::Region* region :project->regions) {
 
+        double regTime = region->startTime;
+
         std::vector<Steinberg::Vst::Event> events;
 
         for(Note& note :region->notes) {
 
-            int offset = AudioManager::instance()->sampleRate * 60.0f * (note.end - time)/project->tempo;
+            double start = note.start + regTime;
+            double end = note.end + regTime;
+            int offset = AudioManager::instance()->sampleRate * 60.0f * (end - time)/project->tempo;
 
-            if(note.dispatched && note.end < time+window && note.end >= time) {
+            if(note.dispatched && end < time+window && end >= time) {
 
 
 
@@ -100,7 +100,7 @@ void EventManager::getEvents() {
 
 
 
-            } else if(!note.dispatched && note.start < time+window && note.start >= time) {
+            } else if(!note.dispatched && start < time+window && start >= time) {
 
                 Steinberg::Vst::Event e{};
                 e.type = Steinberg::Vst::Event::kNoteOnEvent;
@@ -126,17 +126,10 @@ void EventManager::getEvents() {
 
             }
         }
-        if(region->outputType == "Instruments") {
-            for (auto index : region->outputs) {
-                Instrument* inst = project->instruments[index];
-                for(auto& e :events) {
-                  inst->eventList.addEvent(e);
-                }
-            }
 
-
+        for(auto& e :events) {
+            region->inst->eventList.addEvent(e);
         }
-
     }
 
 }

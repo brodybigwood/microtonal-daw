@@ -24,6 +24,8 @@ class InstrumentMenu {
 
         void hover();
 
+        std::string type = "instrument";
+
         SDL_Texture* texture;
         SDL_Renderer* renderer;
 

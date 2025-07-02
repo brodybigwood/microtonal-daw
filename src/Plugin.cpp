@@ -27,6 +27,10 @@ Plugin::Plugin(const char* filepath) : filepath(filepath), pluginFactory(nullptr
         instantiatePlugin();
     }
 
+    if(project->processing) {
+        setup();
+    }
+
 }
 
 Plugin::~Plugin() {

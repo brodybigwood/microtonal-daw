@@ -2,12 +2,14 @@
 #include "GridView.h"
 #include "Home.h"
 #include <SDL3/SDL_events.h>
+#include <X11/Xutil.h>
 #include "Region.h"
 
 
-SongRoll::SongRoll(SDL_FRect* rect, SDL_Renderer* renderer, bool* detached) : GridView(detached, rect, 200) {
+SongRoll::SongRoll(SDL_FRect* rect, SDL_Renderer* renderer, bool* detached) : GridView(detached, rect, 200, &(Project::instance()->startTime)) {
     this->windowHandler = WindowHandler::instance();
     this->project = Project::instance();
+    this->instruments = &(project->instruments);
 
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
     gridTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
@@ -88,42 +90,64 @@ void SongRoll::renderRegion(int r) {
     DAW::Region* region = project->regions[r];
 
     float topLeftCornerX = region->startTime*barWidth + leftMargin;
-    float topLeftCornerY = region->y*divHeight + topMargin;
+    float topLeftCornerY = region->index*divHeight + topMargin;
     regionRect = {topLeftCornerX, topLeftCornerY, region->length*barWidth, divHeight};
     SDL_RenderFillRect(renderer, &regionRect);
 }
 
 void SongRoll::getHoveredRegion() {
-    for(size_t i = 0; i<project->regions.size(); i++) {
-        DAW::Region* region = project->regions[i];
+    for(auto region : project->regions) {
         if(
             mouseX > region->startTime*barWidth + leftMargin &&
             mouseX < (region->length+region->startTime)*barWidth + leftMargin &&
-            mouseY > region->y*divHeight &&
-            mouseY < (region->y+1) * divHeight
+            mouseY > region->index*divHeight &&
+            mouseY < (region->index+1) * divHeight
         ) {
-            hoveredElement = i;
+            hoveredElement = region->id;
             return;
-        } else {
-            hoveredElement = -1;
         }
     }
+    hoveredElement = -1;
+}
+
+float SongRoll::getY() {
+    return mouseY/divHeight;
+}
+
+void SongRoll::createElement() {
+    fract start = getHoveredTime();
+    int y = getY();
+    if(y >= instruments->size()) {
+        return;
+    }
+
+    Instrument* inst = (*instruments)[y];
+    project->createRegion(start, inst);
+    refreshGrid = true;
 }
 
 void SongRoll::clickMouse(SDL_Event& e) {
     switch(e.type) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
+
             if (e.button.button == SDL_BUTTON_LEFT) {
                 lmb = true;
-                if(hoveredElement != -1) {
-                    windowHandler->createPianoRoll(project->regions[hoveredElement], &(windowHandler->home->pianoRollRect));
-                    InstrumentMenu::instance()->setViewedElement("region", hoveredElement);
-                    hoveredElement = -1;
+                if (hoveredElement >= 0 && hoveredElement < static_cast<int>(project->regions.size())) {
+                    DAW::Region* reg = project->regions[hoveredElement];
+                    if(reg) {
+                        windowHandler->createPianoRoll(reg, &(windowHandler->home->pianoRollRect));
+                        InstrumentMenu::instance()->setViewedElement("region", reg->id);
+                    }
+                } else if (mouseX > leftMargin && mouseX < gridRect.w && mouseY > topMargin && mouseY < gridRect.h) {
+                    std::cout<<mouseX<<" "<<mouseY<<std::endl;
+                    createElement();
                 }
+
 
             }
             if (e.button.button == SDL_BUTTON_RIGHT) {
                 rmb = true;
+                deleteElement();
             }
             break;
         case SDL_EVENT_MOUSE_BUTTON_UP:
@@ -137,22 +161,13 @@ void SongRoll::clickMouse(SDL_Event& e) {
     }
 }
 
-int SongRoll::getHoveredTrack() {
-    return (int)mouseY/divHeight;
-}
-
-void SongRoll::createElement() {
-    fract time = getHoveredTime();
-    int track = getHoveredTrack();
-    DAW::Region* reg = new DAW::Region(time, track);
-    reg->outputs.push_back(track);
-    project->regions.push_back(reg);
-}
-
 void SongRoll::deleteElement() {
-    if(hoveredElement != -1) {
-        project->regions.erase(project->regions.begin() + hoveredElement);
-
+    if (hoveredElement >= 0 && hoveredElement < static_cast<int>(project->regions.size())) {
+        DAW::Region* reg = project->regions[hoveredElement];
+        if(reg) {
+            project->regions.erase(project->regions.begin() + reg->index);
+            delete reg;
+        }
     }
 }
 
