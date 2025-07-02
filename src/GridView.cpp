@@ -32,6 +32,8 @@ GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin) : detached
     if(*detached) {
         window = SDL_CreateWindow("Piano Roll", width, height, SDL_WINDOW_RESIZABLE | SDL_WINDOW_UTILITY);
 
+        SDL_SetWindowParent(window, Home::get()->window);
+
         renderer = SDL_CreateRenderer(window, NULL);
     } else {
         window = Home::get()->window;
@@ -46,17 +48,7 @@ GridView::~GridView() {
 }
 
 bool GridView::tick() {
-    if (*detached && window != nullptr) {
-        uint32_t id = SDL_GetWindowID(window);
-        SDL_Event e;
-        while (SDL_PollEvent(&e)) {
-            if (isEventForWindow(e, id)) {
-                if(!handleInput(e)) {
-                    return false;
-                }
-            }
-        }
-    }
+
     return customTick();
 }
 
@@ -163,5 +155,5 @@ void GridView::toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar) {
 }
 
 fract GridView::getHoveredTime() {
-    return fract(std::floor((mouseX+scrollX)/cellWidth),notesPerBar);
+    return fract(std::floor((mouseX+scrollX-leftMargin)/cellWidth),notesPerBar);
 }

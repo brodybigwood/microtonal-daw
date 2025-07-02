@@ -475,11 +475,11 @@ bool PianoRoll::getExistingNote() {
 
 
 float PianoRoll::getNotePosX(Note& note) {
-    return note.start*barWidth -scrollX;
+    return note.start*barWidth -scrollX + leftMargin;
 }
 
 float PianoRoll::getNoteEnd(Note& note) {
-    return note.end*barWidth - scrollX;
+    return note.end*barWidth - scrollX + leftMargin;
 }
 
 float PianoRoll::getNoteHeight(Note& note) {

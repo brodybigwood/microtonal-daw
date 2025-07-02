@@ -1,6 +1,7 @@
 #include "WindowHandler.h"
 #include <X11/Xlib.h>
 #include "PluginManager.h"
+#include "SDL_Events.h"
 WindowHandler::WindowHandler() {
 
     SDL_SetHint(SDL_HINT_APP_NAME, "EDITOR");
@@ -30,18 +31,12 @@ WindowHandler* WindowHandler::instance() {
 }
 
 void WindowHandler::createPianoRoll(DAW::Region* region, SDL_FRect* pRect) {
-    if(editor) {
+    if(home->pianoRoll) {
         return;
     }
     std::cout<<"creating"<<std::endl;
 
-    editor = new PianoRoll(pRect, region, &(home->pianoRollDetached));
-
-    home->pianoRoll = editor;
-
-    SDL_SetWindowParent(editor->window, home->window);
-
-    windows->push_back(editor);
+    home->pianoRoll = new PianoRoll(pRect, region, &(home->pianoRollDetached));
 }
 
 bool WindowHandler::tick() {
@@ -59,61 +54,5 @@ bool WindowHandler::tick() {
     }
     return running;
 
-}
-
-
-bool WindowHandler::handleKeyboard() {
-    
-    focusedWindow = SDL_GetKeyboardFocus();
-    if (focusedWindow != nullptr) {
-
-        if(focusedWindow == home->window) {
-
-            return home->handleInput(e);
-        } else {
-            return false;
-            for (PianoRoll* window : *windows) {
-                // Assuming that the PianoRoll class has a method to get the SDL_Window* for that window
-                if (window->window == focusedWindow) {
-                    window->handleInput(e);;
-                    return false;
-                }
-            }
-        }
-        // Iterate through the windows to find the corresponding PianoRoll object
-
-    }
-    return false;
-}
-
-bool WindowHandler::handleMouse() {
-    
-    focusedWindow = SDL_GetMouseFocus();
-    if (focusedWindow != nullptr) {
-
-        if(focusedWindow == home->window) {
-            return home->handleInput(e);
-        } else {
-            return false;
-        // Iterate through the windows to find the corresponding PianoRoll object
-            for (PianoRoll* window : *windows) {
-                // Assuming that the PianoRoll class has a method to get the SDL_Window* for that window
-                if (window->window == focusedWindow) {
-                    window->handleInput(e);
-                    return false;
-                }
-            }
-        }
-    } 
-    return false;
-}
-
-PianoRoll* WindowHandler::findWindow() {
-    for (PianoRoll* window : *windows) {
-        if (SDL_GetWindowID(window->window) == e.window.windowID) {
-            return window;
-        }
-    }
-    return nullptr;
 }
 

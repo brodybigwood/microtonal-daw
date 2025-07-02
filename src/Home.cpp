@@ -56,6 +56,38 @@ void Home::createRoll() {
 
 bool Home::tick() {
 
+
+    SDL_Event e;
+    while (SDL_PollEvent(&e)) {
+
+        uint32_t id = getEventWindowID(e);
+
+
+        if (id == SDL_GetWindowID(window)) {
+            if(!handleInput(e)) {
+                return false;
+            }
+        }
+
+        if(pianoRoll != nullptr && pianoRollDetached) {
+            if (id == SDL_GetWindowID(pianoRoll->window)) {
+                if(!pianoRoll->handleInput(e)) {
+                    delete pianoRoll;
+                    pianoRoll = nullptr;
+                }
+            }
+        }
+
+        if(song != nullptr && songRollDetached) {
+            if (id == SDL_GetWindowID(song->window)) {
+                if(!song->handleInput(e)) {
+                    delete song;
+                    song = nullptr;
+                }
+            }
+        }
+    }
+
     //std::cout<<"tickingnging"<<std::endl;
     SDL_SetRenderDrawColor(renderer, 100,100,100,255);
     //std::cout<<"tickingnging"<<std::endl;
@@ -65,29 +97,13 @@ bool Home::tick() {
     controls->render();
     instrumentMenu->render();
 
-
-    if(song != nullptr) {
-        if(!song->tick()) {
-            delete song;
-            song = nullptr;
-        }
+    if(song) {
+       song->tick();
     }
-    if(pianoRoll != nullptr) {
-        if(!pianoRoll->tick()) {
-            delete pianoRoll;
-            pianoRoll = nullptr;
-        }
+    if(pianoRoll) {
+        pianoRoll->tick();
     }
 
-    uint32_t id = SDL_GetWindowID(window);
-    SDL_Event e;
-    while (SDL_PollEvent(&e)) {
-        if (isEventForWindow(e, id)) {
-            if(!handleInput(e)) {
-                return false;
-            }
-        }
-    }
     return true;
 }
 

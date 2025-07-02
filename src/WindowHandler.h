@@ -12,7 +12,7 @@
 class WindowHandler {
     public:
     SDL_Window* focusedWindow;
-std::vector<PianoRoll*>* windows = new std::vector<PianoRoll*>();
+std::vector<SDL_Window*> windows;
 SDL_Event e;
         WindowHandler();
         ~WindowHandler();
