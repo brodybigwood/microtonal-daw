@@ -14,6 +14,9 @@ class GridView {
 
         //rendering
         SDL_Renderer* renderer;
+
+        SDL_Texture* gridTexture;
+
         void setRenderColor(SDL_Renderer*, uint8_t*);
         bool tick();
         virtual bool customTick() {};
@@ -22,16 +25,20 @@ class GridView {
 
         bool refreshGrid = false;
         virtual void UpdateGrid() {};
+        void RenderGridTexture();
 
-        int yOffset;
-        int xOffset;
+        int yOffset = 0;
+        int xOffset = 0;
+
+        float* xSize;
+        float* ySize;
 
         bool running = true;
 
         Playhead* playHead;
         Project* project;
 
-        double divHeight;
+        float divHeight;
 
         float leftMargin;
         float topMargin;
@@ -39,9 +46,9 @@ class GridView {
         SDL_FRect gridRect;
         SDL_FRect* dstRect;
 
-        double cellHeight;
-        double cellWidth;
-        double barWidth = 80;
+        float cellHeight;
+        float cellWidth;
+        float barWidth = 80;
 
         double notesPerBar = 4;
 

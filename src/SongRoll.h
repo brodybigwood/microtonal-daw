@@ -29,7 +29,6 @@ class SongRoll : public GridView{
         bool customTick() override;
 
         SDL_Texture* texture;
-        SDL_Texture* gridTexture;
         SDL_Texture* regionTexture;
         SDL_Texture* playHeadTexture;
 
@@ -37,8 +36,6 @@ class SongRoll : public GridView{
 
         void toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar);
         void handleCustomInput(SDL_Event& e) override;
-
-        void RenderGridTexture();
 
         void renderRegions();
         void renderRegion(int);

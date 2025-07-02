@@ -132,6 +132,28 @@ void GridView::moveMouse() {
     mouseY -= dstRect->y;
 }
 
+
+void GridView::RenderGridTexture() {
+
+    SDL_SetRenderTarget(renderer, gridTexture);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0); // Transparent
+    SDL_RenderClear(renderer);
+
+    setRenderColor(renderer, colors.grid);
+
+
+
+    for (double x = xOffset + leftMargin; x < width + leftMargin; x += cellWidth) {
+        SDL_RenderLine(renderer, x, 0, x, height);
+    }
+
+    for (double y = yOffset + topMargin; y < height + topMargin; y += *ySize) {
+        SDL_RenderLine(renderer, 0, y, width, y);
+    }
+
+
+}
+
 void GridView::setRenderColor(SDL_Renderer* theRenderer, uint8_t code[4]) {
     SDL_SetRenderDrawColor(theRenderer,
                            code[0],

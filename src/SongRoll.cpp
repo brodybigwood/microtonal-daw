@@ -10,12 +10,14 @@ SongRoll::SongRoll(SDL_FRect* rect, SDL_Renderer* renderer, bool* detached) : Gr
     this->project = Project::instance();
 
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
-    gridTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, gridRect.w, gridRect.h);
-    regionTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, gridRect.w, gridRect.h);
-    playHeadTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, gridRect.w, gridRect.h);
+    gridTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
+    regionTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
+    playHeadTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
 
-    cellHeight = 50;
-    cellWidth = 20;
+    divHeight = 50;
+    cellWidth = barWidth/4;
+    ySize = &divHeight;
+    xSize = &cellWidth;
 
     insts = new InstrumentList(dstRect->y, leftMargin, dstRect->h, this->renderer, project);
 }
@@ -29,10 +31,10 @@ bool SongRoll::customTick() {
     SDL_SetRenderDrawColor(renderer, colors.background[0], colors.background[1], colors.background[2], colors.background[3]);
     SDL_RenderClear(renderer);
     SDL_SetRenderTarget(renderer,NULL);
-    SDL_RenderTexture(renderer, texture, nullptr, &gridRect);
 
-    SDL_RenderTexture(renderer,gridTexture,nullptr, &gridRect);
-    SDL_RenderTexture(renderer,regionTexture,nullptr, &gridRect);
+    SDL_RenderTexture(renderer, texture, nullptr, dstRect);
+    SDL_RenderTexture(renderer,gridTexture,nullptr, dstRect);
+    SDL_RenderTexture(renderer,regionTexture,nullptr, dstRect);
 
     if(project->processing) {
         playHead->render(renderer, barWidth, scrollX);
@@ -67,32 +69,10 @@ void SongRoll::handleCustomInput(SDL_Event& e) {
     }
 }
 
-void SongRoll::RenderGridTexture() {
-    SDL_SetRenderTarget(renderer, gridTexture);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0); // Transparent
-    SDL_RenderClear(renderer);
-
-    SDL_SetRenderDrawColor(renderer, 
-        colors.grid[0],
-        colors.grid[1],
-        colors.grid[2],
-        colors.grid[3]
-    );
-
-    
-    for (double x = 0; x < width; x += cellWidth) {
-        SDL_RenderLine(renderer, x, 0, x, height);
-    }
-
-    
-    for (double y = 0; y < height; y += cellHeight) {
-        SDL_RenderLine(renderer, 0, y, width, y);
-    }
-
-
-}
-
 void SongRoll::renderRegions() {
+    SDL_SetRenderTarget(renderer, regionTexture);
+    SDL_SetRenderDrawColor(renderer, 0,0,0,0);
+    SDL_RenderClear(renderer);
     for(size_t i = 0; i<project->regions.size(); i++) {
         renderRegion(i);
     }
@@ -107,11 +87,9 @@ void SongRoll::renderRegion(int r) {
 
     DAW::Region* region = project->regions[r];
 
-    float topLeftCornerX = region->startTime*barWidth;
-    float topLeftCornerY = region->y*cellHeight;
-    regionRect = {topLeftCornerX, topLeftCornerY, region->length*barWidth, cellHeight};
-    SDL_SetRenderTarget(renderer, regionTexture);
-
+    float topLeftCornerX = region->startTime*barWidth + leftMargin;
+    float topLeftCornerY = region->y*divHeight + topMargin;
+    regionRect = {topLeftCornerX, topLeftCornerY, region->length*barWidth, divHeight};
     SDL_RenderFillRect(renderer, &regionRect);
 }
 
@@ -121,8 +99,8 @@ void SongRoll::getHoveredRegion() {
         if(
             mouseX > region->startTime*barWidth + leftMargin &&
             mouseX < (region->length+region->startTime)*barWidth + leftMargin &&
-            mouseY > region->y*cellHeight &&
-            mouseY < (region->y+1) * cellHeight
+            mouseY > region->y*divHeight &&
+            mouseY < (region->y+1) * divHeight
         ) {
             hoveredElement = i;
             return;
@@ -160,7 +138,7 @@ void SongRoll::clickMouse(SDL_Event& e) {
 }
 
 int SongRoll::getHoveredTrack() {
-    return (int)mouseY/cellHeight;
+    return (int)mouseY/divHeight;
 }
 
 void SongRoll::createElement() {

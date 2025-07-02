@@ -20,7 +20,6 @@ class PianoRoll : public GridView {
     virtual ~PianoRoll();
     
         SDL_Texture* backgroundTexture;
-        SDL_Texture* gridTexture;
         SDL_Texture* PianoTexture;
         SDL_Texture* NotesTexture;
         SDL_Texture* KeyTexture;
@@ -51,7 +50,6 @@ class PianoRoll : public GridView {
         bool customTick() override;
 
         void UpdateGrid() override;
-        void RenderGridTexture();
         
 
         void createKeys();

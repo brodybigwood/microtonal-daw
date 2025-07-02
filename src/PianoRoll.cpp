@@ -23,6 +23,7 @@ PianoRoll::PianoRoll(SDL_FRect* rect, DAW::Region* region, bool* detached) : reg
     scrollY = 800;
 
     divHeight = 200; //octaveheight
+    ySize = &cellHeight;
 
     UpdateGrid();
 
@@ -152,32 +153,6 @@ void PianoRoll::Scroll() {
         handleMouse();
 }
 
-
-void PianoRoll::RenderGridTexture() {
-
-
-
-
-    SDL_SetRenderTarget(renderer, gridTexture);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0); // Transparent
-    SDL_RenderClear(renderer);
-
-    setRenderColor(renderer, colors.grid);
-
-
-    
-    for (double x = xOffset + leftMargin; x < width + leftMargin; x += cellWidth) {
-        SDL_RenderLine(renderer, x, 0, x, height);
-    }
-
-    
-    for (double y = yOffset + topMargin; y < height + topMargin; y += cellHeight) {
-        SDL_RenderLine(renderer, 0, y, width, y);
-    }
-
-
-}
-
 bool PianoRoll::customTick() {
     //refreshGrid = true;
     //handleCustomInput(e);
@@ -192,12 +167,15 @@ bool PianoRoll::customTick() {
 
     SDL_SetRenderTarget(renderer, NULL);
 
-    SDL_RenderTexture(renderer, backgroundTexture, NULL, NULL);
-    SDL_RenderTexture(renderer, gridTexture, NULL, NULL);
-    SDL_RenderTexture(renderer, NotesTexture, NULL, NULL);
-    SDL_RenderTexture(renderer, PianoTexture, NULL, NULL);
+    SDL_RenderTexture(renderer, backgroundTexture, nullptr, dstRect);
+    SDL_RenderTexture(renderer, gridTexture, nullptr, dstRect);
+    SDL_RenderTexture(renderer, NotesTexture, nullptr, dstRect);
 
-    playHead->render(renderer, barWidth, scrollX);
+    if(project->processing) {
+        playHead->render(renderer, barWidth, scrollX);
+    }
+
+    SDL_RenderTexture(renderer, PianoTexture, nullptr, dstRect);
 
     if(detached){
 
