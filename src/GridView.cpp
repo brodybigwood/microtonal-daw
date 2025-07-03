@@ -1,6 +1,7 @@
 #include "GridView.h"
 #include "Playhead.h"
 #include "SDL_Events.h"
+#include "Transport.h"
 GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin, fract* startTime) : detached(detached), leftMargin(leftMargin), startTime(startTime) {
 
     if(rect != nullptr && !*detached) {
@@ -22,8 +23,6 @@ GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin, fract* sta
     };
 
 
-    this->playHead = new Playhead(&gridRect, dstRect, detached, startTime);
-
     this->width = dstRect->w;
     this->height = dstRect->h;
     this->x = dstRect->x;
@@ -39,6 +38,10 @@ GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin, fract* sta
         window = Home::get()->window;
         renderer = Home::get()->renderer;
     }
+
+
+    this->playHead = new Playhead(&gridRect, dstRect, detached, startTime);
+    this->transport = new Transport(this);
 }
 
 GridView::~GridView() {
@@ -70,6 +73,7 @@ bool GridView::handleInput(SDL_Event& e) {
             moveMouse();
             break;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            transport->clickMouse();
             clickMouse(e);
             break;
         case SDL_EVENT_MOUSE_BUTTON_UP:
@@ -134,6 +138,8 @@ void GridView::moveMouse() {
     SDL_GetMouseState(&mouseX, &mouseY);
     mouseX -= dstRect->x;
     mouseY -= dstRect->y;
+
+    transport->moveMouse(mouseX, mouseY);
 }
 
 
@@ -143,7 +149,7 @@ void GridView::RenderGridTexture() {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0); // Transparent
     SDL_RenderClear(renderer);
 
-    setRenderColor(renderer, colors.grid);
+    setRenderColor(colors.grid);
 
 
 
@@ -158,8 +164,8 @@ void GridView::RenderGridTexture() {
 
 }
 
-void GridView::setRenderColor(SDL_Renderer* theRenderer, uint8_t code[4]) {
-    SDL_SetRenderDrawColor(theRenderer,
+void GridView::setRenderColor(uint8_t code[4]) {
+    SDL_SetRenderDrawColor(renderer,
                            code[0],
                            code[1],
                            code[2],

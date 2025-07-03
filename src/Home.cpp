@@ -17,8 +17,6 @@ Home::Home(Project* project) {
 
 
     renderer = windowHandler->renderer;
-    
-    controls = new ControlArea(controlsHeight, windowWidth, renderer);
 
     instrumentMenuTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, instMenuWidth, windowHeight-mixerHeight-controlsHeight);
 
@@ -89,7 +87,6 @@ bool Home::tick() {
     //std::cout<<"tickingnging"<<std::endl;
     SDL_RenderClear(renderer);
     //std::cout<<"tickingnging"<<std::endl;
-    controls->render();
     instrumentMenu->render();
 
     if(song) {
@@ -130,7 +127,6 @@ bool Home::handleInput(SDL_Event& e) {
         
         case SDL_EVENT_MOUSE_MOTION:
             instrumentMenu->moveMouse(mouseX,mouseY);
-            controls->moveMouse(mouseX, mouseY);
             hoverButtons();
             return true;
             break;
@@ -144,7 +140,6 @@ bool Home::handleInput(SDL_Event& e) {
             if(
                 mouseY < controlsHeight
             ) {
-                controls->handleInput(e);
                 return true;
                 break;
             }

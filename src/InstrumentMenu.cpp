@@ -142,11 +142,9 @@ void InstrumentMenu::render() {
         SDL_SetRenderDrawColor(renderer,0,0,0,255);
         SDL_RenderRect(renderer, rackTitleRect);
 
-        for(auto button : plugins) {
-            button->render();
-        }
-        for(auto button : pluginToggles) {
-            button->render();
+        for(auto plugin : plugins) {
+            plugin.win->render();
+            plugin.proc->render();
         }
 
         renderText();
@@ -168,18 +166,14 @@ bool inside(float px, float py, float x, float y, float w, float h) {
 
 
 void InstrumentMenu::clickMouse(SDL_Event& e) {
-    for (auto plug : plugins) {
-        if(plug->hover()) {
-            plug->onClick();
+    for (auto plugin : plugins) {
+        if(plugin.win->hover()) {
+            plugin.win->onClick();
+        }
+        if(plugin.proc->hover()) {
+            plugin.proc->onClick();
         }
     }
-
-    for (auto tog : pluginToggles) {
-        if(tog->hover()) {
-            tog->onClick();
-        }
-    }
-
 }
 
 void InstrumentMenu::moveMouse(float x, float y) {
@@ -199,75 +193,78 @@ void InstrumentMenu::setInst(Instrument* instrument) {
     pluginHeight = rackRect->h / 10.0f;
     float pluginY = rackRect->y + rackTitleRect->h;
 
-    for (auto* plug : plugins) {
-        delete plug;
+    for (auto plug : plugins) {
+        delete plug.win;
+        delete plug.proc;
     }
     plugins.clear();
-
-    for (auto* tog : pluginToggles) {
-        delete tog;
-    }
-    pluginToggles.clear();
-
 
     std::cout << "setting inst" <<std::endl;
     int i = 0;
 
     for(auto& plugin : instrument->rack.plugins) {
 
-        Button* plug = new Button(
-            plugin->name,
+        plugItem item{};
+
+        Button* win = new Button(
+            renderer
+        );
+
+        win->dstRect = new SDL_FRect{
             rackRect->x + plugMarginX,
             pluginY + plugMarginY,
             rackRect->w  - (3 * plugMarginX),
-            pluginHeight - plugMarginY,
-            renderer
-        );
+            pluginHeight - plugMarginY
+        };
 
-        plug->onClick = [this,i] {
+        win->onClick = [this,i] {
             this->instrument->rack.plugins[i]->showWindow();
         };
 
-        plug->hover = [this, plug] {
-            if (inside(this->mouseX, this->mouseY, plug->x, plug->y, plug->width, plug->height)) {
+        win->hover = [this, win] {
+            if (inside(this->mouseX, this->mouseY, win->dstRect->x, win->dstRect->y, win->dstRect->w, win->dstRect->h)) {
                 return true;
             } else {
                 return false;
             }
         };
 
-        plug->activated = [this,i] {
+        win->activated = [this,i] {
             return this->instrument->rack.plugins[i]->windowOpen;
         };
 
-        Button* tog = new Button(
-            plugin->name,
-            rackRect->x + rackRect->w  - (2 * plugMarginX),
-            pluginY + plugMarginY,
-            plugMarginX,
-            pluginHeight - plugMarginY,
+        item.win = win;
+
+        Button* proc = new Button(
             renderer
         );
 
-        tog->onClick = [this,i,tog] {
+        proc->dstRect = new SDL_FRect{
+            rackRect->x + rackRect->w  - (2 * plugMarginX),
+            pluginY + plugMarginY,
+            plugMarginX,
+            pluginHeight - plugMarginY
+        };
+
+        proc->onClick = [this,i] {
             this->instrument->rack.plugins[i]->toggle();
         };
 
-        tog->hover = [this, tog] {
-            if (inside(this->mouseX, this->mouseY, tog->x, tog->y, tog->width, tog->height)) {
+        proc->hover = [this, proc] {
+            if (inside(this->mouseX, this->mouseY, proc->dstRect->x, proc->dstRect->y, proc->dstRect->w, proc->dstRect->h)) {
                 return true;
             } else {
                 return false;
             }
         };
 
-        tog->activated = [this,i] {
+        proc->activated = [this,i] {
             return this->instrument->rack.plugins[i]->processing;
         };
 
-        pluginToggles.push_back(tog);
+        item.proc = proc;
 
-        plugins.push_back(plug);
+        plugins.push_back(item);
 
         pluginY += pluginHeight;
 

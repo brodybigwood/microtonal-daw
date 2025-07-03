@@ -4,7 +4,7 @@
 #include <SDL3/SDL_events.h>
 #include <X11/Xutil.h>
 #include "Region.h"
-
+#include "Transport.h"
 
 SongRoll::SongRoll(SDL_FRect* rect, bool* detached) : GridView(detached, rect, 200, &(Project::instance()->startTime)) {
     this->windowHandler = WindowHandler::instance();
@@ -21,7 +21,7 @@ SongRoll::SongRoll(SDL_FRect* rect, bool* detached) : GridView(detached, rect, 2
     ySize = &divHeight;
     xSize = &cellWidth;
 
-    insts = new InstrumentList(dstRect->y, leftMargin, dstRect->h, this->renderer, project);
+    insts = new InstrumentList(dstRect->y + topMargin, dstRect->x + leftMargin, dstRect->h, this->renderer, project);
 }
 
 bool SongRoll::customTick() {
@@ -49,6 +49,7 @@ bool SongRoll::customTick() {
 
 void SongRoll::renderMargins() {
     insts->render();
+    transport->render();
 }
 
 
@@ -62,7 +63,7 @@ void SongRoll::handleCustomInput(SDL_Event& e) {
 
         case SDL_EVENT_MOUSE_MOTION:
             getHoveredRegion();
-            insts->moveMouse(mouseX, mouseY);
+            insts->moveMouse(mouseX, mouseY - topMargin);
             break;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             insts->clickMouse(e);
@@ -98,8 +99,8 @@ void SongRoll::getHoveredRegion() {
         if(
             mouseX > region->startTime*barWidth + leftMargin &&
             mouseX < (region->length+region->startTime)*barWidth + leftMargin &&
-            mouseY > region->index*divHeight &&
-            mouseY < (region->index+1) * divHeight
+            mouseY > region->index*divHeight + topMargin &&
+            mouseY < (region->index+1) * divHeight + topMargin
         ) {
             hoveredElement = region->id;
             return;
@@ -109,7 +110,7 @@ void SongRoll::getHoveredRegion() {
 }
 
 float SongRoll::getY() {
-    return mouseY/divHeight;
+    return (mouseY - topMargin)/divHeight;
 }
 
 void SongRoll::createElement() {
@@ -137,7 +138,6 @@ void SongRoll::clickMouse(SDL_Event& e) {
                         InstrumentMenu::instance()->setViewedElement("region", reg->id);
                     }
                 } else if (mouseX > leftMargin && mouseX < gridRect.w && mouseY > topMargin && mouseY < gridRect.h) {
-                    std::cout<<mouseX<<" "<<mouseY<<std::endl;
                     createElement();
                 }
 

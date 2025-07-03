@@ -33,8 +33,12 @@ class InstrumentMenu {
         std::string outputType;
         std::vector<int> outputs;
 
-        std::vector<Button*> plugins;
-        std::vector<Button*> pluginToggles;
+        struct plugItem{
+            Button* win;
+            Button* proc;
+        };
+
+        std::vector<plugItem> plugins;
 
         float plugMarginX = 20.0f;
         float plugMarginY = 20.0f;

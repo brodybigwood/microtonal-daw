@@ -5,7 +5,6 @@
 #include <vector>
 #include "WindowHandler.h"
 #include "InstrumentList.h"
-#include "ControlArea.h"
 #include "SongRoll.h"
 #include "Project.h"
 #include "InstrumentMenu.h"
@@ -71,8 +70,6 @@ class Home {
         std::vector<Button> buttons;
 
         Button* hoveredButton = nullptr;
-
-        ControlArea* controls;
 
         bool mouseOnInst();
 

@@ -8,7 +8,7 @@
 #include "Region.h"
 #include "Note.h"
 #include "Playhead.h"
-
+#include "Transport.h"
 
 
 PianoRoll::PianoRoll(SDL_FRect* rect, DAW::Region* region, bool* detached) : region(region), GridView(detached, rect, 40, &(region->startTime)) {
@@ -87,12 +87,12 @@ void PianoRoll::RenderDestinations() {
     SDL_Color textColor = {0, 0, 0, 255};
 
 
-    SDL_FRect backgroundRect = {0, 0, leftMargin, height};
+    SDL_FRect backgroundRect = {0, topMargin, leftMargin, height - topMargin};
 
-    setRenderColor(renderer, colors.keyWhite);
+    setRenderColor(colors.keyWhite);
     SDL_RenderFillRect(renderer, &backgroundRect);
     SDL_SetRenderDrawColor(renderer,0,0,0,255);
-    SDL_RenderLine(renderer, leftMargin+1,0,leftMargin+1,height);
+    SDL_RenderLine(renderer, leftMargin+1,topMargin,leftMargin+1,height - topMargin);
 
     SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
 
@@ -132,13 +132,13 @@ void PianoRoll::Scroll() {
 
 
     numCellsRight = (scrollX)/cellWidth;
-    numCellsDown = (scrollY-yMin)/cellHeight;
+    numCellsDown = (scrollY-yMin + topMargin)/cellHeight;
     numCellsDown12 = scrollY/cellHeight12;
-    if((scrollY-yMin - cellHeight12) <= 0) {
-        scrollY = yMin + cellHeight12;
+    if((scrollY + topMargin -yMin - cellHeight12) <= 0) {
+        scrollY = yMin + cellHeight12 - topMargin;
     } else {
-        if(scrollY+height+yMin+yMax >= 128*cellHeight12) {
-            scrollY = 128*cellHeight12 - height - yMin -yMax;
+        if(scrollY+height+yMin+yMax + topMargin >= 128*cellHeight12) {
+            scrollY = 128*cellHeight12 - height - yMin -yMax - topMargin;
         }
     }
                 numCellsDown = (scrollY-yMin)/cellHeight;
@@ -177,6 +177,7 @@ bool PianoRoll::customTick() {
 
     SDL_RenderTexture(renderer, PianoTexture, nullptr, dstRect);
 
+    transport->render();
     return true;
 }
 
@@ -211,7 +212,7 @@ void PianoRoll::initWindow() {
     layers[3] = PianoTexture;
 
     SDL_SetRenderTarget(renderer, backgroundTexture);
-    setRenderColor(renderer, colors.background);
+    setRenderColor(colors.background);
 
     SDL_RenderClear(renderer); // Clear backgroundTexture with the background color
 
@@ -238,6 +239,9 @@ void PianoRoll::clickMouse(SDL_Event& e) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             if (e.button.button == SDL_BUTTON_LEFT) {
                 lmb = true;
+                if(mouseY < topMargin) {
+                    return;
+                }
                 if(mouseX > leftMargin && stretchingNote == nullptr) {
                     if(hoveredElement == -1) {
                         createElement();
@@ -397,7 +401,7 @@ void PianoRoll::RenderNotes() {
         float noteTop = noteY + getNoteHeight(note);
 
 
-        setRenderColor(renderer, colors.noteBackground);
+        setRenderColor(colors.noteBackground);
         SDL_FRect noteBGRect = { noteX, noteY, noteEnd - noteX, noteTop-noteY};
         SDL_RenderFillRect(renderer, &noteBGRect);
     }
@@ -410,11 +414,11 @@ void PianoRoll::RenderNotes() {
 
             //noteRadius = (noteTop - noteY)/2;
 
-            setRenderColor(renderer, colors.note);
+            setRenderColor(colors.note);
             SDL_FRect noteRect = { noteX, noteY - noteRadius, noteEnd - noteX, 2*noteRadius};
             SDL_RenderFillRect(renderer, &noteRect);
 
-            setRenderColor(renderer, colors.noteBorder);
+            setRenderColor(colors.noteBorder);
 
             SDL_RenderRect(renderer, &noteRect);
 
@@ -424,6 +428,9 @@ void PianoRoll::RenderNotes() {
 
 bool PianoRoll::getExistingNote() {
     hoveredElement = -1;
+    if(mouseY < topMargin || mouseX < leftMargin) {
+        return false;
+    }
     int i = 0;
     for (Note& note : region->notes) {
         

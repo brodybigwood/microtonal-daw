@@ -5,6 +5,7 @@
 
 class Playhead;
 class Project;
+class Transport;
 
 class GridView {
     public:
@@ -17,9 +18,12 @@ class GridView {
 
         SDL_Texture* gridTexture;
 
-        void setRenderColor(SDL_Renderer*, uint8_t*);
+        void setRenderColor(uint8_t*);
         bool tick();
         virtual bool customTick() {};
+
+        Transport* transport;
+        SDL_FRect* tRect;
 
         bool* detached;
 
@@ -41,7 +45,7 @@ class GridView {
         float divHeight;
 
         float leftMargin;
-        float topMargin;
+        float topMargin = 50;
 
         SDL_FRect gridRect;
         SDL_FRect* dstRect;

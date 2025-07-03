@@ -1,23 +1,7 @@
 #include "Button.h"
 
 
-Button::Button(std::string title, float x, float y, int width = 50, int height = 50, SDL_Renderer* renderer) {
-
-    this->title = title;
-    this->width = width;
-    this->height = height;
-    this->renderer = renderer;
-
-    this->x = x;
-    this->y = y;
-
-    texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
-
-    dstRect = {x, y, width, height};
-
-
-
-    
+Button::Button(SDL_Renderer* renderer) :renderer(renderer) {
 }
 
 void Button::setColor(SDL_Color& color) {
@@ -43,10 +27,10 @@ void Button::render() {
             setColor(inactive);
         }
     }
-    SDL_RenderFillRect(renderer, &dstRect);
+    SDL_RenderFillRect(renderer, dstRect);
 
     setColor(border);
-    SDL_RenderRect(renderer, &dstRect);
+    SDL_RenderRect(renderer, dstRect);
 }
 
 

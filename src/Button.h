@@ -1,7 +1,7 @@
 #include <SDL3/SDL.h>
 #include <SDL_ttf.h>
-#include "ControlArea.h"
 #include <string>
+#include <functional>
 
 
 #ifndef BUTTON_H
@@ -10,7 +10,7 @@
 class Button {
 
     public:
-        Button(std::string title, float x, float y, int width, int height, SDL_Renderer* renderer = nullptr);
+        Button(SDL_Renderer* renderer = nullptr);
         ~Button();
         
         SDL_Renderer* renderer;
@@ -20,21 +20,14 @@ class Button {
         std::function<bool()> hover;
         std::function<void()> onClick;
 
-        float x;
-        float y;
-
-        float width = 50;
-        float height = 50;
-
         void render(); 
         void handleInput(SDL_Event& e);  
 
         void setColor(SDL_Color& color);
 
         SDL_Texture* texture;
-        ControlArea* sector;
 
-        SDL_FRect dstRect;
+        SDL_FRect* dstRect;
 
         SDL_Color inactive = {30, 30, 30, 255};
         SDL_Color inactive_hover = {40, 40, 40, 255};
