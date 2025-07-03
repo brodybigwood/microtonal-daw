@@ -6,7 +6,7 @@
 #include "Region.h"
 
 
-SongRoll::SongRoll(SDL_FRect* rect, SDL_Renderer* renderer, bool* detached) : GridView(detached, rect, 200, &(Project::instance()->startTime)) {
+SongRoll::SongRoll(SDL_FRect* rect, bool* detached) : GridView(detached, rect, 200, &(Project::instance()->startTime)) {
     this->windowHandler = WindowHandler::instance();
     this->project = Project::instance();
     this->instruments = &(project->instruments);

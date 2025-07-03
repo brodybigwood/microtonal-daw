@@ -39,7 +39,7 @@ class Home {
     SongRoll* song;
 
     bool pianoRollDetached = true;
-    bool songRollDetached = false;
+    bool songRollDetached = true;
     
     InstrumentList* insts;
 

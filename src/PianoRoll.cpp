@@ -177,10 +177,6 @@ bool PianoRoll::customTick() {
 
     SDL_RenderTexture(renderer, PianoTexture, nullptr, dstRect);
 
-    if(detached){
-
-        SDL_RenderPresent(renderer);
-    }
     return true;
 }
 

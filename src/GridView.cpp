@@ -49,7 +49,11 @@ GridView::~GridView() {
 
 bool GridView::tick() {
 
-    return customTick();
+    customTick();
+    if(*detached){
+        SDL_RenderPresent(renderer);
+    }
+    return true;
 }
 
 

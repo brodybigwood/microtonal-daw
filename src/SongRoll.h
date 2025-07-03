@@ -17,7 +17,7 @@ class WindowHandler;  // forward declaration
 class SongRoll : public GridView{
 
     public:
-    SongRoll(SDL_FRect* rect, SDL_Renderer* renderer, bool* detached);
+    SongRoll(SDL_FRect* rect, bool* detached);
         ~SongRoll();
         
         WindowHandler* windowHandler;

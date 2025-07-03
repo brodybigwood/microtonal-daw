@@ -42,7 +42,6 @@ void Home::createRoll() {
     }
     song = new SongRoll(
         &songRect,
-        renderer,
         &songRollDetached
     );
 
