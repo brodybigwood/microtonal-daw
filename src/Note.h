@@ -7,10 +7,10 @@
 
 class Note {
     public:
-        Note(fract start, fract end, fract num, double temperament);
+        Note(fract start, fract end, float num, double temperament);
         ~Note();
 
-        fract num;  // Frequency or pitch of the note
+        float num;  // Frequency or pitch of the note
         fract start; //bars
         fract end;
 

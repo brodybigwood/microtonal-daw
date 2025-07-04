@@ -12,7 +12,7 @@
 class InstrumentList {
 
     public:
-    InstrumentList(int y, int width, int height, SDL_Renderer* renderer, Project* project);
+    InstrumentList(int y, int width, int height, SDL_Renderer* renderer, Project* project, float* iHeight);
         ~InstrumentList();
 
         Project* project;
@@ -23,7 +23,7 @@ class InstrumentList {
 
         int y;
 
-        int instrumentHeight = 50;
+        float* instrumentHeight;
         
         SDL_Renderer* renderer;
 

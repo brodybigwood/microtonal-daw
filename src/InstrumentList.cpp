@@ -1,6 +1,6 @@
 #include "InstrumentList.h"
 
-InstrumentList::InstrumentList(int y, int width, int height, SDL_Renderer* renderer, Project* project) {
+InstrumentList::InstrumentList(int y, int width, int height, SDL_Renderer* renderer, Project* project, float* iHeight) : instrumentHeight(iHeight) {
     this->project = project;
     this->y = y;
     this->height = height;
@@ -38,9 +38,9 @@ void InstrumentList::render() {
 void InstrumentList::renderInstrument(int i) {
 
     int xPos = 0;
-    int yPos = i*instrumentHeight;
+    int yPos = i* *instrumentHeight;
 
-    SDL_FRect instPos = {0, yPos, width, instrumentHeight};
+    SDL_FRect instPos = {0, yPos, width, *instrumentHeight};
     if(i == hoveredInstrument) {
         SDL_SetRenderDrawColor(renderer, 140,140,140,255);
     } else {
@@ -72,8 +72,8 @@ void InstrumentList::getHoveredInstrument() {
         if(
             mouseX > 0 &&
             mouseX < width &&
-            mouseY > instrumentHeight*i &&
-            mouseY < instrumentHeight*(i+1)
+            mouseY > *instrumentHeight*i &&
+            mouseY < *instrumentHeight*(i+1)
         ) {
             hoveredInstrument = i;
             return;

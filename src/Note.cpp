@@ -3,7 +3,7 @@
 #include "fract.h"
 
 
-Note::Note(fract start, fract end, fract num, double temperament) {
+Note::Note(fract start, fract end, float num, double temperament) {
     this->end = end;
     this->num = num;
     this->temperament = temperament;

@@ -29,7 +29,7 @@ class SongRoll : public GridView{
 
         std::vector<Instrument*>* instruments;
 
-        float getY();
+        float getY(float) override;
 
         bool customTick() override;
 
@@ -52,6 +52,8 @@ class SongRoll : public GridView{
         void deleteElement() override;
 
         void UpdateGrid() override;
+
+        float getHoveredLine();
 };
 
 #endif

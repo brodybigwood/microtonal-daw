@@ -91,8 +91,8 @@ bool GridView::handleInput(SDL_Event& e) {
             } else
                 if (isAltPressed) {
                     divHeight *= std::pow(scaleSensitivity, e.wheel.y);
-                    if (divHeight < height * 12 / 128 || divHeight <= 0) {
-                        divHeight = height * 12 / 128;
+                    if (divHeight < height * minHeight || divHeight <= 0) {
+                        divHeight = height * minHeight;
                     }
 
                     double gridAtY = (mouseY + scrollY - topMargin)/ cellHeight;
@@ -157,11 +157,10 @@ void GridView::RenderGridTexture() {
         SDL_RenderLine(renderer, x, 0, x, height);
     }
 
-    for (double y = yOffset + topMargin; y < height + topMargin; y += *ySize) {
-        SDL_RenderLine(renderer, 0, y, width, y);
+    for(auto line : lines) {
+        float val = getY(line);
+        SDL_RenderLine(renderer, 0, val, width, val);
     }
-
-
 }
 
 void GridView::setRenderColor(uint8_t code[4]) {

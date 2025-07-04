@@ -18,10 +18,13 @@ SongRoll::SongRoll(SDL_FRect* rect, bool* detached) : GridView(detached, rect, 2
 
     divHeight = 50;
     cellWidth = barWidth/4;
+    minHeight = 1.0f/20;
     ySize = &divHeight;
     xSize = &cellWidth;
 
-    insts = new InstrumentList(dstRect->y + topMargin, dstRect->x + leftMargin, dstRect->h, this->renderer, project);
+    insts = new InstrumentList(dstRect->y + topMargin, dstRect->x + leftMargin, dstRect->h, this->renderer, project, &divHeight);
+
+    UpdateGrid();
 }
 
 bool SongRoll::customTick() {
@@ -109,13 +112,13 @@ void SongRoll::getHoveredRegion() {
     hoveredElement = -1;
 }
 
-float SongRoll::getY() {
+float SongRoll::getHoveredLine() {
     return (mouseY - topMargin)/divHeight;
 }
 
 void SongRoll::createElement() {
     fract start = getHoveredTime();
-    int y = getY();
+    int y = getHoveredLine();
     if(y >= instruments->size()) {
         return;
     }
@@ -169,6 +172,16 @@ void SongRoll::deleteElement() {
     }
 }
 
-void SongRoll::UpdateGrid() {
+float SongRoll::getY(float index) {
+    return divHeight * index + topMargin;
+}
 
+void SongRoll::UpdateGrid() {
+    lines.clear();
+    float y = 1.0f;
+    for (auto& inst : *instruments) {
+        y += inst->index;
+        lines.push_back(y);
+        std::cout<<y<<std::endl;
+    }
 }

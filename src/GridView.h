@@ -1,5 +1,5 @@
 #pragma once
-
+#include <vector>
 #include <SDL_ttf.h>
 #include "fract.h"
 
@@ -12,6 +12,8 @@ class GridView {
         GridView(bool*, SDL_FRect*, float leftMargin, fract* startTime);
 
         ~GridView();
+
+        float yMin = 0;
 
         //rendering
         SDL_Renderer* renderer;
@@ -31,6 +33,8 @@ class GridView {
         virtual void UpdateGrid() {};
         void RenderGridTexture();
 
+        std::vector<float> lines;
+
         int yOffset = 0;
         int xOffset = 0;
 
@@ -43,6 +47,8 @@ class GridView {
         Project* project;
 
         float divHeight;
+        float maxHeight = 1000;
+        float minHeight = 5;
 
         float leftMargin;
         float topMargin = 50;
@@ -98,6 +104,7 @@ class GridView {
 
         virtual void handleCustomInput(SDL_Event&) {};
         virtual void clickMouse(SDL_Event&) {};
+        virtual float getY(float) = 0;
 
         virtual void createElement() {};
         virtual void deleteElement() {};

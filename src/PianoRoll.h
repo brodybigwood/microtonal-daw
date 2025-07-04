@@ -42,7 +42,6 @@ class PianoRoll : public GridView {
         double numCellsRight;
         double numCellsDown;
 
-        double yMin;
         double yMax;
 
         int movingNote;
@@ -73,14 +72,14 @@ class PianoRoll : public GridView {
         bool getExistingNote();
 
         double getNoteName(double);
-        double getY(double);
+        float getY(float);
 
         
         fract lastLength = fract(1, 1);
 
         SDL_Texture* layers[4]; 
 
-        fract getHoveredLine();
+        float getHoveredLine();
         void handleMouse();
 
         float getNotePosX(Note&);

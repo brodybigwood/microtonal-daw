@@ -3,7 +3,7 @@
 #include <SDL3/SDL_scancode.h>
 #include <SDL3/SDL_stdinc.h>
 #include <cmath>
-
+#include <cfloat>
 #include "GridView.h"
 #include "Region.h"
 #include "Note.h"
@@ -23,7 +23,9 @@ PianoRoll::PianoRoll(SDL_FRect* rect, DAW::Region* region, bool* detached) : reg
     scrollY = 800;
 
     divHeight = 200; //octaveheight
-    ySize = &cellHeight;
+    ySize = &divHeight;
+
+    minHeight = 12.0f / 128;
 
     UpdateGrid();
 
@@ -61,15 +63,26 @@ double PianoRoll::getNoteName(double y) {
     return 129-(y + scrollY)/cellHeight12;
 }
 
-double PianoRoll::getY(double noteMidiNum) {
+float PianoRoll::getY(float noteMidiNum) {
     return -cellHeight12*((noteMidiNum-129)+(scrollY/cellHeight12)) - lineWidth;
 }
 
-fract PianoRoll::getHoveredLine() {
-    fract result = fract((notesPerOctave*128)-std::round(numCellsDown+((mouseY+yMin)/cellHeight))*12,notesPerOctave) + fract(1,1);
+float PianoRoll::getHoveredLine() {
+    float closestDiff = FLT_MAX;
+    float closestLine = -1.0f;
 
-    return result;
+    for (auto line : lines) {
+        float y = getY(line);
+        float diff = std::abs(mouseY - y);
+        if (diff < closestDiff) {
+            closestDiff = diff;
+            closestLine = line;
+        }
+    }
+
+    return closestLine;
 }
+
 
 void PianoRoll::RenderDestinations() {
 
@@ -137,8 +150,8 @@ void PianoRoll::Scroll() {
     if((scrollY + topMargin -yMin - cellHeight12) <= 0) {
         scrollY = yMin + cellHeight12 - topMargin;
     } else {
-        if(scrollY+height+yMin+yMax + topMargin >= 128*cellHeight12) {
-            scrollY = 128*cellHeight12 - height - yMin -yMax - topMargin;
+        if(scrollY+height+yMin+yMax >= 129*cellHeight12) {
+            scrollY = 129*cellHeight12 - height - yMin -yMax;
         }
     }
                 numCellsDown = (scrollY-yMin)/cellHeight;
@@ -149,6 +162,33 @@ void PianoRoll::Scroll() {
 
     xOffset = (std::ceil(numCellsRight) * cellWidth) - scrollX;
 
+
+
+    lines.clear();
+    float center = 69.0f;
+    int i = 0;
+
+    while (true) {
+        float note = center + i * (12.0f / notesPerOctave);
+        float mirror = center - i * (12.0f / notesPerOctave);
+
+        bool pushed = false;
+
+        if (note <= 127.0f) {
+            lines.push_back(note);
+            pushed = true;
+        }
+        if (mirror >= 0.0f && i != 0) {
+            lines.push_back(mirror);
+            pushed = true;
+        }
+
+        if (!pushed) break;
+        ++i;
+    }
+
+    std::sort(lines.begin(), lines.end());
+
         refreshGrid = true;
         handleMouse();
 }
@@ -158,7 +198,7 @@ bool PianoRoll::customTick() {
     //handleCustomInput(e);
     if(refreshGrid) {
         refreshGrid = false;
-        RenderGridTexture();  
+        RenderGridTexture();
 
         RenderDestinations();
         RenderNotes();
@@ -373,7 +413,8 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
 
 void PianoRoll::createElement() {
     fract start = getHoveredTime();
-    fract pitch = getHoveredLine();
+    float pitch = getHoveredLine();
+    std::cout<<pitch<<std::endl;
     Note n(start, lastLength + start, pitch, notesPerOctave);
 
     static int nextId = 0;
