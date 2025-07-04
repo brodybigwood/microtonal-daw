@@ -170,17 +170,13 @@ void Plugin::process(float* thrubuffer, int bufferSize, EventList* eventList) {
 
 
 bool Plugin::instantiatePlugin() {
-
     std::memcpy(componentCID, lib->getComponentCID(), sizeof(Steinberg::TUID));
     std::memcpy(controllerCID, lib->getControllerCID(), sizeof(Steinberg::TUID));
-
-
 
     Steinberg::FUnknown* componentUnknown = nullptr;
     auto result = pluginFactory->createInstance(
         componentCID, Steinberg::Vst::IComponent::iid, (void**)&componentUnknown
     );
-
 
     if (result != Steinberg::kResultTrue || !componentUnknown) {
         std::cout << "Error creating main component instance." << std::endl;
@@ -199,124 +195,141 @@ bool Plugin::instantiatePlugin() {
         return false;
     }
 
-    if (audioProcessor) {
+    if (!audioProcessor) return false;
 
-
-        if(component->initialize(nullptr) != Steinberg::kResultTrue) {
-            std::cerr << "Error initializing ." << std::endl;
-            return false;
-        }
-
-
-        std::vector<Steinberg::Vst::SpeakerArrangement> inputArrangements;
-        std::vector<Steinberg::Vst::SpeakerArrangement> outputArrangements;
-
-        Steinberg::int32 numInputs = component->getBusCount(Steinberg::Vst::kAudio, Steinberg::Vst::kInput);
-        Steinberg::int32 numOutputs = component->getBusCount(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput);
-
-        for(Steinberg::int32 busIndex = 0; busIndex<numInputs; busIndex++) {
-            Steinberg::Vst::SpeakerArrangement arr;
-            if (audioProcessor->getBusArrangement(Steinberg::Vst::kInput, busIndex, arr) == Steinberg::kResultTrue) {
-                inputArrangements.push_back(arr);
-            } else {
-                inputArrangements.push_back(Steinberg::Vst::SpeakerArr::kEmpty);
-            }
-
-
-            Steinberg::Vst::BusInfo busInfo;
-            Steinberg::tresult result = component->getBusInfo(Steinberg::Vst::kAudio, Steinberg::Vst::kInput, busIndex, busInfo);
-
-            Steinberg::Vst::AudioBusBuffers bufs;
-            bufs.channelBuffers32 = new float*[busInfo.channelCount];
-            bufs.numChannels = busInfo.channelCount;
-            bufs.silenceFlags = 0;
-
-            float* bufferData = new float[am->bufferSize * busInfo.channelCount];
-
-            for(size_t ch = 0; ch<busInfo.channelCount; ch++) {
-                bufs.channelBuffers32[ch] = bufferData + (ch * am->bufferSize);
-            }
-
-            inputBuses.push_back(bufs);
-        }
-
-        for(Steinberg::int32 busIndex = 0; busIndex<numOutputs; busIndex++) {
-            Steinberg::Vst::SpeakerArrangement arr;
-            if (audioProcessor->getBusArrangement(Steinberg::Vst::kOutput, busIndex, arr) == Steinberg::kResultTrue) {
-                outputArrangements.push_back(arr);
-            } else {
-                outputArrangements.push_back(Steinberg::Vst::SpeakerArr::kEmpty);
-            }
-
-
-
-
-            Steinberg::Vst::BusInfo busInfo;
-            Steinberg::tresult result = component->getBusInfo(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput, busIndex, busInfo);
-
-            Steinberg::Vst::AudioBusBuffers bufs;
-            bufs.channelBuffers32 = new float*[busInfo.channelCount];
-            bufs.numChannels = busInfo.channelCount;
-            bufs.silenceFlags = 0;
-
-            float* bufferData = new float[am->bufferSize * busInfo.channelCount];
-
-            for(size_t ch = 0; ch<busInfo.channelCount; ch++) {
-                bufs.channelBuffers32[ch] = bufferData + (ch * am->bufferSize);
-            }
-
-            outputBuses.push_back(bufs);
-        }
-
-        auto result = audioProcessor->setBusArrangements(
-            inputArrangements.data(), static_cast<Steinberg::int32>(inputArrangements.size()),
-                                                         outputArrangements.data(), static_cast<Steinberg::int32>(outputArrangements.size())
-        );
-
-
-        if (result != Steinberg::kResultOk) {
-            std::cerr << "Failed to set bus arrangements" << std::endl;
-        }
-
-
-        component->activateBus(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput, 0, true);
-
-        for (Steinberg::int32 i = 0; i < component->getBusCount(Steinberg::Vst::kAudio, Steinberg::Vst::kInput); ++i) {
-            component->activateBus(Steinberg::Vst::kAudio, Steinberg::Vst::kInput, i, true);
-        }
-
-        for (auto& bus : inputBuses) bus.silenceFlags = 0;
-        for (auto& bus : outputBuses) bus.silenceFlags = 0;
-
-
-        data.symbolicSampleSize = Steinberg::Vst::kSample32;
-        data.numSamples = am->bufferSize;
-        data.outputs = outputBuses.data();
-        data.numOutputs = static_cast<Steinberg::int32>(outputBuses.size());
-
-        data.inputs = inputBuses.data();
-        data.numInputs = static_cast<Steinberg::int32>(inputBuses.size());
-
-
-        if (component->setActive(true) != Steinberg::kResultTrue) {
-            std::cerr << "Failed to activate component." << std::endl;
-            return false;
-        }
-
+    if(component->initialize(nullptr) != Steinberg::kResultTrue) {
+        std::cerr << "Error initializing ." << std::endl;
+        return false;
     }
 
+    Steinberg::int32 numInputs = component->getBusCount(Steinberg::Vst::kAudio, Steinberg::Vst::kInput);
+    Steinberg::int32 numOutputs = component->getBusCount(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput);
+
+    std::vector<Steinberg::Vst::SpeakerArrangement> inputArrangements;
+    std::vector<Steinberg::Vst::SpeakerArrangement> outputArrangements;
+
+    // Fetch native arrangements before proposing
+    for (Steinberg::int32 busIndex = 0; busIndex < numInputs; ++busIndex) {
+        Steinberg::Vst::SpeakerArrangement arr;
+        if (audioProcessor->getBusArrangement(Steinberg::Vst::kInput, busIndex, arr) == Steinberg::kResultTrue) {
+            inputArrangements.push_back(arr);
+        } else {
+            std::cerr << "Failed to get arrangement for input bus " << busIndex << std::endl;
+            inputArrangements.push_back(Steinberg::Vst::SpeakerArr::kEmpty);
+        }
+    }
+
+    for (Steinberg::int32 busIndex = 0; busIndex < numOutputs; ++busIndex) {
+        Steinberg::Vst::SpeakerArrangement arr;
+        if (audioProcessor->getBusArrangement(Steinberg::Vst::kOutput, busIndex, arr) == Steinberg::kResultTrue) {
+            outputArrangements.push_back(arr);
+        } else {
+            std::cerr << "Failed to get arrangement for output bus " << busIndex << std::endl;
+            outputArrangements.push_back(Steinberg::Vst::SpeakerArr::kEmpty);
+        }
+    }
+
+    // Propose these native arrangements
+    auto arrangementResult = audioProcessor->setBusArrangements(
+        inputArrangements.data(), static_cast<Steinberg::int32>(inputArrangements.size()),
+                                                                outputArrangements.data(), static_cast<Steinberg::int32>(outputArrangements.size())
+    );
+
+    if (arrangementResult != Steinberg::kResultTrue) {
+        std::cerr << "Failed to set bus arrangements" << std::endl;
+    }
+
+    // Allocate buffers for input buses
+    for (Steinberg::int32 busIndex = 0; busIndex < numInputs; ++busIndex) {
+        Steinberg::Vst::BusInfo busInfo;
+        Steinberg::tresult result = component->getBusInfo(Steinberg::Vst::kAudio, Steinberg::Vst::kInput, busIndex, busInfo);
+        if (result != Steinberg::kResultTrue) {
+            std::cerr << "Failed to get bus info for input bus " << busIndex << std::endl;
+            continue;
+        }
+
+        Steinberg::Vst::AudioBusBuffers bufs;
+        bufs.channelBuffers32 = new float*[busInfo.channelCount];
+        bufs.numChannels = busInfo.channelCount;
+        bufs.silenceFlags = 0;
+
+        float* bufferData = new float[am->bufferSize * busInfo.channelCount];
+        for (size_t ch = 0; ch < busInfo.channelCount; ++ch) {
+            bufs.channelBuffers32[ch] = bufferData + (ch * am->bufferSize);
+        }
+        inputBuses.push_back(bufs);
+    }
+
+    // Allocate buffers for output buses
+    for (Steinberg::int32 busIndex = 0; busIndex < numOutputs; ++busIndex) {
+        Steinberg::Vst::BusInfo busInfo;
+        Steinberg::tresult result = component->getBusInfo(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput, busIndex, busInfo);
+        if (result != Steinberg::kResultTrue) {
+            std::cerr << "Failed to get bus info for output bus " << busIndex << std::endl;
+            continue;
+        }
+
+        Steinberg::Vst::AudioBusBuffers bufs;
+        bufs.channelBuffers32 = new float*[busInfo.channelCount];
+        bufs.numChannels = busInfo.channelCount;
+        bufs.silenceFlags = 0;
+
+        float* bufferData = new float[am->bufferSize * busInfo.channelCount];
+        for (size_t ch = 0; ch < busInfo.channelCount; ++ch) {
+            bufs.channelBuffers32[ch] = bufferData + (ch * am->bufferSize);
+        }
+        outputBuses.push_back(bufs);
+    }
+
+    // Activate all input and output buses
+    for (Steinberg::int32 i = 0; i < numOutputs; ++i) {
+        component->activateBus(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput, i, true);
+    }
+    for (Steinberg::int32 i = 0; i < numInputs; ++i) {
+        component->activateBus(Steinberg::Vst::kAudio, Steinberg::Vst::kInput, i, true);
+    }
+
+    // Clear silence flags
+    for (auto& bus : inputBuses) bus.silenceFlags = 0;
+    for (auto& bus : outputBuses) bus.silenceFlags = 0;
 
 
+    data.symbolicSampleSize = Steinberg::Vst::kSample32;
+    data.numSamples = am->bufferSize;
+    data.inputs = inputBuses.data();
+    data.numInputs = static_cast<Steinberg::int32>(inputBuses.size());
+    data.outputs = outputBuses.data();
+    data.numOutputs = static_cast<Steinberg::int32>(outputBuses.size());
+
+    Steinberg::Vst::ProcessSetup setup{};
+    setup.sampleRate = am->sampleRate;
+    setup.maxSamplesPerBlock = am->bufferSize;
+    setup.processMode = Steinberg::Vst::kRealtime;
+    setup.symbolicSampleSize = Steinberg::Vst::kSample32;
+
+    if (component->setActive(true) != Steinberg::kResultTrue) {
+        std::cerr << "Failed to activate component." << std::endl;
+        return false;
+    }
+
+    if (audioProcessor->setupProcessing(setup) != Steinberg::kResultTrue) {
+        std::cerr << "Failed to setup audio processor." << std::endl;
+        return false;
+    }
+
+    if (audioProcessor->setProcessing(true) != Steinberg::kResultTrue) {
+        std::cerr << "Failed to set audio processor to processing state" << std::endl;
+        return false;
+    }
 
     if(createEditControllerAndPlugView(controllerCID)) {
-
         std::cout << "window is ready to show" <<std::endl;
-
         return true;
     }
 
-
+    return false;
 }
+
 
 void Plugin::setup() {
     Steinberg::Vst::ProcessSetup setup{};
