@@ -6,6 +6,7 @@
 #include <SDL_ttf.h>
 #include <string>
 #include <memory>
+#include "GridElement.h"
 
 #ifndef REGION_H
 #define REGION_H
@@ -14,7 +15,7 @@ class Instrument;
 
 namespace DAW {
 
-class Region {
+class Region : GridElement {
     private:
         
 

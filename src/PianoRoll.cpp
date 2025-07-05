@@ -168,7 +168,7 @@ void PianoRoll::Scroll() {
     float center = 69.0f;
     int i = 0;
 
-    while (true) {
+   /* while (true) {
         float note = center + i * (12.0f / notesPerOctave);
         float mirror = center - i * (12.0f / notesPerOctave);
 
@@ -185,6 +185,29 @@ void PianoRoll::Scroll() {
 
         if (!pushed) break;
         ++i;
+    }*/
+
+   float x = 0;
+   while(true) {
+        lines.push_back(x);
+        x += 2.04;
+        lines.push_back(x);
+        x += 1.82;
+        lines.push_back(x);
+        x += 1.65;
+        lines.push_back(x);
+        x += 1.51;
+        lines.push_back(x);
+        x += 1.39;
+        lines.push_back(x);
+        x += 1.28;
+        lines.push_back(x);
+        x += 1.19;
+        lines.push_back(x);
+        x += 1.12;
+        if(x > 127) {
+            break;
+        }
     }
 
     std::sort(lines.begin(), lines.end());
@@ -391,9 +414,9 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                 if(std::abs(dX) >= cellWidth) {
                     moveNote(movingNote, std::ceil(dirX*dX)/dX,0);
                     last_lmb_x += cellWidth*dirX;
-                } if (std::abs(dY) >= cellHeight) {
-                    moveNote(movingNote, 0,std::ceil(dirY*dY)/dY);
-                    last_lmb_y += cellHeight*dirY;
+                } if (getHoveredLine() != lastHoveredLine) {
+                    moveNote(movingNote, 0,getHoveredLine() - lastHoveredLine);
+                    lastHoveredLine = getHoveredLine();
                 }
                 
             } else {
@@ -484,6 +507,7 @@ bool PianoRoll::getExistingNote() {
         if (mouseX >= notePosX && mouseX <= noteEnd &&
             mouseY <= noteY + noteRadius && mouseY >= (noteY - noteRadius)) {
             hoveredElement = i; // Found the hovered note
+            lastHoveredLine = getHoveredLine();
             return true; // Exit early
         }
         i++;
@@ -580,10 +604,9 @@ void PianoRoll::stretchElement(int amount) {
 }
 
 
-void PianoRoll::moveNote(int noteIndex, int moveX, int moveY) {
+void PianoRoll::moveNote(int noteIndex, int moveX, float y) {
 
     fract x = fract(moveX,notesPerBar);
-    fract y = fract(-moveY*12,notesPerOctave);
 
     std::shared_ptr<Note> note = region->notes[noteIndex];
     note->start = note->start + x;

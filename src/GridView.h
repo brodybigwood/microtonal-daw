@@ -111,4 +111,6 @@ class GridView {
 
         fract getHoveredTime();
 
+        float lastHoveredLine;
+
 };

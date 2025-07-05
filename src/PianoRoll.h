@@ -86,7 +86,7 @@ class PianoRoll : public GridView {
         float getNoteEnd(std::shared_ptr<Note>);
         float getNoteHeight(std::shared_ptr<Note>);
 
-        void moveNote(int, int, int);
+        void moveNote(int, int, float);
         
     private:
 
