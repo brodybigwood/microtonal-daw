@@ -1,4 +1,5 @@
 #include "SongRoll.h"
+#include "GridElement.h"
 #include "GridView.h"
 #include "Home.h"
 #include <SDL3/SDL_events.h>
@@ -6,7 +7,7 @@
 #include "Region.h"
 #include "Transport.h"
 
-SongRoll::SongRoll(SDL_FRect* rect, bool* detached) : GridView(detached, rect, 200, &(Project::instance()->startTime)) {
+SongRoll::SongRoll(SDL_FRect* rect, bool* detached) : GridView(detached, rect, 200) {
     this->windowHandler = WindowHandler::instance();
     this->project = Project::instance();
     this->instruments = &(project->instruments);
@@ -25,6 +26,7 @@ SongRoll::SongRoll(SDL_FRect* rect, bool* detached) : GridView(detached, rect, 2
     insts = new InstrumentList(dstRect->y + topMargin, dstRect->x + leftMargin, dstRect->h, this->renderer, project, &divHeight);
 
     UpdateGrid();
+    project->createRegion();
 }
 
 bool SongRoll::customTick() {
@@ -81,36 +83,40 @@ void SongRoll::renderRegions() {
     SDL_RenderClear(renderer);
     for (auto& regionPtr : project->regions) {
         auto localRegion = regionPtr;
-        DAW::Region* region = localRegion.get();
+        GridElement* region = localRegion.get();
         renderRegion(region);
     }
 }
 
-void SongRoll::renderRegion(DAW::Region* region) {
-    if(hoveredElement == region->id) {
-        SDL_SetRenderDrawColor(renderer, 90,90,100,127);
-    } else {
-        SDL_SetRenderDrawColor(renderer, 20,20,100,127);
-    }
+void SongRoll::renderRegion(GridElement* region) {
+    for(auto pos :region->positions) {
+        if(hoveredElement == pos.id) {
+            SDL_SetRenderDrawColor(renderer, 90,90,100,127);
+        } else {
+            SDL_SetRenderDrawColor(renderer, 20,20,100,127);
+        }
 
-    float topLeftCornerX = region->startTime*barWidth + leftMargin;
-    float topLeftCornerY = region->index*divHeight + topMargin;
-    regionRect = {topLeftCornerX, topLeftCornerY, region->length*barWidth, divHeight};
-    SDL_RenderFillRect(renderer, &regionRect);
+        float topLeftCornerX = pos.start*barWidth + leftMargin;
+        float topLeftCornerY = pos.instrument->index*divHeight + topMargin;
+        regionRect = {topLeftCornerX, topLeftCornerY, pos.length*barWidth, divHeight};
+        SDL_RenderFillRect(renderer, &regionRect);
+    }
 }
 
 void SongRoll::getHoveredRegion() {
     for (auto& regionPtr : project->regions) {
         auto localRegion = regionPtr;
-        DAW::Region* region = localRegion.get();
-        if(
-            mouseX > region->startTime*barWidth + leftMargin &&
-            mouseX < (region->length+region->startTime)*barWidth + leftMargin &&
-            mouseY > region->index*divHeight + topMargin &&
-            mouseY < (region->index+1) * divHeight + topMargin
-        ) {
-            hoveredElement = region->id;
-            return;
+        GridElement* region = localRegion.get();
+        for(auto pos :region->positions) {
+            if(
+                mouseX > pos.start*barWidth + leftMargin &&
+                mouseX < (pos.length+pos.start)*barWidth + leftMargin &&
+                mouseY > pos.instrument->index*divHeight + topMargin &&
+                mouseY < (pos.instrument->index+1) * divHeight + topMargin
+            ) {
+                hoveredElement = pos.id;
+                return;
+            }
         }
     }
     hoveredElement = -1;
@@ -128,7 +134,7 @@ void SongRoll::createElement() {
     }
 
     Instrument* inst = (*instruments)[y];
-    project->createRegion(start, inst);
+    project->regions[0]->createPos(start, inst);
     refreshGrid = true;
 }
 
@@ -138,21 +144,24 @@ void SongRoll::clickMouse(SDL_Event& e) {
 
             if (e.button.button == SDL_BUTTON_LEFT) {
                 lmb = true;
-                auto it = std::find_if(project->regions.begin(), project->regions.end(),
-                                       [this](const std::shared_ptr<DAW::Region>& reg) {
-                                           return reg->id == hoveredElement;
-                                       });
+                for (auto& reg : project->regions) {
+                    auto& positions = reg->positions;
+                    auto it = std::find_if(positions.begin(), positions.end(),
+                                           [this](const GridElement::Position& pos) {
+                                               return pos.id == hoveredElement;
+                                           });
 
-                if (it != project->regions.end()) {
-                    std::shared_ptr<DAW::Region> reg = *it;
-                    if(reg) {
+                    if (it != positions.end()) {
                         windowHandler->createPianoRoll(reg, &(windowHandler->home->pianoRollRect));
-                        //InstrumentMenu::instance()->setViewedElement("region", reg->id);
+                        // InstrumentMenu::instance()->setViewedElement("region", hoveredElement);
+                        return;
                     }
-                } else if (mouseX > leftMargin && mouseX < gridRect.w && mouseY > topMargin && mouseY < gridRect.h) {
-                    createElement();
                 }
 
+                if (mouseX > leftMargin && mouseX < gridRect.w &&
+                    mouseY > topMargin && mouseY < gridRect.h) {
+                    createElement();
+                }
 
             }
             if (e.button.button == SDL_BUTTON_RIGHT) {
@@ -172,16 +181,21 @@ void SongRoll::clickMouse(SDL_Event& e) {
 }
 
 void SongRoll::deleteElement() {
-    auto& regions = project->regions;
-    auto it = std::find_if(regions.begin(), regions.end(),
-                           [this](const std::shared_ptr<DAW::Region>& r) {
-                               return r && r->id == hoveredElement;
-                           });
+    for (auto& region : project->regions) {
+        auto& positions = region->positions;
 
-    if (it != regions.end()) {
-        regions.erase(it);
+        auto it = std::find_if(positions.begin(), positions.end(),
+                               [this](const GridElement::Position& p) {
+                                   return p.id == hoveredElement;
+                               });
+
+        if (it != positions.end()) {
+            positions.erase(it);
+            return;
+        }
     }
 }
+
 
 
 

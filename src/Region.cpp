@@ -7,29 +7,12 @@
 
 using namespace DAW;
 
-Region::Region(fract startTime, Instrument* inst) :startTime(startTime), inst(inst), index(inst->index) {
-    static int lastId = 0;
-    id = lastId++;
+Region::Region() {
+
 }
 
 Region::~Region() {
 
-}
-
-void Region::moveX(fract dx) {
-    startTime = startTime + dx;
-}
-
-void Region::resize(bool rightSide, fract dS) {
-
-    if(rightSide) {
-        userSetRight = true;
-        length = length + dS;
-    } else {
-        userSetLeft = true;
-        length = length - dS;
-        startTime = startTime + dS;
-    }
 }
 
 bool Region::updateNoteChannel(std::shared_ptr<Note> n) {
@@ -47,7 +30,7 @@ bool Region::updateNoteChannel(std::shared_ptr<Note> n) {
         }
     }
 
-    for (int ch = 2; ch <= 15; ++ch) {
+    for (int ch = 1; ch <= 15; ++ch) {
         if (!usedChannels.count(ch)) {
             n->channel = ch;
             return true;

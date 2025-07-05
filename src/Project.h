@@ -1,4 +1,3 @@
-#include "Region.h"
 #include "Note.h"
 #include <vector>
 #include "fract.h"
@@ -13,6 +12,10 @@
 #include "EventManager.h"
 
 class Instrument;
+namespace DAW {
+    class Region;
+}
+
 
 class Project {
     public:
@@ -33,7 +36,7 @@ class Project {
 
         void save();
 
-        void createRegion(fract x, Instrument* inst);
+        void createRegion();
         void createInstrument();
 
         fract startTime;

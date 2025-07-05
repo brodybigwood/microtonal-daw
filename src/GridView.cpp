@@ -2,7 +2,7 @@
 #include "Playhead.h"
 #include "SDL_Events.h"
 #include "Transport.h"
-GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin, fract* startTime) : detached(detached), leftMargin(leftMargin), startTime(startTime) {
+GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin) : detached(detached), leftMargin(leftMargin) {
 
     if(rect != nullptr && !*detached) {
         dstRect = rect;

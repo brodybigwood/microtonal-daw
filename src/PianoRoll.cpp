@@ -11,7 +11,7 @@
 #include "Transport.h"
 
 
-PianoRoll::PianoRoll(SDL_FRect* rect, std::shared_ptr<DAW::Region> region, bool* detached) : region(region), GridView(detached, rect, 40, &(region->startTime)) {
+PianoRoll::PianoRoll(SDL_FRect* rect, std::shared_ptr<DAW::Region> region, bool* detached) : region(region), GridView(detached, rect, 40) {
 
     if(!detached) {
         WindowHandler::instance()->home->pianoRoll = this;
@@ -235,7 +235,9 @@ bool PianoRoll::customTick() {
     SDL_RenderTexture(renderer, NotesTexture, nullptr, dstRect);
 
     if(project->processing) {
-        playHead->render(renderer, barWidth, scrollX + region->startTime);
+       for(auto pos : region->positions) {
+           playHead->render(renderer, barWidth, scrollX + pos.start * barWidth);
+        }
     }
 
     SDL_RenderTexture(renderer, PianoTexture, nullptr, dstRect);

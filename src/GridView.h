@@ -9,7 +9,7 @@ class Transport;
 
 class GridView {
     public:
-        GridView(bool*, SDL_FRect*, float leftMargin, fract* startTime);
+        GridView(bool*, SDL_FRect*, float leftMargin);
 
         ~GridView();
 

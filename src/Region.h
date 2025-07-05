@@ -15,12 +15,12 @@ class Instrument;
 
 namespace DAW {
 
-class Region : GridElement {
+class Region : public GridElement {
     private:
         
 
     public:
-        Region(fract startTime, Instrument* inst);
+        Region();
         ~Region();
 
         std::string name = "MIDI Region FX Rack";
@@ -33,19 +33,6 @@ bool updateNoteChannel(std::shared_ptr<Note>);
  void createNote(fract, fract);
 
  void sort();
-
- fract startTime;
-
-Instrument* inst;
-
-int& index;
-
-int id;
-
- fract length = fract(4,1);
-
- bool userSetRight = false;
- bool userSetLeft = false;
 
  void moveX(fract);
  void resize(bool, fract);

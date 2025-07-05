@@ -1,4 +1,5 @@
 #include "EventManager.h"
+#include <cstdlib>
 #include <thread>
 #include "Plugin.h"
 #include "Project.h"
@@ -6,7 +7,7 @@
 #include "AudioManager.h"
 #include "public.sdk/source/vst/vstnoteexpressiontypes.h"
 
-
+#include "Region.h"
 
 
 #include <algorithm>
@@ -33,7 +34,9 @@ void EventManager::clearEvents() {
                 e.noteOff.noteId = note->id;
                 e.sampleOffset = 0;
 
-                region->inst->eventList.addEvent(e);
+                for(auto pos :region->positions) {
+                    pos.instrument->eventList.addEvent(e);
+                }
 
                 note->dispatched = false;
             }
@@ -71,69 +74,74 @@ void EventManager::getEvents() {
         auto localRegion = regionPtr;
         DAW::Region* region = localRegion.get();
 
-        double regTime = region->startTime;
 
-        std::vector<Steinberg::Vst::Event> events;
+        for(auto pos :region->positions) {
+            double regTime = pos.start;
 
-        for(std::shared_ptr<Note>& note :region->notes) {
+            std::vector<Steinberg::Vst::Event> events;
 
-            double start = note->start + regTime;
-            double end = note->end + regTime;
-            int offset = AudioManager::instance()->sampleRate * 60.0f * (end - time)/project->tempo;
+            for(std::shared_ptr<Note>& note :region->notes) {
 
-            if(note->dispatched && end < time+window && end >= time) {
+                double start = note->start + regTime;
+                double end = note->end + regTime;
+                int offset = AudioManager::instance()->sampleRate * 60.0f * (end - time)/project->tempo;
 
-
-
-                Steinberg::Vst::Event e{};
-                e.type = Steinberg::Vst::Event::kNoteOffEvent;
-                e.noteOff.channel = note->channel;
-                e.noteOff.pitch = note->num;
-                e.noteOff.velocity = 1.0f;
-                e.noteOff.noteId = note->id;
-                e.sampleOffset = offset;
-
-                events.push_back(e);
-
-
-                std::cout<<"noteoff "<<note->num<<std::endl;
-                note->dispatched = false;
+                if(note->dispatched && end < time+window && end >= time) {
 
 
 
+                    Steinberg::Vst::Event e{};
+                    e.type = Steinberg::Vst::Event::kNoteOffEvent;
+                    e.noteOff.channel = note->channel;
+                    e.noteOff.pitch = note->num;
+                    e.noteOff.velocity = 1.0f;
+                    e.noteOff.noteId = note->id;
+                    e.sampleOffset = offset;
+
+                    events.push_back(e);
 
 
-
-            } else if(!note->dispatched && start < time+window && start >= time) {
-
-                Steinberg::Vst::Event e{};
-                e.type = Steinberg::Vst::Event::kNoteOnEvent;
-                e.noteOn.channel = note->channel;
-                e.noteOn.pitch = note->num;
-                e.noteOn.velocity = 1.0f;
-                e.noteOn.noteId = note->id;
-                e.noteOn.length = 0;
-                e.noteOn.tuning = 50.0f;
-                e.sampleOffset = offset;
-
-                events.push_back(e);
-
-
-                injectMPE(events, note, offset);
-
-                std::cout<<"noteon "<<note->num<<std::endl;
-                note->dispatched = true;
+                    std::cout<<"noteoff "<<note->num<<std::endl;
+                    note->dispatched = false;
 
 
 
 
 
+
+                } else if(!note->dispatched && start < time+window && start >= time) {
+
+                    Steinberg::Vst::Event e{};
+                    e.type = Steinberg::Vst::Event::kNoteOnEvent;
+                    e.noteOn.channel = note->channel;
+                    e.noteOn.pitch = note->num;
+                    e.noteOn.velocity = 1.0f;
+                    e.noteOn.noteId = note->id;
+                    e.noteOn.length = 0;
+                    e.noteOn.tuning = 50.0f;
+                    e.sampleOffset = offset;
+
+                    events.push_back(e);
+
+
+                    injectMPE(events, note, offset);
+
+                    std::cout<<"noteon "<<note->num<<std::endl;
+                    note->dispatched = true;
+
+
+
+
+
+                }
+            }
+
+            for(auto& e :events) {
+                pos.instrument->eventList.addEvent(e);
             }
         }
 
-        for(auto& e :events) {
-            region->inst->eventList.addEvent(e);
-        }
+
     }
 
 }

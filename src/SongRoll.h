@@ -1,6 +1,7 @@
 #include <SDL3/SDL.h>
 #include <SDL_ttf.h>
 #include <cmath>
+#include "GridElement.h"
 #include "GridView.h"
 #include "styles.h"
 #include "Project.h"
@@ -43,7 +44,7 @@ class SongRoll : public GridView{
         void handleCustomInput(SDL_Event& e) override;
 
         void renderRegions();
-        void renderRegion(DAW::Region*);
+        void renderRegion(GridElement*);
 
         void getHoveredRegion();
 
