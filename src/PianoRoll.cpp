@@ -23,7 +23,6 @@ PianoRoll::PianoRoll(SDL_FRect* rect, std::shared_ptr<DAW::Region> region, bool*
     scrollY = 800;
 
     divHeight = 200; //octaveheight
-    ySize = &divHeight;
 
     minHeight = 12.0f / 128;
 
@@ -32,6 +31,13 @@ PianoRoll::PianoRoll(SDL_FRect* rect, std::shared_ptr<DAW::Region> region, bool*
     Scroll();
 
     initWindow();
+
+    float x = -1000; //for now only this many measures
+    times.clear();
+    while(x < 1000) {
+        times.push_back(x);
+        x += 0.25; //quarters of beats
+    }
 }
 
 PianoRoll::~PianoRoll() {
@@ -49,7 +55,6 @@ void PianoRoll::UpdateGrid() {
         notesPerOctave = 128;
     }
     cellHeight = divHeight/notesPerOctave;
-    cellWidth = barWidth/notesPerBar;
     cellHeight12 = divHeight/12.0;
 
     double a440 = cellHeight12*59;
@@ -144,7 +149,7 @@ void PianoRoll::RenderDestinations() {
 void PianoRoll::Scroll() {
 
 
-    numCellsRight = (scrollX)/cellWidth;
+    numCellsRight = (scrollX)/dW;
     numCellsDown = (scrollY-yMin + topMargin)/cellHeight;
     numCellsDown12 = scrollY/cellHeight12;
     if((scrollY + topMargin -yMin - cellHeight12) <= 0) {
@@ -160,7 +165,7 @@ void PianoRoll::Scroll() {
     yOffset = (std::ceil(numCellsDown) * cellHeight) - scrollY;
     yOffset12 = (std::ceil(numCellsDown12) * cellHeight12) - scrollY;
 
-    xOffset = (std::ceil(numCellsRight) * cellWidth) - scrollX;
+    xOffset = (std::ceil(numCellsRight) * dW) - scrollX;
 
 
 
@@ -236,7 +241,7 @@ bool PianoRoll::customTick() {
 
     if(project->processing) {
        for(auto pos : region->positions) {
-           playHead->render(renderer, barWidth, scrollX + pos.start * barWidth);
+           playHead->render(renderer, dW, scrollX + pos.start * dW);
         }
     }
 
@@ -396,12 +401,12 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                 } else {
                     refreshGrid = true;
                     float dX = mouseX - last_lmb_x;
-                    if(dX >= cellWidth) {
+                    if(dX >= dW) {
                         stretchElement(1);
-                        last_lmb_x += cellWidth;
-                    } else if(dX <= -cellWidth) {
+                        last_lmb_x += dW;
+                    } else if(dX <= -dW) {
                         stretchElement(-1);
-                        last_lmb_x -= cellWidth;
+                        last_lmb_x -= dW;
                     }
                 }
 
@@ -413,9 +418,9 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                 float dY = mouseY - last_lmb_y;
                 float dirY = std::abs(dY)/dY;
 
-                if(std::abs(dX) >= cellWidth) {
+                if(std::abs(dX) >= dW) {
                     moveNote(movingNote, std::ceil(dirX*dX)/dX,0);
-                    last_lmb_x += cellWidth*dirX;
+                    last_lmb_x += dW*dirX;
                 } if (getHoveredLine() != lastHoveredLine) {
                     moveNote(movingNote, 0,getHoveredLine() - lastHoveredLine);
                     lastHoveredLine = getHoveredLine();
@@ -518,11 +523,11 @@ bool PianoRoll::getExistingNote() {
 
 
 float PianoRoll::getNotePosX(std::shared_ptr<Note> note) {
-    return note->start*barWidth -scrollX + leftMargin;
+    return getX(note->start);
 }
 
 float PianoRoll::getNoteEnd(std::shared_ptr<Note> note) {
-    return note->end*barWidth - scrollX + leftMargin;
+    return getX(note->end);
 }
 
 float PianoRoll::getNoteHeight(std::shared_ptr<Note> note) {
@@ -592,9 +597,9 @@ void PianoRoll::stretchElement(int amount) {
         return;
     }
     if(resizeDir == -1) {
-        stretchingNote->start = stretchingNote->start + fract(amount,notesPerBar);
+        stretchingNote->start = stretchingNote->start + fract(amount,1);
     } else if(resizeDir == 1) {
-        stretchingNote->end = stretchingNote->end + fract(amount,notesPerBar);
+        stretchingNote->end = stretchingNote->end + fract(amount,1);
     }
 
     if(stretchingNote->end < stretchingNote->start) {
@@ -607,7 +612,7 @@ void PianoRoll::stretchElement(int amount) {
 
 void PianoRoll::moveNote(int noteIndex, int moveX, float y) {
 
-    fract x = fract(moveX,notesPerBar);
+    fract x = fract(moveX,1);
 
     std::shared_ptr<Note> note = region->notes[noteIndex];
     note->start = note->start + x;

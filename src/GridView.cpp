@@ -81,13 +81,13 @@ bool GridView::handleInput(SDL_Event& e) {
             break;
         case SDL_EVENT_MOUSE_WHEEL:
             if (isCtrlPressed) {
-                barWidth *= std::pow(scaleSensitivity, e.wheel.y);
-                if (barWidth <= 4) {
-                    barWidth = 4;
+                dW *= std::pow(scaleSensitivity, e.wheel.y);
+                if (dW <= 4) {
+                    dW = 4;
                 }
-                double gridAtX = (mouseX + scrollX - leftMargin) / cellWidth;
+                double gridAtX = (mouseX + scrollX - leftMargin) / dW;
                 UpdateGrid();
-                scrollX = gridAtX * cellWidth - mouseX + leftMargin;
+                scrollX = gridAtX * dW - mouseX + leftMargin;
             } else
                 if (isAltPressed) {
                     divHeight *= std::pow(scaleSensitivity, e.wheel.y);
@@ -151,10 +151,9 @@ void GridView::RenderGridTexture() {
 
     setRenderColor(colors.grid);
 
-
-
-    for (double x = xOffset + leftMargin; x < width + leftMargin; x += cellWidth) {
-        SDL_RenderLine(renderer, x, 0, x, height);
+    for(auto line : times) {
+        float val = getX(line);
+        SDL_RenderLine(renderer, val, 0, val, height);
     }
 
     for(auto line : lines) {
@@ -186,5 +185,9 @@ void GridView::toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar) {
 }
 
 fract GridView::getHoveredTime() {
-    return fract(std::floor((mouseX+scrollX-leftMargin)/cellWidth),notesPerBar);
+    return fract(std::floor((mouseX+scrollX-leftMargin)/dW),1);
+}
+
+float GridView::getX(float time) {
+    return time * dW + leftMargin - scrollX;
 }

@@ -11,8 +11,8 @@ void GridElement::createPos(fract startTime, Instrument* inst) {
     Position pos{
         fract{},
         startTime,
-        fract{4,1} + startTime,
-        fract{4,1},
+        fract{16,1} + startTime,
+        fract{16,1},
         inst,
         id
     };

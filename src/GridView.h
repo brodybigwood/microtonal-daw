@@ -34,12 +34,10 @@ class GridView {
         void RenderGridTexture();
 
         std::vector<float> lines;
+        std::vector<float> times;
 
         int yOffset = 0;
         int xOffset = 0;
-
-        float* xSize;
-        float* ySize;
 
         bool running = true;
 
@@ -57,8 +55,7 @@ class GridView {
         SDL_FRect* dstRect;
 
         float cellHeight;
-        float cellWidth;
-        float barWidth = 80;
+        float dW = 40;
 
         double notesPerBar = 4;
         fract* startTime = new fract;
@@ -105,6 +102,7 @@ class GridView {
         virtual void handleCustomInput(SDL_Event&) {};
         virtual void clickMouse(SDL_Event&) {};
         virtual float getY(float) = 0;
+        float getX(float);
 
         virtual void createElement() {};
         virtual void deleteElement() {};
@@ -112,5 +110,6 @@ class GridView {
         fract getHoveredTime();
 
         float lastHoveredLine;
+        float lastHoveredTime;
 
 };

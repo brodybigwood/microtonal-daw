@@ -72,7 +72,7 @@ class PianoRoll : public GridView {
         bool getExistingNote();
 
         double getNoteName(double);
-        float getY(float);
+        float getY(float) override;
 
         
         fract lastLength = fract(1, 1);

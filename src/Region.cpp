@@ -19,7 +19,7 @@ Region::~Region() {
 void Region::draw(SDL_Renderer* renderer) {
 
     if(!texture) {
-        texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, 1000, 100);
+        texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, 10000, 100);
     }
 
     SDL_SetRenderTarget(renderer, texture);

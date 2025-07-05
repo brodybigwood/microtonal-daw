@@ -18,15 +18,19 @@ SongRoll::SongRoll(SDL_FRect* rect, bool* detached) : GridView(detached, rect, 2
     playHeadTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
 
     divHeight = 50;
-    cellWidth = barWidth/4;
     minHeight = 1.0f/20;
-    ySize = &divHeight;
-    xSize = &cellWidth;
 
     insts = new InstrumentList(dstRect->y + topMargin, dstRect->x + leftMargin, dstRect->h, this->renderer, project, &divHeight);
 
     UpdateGrid();
     project->createRegion();
+
+    float x = -1000; //for now only this many measures
+    times.clear();
+    while(x < 1000) {
+        times.push_back(x);
+        x++;
+    }
 }
 
 bool SongRoll::customTick() {
@@ -44,7 +48,7 @@ bool SongRoll::customTick() {
     SDL_RenderTexture(renderer,regionTexture,nullptr, dstRect);
 
     if(project->processing) {
-        playHead->render(renderer, barWidth, scrollX);
+        playHead->render(renderer, dW, scrollX);
     }
 
     renderMargins();
@@ -98,9 +102,9 @@ void SongRoll::renderRegion(GridElement* region) {
             SDL_SetRenderDrawColor(renderer, 20,20,100,127);
         }
 
-        float topLeftCornerX = pos.start*barWidth + leftMargin;
-        float topLeftCornerY = pos.instrument->index*divHeight + topMargin;
-        SDL_FRect dstRect = {topLeftCornerX, topLeftCornerY, pos.length*barWidth, divHeight};
+        float topLeftCornerX = getX(pos.start);
+        float topLeftCornerY = getY(pos.instrument->index);
+        SDL_FRect dstRect = {topLeftCornerX, topLeftCornerY, pos.length*dW, divHeight};
         SDL_FRect srcRect = {pos.startOffset * 100, 0, pos.length * 100, 100};
         SDL_RenderFillRect(renderer, &dstRect);
         SDL_RenderTexture(renderer, region->texture, &srcRect, &dstRect);
@@ -113,10 +117,10 @@ void SongRoll::getHoveredRegion() {
         GridElement* region = localRegion.get();
         for(auto pos :region->positions) {
             if(
-                mouseX > pos.start*barWidth + leftMargin &&
-                mouseX < (pos.length+pos.start)*barWidth + leftMargin &&
-                mouseY > pos.instrument->index*divHeight + topMargin &&
-                mouseY < (pos.instrument->index+1) * divHeight + topMargin
+                mouseX > getX(pos.start) &&
+                mouseX < getX(pos.end) &&
+                mouseY > getY(pos.instrument->index) &&
+                mouseY < getY(pos.instrument->index+1)
             ) {
                 hoveredElement = pos.id;
                 return;
@@ -204,15 +208,14 @@ void SongRoll::deleteElement() {
 
 
 float SongRoll::getY(float index) {
-    return divHeight * index + topMargin;
+    return divHeight * index + topMargin - scrollY;
 }
 
 void SongRoll::UpdateGrid() {
     lines.clear();
-    float y = 1.0f;
-    for (auto& inst : *instruments) {
-        y += inst->index;
+    float y = -20;
+    while(y<20) {
         lines.push_back(y);
-        std::cout<<y<<std::endl;
+        y++;
     }
 }
