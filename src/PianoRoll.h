@@ -82,9 +82,9 @@ class PianoRoll : public GridView {
         float getHoveredLine();
         void handleMouse();
 
-        float getNotePosX(Note&);
-        float getNoteEnd(Note&);
-        float getNoteHeight(Note&);
+        float getNotePosX(std::shared_ptr<Note>);
+        float getNoteEnd(std::shared_ptr<Note>);
+        float getNoteHeight(std::shared_ptr<Note>);
 
         void moveNote(int, int, int);
         
@@ -96,7 +96,7 @@ class PianoRoll : public GridView {
         float selectThresholdX = 5.0f;
         float selectThresholdY = 5.0f;
 
-        Note* stretchingNote = nullptr;
+        std::shared_ptr<Note> stretchingNote = nullptr;
         int resizeDir;
         bool isStretchingNote = false;
 

@@ -32,7 +32,7 @@ void Region::resize(bool rightSide, fract dS) {
     }
 }
 
-bool Region::updateNoteChannel(Note& n) {
+bool Region::updateNoteChannel(std::shared_ptr<Note> n) {
     std::set<int> usedChannels;
 
     static std::function<int(fract)> toMS = [](fract f) {
@@ -40,16 +40,16 @@ bool Region::updateNoteChannel(Note& n) {
     };
 
 
-    for (const auto& other : notes) {
-        bool overlap = !(toMS(n.end) + releaseMS <= toMS(other.start) || toMS(n.start) >= toMS(other.end) + releaseMS);
+    for (std::shared_ptr<Note> other : notes) {
+        bool overlap = !(toMS(n->end) + releaseMS <= toMS(other->start) || toMS(n->start) >= toMS(other->end) + releaseMS);
         if (overlap) {
-            usedChannels.insert(other.channel);
+            usedChannels.insert(other->channel);
         }
     }
 
     for (int ch = 2; ch <= 15; ++ch) {
         if (!usedChannels.count(ch)) {
-            n.channel = ch;
+            n->channel = ch;
             return true;
         }
     }

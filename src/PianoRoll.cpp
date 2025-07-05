@@ -286,7 +286,7 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     if(hoveredElement == -1) {
                         createElement();
                     } else {
-                        notesPerOctave = region->notes[hoveredElement].temperament;
+                        notesPerOctave = region->notes[hoveredElement]->temperament;
                         UpdateGrid();
                         Scroll();
                         movingNote = hoveredElement;
@@ -415,10 +415,10 @@ void PianoRoll::createElement() {
     fract start = getHoveredTime();
     float pitch = getHoveredLine();
     std::cout<<pitch<<std::endl;
-    Note n(start, lastLength + start, pitch, notesPerOctave);
+    auto n = std::make_shared<Note>(start, lastLength + start, pitch, notesPerOctave);
 
     static int nextId = 0;
-    n.id = nextId++;
+    n->id = nextId++;
 
     region->updateNoteChannel(n);
 
@@ -434,10 +434,10 @@ void PianoRoll::RenderNotes() {
     SDL_RenderClear(renderer);
 
     //backgrounds first
-    for(Note& note : region->notes) {
+    for(std::shared_ptr<Note> note : region->notes) {
 
         float noteX = getNotePosX(note) +1;
-        float noteY = getY(note.num);
+        float noteY = getY(note->num);
         float noteEnd = getNoteEnd(note) -2;
         float noteTop = noteY + getNoteHeight(note);
 
@@ -447,9 +447,9 @@ void PianoRoll::RenderNotes() {
         SDL_RenderFillRect(renderer, &noteBGRect);
     }
 
-    for(Note& note : region->notes) {
+    for(std::shared_ptr<Note> note : region->notes) {
             float noteX = getNotePosX(note) +1;
-            float noteY = getY(note.num);
+            float noteY = getY(note->num);
             float noteEnd = getNoteEnd(note) -2;
             float noteTop = noteY + getNoteHeight(note);
 
@@ -473,12 +473,12 @@ bool PianoRoll::getExistingNote() {
         return false;
     }
     int i = 0;
-    for (Note& note : region->notes) {
+    for (std::shared_ptr<Note> note : region->notes) {
         
         // Get the required positions and size once per iteration
         const int notePosX = getNotePosX(note);
         const int noteEnd = getNoteEnd(note);
-        const int noteY = getY(note.num);
+        const int noteY = getY(note->num);
         
         // Check if mouse is within note bounds
         if (mouseX >= notePosX && mouseX <= noteEnd &&
@@ -492,16 +492,16 @@ bool PianoRoll::getExistingNote() {
 }
 
 
-float PianoRoll::getNotePosX(Note& note) {
-    return note.start*barWidth -scrollX + leftMargin;
+float PianoRoll::getNotePosX(std::shared_ptr<Note> note) {
+    return note->start*barWidth -scrollX + leftMargin;
 }
 
-float PianoRoll::getNoteEnd(Note& note) {
-    return note.end*barWidth - scrollX + leftMargin;
+float PianoRoll::getNoteEnd(std::shared_ptr<Note> note) {
+    return note->end*barWidth - scrollX + leftMargin;
 }
 
-float PianoRoll::getNoteHeight(Note& note) {
-    return -cellHeight12*12/note.temperament + lineWidth;
+float PianoRoll::getNoteHeight(std::shared_ptr<Note> note) {
+    return -cellHeight12*12/note->temperament + lineWidth;
 }
 
 void PianoRoll::deleteElement() {
@@ -538,19 +538,19 @@ bool PianoRoll::getStretchingNote() {
     if(isStretchingNote) {
         return true;
     }
-    for (Note& note : region->notes) {
+    for (std::shared_ptr<Note> note : region->notes) {
         const int notePosX = getNotePosX(note);
         const int noteEnd = getNoteEnd(note);
-        const int noteY = getY(note.num);
+        const int noteY = getY(note->num);
 
         if ((mouseY >= noteY - noteRadius && mouseY <= (noteY + noteRadius))) {
             if(mouseX >= notePosX - selectThresholdX/2 && mouseX <= notePosX + selectThresholdX/2) {
-                stretchingNote = &note;
+                stretchingNote = note;
                 resizeDir = -1;
                 isStretchingNote = true;
                 return true;
             } else if (mouseX >= noteEnd - selectThresholdX/2 && mouseX <= noteEnd + selectThresholdX/2) {
-                stretchingNote = &note;
+                stretchingNote = note;
                 resizeDir = 1;
                 isStretchingNote = true;
                 return true;
@@ -585,10 +585,10 @@ void PianoRoll::moveNote(int noteIndex, int moveX, int moveY) {
     fract x = fract(moveX,notesPerBar);
     fract y = fract(-moveY*12,notesPerOctave);
 
-    Note& note = region->notes[noteIndex];
-    note.start = note.start + x;
-    note.end = note.end + x;
-    note.num = note.num + y;
+    std::shared_ptr<Note> note = region->notes[noteIndex];
+    note->start = note->start + x;
+    note->end = note->end + x;
+    note->num = note->num + y;
 
     region->updateNoteChannel(note);
     Scroll();

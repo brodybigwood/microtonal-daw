@@ -23,33 +23,33 @@ void EventManager::clearEvents() {
     for (auto& regionPtr : project->regions) {
         auto localRegion = regionPtr;
         DAW::Region* region = localRegion.get();
-        for (Note& note : region->notes) {
-            if (note.dispatched) {
+        for (std::shared_ptr<Note> note : region->notes) {
+            if (note->dispatched) {
                 Steinberg::Vst::Event e{};
                 e.type = Steinberg::Vst::Event::kNoteOffEvent;
-                e.noteOff.channel = note.channel;    // or correct channel
-                e.noteOff.pitch = note.num;
+                e.noteOff.channel = note->channel;    // or correct channel
+                e.noteOff.pitch = note->num;
                 e.noteOff.velocity = 0.f;
-                e.noteOff.noteId = note.id;
+                e.noteOff.noteId = note->id;
                 e.sampleOffset = 0;
 
                 region->inst->eventList.addEvent(e);
 
-                note.dispatched = false;
+                note->dispatched = false;
             }
         }
     }
 
 }
-void EventManager::injectMPE(std::vector<Steinberg::Vst::Event>& events, Note& note, int& sampleOffset) {
+void EventManager::injectMPE(std::vector<Steinberg::Vst::Event>& events, std::shared_ptr<Note>& note, int& sampleOffset) {
     Steinberg::Vst::Event e{};
     e.type = Steinberg::Vst::Event::kLegacyMIDICCOutEvent;
     e.sampleOffset = sampleOffset;
 
-    e.midiCCOut.channel = static_cast<uint8_t>(note.channel);
+    e.midiCCOut.channel = static_cast<uint8_t>(note->channel);
     e.midiCCOut.controlNumber = 129;
 
-    int bendValue = static_cast<int>((note.num - std::floor(note.num)) * 8192 + 8192);
+    int bendValue = static_cast<int>((note->num - std::floor(note->num)) * 8192 + 8192);
     bendValue = std::clamp(bendValue, 0, 16383);
 
     e.midiCCOut.value = bendValue & 0x7F;
@@ -57,7 +57,7 @@ void EventManager::injectMPE(std::vector<Steinberg::Vst::Event>& events, Note& n
 
     events.push_back(e);
 
-    std::cout<<"mpe "<<note.channel<<std::endl;
+    std::cout<<"mpe "<<note->channel<<std::endl;
 }
 
 
@@ -75,43 +75,43 @@ void EventManager::getEvents() {
 
         std::vector<Steinberg::Vst::Event> events;
 
-        for(Note& note :region->notes) {
+        for(std::shared_ptr<Note>& note :region->notes) {
 
-            double start = note.start + regTime;
-            double end = note.end + regTime;
+            double start = note->start + regTime;
+            double end = note->end + regTime;
             int offset = AudioManager::instance()->sampleRate * 60.0f * (end - time)/project->tempo;
 
-            if(note.dispatched && end < time+window && end >= time) {
+            if(note->dispatched && end < time+window && end >= time) {
 
 
 
                 Steinberg::Vst::Event e{};
                 e.type = Steinberg::Vst::Event::kNoteOffEvent;
-                e.noteOff.channel = note.channel;
-                e.noteOff.pitch = note.num;
+                e.noteOff.channel = note->channel;
+                e.noteOff.pitch = note->num;
                 e.noteOff.velocity = 1.0f;
-                e.noteOff.noteId = note.id;
+                e.noteOff.noteId = note->id;
                 e.sampleOffset = offset;
 
                 events.push_back(e);
 
 
-                std::cout<<"noteoff "<<note.num<<std::endl;
-                note.dispatched = false;
+                std::cout<<"noteoff "<<note->num<<std::endl;
+                note->dispatched = false;
 
 
 
 
 
 
-            } else if(!note.dispatched && start < time+window && start >= time) {
+            } else if(!note->dispatched && start < time+window && start >= time) {
 
                 Steinberg::Vst::Event e{};
                 e.type = Steinberg::Vst::Event::kNoteOnEvent;
-                e.noteOn.channel = note.channel;
-                e.noteOn.pitch = note.num;
+                e.noteOn.channel = note->channel;
+                e.noteOn.pitch = note->num;
                 e.noteOn.velocity = 1.0f;
-                e.noteOn.noteId = note.id;
+                e.noteOn.noteId = note->id;
                 e.noteOn.length = 0;
                 e.noteOn.tuning = 50.0f;
                 e.sampleOffset = offset;
@@ -121,8 +121,8 @@ void EventManager::getEvents() {
 
                 injectMPE(events, note, offset);
 
-                std::cout<<"noteon "<<note.num<<std::endl;
-                note.dispatched = true;
+                std::cout<<"noteon "<<note->num<<std::endl;
+                note->dispatched = true;
 
 
 

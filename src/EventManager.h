@@ -6,6 +6,7 @@
 #include <atomic>
 #include "EventList.h"
 #include "Note.h"
+#include <memory>
 
 class Project;
 
@@ -30,7 +31,7 @@ private:
     std::thread eventThread;
     std::atomic<bool> running = false;
 
-    void injectMPE(std::vector<Steinberg::Vst::Event>& events, Note& note, int& sampleOffset);
+    void injectMPE(std::vector<Steinberg::Vst::Event>& events, std::shared_ptr<Note>& note, int& sampleOffset);
 
 };
 #endif

@@ -5,6 +5,7 @@
 #include <SDL3/SDL.h>
 #include <SDL_ttf.h>
 #include <string>
+#include <memory>
 
 #ifndef REGION_H
 #define REGION_H
@@ -23,9 +24,9 @@ class Region {
 
         std::string name = "MIDI Region FX Rack";
 
- std::vector<Note> notes; 
+ std::vector<std::shared_ptr<Note>> notes;
 
-bool updateNoteChannel(Note&);
+bool updateNoteChannel(std::shared_ptr<Note>);
 
 
  void createNote(fract, fract);
