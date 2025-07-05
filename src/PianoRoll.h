@@ -16,7 +16,7 @@ class PianoRoll : public GridView {
 
 
 
-    PianoRoll(SDL_FRect*, DAW::Region*, bool*);
+    PianoRoll(SDL_FRect*, std::shared_ptr<DAW::Region>, bool*);
     virtual ~PianoRoll();
     
         SDL_Texture* backgroundTexture;
@@ -28,7 +28,7 @@ class PianoRoll : public GridView {
 
         SDL_Texture* keys[128];
 
-        DAW::Region* region;
+        std::shared_ptr<DAW::Region> region;
 
         double referenceOffset;
 

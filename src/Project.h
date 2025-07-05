@@ -45,7 +45,7 @@ class Project {
 
         void stop();
 
-        std::vector<DAW::Region*> regions;
+        std::vector<std::shared_ptr<DAW::Region>> regions;
         std::vector<Instrument*> instruments;
         std::vector<DAW::Region> files;
         std::vector<DAW::Region> recordings;

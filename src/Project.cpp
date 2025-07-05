@@ -1,5 +1,6 @@
 #include "Project.h"
 #include "Plugin.h"
+#include <memory>
 
 Project::Project() {
     em.project = this;
@@ -37,7 +38,7 @@ void Project::load(std::string filepath) {
     for(size_t i = 0; i<0; i++) {
 
         fract pos(0,1);
-        DAW::Region* reg = new DAW::Region(pos, instruments[i]);
+        std::shared_ptr<DAW::Region> reg = std::make_shared<DAW::Region>(pos, instruments[i]);
         regions.push_back(reg);
     }
 }
@@ -51,7 +52,7 @@ void Project::save() {
 }
 
 void Project::createRegion(fract x, Instrument* inst) {
-    regions.push_back(new DAW::Region(x, inst));
+    regions.push_back(std::make_shared<DAW::Region>(x, inst));
 }
 
 void Project::createInstrument() {

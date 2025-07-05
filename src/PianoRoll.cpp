@@ -11,7 +11,7 @@
 #include "Transport.h"
 
 
-PianoRoll::PianoRoll(SDL_FRect* rect, DAW::Region* region, bool* detached) : region(region), GridView(detached, rect, 40, &(region->startTime)) {
+PianoRoll::PianoRoll(SDL_FRect* rect, std::shared_ptr<DAW::Region> region, bool* detached) : region(region), GridView(detached, rect, 40, &(region->startTime)) {
 
     if(!detached) {
         WindowHandler::instance()->home->pianoRoll = this;

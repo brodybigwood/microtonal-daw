@@ -30,7 +30,7 @@ WindowHandler* WindowHandler::instance() {
     return &w;
 }
 
-void WindowHandler::createPianoRoll(DAW::Region* region, SDL_FRect* pRect) {
+void WindowHandler::createPianoRoll(std::shared_ptr<DAW::Region> region, SDL_FRect* pRect) {
     if(home->pianoRoll) {
         return;
     }

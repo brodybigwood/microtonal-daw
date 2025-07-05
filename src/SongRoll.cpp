@@ -79,7 +79,9 @@ void SongRoll::renderRegions() {
     SDL_SetRenderTarget(renderer, regionTexture);
     SDL_SetRenderDrawColor(renderer, 0,0,0,0);
     SDL_RenderClear(renderer);
-    for(auto region :project->regions) {
+    for (auto& regionPtr : project->regions) {
+        auto localRegion = regionPtr;
+        DAW::Region* region = localRegion.get();
         renderRegion(region);
     }
 }
@@ -98,7 +100,9 @@ void SongRoll::renderRegion(DAW::Region* region) {
 }
 
 void SongRoll::getHoveredRegion() {
-    for(auto region : project->regions) {
+    for (auto& regionPtr : project->regions) {
+        auto localRegion = regionPtr;
+        DAW::Region* region = localRegion.get();
         if(
             mouseX > region->startTime*barWidth + leftMargin &&
             mouseX < (region->length+region->startTime)*barWidth + leftMargin &&
@@ -134,11 +138,16 @@ void SongRoll::clickMouse(SDL_Event& e) {
 
             if (e.button.button == SDL_BUTTON_LEFT) {
                 lmb = true;
-                if (hoveredElement >= 0 && hoveredElement < static_cast<int>(project->regions.size())) {
-                    DAW::Region* reg = project->regions[hoveredElement];
+                auto it = std::find_if(project->regions.begin(), project->regions.end(),
+                                       [this](const std::shared_ptr<DAW::Region>& reg) {
+                                           return reg->id == hoveredElement;
+                                       });
+
+                if (it != project->regions.end()) {
+                    std::shared_ptr<DAW::Region> reg = *it;
                     if(reg) {
                         windowHandler->createPianoRoll(reg, &(windowHandler->home->pianoRollRect));
-                        InstrumentMenu::instance()->setViewedElement("region", reg->id);
+                        //InstrumentMenu::instance()->setViewedElement("region", reg->id);
                     }
                 } else if (mouseX > leftMargin && mouseX < gridRect.w && mouseY > topMargin && mouseY < gridRect.h) {
                     createElement();
@@ -163,14 +172,18 @@ void SongRoll::clickMouse(SDL_Event& e) {
 }
 
 void SongRoll::deleteElement() {
-    if (hoveredElement >= 0 && hoveredElement < static_cast<int>(project->regions.size())) {
-        DAW::Region* reg = project->regions[hoveredElement];
-        if(reg) {
-            project->regions.erase(project->regions.begin() + reg->index);
-            delete reg;
-        }
+    auto& regions = project->regions;
+    auto it = std::find_if(regions.begin(), regions.end(),
+                           [this](const std::shared_ptr<DAW::Region>& r) {
+                               return r && r->id == hoveredElement;
+                           });
+
+    if (it != regions.end()) {
+        regions.erase(it);
     }
 }
+
+
 
 float SongRoll::getY(float index) {
     return divHeight * index + topMargin;
