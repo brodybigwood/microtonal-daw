@@ -80,7 +80,7 @@ void EventManager::getEvents() {
 
             std::vector<Steinberg::Vst::Event> events;
 
-            for(std::shared_ptr<Note>& note :region->notes) {
+            for(std::shared_ptr<Note> note :region->notes) {
 
                 double start = note->start + regTime;
                 double end = note->end + regTime;
