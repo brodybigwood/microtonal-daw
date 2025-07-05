@@ -453,7 +453,6 @@ void PianoRoll::createElement() {
 }
 
 void PianoRoll::RenderNotes() {
-    
     SDL_SetRenderTarget(renderer, NotesTexture);
     SDL_SetRenderDrawColor(renderer,0,0,0,0);
     SDL_RenderClear(renderer);

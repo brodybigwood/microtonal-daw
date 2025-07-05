@@ -89,6 +89,8 @@ void SongRoll::renderRegions() {
 }
 
 void SongRoll::renderRegion(GridElement* region) {
+    region->draw(renderer);
+    SDL_SetRenderTarget(renderer, regionTexture);
     for(auto pos :region->positions) {
         if(hoveredElement == pos.id) {
             SDL_SetRenderDrawColor(renderer, 90,90,100,127);
@@ -98,8 +100,10 @@ void SongRoll::renderRegion(GridElement* region) {
 
         float topLeftCornerX = pos.start*barWidth + leftMargin;
         float topLeftCornerY = pos.instrument->index*divHeight + topMargin;
-        regionRect = {topLeftCornerX, topLeftCornerY, pos.length*barWidth, divHeight};
-        SDL_RenderFillRect(renderer, &regionRect);
+        SDL_FRect dstRect = {topLeftCornerX, topLeftCornerY, pos.length*barWidth, divHeight};
+        SDL_FRect srcRect = {pos.startOffset * 100, 0, pos.length * 100, 100};
+        SDL_RenderFillRect(renderer, &dstRect);
+        SDL_RenderTexture(renderer, region->texture, &srcRect, &dstRect);
     }
 }
 

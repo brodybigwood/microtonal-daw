@@ -4,6 +4,7 @@
 #include "EventManager.h"
 #include "Project.h"
 #include "fract.h"
+#include "styles.h"
 
 using namespace DAW;
 
@@ -12,6 +13,28 @@ Region::Region() {
 }
 
 Region::~Region() {
+
+}
+
+void Region::draw(SDL_Renderer* renderer) {
+
+    if(!texture) {
+        texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, 1000, 100);
+    }
+
+    SDL_SetRenderTarget(renderer, texture);
+    SDL_SetRenderDrawColor(renderer,0,0,0,0);
+    SDL_RenderClear(renderer);
+
+    for(std::shared_ptr<Note> note : notes) {
+        float noteX = note->start * 100;
+        float noteY = (128-note->num)/128.0f * 100;
+        float noteEnd = note->end * 100;
+        SDL_SetRenderDrawColor(renderer, colors.note[0],colors.note[1],colors.note[2],colors.note[3]);
+        SDL_FRect noteRect = { noteX, noteY - 1, noteEnd - noteX, 2};
+        SDL_RenderFillRect(renderer, &noteRect);
+    }
+    SDL_SetRenderTarget(renderer, NULL);
 
 }
 
