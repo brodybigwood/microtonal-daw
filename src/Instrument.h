@@ -22,6 +22,8 @@ class Instrument {
 
         std::vector<MixerTrack*> outputs;
 
+        std::vector<std::shared_ptr<Note>> dispatched;
+
         EventList eventList;
 
         int index;

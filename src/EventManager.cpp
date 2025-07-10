@@ -24,25 +24,24 @@ void EventManager::clearEvents() {
     for (auto& regionPtr : project->regions) {
         auto localRegion = regionPtr;
         DAW::Region* region = localRegion.get();
-        for (std::shared_ptr<Note> note : region->notes) {
-            if (note->dispatched) {
-                Steinberg::Vst::Event e{};
-                e.type = Steinberg::Vst::Event::kNoteOffEvent;
-                e.noteOff.channel = note->channel;    // or correct channel
-                e.noteOff.pitch = note->num;
-                e.noteOff.velocity = 0.f;
-                e.noteOff.noteId = note->id;
-                e.sampleOffset = 0;
 
-                for(auto pos :region->positions) {
+        for(auto& pos :region->positions) {
+            auto& dispatched = pos.instrument->dispatched;
+            for (std::shared_ptr<Note> note : region->notes) {
+                if (std::find(dispatched.begin(), dispatched.end(), note) != dispatched.end()) {
+                    Steinberg::Vst::Event e{};
+                    e.type = Steinberg::Vst::Event::kNoteOffEvent;
+                    e.noteOff.channel = note->channel;    // or correct channel
+                    e.noteOff.pitch = note->num;
+                    e.noteOff.velocity = 0.f;
+                    e.noteOff.noteId = note->id;
+                    e.sampleOffset = 0;
                     pos.instrument->eventList.addEvent(e);
+                    dispatched.erase(std::remove(dispatched.begin(), dispatched.end(), note), dispatched.end());
                 }
-
-                note->dispatched = false;
             }
         }
     }
-
 }
 void EventManager::injectMPE(std::vector<Steinberg::Vst::Event>& events, std::shared_ptr<Note>& note, int& sampleOffset) {
     Steinberg::Vst::Event e{};
@@ -78,6 +77,10 @@ void EventManager::getEvents() {
         for(auto pos :region->positions) {
             double regTime = pos.start;
 
+            auto* instrument = pos.instrument;
+
+            auto& dispatched = instrument->dispatched;
+
             std::vector<Steinberg::Vst::Event> events;
 
             for(std::shared_ptr<Note> note :region->notes) {
@@ -86,7 +89,7 @@ void EventManager::getEvents() {
                 double end = note->end + regTime;
                 int offset = AudioManager::instance()->sampleRate * 60.0f * (end - time)/project->tempo;
 
-                if(note->dispatched && end < time+window && end >= time) {
+                if(std::find(dispatched.begin(), dispatched.end(), note) != dispatched.end() && end < time+window && end >= time) {
 
 
 
@@ -102,14 +105,14 @@ void EventManager::getEvents() {
 
 
                     std::cout<<"noteoff "<<note->num<<std::endl;
-                    note->dispatched = false;
+                    dispatched.erase(std::remove(dispatched.begin(), dispatched.end(), note), dispatched.end());
 
 
 
 
 
 
-                } else if(!note->dispatched && start < time+window && start >= time) {
+                } else if(std::find(dispatched.begin(), dispatched.end(), note) == dispatched.end() && start < time+window && start >= time) {
 
                     Steinberg::Vst::Event e{};
                     e.type = Steinberg::Vst::Event::kNoteOnEvent;
@@ -118,6 +121,7 @@ void EventManager::getEvents() {
                     e.noteOn.velocity = 1.0f;
                     e.noteOn.noteId = note->id;
                     e.noteOn.length = 0;
+
                     e.sampleOffset = offset;
 
                     events.push_back(e);
@@ -126,7 +130,7 @@ void EventManager::getEvents() {
                     injectMPE(events, note, offset);
 
                     std::cout<<"noteon "<<note->num<<std::endl;
-                    note->dispatched = true;
+                    dispatched.push_back(note);
 
 
 

@@ -19,8 +19,6 @@ class Note {
 
         SDL_Color customColor;
 
-        bool dispatched = false;
-
         int midiNum, pitchBend, modX, modY, modZ;  // Modulation parameters
 
         double temperament;
