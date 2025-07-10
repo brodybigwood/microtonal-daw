@@ -21,6 +21,7 @@ SongRoll::SongRoll(SDL_FRect* rect, bool* detached) : GridView(detached, rect, 2
     minHeight = 1.0f/20;
 
     insts = new InstrumentList(dstRect->y + topMargin, dstRect->x + leftMargin, dstRect->h, this->renderer, project, &divHeight);
+    insts->scrollY = &scrollY;
 
     UpdateGrid();
     project->createRegion();

@@ -22,6 +22,7 @@ class InstrumentList {
         int width;
 
         int y;
+        int* scrollY;
 
         float* instrumentHeight;
         

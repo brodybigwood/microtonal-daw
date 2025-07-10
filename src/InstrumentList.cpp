@@ -38,7 +38,7 @@ void InstrumentList::render() {
 void InstrumentList::renderInstrument(int i) {
 
     int xPos = 0;
-    int yPos = i* *instrumentHeight;
+    int yPos = i* *instrumentHeight - *scrollY;
 
     SDL_FRect instPos = {0, yPos, width, *instrumentHeight};
     if(i == hoveredInstrument) {
