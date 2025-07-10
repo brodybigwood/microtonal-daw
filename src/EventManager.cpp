@@ -118,7 +118,6 @@ void EventManager::getEvents() {
                     e.noteOn.velocity = 1.0f;
                     e.noteOn.noteId = note->id;
                     e.noteOn.length = 0;
-                    e.noteOn.tuning = 50.0f;
                     e.sampleOffset = offset;
 
                     events.push_back(e);
