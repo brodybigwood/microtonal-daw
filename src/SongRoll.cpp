@@ -132,7 +132,7 @@ void SongRoll::getHoveredRegion() {
 }
 
 float SongRoll::getHoveredLine() {
-    return (mouseY - topMargin)/divHeight;
+    return (mouseY - scrollY - topMargin)/divHeight;
 }
 
 void SongRoll::createElement() {
