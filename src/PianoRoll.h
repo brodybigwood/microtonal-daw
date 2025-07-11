@@ -44,7 +44,7 @@ class PianoRoll : public GridView {
 
         double yMax;
 
-        int movingNote;
+        std::shared_ptr<Note> movingNote;
 
         bool customTick() override;
 
@@ -86,12 +86,14 @@ class PianoRoll : public GridView {
         float getNoteEnd(std::shared_ptr<Note>);
         float getNoteHeight(std::shared_ptr<Note>);
 
-        void moveNote(int, int, float);
+        void moveNote(std::shared_ptr<Note>, int, float);
         
     private:
 
         bool getStretchingNote();
         void stretchElement(int amount);
+
+        std::shared_ptr<Note> hoveredElement;
 
         float selectThresholdX = 5.0f;
         float selectThresholdY = 5.0f;

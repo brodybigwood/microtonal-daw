@@ -315,13 +315,13 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     return;
                 }
                 if(mouseX > leftMargin && stretchingNote == nullptr) {
-                    if(hoveredElement == -1) {
+                    if(hoveredElement == nullptr) {
                         createElement();
                     } else {
-                        notesPerOctave = region->notes[hoveredElement]->temperament;
+                        notesPerOctave = std::dynamic_pointer_cast<Note>(hoveredElement)->temperament;
                         UpdateGrid();
                         Scroll();
-                        movingNote = hoveredElement;
+                        movingNote = std::dynamic_pointer_cast<Note>(hoveredElement);
                     }
                 }
             }
@@ -338,7 +338,7 @@ void PianoRoll::clickMouse(SDL_Event& e) {
         case SDL_EVENT_MOUSE_BUTTON_UP:
             if (e.button.button == SDL_BUTTON_LEFT) {
                 lmb = false;
-                movingNote = -1;
+                movingNote = nullptr;
             }
             if (e.button.button == SDL_BUTTON_RIGHT) {
                 rmb = false;
@@ -412,7 +412,7 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                     }
                 }
 
-            } else if(lmb && movingNote != -1) {
+            } else if(lmb && movingNote != nullptr) {
                 refreshGrid = true;
                 float dX = mouseX - last_lmb_x;
                 float dirX = std::abs(dX)/dX;
@@ -499,7 +499,7 @@ void PianoRoll::RenderNotes() {
 }
 
 bool PianoRoll::getExistingNote() {
-    hoveredElement = -1;
+    hoveredElement = nullptr;
     if(mouseY < topMargin || mouseX < leftMargin) {
         return false;
     }
@@ -514,7 +514,7 @@ bool PianoRoll::getExistingNote() {
         // Check if mouse is within note bounds
         if (mouseX >= notePosX && mouseX <= noteEnd &&
             mouseY <= noteY + noteRadius && mouseY >= (noteY - noteRadius)) {
-            hoveredElement = i; // Found the hovered note
+            hoveredElement = note; // Found the hovered note
             lastHoveredLine = getHoveredLine();
             return true; // Exit early
         }
@@ -537,9 +537,12 @@ float PianoRoll::getNoteHeight(std::shared_ptr<Note> note) {
 }
 
 void PianoRoll::deleteElement() {
-    if(hoveredElement != -1) {
-        region->notes.erase(region->notes.begin() + hoveredElement);
-
+    if(hoveredElement != nullptr) {
+        auto& notes = region->notes;
+        auto it = std::find(notes.begin(), notes.end(), hoveredElement);
+        if (it != notes.end()) {
+            notes.erase(it);
+        }
         Scroll();
     }
 
@@ -552,13 +555,13 @@ void PianoRoll::handleMouse() {
 
     if(rmb) {
         SDL_SetCursor(cursors.pencil);
-        if(hoveredElement != -1) {
+        if(hoveredElement != nullptr) {
             deleteElement();
         } 
     } else {
         if (stretchingNote != nullptr) {
             SDL_SetCursor(cursors.resize);
-        } else if(hoveredElement != -1) {
+        } else if(hoveredElement != nullptr) {
             SDL_SetCursor(cursors.mover);
         } else {
             SDL_SetCursor(cursors.selector);
@@ -567,7 +570,7 @@ void PianoRoll::handleMouse() {
 }
 
 bool PianoRoll::getStretchingNote() {
-    if(movingNote != -1) {
+    if(movingNote != nullptr) {
         return false;
     }
     if(isStretchingNote) {
@@ -615,11 +618,9 @@ void PianoRoll::stretchElement(int amount) {
 }
 
 
-void PianoRoll::moveNote(int noteIndex, int moveX, float y) {
+void PianoRoll::moveNote(std::shared_ptr<Note> note, int moveX, float y) {
+    fract x = fract(moveX, notesPerBar);
 
-    fract x = fract(moveX,notesPerBar);
-
-    std::shared_ptr<Note> note = region->notes[noteIndex];
     note->start = note->start + x;
     note->end = note->end + x;
     note->num = note->num + y;
@@ -627,3 +628,4 @@ void PianoRoll::moveNote(int noteIndex, int moveX, float y) {
     region->updateNoteChannel(note);
     Scroll();
 }
+
