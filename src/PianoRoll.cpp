@@ -36,7 +36,7 @@ PianoRoll::PianoRoll(SDL_FRect* rect, std::shared_ptr<DAW::Region> region, bool*
     times.clear();
     while(x < 1000) {
         times.push_back(x);
-        x += 0.25; //quarters of beats
+        x += 1.0f/notesPerBar;
     }
 
     createGridRect();
@@ -403,12 +403,12 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                 } else {
                     refreshGrid = true;
                     float dX = mouseX - last_lmb_x;
-                    if(dX >= dW) {
+                    if(dX >= dW/notesPerBar) {
                         stretchElement(1);
-                        last_lmb_x += dW;
-                    } else if(dX <= -dW) {
+                        last_lmb_x += dW/notesPerBar;
+                    } else if(dX <= -dW/notesPerBar) {
                         stretchElement(-1);
-                        last_lmb_x -= dW;
+                        last_lmb_x -= dW/notesPerBar;
                     }
                 }
 
@@ -420,9 +420,9 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                 float dY = mouseY - last_lmb_y;
                 float dirY = std::abs(dY)/dY;
 
-                if(std::abs(dX) >= dW) {
+                if(std::abs(dX) >= dW/notesPerBar) {
                     moveNote(movingNote, std::ceil(dirX*dX)/dX,0);
-                    last_lmb_x += dW*dirX;
+                    last_lmb_x += dW*dirX/notesPerBar;
                 } if (getHoveredLine() != lastHoveredLine) {
                     moveNote(movingNote, 0,getHoveredLine() - lastHoveredLine);
                     lastHoveredLine = getHoveredLine();
@@ -567,6 +567,9 @@ void PianoRoll::handleMouse() {
 }
 
 bool PianoRoll::getStretchingNote() {
+    if(movingNote != -1) {
+        return false;
+    }
     if(isStretchingNote) {
         return true;
     }
@@ -599,9 +602,9 @@ void PianoRoll::stretchElement(int amount) {
         return;
     }
     if(resizeDir == -1) {
-        stretchingNote->start = stretchingNote->start + fract(amount,1);
+        stretchingNote->start = stretchingNote->start + fract(amount,notesPerBar);
     } else if(resizeDir == 1) {
-        stretchingNote->end = stretchingNote->end + fract(amount,1);
+        stretchingNote->end = stretchingNote->end + fract(amount,notesPerBar);
     }
 
     if(stretchingNote->end < stretchingNote->start) {
@@ -614,7 +617,7 @@ void PianoRoll::stretchElement(int amount) {
 
 void PianoRoll::moveNote(int noteIndex, int moveX, float y) {
 
-    fract x = fract(moveX,1);
+    fract x = fract(moveX,notesPerBar);
 
     std::shared_ptr<Note> note = region->notes[noteIndex];
     note->start = note->start + x;
