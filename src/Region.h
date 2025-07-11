@@ -27,6 +27,8 @@ class Region : public GridElement {
 
  std::vector<std::shared_ptr<Note>> notes;
 
+ int id;
+
 bool updateNoteChannel(std::shared_ptr<Note>);
 
 

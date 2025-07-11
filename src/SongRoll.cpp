@@ -6,6 +6,7 @@
 #include <X11/Xutil.h>
 #include "Region.h"
 #include "Transport.h"
+#include "RegionManager.h"
 
 SongRoll::SongRoll(SDL_FRect* rect, bool* detached) : GridView(detached, rect, 200) {
     this->windowHandler = WindowHandler::instance();
@@ -24,7 +25,18 @@ SongRoll::SongRoll(SDL_FRect* rect, bool* detached) : GridView(detached, rect, 2
     insts->scrollY = &scrollY;
 
     UpdateGrid();
-    project->createRegion();
+
+    rightMargin = 200;
+
+    rightRect = SDL_FRect{dstRect->x + dstRect->w - rightMargin, dstRect->y + topMargin, rightMargin, dstRect->h - topMargin};
+
+    this->regionManager = new RegionManager();
+    regionManager->mouseX = &mouseX;
+    regionManager->mouseY = &mouseY;
+    regionManager->dstRect = &rightRect;
+    regionManager->renderer = renderer;
+
+
 
     float x = -1000; //for now only this many measures
     times.clear();
@@ -32,6 +44,7 @@ SongRoll::SongRoll(SDL_FRect* rect, bool* detached) : GridView(detached, rect, 2
         times.push_back(x);
         x++;
     }
+    createGridRect();
 }
 
 bool SongRoll::customTick() {
@@ -60,6 +73,7 @@ bool SongRoll::customTick() {
 void SongRoll::renderMargins() {
     insts->render();
     transport->render();
+    regionManager->render();
 }
 
 
@@ -77,9 +91,15 @@ void SongRoll::handleCustomInput(SDL_Event& e) {
             break;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             insts->clickMouse(e);
+            break;
         default:
             break;
     }
+    if (mouseX > rightRect.x && mouseX <= (rightRect.x + rightRect.w) &&
+        mouseY > rightRect.y && mouseY <= (rightRect.y + rightRect.h)) {
+        regionManager->handleInput(e);
+    }
+
 }
 
 void SongRoll::renderRegions() {
@@ -132,10 +152,13 @@ void SongRoll::getHoveredRegion() {
 }
 
 float SongRoll::getHoveredLine() {
-    return (mouseY - scrollY - topMargin)/divHeight;
+    return (mouseY + scrollY - topMargin)/divHeight;
 }
 
 void SongRoll::createElement() {
+    if(!regionManager->currentRegion) {
+        return;
+    }
     fract start = getHoveredTime();
     int y = getHoveredLine();
     if(y >= instruments->size()) {
@@ -143,7 +166,7 @@ void SongRoll::createElement() {
     }
 
     Instrument* inst = (*instruments)[y];
-    project->regions[0]->createPos(start, inst);
+    regionManager->currentRegion->createPos(start, inst);
     refreshGrid = true;
 }
 
@@ -167,8 +190,8 @@ void SongRoll::clickMouse(SDL_Event& e) {
                     }
                 }
 
-                if (mouseX > leftMargin && mouseX < gridRect.w &&
-                    mouseY > topMargin && mouseY < gridRect.h) {
+                if (mouseX > gridRect.x && mouseX < gridRect.x + gridRect.w &&
+                    mouseY > gridRect.y && mouseY < gridRect.y + gridRect.h) {
                     createElement();
                 }
 

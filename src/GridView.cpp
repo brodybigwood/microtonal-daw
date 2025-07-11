@@ -10,18 +10,10 @@ GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin) : detached
         dstRect = new SDL_FRect{
             0,
             0,
-            800,
+            1000,
             600
         };
     }
-
-    this->gridRect = {
-        dstRect->x+leftMargin,
-        dstRect->y+topMargin,
-        dstRect->w-leftMargin,
-        dstRect->h-topMargin
-    };
-
 
     this->width = dstRect->w;
     this->height = dstRect->h;
@@ -42,6 +34,15 @@ GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin) : detached
 
     this->playHead = new Playhead(&gridRect, dstRect, detached, startTime);
     this->transport = new Transport(this);
+}
+
+void GridView::createGridRect() {
+    gridRect = {
+        dstRect->x+leftMargin,
+        dstRect->y+topMargin,
+        dstRect->w-leftMargin-rightMargin,
+        dstRect->h-topMargin
+    };
 }
 
 GridView::~GridView() {
@@ -80,6 +81,10 @@ bool GridView::handleInput(SDL_Event& e) {
             clickMouse(e);
             break;
         case SDL_EVENT_MOUSE_WHEEL:
+            if (mouseX < gridRect.x || mouseX >= (gridRect.x + gridRect.w) ||
+                mouseY < gridRect.y || mouseY >= (gridRect.y + gridRect.h)) {
+                break;
+            }
             if (isCtrlPressed) {
                 dW *= std::pow(scaleSensitivity, e.wheel.y);
                 if (dW <= 4) {

@@ -48,7 +48,8 @@ class GridView {
         float maxHeight = 1000;
         float minHeight = 5;
 
-        float leftMargin;
+        float leftMargin = 0;
+        float rightMargin = 0;
         float topMargin = 50;
 
         SDL_FRect gridRect;
@@ -106,6 +107,8 @@ class GridView {
 
         virtual void createElement() {};
         virtual void deleteElement() {};
+
+        void createGridRect();
 
         fract getHoveredTime();
 

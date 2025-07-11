@@ -34,12 +34,6 @@ void Project::load(std::string filepath) {
 
         instruments.push_back(new Instrument(this, i));
     }
-
-
-    for(size_t i = 0; i<0; i++) {
-        std::shared_ptr<DAW::Region> reg = std::make_shared<DAW::Region>();
-        regions.push_back(reg);
-    }
 }
 
 void Project::save() {

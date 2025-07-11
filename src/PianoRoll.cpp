@@ -38,6 +38,8 @@ PianoRoll::PianoRoll(SDL_FRect* rect, std::shared_ptr<DAW::Region> region, bool*
         times.push_back(x);
         x += 0.25; //quarters of beats
     }
+
+    createGridRect();
 }
 
 PianoRoll::~PianoRoll() {

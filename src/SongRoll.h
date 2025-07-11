@@ -13,7 +13,7 @@
 #define SONGROLL_H
 
 class WindowHandler;  // forward declaration
-
+class RegionManager;
 
 class SongRoll : public GridView{
 
@@ -39,6 +39,9 @@ class SongRoll : public GridView{
         SDL_Texture* playHeadTexture;
 
         SDL_FRect regionRect;
+        SDL_FRect rightRect;
+
+        RegionManager* regionManager;
 
         void toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar);
         void handleCustomInput(SDL_Event& e) override;
