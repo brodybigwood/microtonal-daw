@@ -5,7 +5,6 @@
 
 Project::Project() {
     em.project = this;
-    em.start();
 }
 
 Project::~Project() {
@@ -73,7 +72,7 @@ void Project::stop() {
 
 
 void Project::tick() {
-    em.getEvents();
+
 }
 
 void Project::setup() {

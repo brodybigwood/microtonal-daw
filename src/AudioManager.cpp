@@ -32,6 +32,8 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
 
     AudioManager::instance()->streamTimeSeconds += static_cast<double>(bufferSize) / audioManager->sampleRate;
 
+    project->em.tick();
+
     unsigned int numChannels = audioManager->outputChannels;
     std::vector<float> mono(bufferSize, 0.0f);
 

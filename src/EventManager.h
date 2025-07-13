@@ -22,10 +22,7 @@ class EventManager {
         double time;
         double window;
 
-        void start();
-
-        void run();
-        void stop();
+        void tick();
 
 private:
     std::thread eventThread;

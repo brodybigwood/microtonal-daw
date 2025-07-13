@@ -68,6 +68,7 @@ void EventManager::injectMPE(std::vector<Steinberg::Vst::Event>& events, std::sh
 
 void EventManager::getEvents() {
 
+    float epsilon = 1e-6;
 
     for (auto& regionPtr : project->regions) {
         auto localRegion = regionPtr;
@@ -89,7 +90,7 @@ void EventManager::getEvents() {
                 double end = note->end + regTime;
                 int offset = AudioManager::instance()->sampleRate * 60.0f * (end - time)/project->tempo;
 
-                if(std::find(dispatched.begin(), dispatched.end(), note) != dispatched.end() && end < time+window && end >= time) {
+                if(std::find(dispatched.begin(), dispatched.end(), note) != dispatched.end() && end < time+window+epsilon && end+epsilon >= time) {
 
 
 
@@ -112,7 +113,7 @@ void EventManager::getEvents() {
 
 
 
-                } else if(std::find(dispatched.begin(), dispatched.end(), note) == dispatched.end() && start < time+window && start >= time) {
+                } else if(std::find(dispatched.begin(), dispatched.end(), note) == dispatched.end() && start < time+window+epsilon && start+epsilon >= time) {
 
                     Steinberg::Vst::Event e{};
                     e.type = Steinberg::Vst::Event::kNoteOnEvent;
@@ -149,37 +150,14 @@ void EventManager::getEvents() {
 
 }
 
-void EventManager::run() {
-    while(running) {
+void EventManager::tick() {
 
+    time = project->tempo * project->timeSeconds/60.0f;
+    window = (project->tempo * (float)AudioManager::instance()->bufferSize / AudioManager::instance()->sampleRate) / 60.0f;
 
-        time = project->tempo * project->timeSeconds/60.0f;
-
-        window = (project->tempo * (float)AudioManager::instance()->bufferSize / AudioManager::instance()->sampleRate) / 60.0f;
-
-
-
-
-        if(project->isPlaying) {
-            getEvents();
-        } else {
-            clearEvents();
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    if(project->isPlaying) {
+        getEvents();
+    } else {
+        clearEvents();
     }
-}
-
-void EventManager::stop() {
-    running = false;
-    if (eventThread.joinable()) {
-        eventThread.join();
-    }
-}
-
-
-void EventManager::start(){
-    running = true;
-    eventThread = std::thread([this]() {
-        this->run();
-    });
 }
