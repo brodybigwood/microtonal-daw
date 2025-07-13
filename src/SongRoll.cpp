@@ -92,6 +92,11 @@ void SongRoll::handleCustomInput(SDL_Event& e) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             insts->clickMouse(e);
             break;
+        case SDL_EVENT_MOUSE_WHEEL:
+            if(scrollY < 0) {
+                scrollY = 0;
+            }
+            break;
         default:
             break;
     }
