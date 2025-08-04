@@ -32,7 +32,7 @@ class Project {
 
         float tempo = 120;
 
-        void load(std::string filepath = "");
+        void load(std::string path = "");
 
         void save();
 
