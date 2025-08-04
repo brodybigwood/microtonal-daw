@@ -43,8 +43,9 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
     float *inBuffer = static_cast<float *>(inputBuffer);
 
 
-    project->tracks[0]->process(mono.data(), bufferSize);
-
+    for(auto* track : project->tracks) {
+        track->process(mono.data(), bufferSize);
+    }
 
     for (unsigned int i = 0; i < bufferSize; ++i) {
         for (unsigned int ch = 0; ch < numChannels; ++ch) {
