@@ -40,6 +40,8 @@ class InstrumentMenu {
 
         std::vector<plugItem> plugins;
 
+        std::unique_ptr<Button> addInst;
+
         float plugMarginX = 20.0f;
         float plugMarginY = 20.0f;
 
@@ -92,6 +94,8 @@ SDL_Surface* titleSurface;
 SDL_Surface* outputSurface;
 
 Instrument* instrument;
+
+Rack* generators;
 
 void setInst(Instrument* instrument);
 };

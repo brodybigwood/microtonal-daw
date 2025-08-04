@@ -1,6 +1,8 @@
 #include "InstrumentMenu.h"
 #include <SDL3/SDL_oldnames.h>
+#include <memory>
 #include "Region.h"
+#include "Rack.h"
 InstrumentMenu::InstrumentMenu() {}
 
 void InstrumentMenu::create(SDL_Texture* texture, SDL_Renderer* renderer, int x, int y, Project* project) {
@@ -14,8 +16,6 @@ void InstrumentMenu::create(SDL_Texture* texture, SDL_Renderer* renderer, int x,
     dstRect = {x, y, width, height};
     this->x = x;
     this->y = y;
-
-    TTF_Init();
 
     outRect = new SDL_FRect{
         width / 10.0f,
@@ -43,6 +43,28 @@ void InstrumentMenu::create(SDL_Texture* texture, SDL_Renderer* renderer, int x,
         y + height / 4.0f,
         8 * width / 10.f,
         20.0f
+    };
+
+    addInst = std::make_unique<Button>(renderer);
+    addInst->dstRect = new SDL_FRect{
+        x + width / 10.0f,
+        y + height / 8.0f,
+        8 * width / 10.f,
+        20.0f
+    };
+
+    addInst->activated = [] {
+        return false;
+    };
+
+    addInst->hover = [this, &rect = addInst->dstRect] {
+        return rect && mouseX >= rect->x && mouseX <= rect->x + rect->w && mouseY >= rect->y && mouseY <= rect->y + rect->h;
+    };
+
+    addInst->onClick = [this] {
+        this->generators->addPlugin("/home/brody/Downloads/surge-xt-linux-x86_64-1.3.4/lib/vst3/Surge XT.vst3/Contents/x86_64-linux/Surge XT.so");
+        //    rack.addPlugin("/usr/lib/vst3/Vital.vst3/Contents/x86_64-linux/Vital.so");
+        this->setInst(this->instrument);
     };
 
 }
@@ -150,7 +172,7 @@ void InstrumentMenu::render() {
         renderText();
         SDL_RenderTexture(renderer, texture, nullptr, &dstRect);
   
-
+        addInst->render();
 
 
     }
@@ -174,6 +196,9 @@ void InstrumentMenu::clickMouse(SDL_Event& e) {
             plugin.proc->onClick();
         }
     }
+    if(addInst->hover()){
+        addInst->onClick();
+    }
 }
 
 void InstrumentMenu::moveMouse(float x, float y) {
@@ -189,6 +214,7 @@ void InstrumentMenu::hover() {
 
 void InstrumentMenu::setInst(Instrument* instrument) {
     this->instrument = instrument;
+    this->generators = &(instrument->rack);
 
     pluginHeight = rackRect->h / 10.0f;
     float pluginY = rackRect->y + rackTitleRect->h;
