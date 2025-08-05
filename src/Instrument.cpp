@@ -8,6 +8,7 @@ Instrument::Instrument(Project* project, int index) : index(index) {
     this->project = project;
 
     addDestination(0);
+    this->id = (project->id_inst)++;
 }
 Instrument::~Instrument() {
 
@@ -25,4 +26,9 @@ void Instrument::process(float* outputBuffer, int bufferSize) {
     eventList.events.clear();
     rack.process(tempBuffer, outputBuffer, bufferSize, &tempEventList);
 
+}
+
+json Instrument::toJSON() {
+    json j;
+    return j;
 }

@@ -30,6 +30,9 @@ void Project::load(std::string path) {
     if (!inFile.is_open()) {
         std::cout<<"file didnt open"<<std::endl;
 
+        if(tracks.empty()) { //temporary
+            tracks.push_back(new MixerTrack(this));
+        }
         return;
     }
 
@@ -39,31 +42,55 @@ void Project::load(std::string path) {
 
     tempo = j.value("tempo", 120.0f);
 
+    constexpr uint16_t NO_ID = std::numeric_limits<uint16_t>::max();
+
     if (j.contains("tracks")) {
         for (auto& jt : j["tracks"]) {
+            id_track = jt.value("id", NO_ID);
             auto* track = new MixerTrack(this);
             track->name = jt.value("name", "Mixer Track");
             tracks.push_back(track);
         }
     }
 
+    uint16_t max_id = 0;
+    for (auto track : tracks) {
+        if (track->id > max_id) max_id = track->id;
+    }
+    id_track = max_id + 1;
+
+
     if (j.contains("instruments")) {
         int i = 0;
         for (auto& ji : j["instruments"]) {
+            id_inst = ji.value("id", NO_ID);
             auto* inst = new Instrument(this, i++);
             inst->name = ji.value("name", "Instrument");
             instruments.push_back(inst);
         }
     }
 
+    max_id = 0;
+    for (auto instrument : instruments) {
+        if (instrument->id > max_id) max_id = instrument->id;
+    }
+    id_inst = max_id + 1;
+
     if (j.contains("regions")) {
         int i = 0;
         for (auto& ji : j["regions"]) {
+            id_reg = ji.value("id", NO_ID);
             auto reg = std::make_shared<DAW::Region>();
             reg->name = ji.value("name", "MIDI Region");
             regions.push_back(reg);
         }
     }
+
+    max_id = 0;
+    for (auto region : regions) {
+        if (region->id > max_id) max_id = region->id;
+    }
+    id_reg = max_id + 1;
 
     if(tracks.empty()) {
         tracks.push_back(new MixerTrack(this));
@@ -79,8 +106,7 @@ void Project::save() {
 
     j["tracks"] = json::array();
     for (auto e : tracks) {
-        json je;
-        je["name"] = e->name;
+        json je = e->toJSON();
         j["tracks"].push_back(je);
     }
 

@@ -48,6 +48,10 @@ class Project {
 
         void stop();
 
+        uint16_t id_inst = 0;
+        uint16_t id_track = 0;
+        uint16_t id_reg = 0;
+
         std::vector<std::shared_ptr<DAW::Region>> regions;
         std::vector<Instrument*> instruments;
         std::vector<DAW::Region> files;

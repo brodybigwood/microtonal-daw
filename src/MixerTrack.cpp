@@ -3,7 +3,7 @@
 
 MixerTrack::MixerTrack(Project* project) {
 
-
+    this->id = (project->id_track)++;
 }
 
 
@@ -25,4 +25,24 @@ void MixerTrack::process(float* outputBuffer, int bufferSize) {
     }
     rack.process(childBuffer, outputBuffer, bufferSize);
 
+}
+
+json MixerTrack::toJSON() {
+    json j;
+    j["name"] = name;
+    j["id"] = id;
+
+    json arr1 = json::array();
+    for (auto child : childInstruments) {
+        arr1.push_back(child->id);
+    }
+    j["childInstruments"] = arr1;
+
+    json arr2 = json::array();
+    for (auto child : childTracks) {
+        arr2.push_back(child->id);
+    }
+    j["childTracks"] = arr2;
+
+    return j;
 }

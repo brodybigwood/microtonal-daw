@@ -9,8 +9,7 @@
 using namespace DAW;
 
 Region::Region() {
-    static int id = 0;
-    this->id = id++;
+    this->id = (Project::instance()->id_reg)++;
 }
 
 Region::~Region() {

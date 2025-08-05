@@ -8,6 +8,9 @@
 #include "Plugin.h"
 #include "EventList.h"
 
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
+
 #ifndef INSTRUMENT_H
 #define INSTRUMENT_H
 
@@ -27,6 +30,7 @@ class Instrument {
         EventList eventList;
 
         int index;
+        uint16_t id;
 
         Project* project;
 
@@ -40,6 +44,10 @@ class Instrument {
         void process(float* outputBuffer, int bufferSize);
 
         void addDestination(int trackIndex);
+
+        json toJSON();
+
+        void fromJSON(json);
 
 };
 
