@@ -30,5 +30,29 @@ void Instrument::process(float* outputBuffer, int bufferSize) {
 
 json Instrument::toJSON() {
     json j;
+    j["name"] = name;
+    j["id"] = id;
+    j["rack"] = rack.toJSON();
     return j;
+}
+
+void Instrument::fromJSON(json js) {
+    name = js["name"];
+    id = js["id"];
+
+    constexpr uint16_t NO_ID = std::numeric_limits<uint16_t>::max();
+
+    if (js.contains("rack")) {
+        json jr = js["rack"];
+        Project::instance()->id_rack = jr.value("id", NO_ID);
+        rack = Rack();
+        rack.fromJSON(jr);
+        Project::instance()->racks.push_back(&rack);
+    }
+
+    uint16_t max_id = 0;
+    for (auto rack : Project::instance()->racks) {
+        if (rack->id > max_id) max_id = rack->id;
+    }
+    Project::instance()->id_rack = max_id + 1;
 }

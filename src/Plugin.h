@@ -27,13 +27,16 @@
 
 #include "Project.h"
 
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
+
 class EditorHostFrame;
 
 class Project;
 
 class Plugin {
     public:
-        Plugin(const char* filepath);
+        Plugin(char* filepath);
         ~Plugin();
 
         std::unique_ptr<EditorHostFrame> hostFrame;
@@ -99,7 +102,12 @@ class Plugin {
         bool windowOpen = false;
 
         bool editorTick();
-        private:
+        uint16_t id;
+        char* path;
+
+        json toJSON();
+        void fromJSON(json);
+    private:
 
         void fetchPluginFactoryInfo();
         bool instantiatePlugin();
@@ -108,7 +116,6 @@ class Plugin {
 
 
         void makeConnection();
-
 
 };
 

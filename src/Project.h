@@ -1,5 +1,6 @@
 #include "Note.h"
 #include <vector>
+#include "Plugin.h"
 #include "fract.h"
 #include "Instrument.h"
 #include <iostream>
@@ -12,6 +13,8 @@
 #include "EventManager.h"
 
 class Instrument;
+class Rack;
+
 namespace DAW {
     class Region;
 }
@@ -51,6 +54,7 @@ class Project {
         uint16_t id_inst = 0;
         uint16_t id_track = 0;
         uint16_t id_reg = 0;
+        uint16_t id_rack = 0;
 
         std::vector<std::shared_ptr<DAW::Region>> regions;
         std::vector<Instrument*> instruments;
@@ -59,6 +63,7 @@ class Project {
         std::vector<DAW::Region> automations;
 
         std::vector<MixerTrack*> tracks;
+        std::vector<Rack*> racks;
 
         void tick();
 

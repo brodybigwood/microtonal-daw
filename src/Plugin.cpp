@@ -5,10 +5,16 @@
 #include <iostream>
 #include <dlfcn.h>
 
+json Plugin::toJSON() {
+    json j;
+    j["path"] = path;
+    return j;
+}
 
 
-Plugin::Plugin(const char* filepath) : filepath(filepath), pluginFactory(nullptr) {
+Plugin::Plugin(char* filepath) : filepath(filepath), pluginFactory(nullptr) {
 
+    this->path = filepath;
     am = AudioManager::instance();
 
     project = Project::instance();

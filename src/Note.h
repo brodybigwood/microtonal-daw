@@ -4,6 +4,8 @@
 #include <SDL3/SDL.h>
 
 #include "fract.h"
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
 
 class Note {
     public:
@@ -17,15 +19,13 @@ class Note {
         int id;
         int channel;
 
-        SDL_Color customColor;
-
-        int midiNum, pitchBend, modX, modY, modZ;  // Modulation parameters
-
         double temperament;
-
-        int destinationTracks[16];  // Array for destination tracks (might be useful in your design)
         
         void move(fract x, fract y);
+
+        json toJSON();
+        void fromJSON(json&);
+
 };
 
 #endif

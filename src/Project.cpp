@@ -50,6 +50,7 @@ void Project::load(std::string path) {
             auto* track = new MixerTrack(this);
             track->name = jt.value("name", "Mixer Track");
             tracks.push_back(track);
+            track->fromJSON(jt);
         }
     }
 
@@ -67,6 +68,7 @@ void Project::load(std::string path) {
             auto* inst = new Instrument(this, i++);
             inst->name = ji.value("name", "Instrument");
             instruments.push_back(inst);
+            inst->fromJSON(ji);
         }
     }
 
@@ -112,8 +114,7 @@ void Project::save() {
 
     j["instruments"] = json::array();
     for (auto e : instruments) {
-        json je;
-        je["name"] = e->name;
+        json je = e->toJSON();
         j["instruments"].push_back(je);
     }
 

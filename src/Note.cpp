@@ -8,17 +8,32 @@ Note::Note(fract start, fract end, float num, double temperament) {
     this->num = num;
     this->temperament = temperament;
     this->start = start;
-    this->midiNum = 0;  // Initialize midiNum if needed (default value, can be changed later)
-    this->pitchBend = 0.0f;  // Initialize pitchBend to 0
-    this->modX = 0.0f;  // Initialize modulation X
-    this->modY = 0.0f;  // Initialize modulation Y
-    this->modZ = 0.0f;  // Initialize modulation Z
-
-    for (int i = 0; i < 16; ++i) {
-        this->destinationTracks[i] = -1;  // Default track number as -1 or another value to denote "no track"
-    }
 }
 
 Note::~Note() {
     // Destructor logic, if any is needed in future
 }
+
+json Note::toJSON() {
+    json j;
+    j["num"] = num;
+    j["start"] = { {"num", start.num}, {"den", start.den} };
+    j["end"] = { {"num", end.num}, {"den", end.den} };
+    j["id"] = id;
+    j["channel"] = channel;
+    j["temperament"] = temperament;
+
+    return j;
+}
+
+void Note::fromJSON(json& input) {
+    num = input.at("num").get<float>();
+    start.num = input.at("start").at("num").get<int>();
+    start.den = input.at("start").at("den").get<int>();
+    end.num = input.at("end").at("num").get<int>();
+    end.den = input.at("end").at("den").get<int>();
+    id = input.at("id").get<int>();
+    channel = input.at("channel").get<int>();
+    temperament = input.at("temperament").get<double>();
+}
+
