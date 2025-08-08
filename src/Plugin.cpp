@@ -77,7 +77,10 @@ std::vector<uint8_t> Plugin::getState() {
 
 Plugin::Plugin(char* filepath) : filepath(filepath), pluginFactory(nullptr) {
 
-    this->path = filepath;
+    size_t len = std::strlen(filepath) + 1;
+    this->path = new char[len];
+    std::memcpy(this->path, filepath, len);
+
     am = AudioManager::instance();
 
     project = Project::instance();
@@ -106,6 +109,8 @@ Plugin::~Plugin() {
     if (view){
         view->release();
     }
+
+    delete[] path;
 }
 
 void Plugin::toggle() {
