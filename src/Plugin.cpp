@@ -13,39 +13,34 @@ json Plugin::toJSON() {
 
     std::filesystem::path folder = std::filesystem::path(project->filepath)
     / "racks"
-    / std::to_string(rack->id)
-    / std::to_string(rack->getIndex(this));
+    / std::to_string(rack->id);
 
     std::filesystem::create_directories(folder);
 
     std::vector<uint8_t> vstState = getState();
 
-    std::ofstream stateFile(folder / "state", std::ios::binary);
+    std::ofstream stateFile(folder / std::to_string(rack->getIndex(this)), std::ios::binary);
     if (stateFile.is_open()) {
         stateFile.write(reinterpret_cast<const char*>(vstState.data()), vstState.size());
     }
 
 
     json j;
-    j["path"] = path;
+    j["path"] = this->path;
 
     return j;
 }
 
 void Plugin::fromJSON(json j) {
 
-    // Rebuild folder path
-    std::filesystem::path folder = std::filesystem::path(project->filepath)
+    std::filesystem::path path = std::filesystem::path(project->filepath)
     / "racks"
     / std::to_string(rack->id)
     / std::to_string(rack->getIndex(this));
 
-    std::filesystem::path stateFile = folder / "state";
-
-    // Read binary state
-    std::ifstream in(stateFile, std::ios::binary | std::ios::ate);
+    std::ifstream in(path, std::ios::binary | std::ios::ate);
     if (!in.is_open()) {
-        // Handle missing file as needed (throw or default state)
+        std::cout<<"could not find plugin state file"<<std::endl;
         return;
     }
 
@@ -54,11 +49,9 @@ void Plugin::fromJSON(json j) {
 
     std::vector<uint8_t> buffer(size);
     if (!in.read(reinterpret_cast<char*>(buffer.data()), size)) {
-        // Handle read error
         return;
     }
 
-    // Restore VST state
     setState(buffer);
 }
 
