@@ -72,12 +72,15 @@ json Region::toJSON() {
     for(auto e : notes) {
         j["notes"].push_back(e->toJSON());
     }
+    j["positions"] = GridElement::toJSON();
+
     return j;
 }
 
 void Region::fromJSON(json j) {
     name = j["name"];
     releaseMS = j["releaseMS"];
+    GridElement::fromJSON(j["positions"]);
 
     for (auto e : j["notes"]) {
         notes.push_back(Note::fromJSON(e));
