@@ -2,6 +2,9 @@
 #define FRACT_H
 
 #include <numeric>  // For std::gcd
+#include <nlohmann/json.hpp>
+
+// like all gpt
 
 struct fract {
     int num;  // Numerator
@@ -70,6 +73,18 @@ struct fract {
         fract new_fract(new_num, new_den);
         new_fract.simplify();
         return new_fract;
+    }
+
+    nlohmann::json toJSON() {
+        return nlohmann::json{{"num", num}, {"den", den}};
+    }
+
+    static fract fromJSON(const nlohmann::json& j) {
+        fract f{};
+        j.at("num").get_to(f.num);
+        j.at("den").get_to(f.den);
+        if (f.den == 0) f.den = 1;
+        return f;
     }
 };
 
