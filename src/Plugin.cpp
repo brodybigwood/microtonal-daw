@@ -4,12 +4,82 @@
 #include <cstddef>
 #include <iostream>
 #include <dlfcn.h>
+#include <filesystem>
+#include "VectorStream.h"
+#include <fstream>
+
 
 json Plugin::toJSON() {
+
+    std::filesystem::path folder = std::filesystem::path(project->filepath)
+    / "racks"
+    / std::to_string(rack->id)
+    / std::to_string(rack->getIndex(this));
+
+    std::filesystem::create_directories(folder);
+
+    std::vector<uint8_t> vstState = getState();
+
+    std::ofstream stateFile(folder / "state", std::ios::binary);
+    if (stateFile.is_open()) {
+        stateFile.write(reinterpret_cast<const char*>(vstState.data()), vstState.size());
+    }
+
+
     json j;
     j["path"] = path;
+
     return j;
 }
+
+void Plugin::fromJSON(json j) {
+
+    // Rebuild folder path
+    std::filesystem::path folder = std::filesystem::path(project->filepath)
+    / "racks"
+    / std::to_string(rack->id)
+    / std::to_string(rack->getIndex(this));
+
+    std::filesystem::path stateFile = folder / "state";
+
+    // Read binary state
+    std::ifstream in(stateFile, std::ios::binary | std::ios::ate);
+    if (!in.is_open()) {
+        // Handle missing file as needed (throw or default state)
+        return;
+    }
+
+    std::streamsize size = in.tellg();
+    in.seekg(0, std::ios::beg);
+
+    std::vector<uint8_t> buffer(size);
+    if (!in.read(reinterpret_cast<char*>(buffer.data()), size)) {
+        // Handle read error
+        return;
+    }
+
+    // Restore VST state
+    setState(buffer);
+}
+
+void Plugin::setState(std::vector<uint8_t>& stateData) {
+    VectorReadStream stream(stateData);
+    if (component) {
+        component->setState(&stream);
+    }
+}
+
+
+
+std::vector<uint8_t> Plugin::getState() {
+    VectorStream stream;
+    if (component) {
+        component->getState(&stream);
+    }
+    return std::move(stream.data);
+}
+
+
 
 
 Plugin::Plugin(char* filepath) : filepath(filepath), pluginFactory(nullptr) {

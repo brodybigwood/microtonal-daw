@@ -33,6 +33,7 @@ using json = nlohmann::json;
 class EditorHostFrame;
 
 class Project;
+class Rack;
 
 class Plugin {
     public:
@@ -102,11 +103,15 @@ class Plugin {
         bool windowOpen = false;
 
         bool editorTick();
-        uint16_t id;
+        Rack* rack;
         char* path;
 
         json toJSON();
         void fromJSON(json);
+
+        std::vector<uint8_t> getState();
+        void setState(std::vector<uint8_t>&);
+        uint16_t id;
     private:
 
         void fetchPluginFactoryInfo();

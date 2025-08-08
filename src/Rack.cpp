@@ -33,11 +33,21 @@ void Rack::process(
 
 bool Rack::addPlugin(char* filepath) {
     Plugin* p = new Plugin(filepath);
+    p->rack = this;
     plugins.push_back(p);
     p->id = id_plug++;
     PluginManager::instance().addPlugin(p);
     return true;
 }
+
+int Rack::getIndex(Plugin* plugin) {
+    for (size_t i = 0; i < plugins.size(); ++i) {
+        if (plugins[i] == plugin)
+            return static_cast<int>(i);
+    }
+    return -1; // not found
+}
+
 
 json Rack::toJSON() {
     json j;
@@ -64,8 +74,10 @@ void Rack::fromJSON(json j) {
             char* path = spath.data();
             std::cout<<path<<std::endl;
             Plugin* p = new Plugin(path);
+            p->rack = this;
             plugins.push_back(p);
             p->id = id_plug++;
+            p->fromJSON(jt);
             PluginManager::instance().addPlugin(p);
         }
     }

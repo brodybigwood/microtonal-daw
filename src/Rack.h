@@ -32,5 +32,7 @@ class Rack {
     uint16_t id_plug = 0;
     uint16_t id;
 
+    int getIndex(Plugin*);
+
 };
 #endif
