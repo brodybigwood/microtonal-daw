@@ -8,6 +8,9 @@
 #include <memory>
 #include "GridElement.h"
 
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
+
 #ifndef REGION_H
 #define REGION_H
 
@@ -27,7 +30,7 @@ class Region : public GridElement {
 
  std::vector<std::shared_ptr<Note>> notes;
 
- int id;
+ uint16_t id;
 
 bool updateNoteChannel(std::shared_ptr<Note>);
 
@@ -42,6 +45,9 @@ bool updateNoteChannel(std::shared_ptr<Note>);
 int releaseMS = 1000;
 
 void draw(SDL_Renderer*) override;
+
+json toJSON();
+void fromJSON(json);
 
 };
 

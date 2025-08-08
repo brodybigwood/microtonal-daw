@@ -89,7 +89,7 @@ void Project::load(std::string path) {
         for (auto& ji : j["regions"]) {
             id_reg = ji.value("id", NO_ID);
             auto reg = std::make_shared<DAW::Region>();
-            reg->name = ji.value("name", "MIDI Region");
+            reg->fromJSON(ji);
             regions.push_back(reg);
         }
     }
@@ -130,8 +130,7 @@ void Project::save() {
 
     j["regions"] = json::array();
     for (auto e : regions) {
-        json je;
-        je["name"] = e->name;
+        json je = e->toJSON();
         j["regions"].push_back(je);
     }
 

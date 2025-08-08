@@ -63,3 +63,23 @@ bool Region::updateNoteChannel(std::shared_ptr<Note> n) {
     return false;
 }
 
+json Region::toJSON() {
+    json j;
+    j["name"] = name;
+    j["releaseMS"] = releaseMS;
+    j["id"] = id;
+    j["notes"] = json::array();
+    for(auto e : notes) {
+        j["notes"].push_back(e->toJSON());
+    }
+    return j;
+}
+
+void Region::fromJSON(json j) {
+    name = j["name"];
+    releaseMS = j["releaseMS"];
+
+    for (auto e : j["notes"]) {
+        notes.push_back(Note::fromJSON(e));
+    }
+}

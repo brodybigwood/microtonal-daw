@@ -26,14 +26,22 @@ json Note::toJSON() {
     return j;
 }
 
-void Note::fromJSON(json& input) {
-    num = input.at("num").get<float>();
+std::shared_ptr<Note> Note::fromJSON(json& input) {
+    auto num = input.at("num").get<float>();
+    fract start;
     start.num = input.at("start").at("num").get<int>();
     start.den = input.at("start").at("den").get<int>();
+    fract end;
     end.num = input.at("end").at("num").get<int>();
     end.den = input.at("end").at("den").get<int>();
-    id = input.at("id").get<int>();
-    channel = input.at("channel").get<int>();
-    temperament = input.at("temperament").get<double>();
+    auto id = input.at("id").get<int>();
+    auto channel = input.at("channel").get<int>();
+    auto temperament = input.at("temperament").get<double>();
+
+    std::shared_ptr<Note> n = std::make_shared<Note>(start,end,num,temperament);
+    n->id = id;
+    n->channel = channel;
+
+    return n;
 }
 
