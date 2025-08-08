@@ -2,6 +2,7 @@
 #include "Plugin.h"
 #include "Region.h"
 #include <memory>
+#include <filesystem>
 
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -26,7 +27,11 @@ void Project::load(std::string path) {
         filepath = path;
     }
 
-    std::ifstream inFile(filepath);
+    std::filesystem::path folder(filepath);
+    std::filesystem::create_directories(folder);
+    std::filesystem::path file = folder / "save.json";
+
+    std::ifstream inFile(file);
     if (!inFile.is_open()) {
         std::cout<<"file didnt open"<<std::endl;
 
@@ -35,6 +40,7 @@ void Project::load(std::string path) {
         }
         return;
     }
+
 
 
     json j;
@@ -103,6 +109,10 @@ void Project::load(std::string path) {
 void Project::save() {
     if (filepath.empty()) return;
 
+    std::filesystem::path folder(filepath);
+    std::filesystem::create_directories(folder);
+    std::filesystem::path file = folder / "save.json";
+
     json j;
     j["tempo"] = tempo;
 
@@ -125,7 +135,7 @@ void Project::save() {
         j["regions"].push_back(je);
     }
 
-    std::ofstream outFile(filepath);
+    std::ofstream outFile(file);
     if (outFile.is_open()) {
         outFile << j.dump(2);
     }

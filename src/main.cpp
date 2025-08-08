@@ -30,7 +30,7 @@ int main() {
 
     windowHandler->createHome(project);
 
-    project->load("test.json");
+    project->load("test");
 
     if (!audioManager->start()) {
         std::cout << "audiomanager failed" << std::endl;
