@@ -25,7 +25,6 @@ class Home {
     int windowHeight = 1080;
     int windowWidth = 1920;
 
-    int controlsHeight = 50;
     int mixerHeight = 200;
 
     int instMenuWidth = 200;
@@ -38,7 +37,7 @@ class Home {
     SongRoll* song;
 
     bool pianoRollDetached = true;
-    bool songRollDetached = true;
+    bool songRollDetached = false;
     
     InstrumentList* insts;
 
@@ -64,8 +63,6 @@ class Home {
         bool handleInput(SDL_Event& e);
 
         float mouseX, mouseY;
-
-        void hoverButtons();
 
         std::vector<Button> buttons;
 

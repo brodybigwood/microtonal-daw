@@ -18,13 +18,13 @@ Home::Home(Project* project) {
 
     renderer = windowHandler->renderer;
 
-    instrumentMenuTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, instMenuWidth, windowHeight-mixerHeight-controlsHeight);
+    instrumentMenuTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, instMenuWidth, windowHeight-mixerHeight);
 
     songRect = SDL_FRect{
         0,
-        (float)controlsHeight,
+        0,
        (float) windowWidth-instMenuWidth,
-        (float)windowHeight-controlsHeight-mixerHeight
+        (float)windowHeight-mixerHeight
     };
 
 
@@ -44,7 +44,7 @@ void Home::createRoll() {
     );
 
     instrumentMenu = InstrumentMenu::instance();
-    instrumentMenu->create(instrumentMenuTexture, renderer, windowWidth-instMenuWidth, controlsHeight, project);
+    instrumentMenu->create(instrumentMenuTexture, renderer, windowWidth-instMenuWidth, 0, project);
 
 }
 
@@ -127,19 +127,11 @@ bool Home::handleInput(SDL_Event& e) {
         
         case SDL_EVENT_MOUSE_MOTION:
             instrumentMenu->moveMouse(mouseX,mouseY);
-            hoverButtons();
             return true;
             break;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             if(mouseOnEditor()) {
                 instrumentMenu->clickMouse(e);
-                return true;
-                break;
-            }
-
-            if(
-                mouseY < controlsHeight
-            ) {
                 return true;
                 break;
             }
@@ -169,16 +161,11 @@ bool Home::handleInput(SDL_Event& e) {
 
 }
 
-void Home::hoverButtons() {
-
-
-}
-
 bool Home::mouseOnEditor() {
     if(
         mouseX > windowWidth-instMenuWidth &&
         mouseX < windowWidth &&
-        mouseY > controlsHeight &&
+        mouseY > 0 &&
         mouseY < windowHeight-mixerHeight
     ) {
         return true;
