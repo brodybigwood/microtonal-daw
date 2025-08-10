@@ -45,6 +45,11 @@ void Rack::process(
                 dest[i] += src[i];
             }
         }
+
+        for (size_t i = 0; i < data.output.numChannels; ++i) {
+            delete[] tempChannels[i].buffer;
+        }
+        delete[] tempChannels;
     }
 
 }
