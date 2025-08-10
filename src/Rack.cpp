@@ -13,20 +13,12 @@ Rack::~Rack() {
 }
 
 void Rack::process(
-    float* tempBuffer,
-    float* outputBuffer,
-    int bufferSize,
+    audioData data,
     EventList* eventList
 ) {
-
-    size_t pluginCount = plugins.size();
  
-    for(size_t i = 0; i<pluginCount; i++) {
-        plugins[i]->process(tempBuffer, bufferSize, eventList);
-    }
-
-    for (size_t i = 0; i < bufferSize; i++) {
-        outputBuffer[i] += tempBuffer[i];
+    for(size_t i = 0; i< plugins.size(); i++) {
+        plugins[i]->process(data.output.channels[0].buffer, data.bufferSize, eventList);
     }
 
 }

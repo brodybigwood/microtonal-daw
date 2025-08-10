@@ -10,7 +10,7 @@
 
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
-
+#include "Processing.h"
 #ifndef INSTRUMENT_H
 #define INSTRUMENT_H
 
@@ -41,7 +41,7 @@ class Instrument {
 
         Rack rack;
 
-        void process(float* outputBuffer, int bufferSize);
+        void process(audioData);
 
         void addDestination(int trackIndex);
 

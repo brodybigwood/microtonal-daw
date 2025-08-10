@@ -20,11 +20,10 @@ void Instrument::addDestination(int trackIndex) {
     project->tracks[0]->childInstruments.push_back(this);
 }
 
-void Instrument::process(float* outputBuffer, int bufferSize) {
-    float tempBuffer[bufferSize] = {0.0f};
+void Instrument::process(audioData data) {
     EventList tempEventList = std::move(eventList);
     eventList.events.clear();
-    rack.process(tempBuffer, outputBuffer, bufferSize, &tempEventList);
+    rack.process(data, &tempEventList);
 
 }
 

@@ -36,9 +36,9 @@ void MixerTrack::process(audioData data) {
         childTracks[i]->process(tempData);
     }
     for (size_t i = 0; i < childInstruments.size(); i++) {
-        childInstruments[i]->process(tempChannels[0].buffer, data.bufferSize);//left side
+        childInstruments[i]->process(data);//left side
     }
-    rack.process(tempChannels[0].buffer, data.output.channels[0].buffer, data.bufferSize);
+    rack.process(data);
 
     for (size_t i = 0; i < data.output.numChannels; i++) {
         for (size_t j = 0; j < data.bufferSize; j++) {

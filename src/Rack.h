@@ -5,6 +5,7 @@
 #include "EventList.h"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
+#include "Processing.h"
 
 #ifndef RACK_H
 #define RACK_H
@@ -19,9 +20,7 @@ class Rack {
     std::vector<Plugin*> plugins;
 
     void process(
-        float* tempBuffer,
-        float* outputBuffer,
-        int bufferSize,
+        audioData data,
         EventList* eventList = nullptr
     );
   
