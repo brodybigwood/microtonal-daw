@@ -26,7 +26,7 @@
 #include "EventList.h"
 
 #include "Project.h"
-
+#include "Processing.h"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
@@ -49,9 +49,8 @@ class Plugin {
          AudioManager* am;
          
          void process(
-            float* thrubuffer,
-            int bufferSize,
-            EventList* eventList
+            audioData,
+            EventList*
         );
 
          void setup();

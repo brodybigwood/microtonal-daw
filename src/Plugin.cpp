@@ -169,23 +169,22 @@ bool Plugin::editorTick() {
 
 
 
-void Plugin::process(float* thrubuffer, int bufferSize, EventList* eventList) {
+void Plugin::process(audioData audio, EventList* eventList) {
 
-    if (!audioProcessor) return;
+    if (!audioProcessor || !processing) return;
 
-    if(!processing) return;
+    int bufferSize = audio.bufferSize;
 
     const int totalInputChannels = std::accumulate(
         inputBuses.begin(), inputBuses.end(), 0,
-                                                   [](int sum, const auto& b) { return sum + b.numChannels; });
-
-
+        [](int sum, const auto& b) { return sum + b.numChannels; }
+    );
     const int totalOutputChannels = std::accumulate(
         outputBuses.begin(), outputBuses.end(), 0,
-                                              [](int sum, const auto& b) { return sum + b.numChannels; });
+        [](int sum, const auto& b) { return sum + b.numChannels; }
+    );
 
     std::vector<float> tempBuffer(bufferSize * totalOutputChannels, 0.0f);
-
     std::vector<float> inputTemp(bufferSize * totalInputChannels, 0.0f);
 
     int chOffset = 0;
@@ -195,8 +194,6 @@ void Plugin::process(float* thrubuffer, int bufferSize, EventList* eventList) {
             ++chOffset;
         }
     }
-
-
 
     chOffset = 0;
     for (auto& bus : outputBuses) {
@@ -215,28 +212,16 @@ void Plugin::process(float* thrubuffer, int bufferSize, EventList* eventList) {
     context.sampleRate = am->sampleRate;
 
     data.processContext = &context;
-
-    for (int i = 0; i < data.numInputs; ++i) {
-        for (int ch = 0; ch < inputBuses[i].numChannels; ++ch) {
-        }
-    }
-
-    for (int i = 0; i < data.numOutputs; ++i) {
-        for (int ch = 0; ch < outputBuses[i].numChannels; ++ch) {
-        }
-    }
-
     data.inputEvents = eventList;
-
 
     audioProcessor->process(data);
 
-    for (int s = 0; s < bufferSize; ++s) {
-        float mixed = 0.0f;
-        for (int ch = 0; ch < totalOutputChannels; ++ch) {
-            mixed += tempBuffer[ch * bufferSize + s];
+    for (size_t ch = 0; ch < audio.output.numChannels && ch < (size_t)totalOutputChannels; ++ch) {
+        float* pluginOut = tempBuffer.data() + ch * bufferSize;
+        float* audioOut = audio.output.channels[ch].buffer;
+        for (size_t i = 0; i < bufferSize; ++i) {
+            audioOut[i] += pluginOut[i];
         }
-        thrubuffer[s] += mixed;
     }
 }
 

@@ -18,7 +18,33 @@ void Rack::process(
 ) {
  
     for(size_t i = 0; i< plugins.size(); i++) {
-        plugins[i]->process(data.output.channels[0].buffer, data.bufferSize, eventList);
+
+        channel* tempChannels = new channel[data.output.numChannels];
+
+        for (size_t i = 0; i < data.output.numChannels; i++) {
+            tempChannels[i].buffer = new float[data.bufferSize]();
+        }
+
+        audioStream output {
+            tempChannels,
+            data.output.numChannels
+        };
+
+        audioData tempData {
+            data.input,
+            output,
+            data.bufferSize
+        };
+
+        plugins[i]->process(tempData, eventList);
+
+        for (size_t j = 0; j < tempData.output.numChannels; j++) {
+            float* dest = data.output.channels[j].buffer;
+            float* src = tempData.output.channels[j].buffer;
+            for (size_t i = 0; i < data.bufferSize; ++i) {
+                dest[i] += src[i];
+            }
+        }
     }
 
 }
