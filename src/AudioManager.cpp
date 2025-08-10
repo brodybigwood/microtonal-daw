@@ -1,5 +1,7 @@
 #include "AudioManager.h"
 #include <cmath>
+#include <endian.h>
+#include "Processing.h"
 
 AudioManager::AudioManager() {
 
@@ -35,7 +37,6 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
     project->em.tick();
 
     unsigned int numChannels = audioManager->outputChannels;
-    std::vector<float> mono(bufferSize, 0.0f);
 
     memset(outputBuffer, 0, bufferSize * numChannels * sizeof(float));
 
@@ -43,15 +44,56 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
     float *inBuffer = static_cast<float *>(inputBuffer);
 
 
+
+
+    channel* outChannels = new channel[audioManager->outputChannels];
+    channel* inChannels = new channel[audioManager->inputChannels];
+
+    for (size_t i = 0; i < audioManager->outputChannels; i++) {
+        outChannels[i].buffer = new float[bufferSize]();
+    }
+
+    for (size_t i = 0; i < audioManager->inputChannels; i++) {
+        inChannels[i].buffer = new float[bufferSize]();
+    }
+
+    audioStream output {
+        outChannels,
+        audioManager->outputChannels
+    };
+
+    audioStream input {
+        inChannels,
+        audioManager->inputChannels
+    };
+
+    audioData data {
+        input,
+        output,
+        bufferSize
+    };
+
+
     for(auto* track : project->tracks) {
-        track->process(mono.data(), bufferSize);
+        track->process(data);
     }
 
     for (unsigned int i = 0; i < bufferSize; ++i) {
         for (unsigned int ch = 0; ch < numChannels; ++ch) {
-            outBuffer[i * numChannels + ch] = mono[i];
+            outBuffer[i * numChannels + ch] = data.output.channels[ch].buffer[i];
         }
     }
+
+    for (size_t i = 0; i < audioManager->outputChannels; i++) {
+        delete[] outChannels[i].buffer;
+    }
+
+    for (size_t i = 0; i < audioManager->inputChannels; i++) {
+        delete[] inChannels[i].buffer;
+    }
+
+    delete[] outChannels;
+    delete[] inChannels;
 
     if(project->isPlaying) {
         project->effectiveTime = project->timeSeconds -  static_cast<double>(audioManager->latency) / audioManager->sampleRate;
@@ -111,7 +153,7 @@ bool AudioManager::start() {
 
     std::cout << "Audio stream started successfully!" << std::endl;
 
-    std::cout << "AudioManager data: samplerate: " <<sampleRate << ", buff size: " <<bufferSize <<std::endl;
+    std::cout << "AudioManager data: samplerate: " <<sampleRate << ", buff size: " <<bufferSize << ", nchannelsout: " << outputChannels << std::endl;
 
     latency = rtaudio.getStreamLatency();
 

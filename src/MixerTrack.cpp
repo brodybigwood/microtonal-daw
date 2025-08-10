@@ -12,19 +12,45 @@ MixerTrack::~MixerTrack() {
 
 }
 
-void MixerTrack::process(float* outputBuffer, int bufferSize) {
+void MixerTrack::process(audioData data) {
 
-    float childBuffer[bufferSize] = {0.0f}; // stack buffer initialized to 0
+    channel* tempChannels = new channel[data.output.numChannels];
+
+    for (size_t i = 0; i < data.output.numChannels; i++) {
+        tempChannels[i].buffer = new float[data.bufferSize]();
+    }
+
+    audioStream output {
+        tempChannels,
+        data.output.numChannels
+    };
+
+    audioData tempData {
+        data.input,
+        output,
+        data.bufferSize
+    };
 
 
     for (size_t i = 0; i < childTracks.size(); i++) {
-        // Process each child track and store its result in the childBuffer
-        childTracks[i]->process(childBuffer, bufferSize);
+        childTracks[i]->process(tempData);
     }
     for (size_t i = 0; i < childInstruments.size(); i++) {
-        childInstruments[i]->process(childBuffer, bufferSize);
+        childInstruments[i]->process(tempChannels[0].buffer, data.bufferSize);//left side
     }
-    rack.process(childBuffer, outputBuffer, bufferSize);
+    rack.process(tempChannels[0].buffer, data.output.channels[0].buffer, data.bufferSize);
+
+    for (size_t i = 0; i < data.output.numChannels; i++) {
+        for (size_t j = 0; j < data.bufferSize; j++) {
+            data.output.channels[i].buffer[j] += tempChannels[i].buffer[j];
+        }
+    }
+
+
+    for (size_t i = 0; i < data.output.numChannels; i++) {
+        delete[] tempChannels[i].buffer;
+    }
+    delete[] tempChannels;
 
 }
 

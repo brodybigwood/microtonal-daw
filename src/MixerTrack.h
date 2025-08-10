@@ -3,7 +3,7 @@
 #include "Rack.h"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
-
+#include "Processing.h"
 #ifndef MIXERTRACK_H
 #define MIXERTRACK_H
 
@@ -24,7 +24,7 @@ class MixerTrack {
         std::vector<Instrument*> childInstruments;
         std::vector<MixerTrack*> childTracks;
 
-        void process(float* outputBuffer, int bufferSize);
+        void process(audioData);
 
         json toJSON();
         void fromJSON(json);
