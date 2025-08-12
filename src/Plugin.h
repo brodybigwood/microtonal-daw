@@ -62,6 +62,8 @@ class Plugin {
          void toggle();
 
         std::vector<Steinberg::Vst::AudioBusBuffers> inputBuses, outputBuses;
+        std::vector<float*> outputBufferData;
+        std::vector<float*> inputBufferData;
         Steinberg::Vst::ProcessData data{};
 
         PlugLib* lib;

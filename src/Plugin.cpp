@@ -75,7 +75,7 @@ std::vector<uint8_t> Plugin::getState() {
 
 
 
-Plugin::Plugin(char* filepath) : filepath(filepath), pluginFactory(nullptr) {
+Plugin::Plugin(char* filepath) : pluginFactory(nullptr) {
 
     size_t len = std::strlen(filepath) + 1;
     this->path = new char[len];
@@ -111,6 +111,26 @@ Plugin::~Plugin() {
     }
 
     delete[] path;
+
+    for (auto& bus : inputBuses) {
+        delete[] bus.channelBuffers32;
+    }
+    inputBuses.clear();
+
+    for (auto& bus : outputBuses) {
+        delete[] bus.channelBuffers32;
+    }
+    outputBuses.clear();
+
+    for(auto buffer :outputBufferData) {
+        delete[] buffer;
+    }
+    outputBufferData.clear();
+
+    for(auto buffer :inputBufferData) {
+        delete[] buffer;
+    }
+    inputBufferData.clear();
 }
 
 void Plugin::toggle() {
@@ -232,7 +252,7 @@ bool Plugin::instantiatePlugin() {
     std::memcpy(componentCID, lib->getComponentCID(), sizeof(Steinberg::TUID));
     std::memcpy(controllerCID, lib->getControllerCID(), sizeof(Steinberg::TUID));
 
-    Steinberg::FUnknown* componentUnknown = nullptr;
+    Steinberg::FUnknownPtr<Steinberg::FUnknown> componentUnknown = nullptr;
     auto result = pluginFactory->createInstance(
         componentCID, Steinberg::Vst::IComponent::iid, (void**)&componentUnknown
     );
@@ -244,7 +264,7 @@ bool Plugin::instantiatePlugin() {
 
     component = Steinberg::FUnknownPtr<Steinberg::Vst::IComponent>(componentUnknown);
 
-    Steinberg::FUnknown* processorUnknown = nullptr;
+    Steinberg::FUnknownPtr<Steinberg::FUnknown> processorUnknown = nullptr;
     auto res = component->queryInterface(Steinberg::Vst::IAudioProcessor::iid, (void**)&processorUnknown);
     if (res == Steinberg::kResultTrue && processorUnknown) {
         audioProcessor = Steinberg::FUnknownPtr<Steinberg::Vst::IAudioProcessor>(processorUnknown);
@@ -313,6 +333,7 @@ bool Plugin::instantiatePlugin() {
         bufs.silenceFlags = 0;
 
         float* bufferData = new float[am->bufferSize * busInfo.channelCount];
+        inputBufferData.push_back(bufferData);
         for (size_t ch = 0; ch < busInfo.channelCount; ++ch) {
             bufs.channelBuffers32[ch] = bufferData + (ch * am->bufferSize);
         }
@@ -334,6 +355,7 @@ bool Plugin::instantiatePlugin() {
         bufs.silenceFlags = 0;
 
         float* bufferData = new float[am->bufferSize * busInfo.channelCount];
+        outputBufferData.push_back(bufferData);
         for (size_t ch = 0; ch < busInfo.channelCount; ++ch) {
             bufs.channelBuffers32[ch] = bufferData + (ch * am->bufferSize);
         }

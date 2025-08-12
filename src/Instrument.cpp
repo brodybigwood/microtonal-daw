@@ -11,12 +11,15 @@ Instrument::Instrument(Project* project, int index) : index(index) {
     this->id = (project->id_inst)++;
 }
 Instrument::~Instrument() {
-
+    outputs.clear();
 }
 
 void Instrument::addDestination(int trackIndex) {
-    outputs.push_back(project->tracks[0]);
+    outputs.reserve(outputs.size() + 1);
+    project->tracks[0]->childInstruments.reserve(project->tracks[0]->childInstruments.size() + 1);
 
+
+    outputs.push_back(project->tracks[0]);
     project->tracks[0]->childInstruments.push_back(this);
 }
 

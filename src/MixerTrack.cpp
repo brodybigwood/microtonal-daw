@@ -9,7 +9,8 @@ MixerTrack::MixerTrack(Project* project) {
 
 
 MixerTrack::~MixerTrack() {
-
+    childInstruments.clear();
+    childTracks.clear();
 }
 
 void MixerTrack::process(audioData data) {

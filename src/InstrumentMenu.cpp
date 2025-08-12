@@ -76,7 +76,13 @@ InstrumentMenu* InstrumentMenu::instance() {
 
 
 InstrumentMenu::~InstrumentMenu() {
-    
+    for (auto& plug : plugins) {
+        delete plug.win->dstRect;
+        delete plug.win;
+
+        delete plug.proc->dstRect;
+        delete plug.proc;
+    }
 }
 
 
@@ -219,8 +225,11 @@ void InstrumentMenu::setInst(Instrument* instrument) {
     pluginHeight = rackRect->h / 10.0f;
     float pluginY = rackRect->y + rackTitleRect->h;
 
-    for (auto plug : plugins) {
+    for (auto& plug : plugins) {
+        delete plug.win->dstRect;
         delete plug.win;
+
+        delete plug.proc->dstRect;
         delete plug.proc;
     }
     plugins.clear();

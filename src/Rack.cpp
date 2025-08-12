@@ -9,7 +9,10 @@ Rack::Rack() {
 }
 
 Rack::~Rack() {
-
+    for (auto plug : plugins) {
+        delete plug;
+    }
+    plugins.clear();
 }
 
 void Rack::process(
@@ -91,6 +94,10 @@ void Rack::fromJSON(json j) {
 
     if (j.contains("plugins")) {
         std::cout<<"checking for plugins..."<<std::endl;
+
+        size_t pluginCount = j["plugins"].size();
+        plugins.reserve(pluginCount);
+
         for (auto& jt : j["plugins"]) {
             id_plug = jt.value("id", NO_ID);
             std::string spath = jt["path"];
