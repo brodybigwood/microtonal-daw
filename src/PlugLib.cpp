@@ -76,3 +76,15 @@ bool PlugLib::fetchClassIDs() {
     return true;
 }
 
+PlugLib::~PlugLib() {
+    plugProvider.reset();
+
+    factoryWrapper.reset();
+    factory = nullptr;
+
+    if (handle) {
+        dlclose(handle);
+        handle = nullptr;
+    }
+}
+

@@ -17,7 +17,7 @@
 class PlugLib {
 public:
     PlugLib(std::string path);
-    ~PlugLib() {}
+    ~PlugLib();
 
     bool isLoaded() const { return handle != nullptr; }
     Steinberg::IPluginFactory* getFactory() const { return factory; }
