@@ -26,7 +26,7 @@ void Instrument::addDestination(int trackIndex) {
 void Instrument::process(audioData data) {
     EventList tempEventList = std::move(eventList);
     eventList.events.clear();
-    rack.process(data, &tempEventList);
+    generators.process(data, &tempEventList);
 
 }
 
@@ -34,7 +34,7 @@ json Instrument::toJSON() {
     json j;
     j["name"] = name;
     j["id"] = id;
-    j["rack"] = rack.toJSON();
+    j["generators"] = generators.toJSON();
     return j;
 }
 
@@ -44,12 +44,12 @@ void Instrument::fromJSON(json js) {
 
     constexpr uint16_t NO_ID = std::numeric_limits<uint16_t>::max();
 
-    if (js.contains("rack")) {
-        json jr = js["rack"];
+    if (js.contains("generators")) {
+        json jr = js["generators"];
         Project::instance()->id_rack = jr.value("id", NO_ID);
-        rack = Rack();
-        rack.fromJSON(jr);
-        Project::instance()->racks.push_back(&rack);
+        generators = Rack();
+        generators.fromJSON(jr);
+        Project::instance()->racks.push_back(&generators);
     }
 
     uint16_t max_id = 0;

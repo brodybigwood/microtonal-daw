@@ -77,7 +77,12 @@ InstrumentMenu* InstrumentMenu::instance() {
 
 
 InstrumentMenu::~InstrumentMenu() {
-    for (auto& plug : plugins) {
+    for (auto& plug : gPlugs) {
+        delete plug.win;
+        delete plug.proc;
+    }
+
+    for (auto& plug : ePlugs) {
         delete plug.win;
         delete plug.proc;
     }
@@ -169,7 +174,7 @@ void InstrumentMenu::render() {
         SDL_SetRenderDrawColor(renderer,0,0,0,255);
         SDL_RenderRect(renderer, rackTitleRect);
 
-        for(auto plugin : plugins) {
+        for(auto plugin : gPlugs) {
             plugin.win->render();
             plugin.proc->render();
         }
@@ -193,7 +198,7 @@ bool inside(float px, float py, float x, float y, float w, float h) {
 
 
 void InstrumentMenu::clickMouse(SDL_Event& e) {
-    for (auto plugin : plugins) {
+    for (auto plugin : gPlugs) {
         if(plugin.win->hover()) {
             plugin.win->onClick();
         }
@@ -219,21 +224,21 @@ void InstrumentMenu::hover() {
 
 void InstrumentMenu::setInst(Instrument* instrument) {
     this->instrument = instrument;
-    this->generators = &(instrument->rack);
+    this->generators = &(instrument->generators);
+    this->effects = &(instrument->effects);
 
     pluginHeight = rackRect->h / 10.0f;
     float pluginY = rackRect->y + rackTitleRect->h;
 
-    for (auto& plug : plugins) {
+    for (auto& plug : gPlugs) {
         delete plug.win;
         delete plug.proc;
     }
-    plugins.clear();
+    gPlugs.clear();
 
-    std::cout << "setting inst" <<std::endl;
     int i = 0;
 
-    for(auto& plugin : instrument->rack.plugins) {
+    for(auto& plugin : instrument->generators.plugins) {
 
         plugItem item{};
 
@@ -249,7 +254,7 @@ void InstrumentMenu::setInst(Instrument* instrument) {
         };
 
         win->onClick = [this,i] {
-            this->instrument->rack.plugins[i]->showWindow();
+            this->instrument->generators.plugins[i]->showWindow();
         };
 
         win->hover = [this, win] {
@@ -261,7 +266,7 @@ void InstrumentMenu::setInst(Instrument* instrument) {
         };
 
         win->activated = [this,i] {
-            return this->instrument->rack.plugins[i]->windowOpen;
+            return this->instrument->generators.plugins[i]->windowOpen;
         };
 
         item.win = win;
@@ -278,7 +283,7 @@ void InstrumentMenu::setInst(Instrument* instrument) {
         };
 
         proc->onClick = [this,i] {
-            this->instrument->rack.plugins[i]->toggle();
+            this->instrument->generators.plugins[i]->toggle();
         };
 
         proc->hover = [this, proc] {
@@ -290,12 +295,12 @@ void InstrumentMenu::setInst(Instrument* instrument) {
         };
 
         proc->activated = [this,i] {
-            return this->instrument->rack.plugins[i]->processing;
+            return this->instrument->generators.plugins[i]->processing;
         };
 
         item.proc = proc;
 
-        plugins.push_back(item);
+        gPlugs.push_back(item);
 
         pluginY += pluginHeight;
 
@@ -303,5 +308,84 @@ void InstrumentMenu::setInst(Instrument* instrument) {
     }
 
 
+    pluginHeight = rackRect->h / 10.0f;
+    pluginY = rackRect->y + rackTitleRect->h;
+
+    for (auto& plug : ePlugs) {
+        delete plug.win;
+        delete plug.proc;
+    }
+    ePlugs.clear();
+
+    i = 0;
+
+    for(auto& plugin : instrument->effects.plugins) {
+
+        plugItem item{};
+
+        Button* win = new Button(
+            renderer
+        );
+
+        win->dstRect = new SDL_FRect{
+            rackRect->x + plugMarginX,
+            pluginY + plugMarginY,
+            rackRect->w  - (3 * plugMarginX),
+            pluginHeight - plugMarginY
+        };
+
+        win->onClick = [this,i] {
+            this->instrument->effects.plugins[i]->showWindow();
+        };
+
+        win->hover = [this, win] {
+            if (inside(this->mouseX, this->mouseY, win->dstRect->x, win->dstRect->y, win->dstRect->w, win->dstRect->h)) {
+                return true;
+            } else {
+                return false;
+            }
+        };
+
+        win->activated = [this,i] {
+            return this->instrument->effects.plugins[i]->windowOpen;
+        };
+
+        item.win = win;
+
+        Button* proc = new Button(
+            renderer
+        );
+
+        proc->dstRect = new SDL_FRect{
+            rackRect->x + rackRect->w  - (2 * plugMarginX),
+            pluginY + plugMarginY,
+            plugMarginX,
+            pluginHeight - plugMarginY
+        };
+
+        proc->onClick = [this,i] {
+            this->instrument->effects.plugins[i]->toggle();
+        };
+
+        proc->hover = [this, proc] {
+            if (inside(this->mouseX, this->mouseY, proc->dstRect->x, proc->dstRect->y, proc->dstRect->w, proc->dstRect->h)) {
+                return true;
+            } else {
+                return false;
+            }
+        };
+
+        proc->activated = [this,i] {
+            return this->instrument->effects.plugins[i]->processing;
+        };
+
+        item.proc = proc;
+
+        ePlugs.push_back(item);
+
+        pluginY += pluginHeight;
+
+        i++;
+    }
 
 }

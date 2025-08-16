@@ -38,7 +38,8 @@ class InstrumentMenu {
             Button* proc;
         };
 
-        std::vector<plugItem> plugins;
+        std::vector<plugItem> gPlugs;
+        std::vector<plugItem> ePlugs;
 
         std::unique_ptr<Button> addInst;
 
@@ -96,6 +97,7 @@ SDL_Surface* outputSurface;
 Instrument* instrument;
 
 Rack* generators;
+Rack* effects;
 
 void setInst(Instrument* instrument);
 };

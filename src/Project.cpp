@@ -174,15 +174,8 @@ void Project::tick() {
 }
 
 void Project::setup() {
-    for(auto& inst : instruments) {
-        auto& rack = inst->rack;
-        for(auto& plug : rack.plugins) {
-            plug->setup();
-        }
-    }
-    for(auto& track : tracks) {
-        auto& rack = track->rack;
-        for(auto& plug : rack.plugins) {
+    for(auto rack : racks) {
+        for(auto& plug : rack->plugins) {
             plug->setup();
         }
     }

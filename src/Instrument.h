@@ -39,7 +39,8 @@ class Instrument {
         //std::vector<int> outputs;
         std::string outputType = "Output to Mixer Tracks:";
 
-        Rack rack;
+        Rack generators;
+        Rack effects;
 
         void process(audioData);
 
