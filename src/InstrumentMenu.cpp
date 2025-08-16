@@ -17,41 +17,58 @@ void InstrumentMenu::create(SDL_Texture* texture, SDL_Renderer* renderer, int x,
     this->x = x;
     this->y = y;
 
-    outRect = new SDL_FRect{
-        width / 10.0f,
-        height - 20.0f - (0.75f * y),
-        8 * width / 10.f,
-        20.0f
-    };
-
     rackTitleTextRect = new SDL_FRect{
         width / 10.0f,
-        height / 4.0f,
+        height / 10.0f,
         8 * width / 10.f,
         20.0f
     };
 
-    rackRect = new SDL_FRect{
-        x + width / 10.0f,
-        y + height / 4.0f,
-        8 * width / 10.f,
-        (height-y) * 0.75f
+    gRect = new SDL_FRect{
+        x + width / 20.0f,
+        y + height / 8.0f,
+        8 * width / 20.f,
+        (height-y) * 0.5f
+    };
+
+    eRect = new SDL_FRect{
+        x + (3 * width / 20.0f) + (8 * width / 20.f),
+        y + height / 8.0f,
+        8 * width / 20.f,
+        (height-y) * 0.5f
     };
 
     rackTitleRect = new SDL_FRect{
         x + width / 10.0f,
-        y + height / 4.0f,
+        y + height / 10.0f,
         8 * width / 10.f,
         20.0f
     };
 
     addInst = std::make_unique<Button>(renderer);
     addInst->dstRect = new SDL_FRect{
-        x + width / 10.0f,
-        y + height / 8.0f,
+        x + width / 20.0f,
+        eRect->h + eRect->y + 10,
+        8 * width / 20.0f,
+        20.0f
+    };
+
+    addFX = std::make_unique<Button>(renderer);
+    addFX->dstRect = new SDL_FRect{
+        x + (19 * width / 20.0f) - (8 * width / 20.f),
+        eRect->h + eRect->y + 10,
+        8 * width / 20.f,
+        20.0f
+    };
+
+    outRect = new SDL_FRect{
+        width / 10.0f,
+        addFX->dstRect->y + addFX->dstRect->h + 10,
         8 * width / 10.f,
         20.0f
     };
+
+
 
     addInst->activated = [] {
         return false;
@@ -65,6 +82,19 @@ void InstrumentMenu::create(SDL_Texture* texture, SDL_Renderer* renderer, int x,
         this->generators->addPlugin("/home/brody/Downloads/surge-xt-linux-x86_64-1.3.4/lib/vst3/Surge XT.vst3/Contents/x86_64-linux/Surge XT.so");
         //    rack.addPlugin("/usr/lib/vst3/Vital.vst3/Contents/x86_64-linux/Vital.so");
 
+        this->setInst(this->instrument);
+    };
+
+    addFX->activated = [] {
+        return false;
+    };
+
+    addFX->hover = [this, &rect = addFX->dstRect] {
+        return rect && mouseX >= rect->x && mouseX <= rect->x + rect->w && mouseY >= rect->y && mouseY <= rect->y + rect->h;
+    };
+
+    addFX->onClick = [this] {
+        this->effects->addPlugin("/mnt/2TB/home/brody/Downloads/FirComp_linuxVST3/FirComp.vst3/Contents/x86_64-linux/FirComp.so");
         this->setInst(this->instrument);
     };
 
@@ -86,6 +116,9 @@ InstrumentMenu::~InstrumentMenu() {
         delete plug.win;
         delete plug.proc;
     }
+
+    delete gRect;
+    delete eRect;
 }
 
 
@@ -163,10 +196,16 @@ void InstrumentMenu::render() {
 
 
         SDL_SetRenderDrawColor(renderer,50,50,50,255);
-        SDL_RenderFillRect(renderer, rackRect);
+        SDL_RenderFillRect(renderer, gRect);
 
         SDL_SetRenderDrawColor(renderer,0,0,0,255);
-        SDL_RenderRect(renderer, rackRect);
+        SDL_RenderRect(renderer, gRect);
+
+        SDL_SetRenderDrawColor(renderer,50,50,50,255);
+        SDL_RenderFillRect(renderer, eRect);
+
+        SDL_SetRenderDrawColor(renderer,0,0,0,255);
+        SDL_RenderRect(renderer, eRect);
 
         SDL_SetRenderDrawColor(renderer,75,75,75,255);
         SDL_RenderFillRect(renderer, rackTitleRect);
@@ -178,11 +217,16 @@ void InstrumentMenu::render() {
             plugin.win->render();
             plugin.proc->render();
         }
+        for(auto plugin : ePlugs) {
+            plugin.win->render();
+            plugin.proc->render();
+        }
 
         renderText();
         SDL_RenderTexture(renderer, texture, nullptr, &dstRect);
   
         addInst->render();
+        addFX->render();
 
 
     }
@@ -206,8 +250,21 @@ void InstrumentMenu::clickMouse(SDL_Event& e) {
             plugin.proc->onClick();
         }
     }
+
+    for (auto plugin : ePlugs) {
+        if(plugin.win->hover()) {
+            plugin.win->onClick();
+        }
+        if(plugin.proc->hover()) {
+            plugin.proc->onClick();
+        }
+    }
+
     if(addInst->hover()){
         addInst->onClick();
+    }
+    if(addFX->hover()){
+        addFX->onClick();
     }
 }
 
@@ -227,8 +284,8 @@ void InstrumentMenu::setInst(Instrument* instrument) {
     this->generators = &(instrument->generators);
     this->effects = &(instrument->effects);
 
-    pluginHeight = rackRect->h / 10.0f;
-    float pluginY = rackRect->y + rackTitleRect->h;
+    pluginHeight = gRect->h / 20.0f;
+    float pluginY = gRect->y;
 
     for (auto& plug : gPlugs) {
         delete plug.win;
@@ -247,9 +304,9 @@ void InstrumentMenu::setInst(Instrument* instrument) {
         );
 
         win->dstRect = new SDL_FRect{
-            rackRect->x + plugMarginX,
+            gRect->x + plugMarginX,
             pluginY + plugMarginY,
-            rackRect->w  - (3 * plugMarginX),
+            gRect->w  - (3 * plugMarginX),
             pluginHeight - plugMarginY
         };
 
@@ -269,6 +326,8 @@ void InstrumentMenu::setInst(Instrument* instrument) {
             return this->instrument->generators.plugins[i]->windowOpen;
         };
 
+        win->inactive = SDL_Color{50,30,30,255};
+
         item.win = win;
 
         Button* proc = new Button(
@@ -276,9 +335,9 @@ void InstrumentMenu::setInst(Instrument* instrument) {
         );
 
         proc->dstRect = new SDL_FRect{
-            rackRect->x + rackRect->w  - (2 * plugMarginX),
+            gRect->x + gRect->w  - (5 * plugMarginX),
             pluginY + plugMarginY,
-            plugMarginX,
+            plugMarginX * 4,
             pluginHeight - plugMarginY
         };
 
@@ -307,9 +366,7 @@ void InstrumentMenu::setInst(Instrument* instrument) {
         i++;
     }
 
-
-    pluginHeight = rackRect->h / 10.0f;
-    pluginY = rackRect->y + rackTitleRect->h;
+    pluginY = eRect->y;
 
     for (auto& plug : ePlugs) {
         delete plug.win;
@@ -328,9 +385,9 @@ void InstrumentMenu::setInst(Instrument* instrument) {
         );
 
         win->dstRect = new SDL_FRect{
-            rackRect->x + plugMarginX,
+            eRect->x + plugMarginX,
             pluginY + plugMarginY,
-            rackRect->w  - (3 * plugMarginX),
+            eRect->w  - (3 * plugMarginX),
             pluginHeight - plugMarginY
         };
 
@@ -350,6 +407,8 @@ void InstrumentMenu::setInst(Instrument* instrument) {
             return this->instrument->effects.plugins[i]->windowOpen;
         };
 
+        win->inactive = SDL_Color{30,50,30,255};
+
         item.win = win;
 
         Button* proc = new Button(
@@ -357,9 +416,9 @@ void InstrumentMenu::setInst(Instrument* instrument) {
         );
 
         proc->dstRect = new SDL_FRect{
-            rackRect->x + rackRect->w  - (2 * plugMarginX),
+            eRect->x + eRect->w  - (5 * plugMarginX),
             pluginY + plugMarginY,
-            plugMarginX,
+            plugMarginX * 4,
             pluginHeight - plugMarginY
         };
 

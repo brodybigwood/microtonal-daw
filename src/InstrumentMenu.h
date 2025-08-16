@@ -42,11 +42,14 @@ class InstrumentMenu {
         std::vector<plugItem> ePlugs;
 
         std::unique_ptr<Button> addInst;
+        std::unique_ptr<Button> addFX;
 
-        float plugMarginX = 20.0f;
-        float plugMarginY = 20.0f;
+        float plugMarginX = 5.0f;
+        float plugMarginY = 5.0f;
 
-        SDL_FRect* rackRect;
+        SDL_FRect* gRect;
+        SDL_FRect* eRect;
+
         SDL_FRect* rackTitleRect;
 
         SDL_FRect* rackTitleTextRect;
