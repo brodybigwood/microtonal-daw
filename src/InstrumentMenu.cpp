@@ -64,6 +64,7 @@ void InstrumentMenu::create(SDL_Texture* texture, SDL_Renderer* renderer, int x,
     addInst->onClick = [this] {
         this->generators->addPlugin("/home/brody/Downloads/surge-xt-linux-x86_64-1.3.4/lib/vst3/Surge XT.vst3/Contents/x86_64-linux/Surge XT.so");
         //    rack.addPlugin("/usr/lib/vst3/Vital.vst3/Contents/x86_64-linux/Vital.so");
+
         this->setInst(this->instrument);
     };
 
@@ -77,10 +78,7 @@ InstrumentMenu* InstrumentMenu::instance() {
 
 InstrumentMenu::~InstrumentMenu() {
     for (auto& plug : plugins) {
-        delete plug.win->dstRect;
         delete plug.win;
-
-        delete plug.proc->dstRect;
         delete plug.proc;
     }
 }
@@ -121,6 +119,7 @@ SDL_RenderTexture(renderer, textTexture, nullptr, rackTitleTextRect);
 
 
 void InstrumentMenu::setViewedElement(std::string type, int index) {
+    delete viewedElement;
     viewedElement = new element{type, index};
     this->type = type;
     if(type == "instrument") {
@@ -226,10 +225,7 @@ void InstrumentMenu::setInst(Instrument* instrument) {
     float pluginY = rackRect->y + rackTitleRect->h;
 
     for (auto& plug : plugins) {
-        delete plug.win->dstRect;
         delete plug.win;
-
-        delete plug.proc->dstRect;
         delete plug.proc;
     }
     plugins.clear();
