@@ -19,9 +19,15 @@ class Rack {
 
     std::vector<Plugin*> plugins;
 
+    enum RackTypes {
+        parallel,
+        series,
+    };
+
     void process(
         audioData data,
-        EventList* eventList = nullptr
+        EventList* eventList = nullptr,
+        RackTypes rackType = parallel
     );
   
     bool addPlugin(char* filepath);

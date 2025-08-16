@@ -17,42 +17,60 @@ Rack::~Rack() {
 
 void Rack::process(
     audioData data,
-    EventList* eventList
+    EventList* eventList,
+    RackTypes rackType
 ) {
- 
-    for(size_t i = 0; i< plugins.size(); i++) {
 
-        channel* tempChannels = new channel[data.output.numChannels];
+    switch(rackType) {
+        case series: {
+            audioData tempData {
+                data.output,
+                data.output,
+                data.bufferSize
+            };
 
-        for (size_t i = 0; i < data.output.numChannels; i++) {
-            tempChannels[i].buffer = new float[data.bufferSize]();
-        }
-
-        audioStream output {
-            tempChannels,
-            data.output.numChannels
-        };
-
-        audioData tempData {
-            data.input,
-            output,
-            data.bufferSize
-        };
-
-        plugins[i]->process(tempData, eventList);
-
-        for (size_t j = 0; j < tempData.output.numChannels; j++) {
-            float* dest = data.output.channels[j].buffer;
-            float* src = tempData.output.channels[j].buffer;
-            for (size_t i = 0; i < data.bufferSize; ++i) {
-                dest[i] += src[i];
+            for(size_t i = 0; i< plugins.size(); i++) {
+                plugins[i]->process(tempData, eventList);
             }
+            break;
         }
 
-        for (size_t i = 0; i < data.output.numChannels; ++i) {
-            delete[] tempChannels[i].buffer;
-        }
-        delete[] tempChannels;
+        case parallel:
+            for(size_t i = 0; i< plugins.size(); i++) {
+
+                channel* tempChannels = new channel[data.output.numChannels];
+
+                for (size_t i = 0; i < data.output.numChannels; i++) {
+                    tempChannels[i].buffer = new float[data.bufferSize]();
+                }
+
+                audioStream output {
+                    tempChannels,
+                    data.output.numChannels
+                };
+
+                audioData tempData {
+                    data.input,
+                    output,
+                    data.bufferSize
+                };
+
+                plugins[i]->process(tempData, eventList);
+
+                for (size_t j = 0; j < tempData.output.numChannels; j++) {
+                    float* dest = data.output.channels[j].buffer;
+                    float* src = tempData.output.channels[j].buffer;
+                    for (size_t i = 0; i < data.bufferSize; ++i) {
+                        dest[i] += src[i];
+                    }
+                }
+
+                for (size_t i = 0; i < data.output.numChannels; ++i) {
+                    delete[] tempChannels[i].buffer;
+                }
+                delete[] tempChannels;
+            }
+            break;
     }
 
 }

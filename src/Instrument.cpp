@@ -27,6 +27,7 @@ void Instrument::process(audioData data) {
     EventList tempEventList = std::move(eventList);
     eventList.events.clear();
     generators.process(data, &tempEventList);
+    effects.process(data, &tempEventList, Rack::series);
 
 }
 
