@@ -323,7 +323,7 @@ void InstrumentMenu::setInst(Instrument* instrument) {
         };
 
         win->activated = [this,i] {
-            return this->instrument->generators.plugins[i]->windowOpen;
+            return this->instrument->generators.plugins[i]->windowOpen();
         };
 
         win->inactive = SDL_Color{50,30,30,255};
@@ -354,7 +354,7 @@ void InstrumentMenu::setInst(Instrument* instrument) {
         };
 
         proc->activated = [this,i] {
-            return this->instrument->generators.plugins[i]->processing;
+            return this->instrument->generators.plugins[i]->processing();
         };
 
         item.proc = proc;
@@ -404,7 +404,7 @@ void InstrumentMenu::setInst(Instrument* instrument) {
         };
 
         win->activated = [this,i] {
-            return this->instrument->effects.plugins[i]->windowOpen;
+            return this->instrument->effects.plugins[i]->windowOpen();
         };
 
         win->inactive = SDL_Color{30,50,30,255};
@@ -435,7 +435,7 @@ void InstrumentMenu::setInst(Instrument* instrument) {
         };
 
         proc->activated = [this,i] {
-            return this->instrument->effects.plugins[i]->processing;
+            return this->instrument->effects.plugins[i]->processing();
         };
 
         item.proc = proc;
