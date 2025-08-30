@@ -1,4 +1,5 @@
 #include "PluginManager.h"
+#include "VstLib.h"
 
 void PluginManager::addPlugin(Plugin* p) {
     instances.push_back(p);
@@ -16,13 +17,15 @@ PlugLib* PluginManager::load(const char* path) {
         return it->second.get();
     }
     // Not loaded yet — create and insert
-    auto plugLib = std::make_unique<PlugLib>(path);
-    if (!plugLib->isLoaded()) {
-        std::cout << "loading failed" <<std::endl;
-        return nullptr;
-    }
+    auto plugLib = std::make_unique<VstLib>(std::string(path));
     PlugLib* ptr = plugLib.get();
     loaded.emplace(path, std::move(plugLib));
+    if(!ptr) std::cout << "ptr is null" << std::endl;
+    if(!ptr->load()) {
+        std::cout << "loading failed" << std::endl;
+        loaded.erase(path);
+        return nullptr;
+    }
     return ptr;
 }
 

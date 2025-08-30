@@ -6,6 +6,8 @@ using json = nlohmann::json;
 #include "PlugType.h"
 #include "AudioManager.h"
 #include "Project.h"
+#include "PlugLib.h"
+#include "VstLib.h"
 
 class Plugin {
 	public:
@@ -34,4 +36,6 @@ class Plugin {
 		json toJSON();
 
 		Project* project;
+
+		PlugLib* lib;
 };

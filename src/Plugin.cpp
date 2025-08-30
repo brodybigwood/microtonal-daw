@@ -1,8 +1,10 @@
 #include "Plugin.h"
 #include "VstPlugin.h"
+#include "PluginManager.h"
 
 Plugin::Plugin(char* filepath) {
-	obj = std::make_unique<VstPlugin>(filepath);
+	lib = PluginManager::instance().load(filepath);
+	obj = std::make_unique<VstPlugin>(filepath, lib);
 	this->rack = obj->rack;
 	project = Project::instance();
 }

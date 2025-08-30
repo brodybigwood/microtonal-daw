@@ -60,7 +60,7 @@ std::vector<uint8_t> VstPlugin::getState() {
 
 
 
-VstPlugin::VstPlugin(char* filepath) {
+VstPlugin::VstPlugin(char* filepath, PlugLib* library) {
 
     size_t len = std::strlen(filepath) + 1;
     this->path = new char[len];
@@ -70,7 +70,8 @@ VstPlugin::VstPlugin(char* filepath) {
 
     project = Project::instance();
 
-    lib = PluginManager::instance().load(filepath);
+    lib = static_cast<VstLib*>(library);
+
     if (!lib) {
         std::cerr << "Failed to load plugin library.\n";
         return;
@@ -399,7 +400,6 @@ bool VstPlugin::instantiatePlugin() {
 
 void VstPlugin::setup() {
     Steinberg::Vst::ProcessSetup setup{};
-
     setup.sampleRate = am->sampleRate;
     setup.maxSamplesPerBlock = am->bufferSize;
     setup.processMode = Steinberg::Vst::kRealtime;

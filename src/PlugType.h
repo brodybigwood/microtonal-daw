@@ -2,6 +2,7 @@
 #include "EventList.h"
 #include "Processing.h"
 #include <filesystem>
+#include "VstLib.h"
 
 class Rack;
 
@@ -26,4 +27,6 @@ class PlugType{
 	
 		virtual void serialize(std::filesystem::path) = 0;
 		virtual void deSerialize(std::filesystem::path) = 0;
+
+		PlugLib* library;
 };

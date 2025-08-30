@@ -8,7 +8,7 @@
 
 #include "public.sdk/source/vst/hosting/plugprovider.h"
 
-#include "PlugLib.h"
+#include "VstLib.h"
 
 #include "pluginterfaces/vst/ivsteditcontroller.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
@@ -30,6 +30,7 @@
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 #include "PlugType.h"
+#include "VstLib.h"
 
 class EditorHostFrame;
 
@@ -37,7 +38,7 @@ class Project;
 
 class VstPlugin : public PlugType {
     public:
-        VstPlugin(char* filepath);
+        VstPlugin(char* filepath, PlugLib* library);
         ~VstPlugin();
 
         std::unique_ptr<EditorHostFrame> hostFrame;
@@ -64,7 +65,7 @@ class VstPlugin : public PlugType {
         std::vector<float*> inputBufferData;
         Steinberg::Vst::ProcessData data{};
 
-        PlugLib* lib;
+        VstLib* lib;
 
         Steinberg::TUID componentCID;
         Steinberg::TUID controllerCID;
