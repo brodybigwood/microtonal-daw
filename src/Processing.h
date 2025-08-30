@@ -15,3 +15,10 @@ struct audioData {
     audioStream output;
     size_t bufferSize;
 };
+
+struct ProcessContext {
+    int sampleRate;
+    int bufferSize;
+    int inputCount;
+    int outputCount;
+};
