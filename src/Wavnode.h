@@ -16,4 +16,10 @@ class Wavnode : public PlugType {
 
 		void serialize(std::filesystem::path) override;
 		void deSerialize(std::filesystem::path) override;
+
+		typedef void(*setupFunc)(ProcessContext);
+		setupFunc setupPlug = nullptr;
+
+		typedef void(*processFunc)(audioData);
+		processFunc processPlug = nullptr;
 };

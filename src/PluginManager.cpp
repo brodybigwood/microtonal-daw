@@ -37,6 +37,12 @@ PlugLib* PluginManager::load(const char* path, PlugFormat p) {
 		    auto plugLib = std::make_unique<WavLib>(std::string(path));
 		    PlugLib* ptr = plugLib.get();
 		    loaded.emplace(path, std::move(plugLib));
+		    if(!ptr) std::cout << "ptr is null" << std::endl;
+		    if(!ptr->load()) {
+		        std::cout << "loading failed" << std::endl;
+		        loaded.erase(path);
+		        return nullptr;
+		    }
 		    return ptr;
 	    }
     }
