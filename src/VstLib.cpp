@@ -3,6 +3,7 @@
 #include <cstring>
 
 VstLib::VstLib(std::string filepath) : PlugLib(filepath) {
+	format = PlugFormat::VST;
 }
 
 bool VstLib::load() {

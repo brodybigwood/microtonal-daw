@@ -8,19 +8,18 @@ using json = nlohmann::json;
 #include "Project.h"
 #include "PlugLib.h"
 #include "VstLib.h"
+#include "PlugFormat.h"
 
 class Plugin {
 	public:
 		void process(audioData, EventList*);
 
-		Plugin(char* filepath);
+		Plugin(char* filepath, PlugFormat p);
 		~Plugin();
 
 		std::unique_ptr<PlugType> obj;
 
-		void toggle() {
-			obj->toggle();
-		}
+		void toggle();
 
 		int id;
 		Rack* rack;

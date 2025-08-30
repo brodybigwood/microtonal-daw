@@ -75,8 +75,8 @@ void Rack::process(
 
 }
 
-bool Rack::addPlugin(char* filepath) {
-    Plugin* p = new Plugin(filepath);
+bool Rack::addPlugin(char* filepath, PlugFormat pf) {
+    Plugin* p = new Plugin(filepath, pf);
     p->rack = this;
     plugins.push_back(p);
     p->id = id_plug++;
@@ -121,7 +121,7 @@ void Rack::fromJSON(json j) {
             std::string spath = jt["path"];
             char* path = spath.data();
             std::cout<<path<<std::endl;
-            Plugin* p = new Plugin(path);
+            Plugin* p = new Plugin(path, jt["format"]);
             p->rack = this;
             plugins.push_back(p);
             p->id = id_plug++;

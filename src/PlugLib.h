@@ -3,6 +3,7 @@
 #include <string>
 #include <dlfcn.h>
 #include <iostream>
+#include "PlugFormat.h"
 
 class PlugLib {
 	public:
@@ -13,4 +14,6 @@ class PlugLib {
 		void* handle = nullptr;
 		std::string path;
 		virtual bool load() = 0;
+
+		PlugFormat format;
 };

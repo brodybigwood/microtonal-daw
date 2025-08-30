@@ -1,10 +1,20 @@
 #include "Plugin.h"
 #include "VstPlugin.h"
 #include "PluginManager.h"
+#include "Wavnode.h"
 
-Plugin::Plugin(char* filepath) {
-	lib = PluginManager::instance().load(filepath);
-	obj = std::make_unique<VstPlugin>(filepath, lib);
+Plugin::Plugin(char* filepath, PlugFormat p) {
+	lib = PluginManager::instance().load(filepath, p);
+	switch(p) {
+		case PlugFormat::VST: {
+			obj = std::make_unique<VstPlugin>(filepath, lib);
+			break;
+		}
+		case PlugFormat::Wavnode: {
+			obj = std::make_unique<Wavnode>(filepath, lib);
+			break;
+		}
+	}
 	this->rack = obj->rack;
 	project = Project::instance();
 }
@@ -30,6 +40,7 @@ json Plugin::toJSON() {
 	
 	json j;
 	j["path"] = obj->path;
+	j["format"] = lib->format;
 	return j;
 }
 
@@ -42,3 +53,6 @@ void Plugin::fromJSON(json j) {
 	obj->deSerialize(folder);
 }
 
+void Plugin::toggle() {
+	obj->toggle();
+}

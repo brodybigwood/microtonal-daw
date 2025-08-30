@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <string>
 #include <iostream>
+#include "PlugFormat.h"
 
 class Plugin;  // forward declaration
 
@@ -16,5 +17,5 @@ public:
 
     static PluginManager& instance();
     std::unordered_map<std::string, std::unique_ptr<PlugLib>> loaded;
-    PlugLib* load(const char* path);
+    PlugLib* load(const char* path, PlugFormat p);
 };

@@ -3,6 +3,7 @@
 #include <memory>
 #include "Region.h"
 #include "Rack.h"
+#include "PlugFormat.h"
 InstrumentMenu::InstrumentMenu() {}
 
 void InstrumentMenu::create(SDL_Texture* texture, SDL_Renderer* renderer, int x, int y, Project* project) {
@@ -79,7 +80,7 @@ void InstrumentMenu::create(SDL_Texture* texture, SDL_Renderer* renderer, int x,
     };
 
     addInst->onClick = [this] {
-        this->generators->addPlugin("/home/brody/Downloads/surge-xt-linux-x86_64-1.3.4/lib/vst3/Surge XT.vst3/Contents/x86_64-linux/Surge XT.so");
+        this->generators->addPlugin("/home/brody/Downloads/surge-xt-linux-x86_64-1.3.4/lib/vst3/Surge XT.vst3/Contents/x86_64-linux/Surge XT.so", PlugFormat::VST);
         //    rack.addPlugin("/usr/lib/vst3/Vital.vst3/Contents/x86_64-linux/Vital.so");
 
         this->setInst(this->instrument);
@@ -94,7 +95,7 @@ void InstrumentMenu::create(SDL_Texture* texture, SDL_Renderer* renderer, int x,
     };
 
     addFX->onClick = [this] {
-        this->effects->addPlugin("/mnt/2TB/home/brody/Downloads/FirComp_linuxVST3/FirComp.vst3/Contents/x86_64-linux/FirComp.so");
+        this->effects->addPlugin("/mnt/2TB/home/brody/projects/wavnode/src/libdelay.so", PlugFormat::Wavnode);
         this->setInst(this->instrument);
     };
 

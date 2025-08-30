@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 #include "Processing.h"
+#include "PlugFormat.h"
 
 #ifndef RACK_H
 #define RACK_H
@@ -30,7 +31,7 @@ class Rack {
         RackTypes rackType = parallel
     );
   
-    bool addPlugin(char* filepath);
+    bool addPlugin(char* filepath, PlugFormat pf);
 
     json toJSON();
     void fromJSON(json);
