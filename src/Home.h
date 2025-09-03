@@ -9,6 +9,7 @@
 #include "Project.h"
 #include "InstrumentMenu.h"
 #include "Instrument.h"
+#include "Mixer.h"
 
 #ifndef HOME_H
 #define HOME_H
@@ -18,6 +19,9 @@ class WindowHandler;  // Forward declaration
 class Home {
 
     public:
+
+    SDL_FRect* mixerRect;
+    Mixer* mixer;
 
     SDL_FRect pianoRollRect = {200,200,800,600};
     PianoRoll* pianoRoll = nullptr;

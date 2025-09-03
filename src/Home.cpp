@@ -46,6 +46,15 @@ void Home::createRoll() {
     instrumentMenu = InstrumentMenu::instance();
     instrumentMenu->create(instrumentMenuTexture, renderer, windowWidth-instMenuWidth, 0, project);
 
+    mixer = new Mixer;
+    mixerRect = new SDL_FRect{
+        0,
+        windowHeight-mixerHeight,
+        windowWidth,
+        mixerHeight
+    };
+    mixer->renderer = renderer;
+    mixer->dstRect = mixerRect;
 }
 
 bool Home::tick() {
@@ -95,6 +104,8 @@ bool Home::tick() {
     if(pianoRoll) {
         pianoRoll->tick();
     }
+
+    if(mixer) mixer->tick();
 
     return true;
 }

@@ -101,3 +101,10 @@ void MixerTrack::fromJSON(json js) {
 
 
 }
+
+void MixerTrack::render(SDL_Renderer* renderer, SDL_FRect* dstRect) {
+    SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
+    SDL_RenderRect(renderer, dstRect);
+    SDL_SetRenderDrawColor(renderer, 70, 70, 70, 255);
+    SDL_RenderFillRect(renderer, dstRect);
+}

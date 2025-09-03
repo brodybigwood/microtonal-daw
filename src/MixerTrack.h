@@ -28,7 +28,8 @@ class MixerTrack {
 
         json toJSON();
         void fromJSON(json);
-              
+
+        void render(SDL_Renderer*, SDL_FRect*);
 };
 
 #endif
