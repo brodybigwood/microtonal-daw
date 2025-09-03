@@ -3,7 +3,7 @@
 #include "Project.h"
 
 MixerTrack::MixerTrack(Project* project) {
-
+    bar.type = VolumeBar::Type::Vertical;
     this->id = (project->id_track)++;
 }
 
@@ -52,7 +52,6 @@ void MixerTrack::process(audioData data) {
         delete[] tempChannels[i].buffer;
     }
     delete[] tempChannels;
-
 }
 
 json MixerTrack::toJSON() {
@@ -107,4 +106,5 @@ void MixerTrack::render(SDL_Renderer* renderer, SDL_FRect* dstRect) {
     SDL_RenderRect(renderer, dstRect);
     SDL_SetRenderDrawColor(renderer, 70, 70, 70, 255);
     SDL_RenderFillRect(renderer, dstRect);
+    bar.render(renderer, dstRect);
 }
