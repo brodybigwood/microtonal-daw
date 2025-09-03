@@ -72,8 +72,8 @@ void InstrumentList::getHoveredInstrument() {
         if(
             mouseX > 0 &&
             mouseX < width &&
-            mouseY > *instrumentHeight*i &&
-            mouseY < *instrumentHeight*(i+1)
+            mouseY + *scrollY > *instrumentHeight*i &&
+            mouseY + *scrollY < *instrumentHeight*(i+1)
         ) {
             hoveredInstrument = i;
             return;
