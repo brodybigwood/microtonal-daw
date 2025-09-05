@@ -61,6 +61,10 @@ void Mixer::clickMouse(SDL_Event& e) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             switch(e.button.button) {
                 case SDL_BUTTON_LEFT:
+                    if(hoveredId < 0) {
+                        create();
+                        break;
+                    }
                     selectId = hoveredId;
                     break;
                 case SDL_BUTTON_RIGHT:
