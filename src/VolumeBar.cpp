@@ -1,4 +1,5 @@
 #include "VolumeBar.h"
+#include <cmath>
 
 VolumeBar::VolumeBar() {};
 
@@ -14,4 +15,18 @@ void VolumeBar::render(SDL_Renderer* renderer, SDL_FRect* dstRect) {
     };
     SDL_RenderFillRect(renderer, &volRect);
 
+}
+
+void VolumeBar::process(audioData data) {
+    
+    amplitude = 0;
+
+    auto stream = data.output;
+    for(size_t ch = 0; ch < stream.numChannels; ch++) {
+        auto buffer = stream.channels[ch].buffer;
+        for(size_t s = 0; s < data.bufferSize; s++) {
+            float abs = std::fabs(buffer[s]);
+            if( abs > amplitude ) amplitude = abs;
+        }
+    }
 }

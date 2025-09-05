@@ -47,6 +47,7 @@ void MixerTrack::process(audioData data) {
         }
     }
 
+    bar.process(data);
 
     for (size_t i = 0; i < data.output.numChannels; i++) {
         delete[] tempChannels[i].buffer;
