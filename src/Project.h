@@ -63,6 +63,9 @@ class Project {
         std::vector<DAW::Region> automations;
 
         std::vector<MixerTrack*> tracks;
+
+        int createMixerTrack();
+
         std::vector<Rack*> racks;
 
         void tick();

@@ -5,6 +5,7 @@
 using json = nlohmann::json;
 #include "Processing.h"
 #include "VolumeBar.h"
+#include "gui.h"
 
 #ifndef MIXERTRACK_H
 #define MIXERTRACK_H
@@ -31,7 +32,7 @@ class MixerTrack {
         json toJSON();
         void fromJSON(json);
 
-        void render(SDL_Renderer*, SDL_FRect*);
+        void render(SDL_Renderer*, SDL_FRect*, gui::mode);
         VolumeBar bar;
 };
 

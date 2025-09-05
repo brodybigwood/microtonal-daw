@@ -180,3 +180,9 @@ void Project::setup() {
         }
     }
 }
+
+int Project::createMixerTrack() {
+    MixerTrack* track = new MixerTrack(this);
+    tracks.push_back(track);
+    return 0;
+}

@@ -102,10 +102,24 @@ void MixerTrack::fromJSON(json js) {
 
 }
 
-void MixerTrack::render(SDL_Renderer* renderer, SDL_FRect* dstRect) {
-    SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
-    SDL_RenderRect(renderer, dstRect);
-    SDL_SetRenderDrawColor(renderer, 70, 70, 70, 255);
+void MixerTrack::render(SDL_Renderer* renderer, SDL_FRect* dstRect, gui::mode mode) {
+    switch(mode) {
+        case gui::mode::hover:
+            SDL_SetRenderDrawColor(renderer, 80, 80, 80, 255);
+            break;
+        case gui::mode::select:
+            SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
+            break;
+        case gui::mode::def:
+            SDL_SetRenderDrawColor(renderer, 70, 70, 70, 255);
+            break;
+        default:
+            break;
+    }
     SDL_RenderFillRect(renderer, dstRect);
+
+    SDL_SetRenderDrawColor(renderer, 30, 30, 30, 255);
+    SDL_RenderRect(renderer, dstRect);
+
     bar.render(renderer, dstRect);
 }

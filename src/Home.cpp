@@ -62,6 +62,11 @@ bool Home::tick() {
 
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
+        
+        if(e.type == SDL_EVENT_KEY_DOWN && e.key.scancode == SDL_SCANCODE_SPACE) {
+            project->togglePlaying();
+            return true;
+        }
 
         uint32_t id = getEventWindowID(e);
 
@@ -117,6 +122,10 @@ bool Home::sendInput(SDL_Event& e) {
     }
     if (song && !songRollDetached && mouseOn(&songRect)) {
         song->handleInput(e);
+        return true;
+    }
+    if(mixer && mouseOn(mixerRect)) {
+        mixer->handleInput(e);
         return true;
     }
     return false;
