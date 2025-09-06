@@ -22,8 +22,10 @@ set(CMAKE_LINKER_FLAGS "${CMAKE_LINKER_FLAGS} -fsanitize=address")
 
 add_compile_definitions(_DEBUG)
 
+set(TINYFILEDIALOGS_DIR lib/tinyfiledialogs)
 
 file(GLOB SOURCES CONFIGURE_DEPENDS "src/*.cpp")
+list(APPEND SOURCES ${TINYFILEDIALOGS_DIR}/tinyfiledialogs.c)
 
 set(VST3_SDK_PATH "${CMAKE_SOURCE_DIR}/lib/VST_SDK/vst3sdk")
 
@@ -134,9 +136,8 @@ pkg_check_modules(RTAUDIO REQUIRED rtaudio)
 
 find_package(X11 REQUIRED)
 
-
 target_include_directories(DAW PRIVATE
-
+    ${TINYFILEDIALOGS_DIR}
     ${SDL2_INCLUDE_DIRS}
     ${RTAUDIO_INCLUDE_DIRS}
     ${X11_INCLUDE_DIR}

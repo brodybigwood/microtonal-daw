@@ -10,11 +10,16 @@
 #ifndef PIANOROLL_H
 #define PIANOROLL_H
 
+struct TuningTable;
+
 class PianoRoll : public GridView {
 
     public:
 
-
+    TuningTable* tuning_table;
+    void newTuning();
+    void updateLines();
+    
 
     PianoRoll(SDL_FRect*, std::shared_ptr<DAW::Region>, bool*);
     virtual ~PianoRoll();

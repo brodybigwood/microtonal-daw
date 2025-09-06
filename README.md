@@ -7,6 +7,7 @@ Install rtaudio -> for audio device functionality
 Install libdl -> to load vst libraries (.so)
 
 download vst3sdk and link the dir in cmakelists.txt (at the top)
+get tinyfiledialogs source and header, also link it in cmakelists
 
 git clone https://github.com/brodybigwood/microtonal-midi.git
 

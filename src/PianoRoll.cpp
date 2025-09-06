@@ -9,9 +9,22 @@
 #include "Note.h"
 #include "Playhead.h"
 #include "Transport.h"
+#include "TuningTable.h"
 
+void PianoRoll::newTuning() {
+    delete tuning_table;
+    tuning_table = new TuningTable(true);
+    updateLines();
+}
+
+void PianoRoll::updateLines() {
+    lines = tuning_table->notes;
+}
 
 PianoRoll::PianoRoll(SDL_FRect* rect, std::shared_ptr<DAW::Region> region, bool* detached) : region(region), GridView(detached, rect, 40) {
+
+    tuning_table = new TuningTable(false);
+    updateLines();
 
     if(!detached) {
         WindowHandler::instance()->home->pianoRoll = this;
@@ -147,7 +160,6 @@ void PianoRoll::RenderDestinations() {
 
 }
 
-
 void PianoRoll::Scroll() {
 
 
@@ -168,56 +180,6 @@ void PianoRoll::Scroll() {
     yOffset12 = (std::ceil(numCellsDown12) * cellHeight12) - scrollY;
 
     xOffset = (std::ceil(numCellsRight) * dW) - scrollX;
-
-
-
-    lines.clear();
-    float center = 69.0f;
-    int i = 0;
-
-   /* while (true) {
-        float note = center + i * (12.0f / notesPerOctave);
-        float mirror = center - i * (12.0f / notesPerOctave);
-
-        bool pushed = false;
-
-        if (note <= 127.0f) {
-            lines.push_back(note);
-            pushed = true;
-        }
-        if (mirror >= 0.0f && i != 0) {
-            lines.push_back(mirror);
-            pushed = true;
-        }
-
-        if (!pushed) break;
-        ++i;
-    }*/
-
-   float x = 0;
-   while(true) {
-        lines.push_back(x);
-        x += 2.04;
-        lines.push_back(x);
-        x += 1.82;
-        lines.push_back(x);
-        x += 1.65;
-        lines.push_back(x);
-        x += 1.51;
-        lines.push_back(x);
-        x += 1.39;
-        lines.push_back(x);
-        x += 1.28;
-        lines.push_back(x);
-        x += 1.19;
-        lines.push_back(x);
-        x += 1.12;
-        if(x > 127) {
-            break;
-        }
-    }
-
-    std::sort(lines.begin(), lines.end());
 
         refreshGrid = true;
         handleMouse();
