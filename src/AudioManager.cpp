@@ -74,9 +74,38 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
     };
 
 
-    for(auto* track : project->tracks) {
-        track->process(data);
+        channel* tempOutChs = new channel[audioManager->outputChannels];
+        for(size_t ch = 0; ch < audioManager->outputChannels; ch++) {
+        tempOutChs[ch].buffer = new float[bufferSize]();
     }
+    audioStream tempOut {
+        tempOutChs,
+        audioManager->outputChannels
+    };
+
+    audioData tempData {
+        input,
+        tempOut,
+        bufferSize
+    };
+
+    for( auto track : project->tracks ) {
+        track->process(tempData);
+
+        for( size_t ch = 0; ch < tempOut.numChannels; ch++) {
+            channel tempChannel = tempOutChs[ch];
+            channel masterChannel = outChannels[ch];
+            for( size_t s = 0; s < bufferSize; s++) {
+                masterChannel.buffer[s] += tempChannel.buffer[s];
+                tempChannel.buffer[s] = 0;
+            }
+        }
+    }
+
+    for(size_t ch = 0; ch < audioManager->outputChannels; ch++) {
+        delete[] tempOutChs[ch].buffer;
+    }
+    delete[] tempOutChs;
 
     for (unsigned int i = 0; i < bufferSize; ++i) {
         for (unsigned int ch = 0; ch < numChannels; ++ch) {
