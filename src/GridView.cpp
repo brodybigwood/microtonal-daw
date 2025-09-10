@@ -41,7 +41,7 @@ void GridView::createGridRect() {
         dstRect->x+leftMargin,
         dstRect->y+topMargin,
         dstRect->w-leftMargin-rightMargin,
-        dstRect->h-topMargin
+        dstRect->h - topMargin - bottomMargin
     };
 }
 

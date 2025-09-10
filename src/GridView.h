@@ -51,6 +51,7 @@ class GridView {
         float leftMargin = 0;
         float rightMargin = 0;
         float topMargin = 50;
+        float bottomMargin = 0;
 
         SDL_FRect gridRect;
         SDL_FRect* dstRect;

@@ -1,6 +1,7 @@
 #include "TuningTable.h"
 #include <iostream>
 #include "tinyfiledialogs.h"
+#include <fstream>
 
 TuningTable::TuningTable(bool dialog) {
 
@@ -27,18 +28,16 @@ TuningTable::TuningTable(bool dialog) {
     std::filesystem::path p(file);
     name = p.filename().string();
 
-    FILE *fp = std::fopen(file, "r");
+    std::ifstream fs(file);
+    if(!fs.is_open()) {
+        std::cerr << "couldnt open the file" << std::endl;
+        return;
+    }
 
-    std::fseek(fp, 0, SEEK_END);
-    long size = std::ftell(fp);
-    std::rewind(fp);
-
-    std::string content(size, '\0');
-    std::fread(&content[0], 1, size, fp);
-    std::fclose(fp);
+    json j;
+    fs >>j;
 
     try {
-        json j = json::parse(content)["notes"];
         std::vector<double> notesD = j["notes"].get<std::vector<double>>();
         notes.assign(notesD.begin(), notesD.end());
 

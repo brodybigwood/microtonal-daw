@@ -19,6 +19,7 @@ void PianoRoll::newTuning() {
 
 void PianoRoll::updateLines() {
     lines = tuning_table->notes;
+    Scroll();
 }
 
 PianoRoll::PianoRoll(SDL_FRect* rect, std::shared_ptr<DAW::Region> region, bool* detached) : region(region), GridView(detached, rect, 40) {
@@ -38,6 +39,8 @@ PianoRoll::PianoRoll(SDL_FRect* rect, std::shared_ptr<DAW::Region> region, bool*
     divHeight = 200; //octaveheight
 
     minHeight = 12.0f / 128;
+
+    bottomMargin = 20;
 
     UpdateGrid();
 
@@ -120,12 +123,12 @@ void PianoRoll::RenderDestinations() {
     SDL_Color textColor = {0, 0, 0, 255};
 
 
-    SDL_FRect backgroundRect = {0, topMargin, leftMargin, height - topMargin};
+    SDL_FRect backgroundRect = {0, topMargin, leftMargin, height - topMargin - bottomMargin};
 
     setRenderColor(colors.keyWhite);
     SDL_RenderFillRect(renderer, &backgroundRect);
     SDL_SetRenderDrawColor(renderer,0,0,0,255);
-    SDL_RenderLine(renderer, leftMargin+1,topMargin,leftMargin+1,height - topMargin);
+    SDL_RenderLine(renderer, leftMargin+1,topMargin,leftMargin+1,height - topMargin - bottomMargin);
 
     SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
 
@@ -212,6 +215,17 @@ bool PianoRoll::customTick() {
     SDL_RenderTexture(renderer, PianoTexture, nullptr, dstRect);
 
     transport->render();
+
+    SDL_FRect bottomRect{
+        0,
+        height-bottomMargin,
+        width,
+        bottomMargin
+    };
+
+    SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
+    SDL_RenderFillRect(renderer, &bottomRect);
+
     return true;
 }
 
@@ -224,7 +238,7 @@ void PianoRoll::initWindow() {
         dstRect->x+leftMargin,
         dstRect->y+topMargin,
         dstRect->w-leftMargin,
-        dstRect->h-topMargin
+        dstRect->h-topMargin - bottomMargin
     };
 
     SDL_DestroyTexture(backgroundTexture);
@@ -274,6 +288,10 @@ void PianoRoll::clickMouse(SDL_Event& e) {
             if (e.button.button == SDL_BUTTON_LEFT) {
                 lmb = true;
                 if(mouseY < topMargin) {
+                    return;
+                }
+                if(mouseY > height - bottomMargin) {
+                    newTuning();
                     return;
                 }
                 if(mouseX > leftMargin && stretchingNote == nullptr) {
@@ -385,8 +403,8 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                 if(std::abs(dX) >= dW/notesPerBar) {
                     moveNote(movingNote, std::ceil(dirX*dX)/dX,0);
                     last_lmb_x += dW*dirX/notesPerBar;
-                } if (getHoveredLine() != lastHoveredLine) {
-                    moveNote(movingNote, 0,getHoveredLine() - lastHoveredLine);
+                } if (getHoveredLine() != movingNote->num) {
+                    moveNote(movingNote, 0,getHoveredLine() - movingNote->num);
                     lastHoveredLine = getHoveredLine();
                 }
                 
