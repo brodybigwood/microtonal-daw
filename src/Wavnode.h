@@ -1,5 +1,6 @@
 #include "PlugType.h"
 #include "WavLib.h"
+#include "NodeInstance.h"
 
 class Wavnode : public PlugType {
 	public:
@@ -17,9 +18,9 @@ class Wavnode : public PlugType {
 		void serialize(std::filesystem::path) override;
 		void deSerialize(std::filesystem::path) override;
 
-		typedef void(*setupFunc)(ProcessContext);
-		setupFunc setupPlug = nullptr;
+        NodeInstance* mainNode;
 
-		typedef void(*processFunc)(audioData);
-		processFunc processPlug = nullptr;
+        typedef NodeInstance* (*nodeGetter)();
+		nodeGetter getNodeInstance = nullptr;
+
 };

@@ -17,23 +17,23 @@ Wavnode::~Wavnode() {}
 
 void Wavnode::toggle() {};
 void Wavnode::setup() {
-	setupPlug = (setupFunc)dlsym(lib->handle, "setup");
-	if(!setupPlug) throw std::runtime_error(dlerror());
+	getNodeInstance = (nodeGetter)dlsym(lib->handle, "getNodeInstance");
+	if(!getNodeInstance) throw std::runtime_error(dlerror());
+
+    mainNode = getNodeInstance();
+
 	auto am = AudioManager::instance();
 	ProcessContext ctx {
 		am->sampleRate,
 		am->bufferSize,
-		am->inputChannels,
+		am->outputChannels,
 		am->outputChannels
 	};
 
-	setupPlug(ctx);
-
-	processPlug = (processFunc)dlsym(lib->handle, "process");
-	if(!processPlug) throw std::runtime_error(dlerror());
+	mainNode->setup(ctx);
 };
 void Wavnode::process(audioData data, EventList* events) {
-	processPlug(data);
+	mainNode->process(data);
 };
 void Wavnode::showWindow() {};
 bool Wavnode::editorTick() {return true;};
