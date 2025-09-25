@@ -5,11 +5,18 @@
 #include "Project.h"
 #include "fract.h"
 #include "styles.h"
+#include "ScaleManager.h"
 
 using namespace DAW;
 
+
+TuningTable* Region::getTuning() {
+    return scale;
+}
+
 Region::Region() {
     this->id = (Project::instance()->id_reg)++;
+    scale = ScaleManager::instance()->getLastScale();
 }
 
 Region::~Region() {

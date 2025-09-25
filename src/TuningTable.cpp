@@ -3,12 +3,24 @@
 #include "tinyfiledialogs.h"
 #include <fstream>
 
+std::vector<float> TuningTable::getNoteNums() {
+    std::vector<float> nums;
+    for(auto note: notes) {
+        nums.push_back(note.midiNum);
+    }
+    return nums;
+}
+
 TuningTable::TuningTable(bool dialog) {
 
     if(!dialog) {
 
         for(float note = 0; note <= 127.0f; note++) {
-            notes.push_back(note);
+            ScaleNote s = {
+                .midiNum = note,
+                .identifier = std::to_string(note)
+            };
+            notes.push_back(s);
         };
 
         filepath = "";
@@ -38,9 +50,13 @@ TuningTable::TuningTable(bool dialog) {
     fs >>j;
 
     try {
-        std::vector<double> notesD = j["notes"].get<std::vector<double>>();
-        notes.assign(notesD.begin(), notesD.end());
-
+        for(json n : j["notes"]) {
+            ScaleNote note = {
+                .midiNum = n["midiNum"].get<float>(),
+                .identifier = n["identifier"].get<std::string>()
+            };
+            notes.push_back(note);
+        }
     } catch (const std::exception& e) {
         std::cerr << "json parse error: " << e.what() << std::endl;
     }

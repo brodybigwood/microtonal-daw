@@ -1,7 +1,15 @@
 #include "Note.h"
 #include <SDL3/SDL.h>
 #include "fract.h"
+#include "ScaleManager.h"
 
+TuningTable* Note::getScale() {
+    if(scale == nullptr) {
+        return ScaleManager::instance()->getLastScale();
+    } else {
+        return scale;
+    }
+};
 
 Note::Note(fract start, fract end, float num, double temperament) {
     this->end = end;

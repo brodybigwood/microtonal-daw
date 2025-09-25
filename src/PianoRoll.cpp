@@ -10,21 +10,24 @@
 #include "Playhead.h"
 #include "Transport.h"
 #include "TuningTable.h"
+#include "ScaleManager.h"
 
 void PianoRoll::newTuning() {
-    delete tuning_table;
-    tuning_table = new TuningTable(true);
+    TuningTable t (true);
+    ScaleManager::instance()->addScale(t);
+    tuning_table = ScaleManager::instance()->getLastScale();
+    region->scale = tuning_table;
     updateLines();
 }
 
 void PianoRoll::updateLines() {
-    lines = tuning_table->notes;
+    lines = tuning_table->getNoteNums();
     Scroll();
 }
 
 PianoRoll::PianoRoll(SDL_FRect* rect, std::shared_ptr<DAW::Region> region, bool* detached) : region(region), GridView(detached, rect, 40) {
 
-    tuning_table = new TuningTable(false);
+    tuning_table = region->getTuning();
     updateLines();
 
     if(!detached) {
@@ -132,20 +135,20 @@ void PianoRoll::RenderDestinations() {
 
     SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
 
-    for (double y = yOffset12-cellHeight12; y < height+cellHeight12; y += cellHeight12) {
+    for (auto n : tuning_table->notes) {
 
-        double noteNum = std::abs(getNoteName(y)-1);
+        float y = getY(n.midiNum);
         
-        std::string noteNumStrTemp = std::to_string(noteNum);
+        std::string noteNumStrTemp = n.identifier;
         const char* noteNumStr = noteNumStrTemp.c_str();
         
-        SDL_Surface* textSurface = TTF_RenderText_Solid(fonts.mainFont, noteNumStr, 3, textColor);  // textColor is an SDL_Color
+        SDL_Surface* textSurface = TTF_RenderText_Solid(fonts.mainFont, noteNumStr, noteNumStrTemp.size(), textColor);  // textColor is an SDL_Color
 
         KeyTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
 
         SDL_FRect textRect = {
             0,
-            static_cast<float>(y + cellHeight12) - static_cast<float>(textSurface->h)/2,
+            y - textSurface->h/2,
             static_cast<float>(textSurface->w),
             static_cast<float>(textSurface->h)
         };

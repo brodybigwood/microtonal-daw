@@ -1,11 +1,12 @@
 #ifndef NOTE_H
 #define NOTE_H
-
 #include <SDL3/SDL.h>
 #include <memory>
 #include "fract.h"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
+
+class TuningTable;
 
 class Note {
     public:
@@ -15,6 +16,9 @@ class Note {
         float num;  // Frequency or pitch of the note
         fract start; //bars
         fract end;
+
+        TuningTable* scale;
+        TuningTable* getScale();
 
         int id;
         int channel;

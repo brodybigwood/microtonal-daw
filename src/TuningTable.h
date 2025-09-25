@@ -6,10 +6,18 @@
 
 using json = nlohmann::json;
 
+struct ScaleNote{
+    float midiNum;
+    std::string identifier;
+};
+
 struct TuningTable {
     std::string filepath;
     std::string name;
-    std::vector<float> notes;
+    std::vector<ScaleNote> notes;
+    std::vector<float> getNoteNums();
 
-    TuningTable(bool);
+    int id;
+
+    TuningTable(bool=true);
 };

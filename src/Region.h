@@ -15,6 +15,7 @@ using json = nlohmann::json;
 #define REGION_H
 
 class Instrument;
+class TuningTable;
 
 namespace DAW {
 
@@ -27,7 +28,8 @@ class Region : public GridElement {
         ~Region();
 
         std::string name = "MIDI Region FX Rack";
-
+TuningTable* scale;
+TuningTable* getTuning();
  std::vector<std::shared_ptr<Note>> notes;
 
  uint16_t id;
