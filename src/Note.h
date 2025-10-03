@@ -17,7 +17,7 @@ class Note {
         fract start; //bars
         fract end;
 
-        TuningTable* scale;
+        TuningTable* scale = nullptr;
         TuningTable* getScale();
 
         int id;

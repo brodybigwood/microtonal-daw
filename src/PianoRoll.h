@@ -18,6 +18,7 @@ class PianoRoll : public GridView {
 
     TuningTable* tuning_table;
     void newTuning();
+    void setTuning(TuningTable*);
     void updateLines();
     
 

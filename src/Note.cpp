@@ -9,7 +9,7 @@ TuningTable* Note::getScale() {
     } else {
         return scale;
     }
-};
+}
 
 Note::Note(fract start, fract end, float num, double temperament) {
     this->end = end;

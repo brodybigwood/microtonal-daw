@@ -20,6 +20,12 @@ void PianoRoll::newTuning() {
     updateLines();
 }
 
+void PianoRoll::setTuning(TuningTable* t) {
+    region->scale = t;
+    tuning_table = t;
+    updateLines();
+}
+
 void PianoRoll::updateLines() {
     lines = tuning_table->getNoteNums();
     Scroll();
@@ -302,6 +308,7 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                         createElement();
                     } else {
                         notesPerOctave = std::dynamic_pointer_cast<Note>(hoveredElement)->temperament;
+                        setTuning(std::dynamic_pointer_cast<Note>(hoveredElement)->getScale());
                         UpdateGrid();
                         Scroll();
                         movingNote = std::dynamic_pointer_cast<Note>(hoveredElement);
@@ -434,6 +441,7 @@ void PianoRoll::createElement() {
 
     static int nextId = 0;
     n->id = nextId++;
+    n->scale = tuning_table;
 
     region->updateNoteChannel(n);
 
