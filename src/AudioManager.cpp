@@ -43,87 +43,6 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
     float *outBuffer = static_cast<float *>(outputBuffer);
     float *inBuffer = static_cast<float *>(inputBuffer);
 
-
-
-
-    channel* outChannels = new channel[audioManager->outputChannels];
-    channel* inChannels = new channel[audioManager->inputChannels];
-
-    for (size_t i = 0; i < audioManager->outputChannels; i++) {
-        outChannels[i].buffer = new float[bufferSize]();
-    }
-
-    for (size_t i = 0; i < audioManager->inputChannels; i++) {
-        inChannels[i].buffer = new float[bufferSize]();
-    }
-
-    audioStream output {
-        outChannels,
-        audioManager->outputChannels
-    };
-
-    audioStream input {
-        inChannels,
-        audioManager->inputChannels
-    };
-
-    audioData data {
-        input,
-        output,
-        bufferSize
-    };
-
-
-        channel* tempOutChs = new channel[audioManager->outputChannels];
-        for(size_t ch = 0; ch < audioManager->outputChannels; ch++) {
-        tempOutChs[ch].buffer = new float[bufferSize]();
-    }
-    audioStream tempOut {
-        tempOutChs,
-        audioManager->outputChannels
-    };
-
-    audioData tempData {
-        input,
-        tempOut,
-        bufferSize
-    };
-
-    for( auto track : project->tracks ) {
-        track->process(tempData);
-
-        for( size_t ch = 0; ch < tempOut.numChannels; ch++) {
-            channel tempChannel = tempOutChs[ch];
-            channel masterChannel = outChannels[ch];
-            for( size_t s = 0; s < bufferSize; s++) {
-                masterChannel.buffer[s] += tempChannel.buffer[s];
-                tempChannel.buffer[s] = 0;
-            }
-        }
-    }
-
-    for(size_t ch = 0; ch < audioManager->outputChannels; ch++) {
-        delete[] tempOutChs[ch].buffer;
-    }
-    delete[] tempOutChs;
-
-    for (unsigned int i = 0; i < bufferSize; ++i) {
-        for (unsigned int ch = 0; ch < numChannels; ++ch) {
-            outBuffer[i * numChannels + ch] = data.output.channels[ch].buffer[i];
-        }
-    }
-
-    for (size_t i = 0; i < audioManager->outputChannels; i++) {
-        delete[] outChannels[i].buffer;
-    }
-
-    for (size_t i = 0; i < audioManager->inputChannels; i++) {
-        delete[] inChannels[i].buffer;
-    }
-
-    delete[] outChannels;
-    delete[] inChannels;
-
     if(project->isPlaying) {
         project->effectiveTime = project->timeSeconds -  static_cast<double>(audioManager->latency) / audioManager->sampleRate;
     } else {
@@ -146,11 +65,11 @@ bool AudioManager::start() {
 
     auto defaultDevice = rtaudio.getDefaultOutputDevice();
 
-    RtAudio::DeviceInfo info = rtaudio.getDeviceInfo(deviceIds[1]);
+    RtAudio::DeviceInfo info = rtaudio.getDeviceInfo(deviceIds[0]);
     sampleRate = info.preferredSampleRate;
     outputChannels = info.outputChannels > 0 ? info.outputChannels : 2;
 
-    outputParams.deviceId = deviceIds[1];
+    outputParams.deviceId = deviceIds[0];
     outputParams.nChannels = outputChannels;
     outputParams.firstChannel = 0; 
 

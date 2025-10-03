@@ -1,6 +1,5 @@
 #include "WindowHandler.h"
 #include <X11/Xlib.h>
-#include "PluginManager.h"
 #include "SDL_Events.h"
 WindowHandler::WindowHandler() {
 
@@ -46,9 +45,6 @@ bool WindowHandler::tick() {
     double timeSinceLastFrame = double(SDL_GetTicks())-double(lastTime);
     if(timeSinceLastFrame >= frameTime) {
         lastTime = double(SDL_GetTicks())-frameTime;
-
-        PluginManager::instance().tickAll();
-
         running = home->tick();
         SDL_RenderPresent(renderer);
     }

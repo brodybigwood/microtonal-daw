@@ -23,12 +23,8 @@ class SongRoll : public GridView{
         
         WindowHandler* windowHandler;
 
-        InstrumentList* insts;
-
         void renderMargins();
         void createElement() override;
-
-        std::vector<Instrument*>* instruments;
 
         float getY(float) override;
 

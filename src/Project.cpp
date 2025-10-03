@@ -1,10 +1,10 @@
 #include "Project.h"
-#include "Plugin.h"
 #include "Region.h"
 #include <memory>
 #include <filesystem>
-
 #include <fstream>
+#include "AudioManager.h"
+
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
@@ -34,10 +34,6 @@ void Project::load(std::string path) {
     std::ifstream inFile(file);
     if (!inFile.is_open()) {
         std::cout<<"file didnt open"<<std::endl;
-
-        if(tracks.empty()) { //temporary
-            tracks.push_back(new MixerTrack(this));
-        }
         return;
     }
 
@@ -50,40 +46,6 @@ void Project::load(std::string path) {
 
     constexpr uint16_t NO_ID = std::numeric_limits<uint16_t>::max();
 
-    if (j.contains("tracks")) {
-        for (auto& jt : j["tracks"]) {
-            id_track = jt.value("id", NO_ID);
-            auto* track = new MixerTrack(this);
-            track->name = jt.value("name", "Mixer Track");
-            tracks.push_back(track);
-            track->fromJSON(jt);
-        }
-    }
-
-    uint16_t max_id = 0;
-    for (auto track : tracks) {
-        if (track->id > max_id) max_id = track->id;
-    }
-    id_track = max_id + 1;
-
-
-    if (j.contains("instruments")) {
-        int i = 0;
-        for (auto& ji : j["instruments"]) {
-            id_inst = ji.value("id", NO_ID);
-            auto* inst = new Instrument(this, i++);
-            inst->name = ji.value("name", "Instrument");
-            instruments.push_back(inst);
-            inst->fromJSON(ji);
-        }
-    }
-
-    max_id = 0;
-    for (auto instrument : instruments) {
-        if (instrument->id > max_id) max_id = instrument->id;
-    }
-    id_inst = max_id + 1;
-
     if (j.contains("regions")) {
         int i = 0;
         for (auto& ji : j["regions"]) {
@@ -94,15 +56,11 @@ void Project::load(std::string path) {
         }
     }
 
-    max_id = 0;
+    int max_id = 0;
     for (auto region : regions) {
         if (region->id > max_id) max_id = region->id;
     }
     id_reg = max_id + 1;
-
-    if(tracks.empty()) {
-        tracks.push_back(new MixerTrack(this));
-    }
 
 }
 
@@ -115,18 +73,6 @@ void Project::save() {
 
     json j;
     j["tempo"] = tempo;
-
-    j["tracks"] = json::array();
-    for (auto e : tracks) {
-        json je = e->toJSON();
-        j["tracks"].push_back(je);
-    }
-
-    j["instruments"] = json::array();
-    for (auto e : instruments) {
-        json je = e->toJSON();
-        j["instruments"].push_back(je);
-    }
 
     j["regions"] = json::array();
     for (auto e : regions) {
@@ -143,10 +89,6 @@ void Project::save() {
 
 void Project::createRegion() {
     regions.push_back(std::make_shared<DAW::Region>());
-}
-
-void Project::createInstrument() {
-    instruments.push_back(new Instrument(this, instruments.size()));
 }
 
 void Project::togglePlaying() {
@@ -174,15 +116,4 @@ void Project::tick() {
 }
 
 void Project::setup() {
-    for(auto rack : racks) {
-        for(auto& plug : rack->plugins) {
-            plug->setup();
-        }
-    }
-}
-
-int Project::createMixerTrack() {
-    MixerTrack* track = new MixerTrack(this);
-    tracks.push_back(track);
-    return 0;
 }

@@ -44,8 +44,8 @@ SDL_Event e;
     
         SDL_Window* mainWindow;
 
-        int windowWidth = 1920;
-        int windowHeight = 1080;
+        int windowWidth = 800;
+        int windowHeight = 600;
 
 
 };

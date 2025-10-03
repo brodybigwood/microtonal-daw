@@ -1,26 +1,27 @@
-#include "PlugType.h"
-#include "WavLib.h"
 #include "NodeInstance.h"
+#include "EventManager.h"
+#include <filesystem>
 
-class Wavnode : public PlugType {
+class Wavnode {
 	public:
-		Wavnode(char* path, PlugLib* library);
+		Wavnode(char* path);
 		~Wavnode();
 
-		WavLib* lib;
+		void toggle();
+		void setup();
+		void process(audioData, EventList*);
+		void showWindow();
+		bool editorTick();
 
-		void toggle() override;
-		void setup() override;
-		void process(audioData, EventList*) override;
-		void showWindow() override;
-		bool editorTick() override;
-
-		void serialize(std::filesystem::path) override;
-		void deSerialize(std::filesystem::path) override;
+		void serialize(std::filesystem::path);
+		void deSerialize(std::filesystem::path);
 
         NodeInstance* mainNode;
 
         typedef NodeInstance* (*nodeGetter)();
 		nodeGetter getNodeInstance = nullptr;
+
+        void* handle;
+        char* path;
 
 };

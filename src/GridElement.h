@@ -3,7 +3,6 @@
 #include "fract.h"
 #include <SDL3/SDL.h>
 class fract;
-class Instrument;
 
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
@@ -19,11 +18,11 @@ class GridElement {
             fract start;
             fract end;
             fract length;
-            Instrument* instrument;
+            int bus;
             int id;
         };
 
-        void createPos(fract, Instrument*);
+        void createPos(fract, int);
 
         std::vector<Position> positions;
 

@@ -18,13 +18,11 @@ Home::Home(Project* project) {
 
     renderer = windowHandler->renderer;
 
-    instrumentMenuTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, instMenuWidth, windowHeight-mixerHeight);
-
     songRect = SDL_FRect{
         0,
         0,
-       (float) windowWidth-instMenuWidth,
-        (float)windowHeight-mixerHeight
+       (float) windowWidth,
+        (float)windowHeight
     };
 
 
@@ -43,18 +41,6 @@ void Home::createRoll() {
         &songRollDetached
     );
 
-    instrumentMenu = InstrumentMenu::instance();
-    instrumentMenu->create(instrumentMenuTexture, renderer, windowWidth-instMenuWidth, 0, project);
-
-    mixer = new Mixer;
-    mixerRect = new SDL_FRect{
-        0,
-        windowHeight-mixerHeight,
-        windowWidth,
-        mixerHeight
-    };
-    mixer->renderer = renderer;
-    mixer->dstRect = mixerRect;
 }
 
 bool Home::tick() {
@@ -96,12 +82,8 @@ bool Home::tick() {
         }
     }
 
-    //std::cout<<"tickingnging"<<std::endl;
     SDL_SetRenderDrawColor(renderer, 100,100,100,255);
-    //std::cout<<"tickingnging"<<std::endl;
     SDL_RenderClear(renderer);
-    //std::cout<<"tickingnging"<<std::endl;
-    instrumentMenu->render();
 
     if(song) {
        song->tick();
@@ -109,8 +91,6 @@ bool Home::tick() {
     if(pianoRoll) {
         pianoRoll->tick();
     }
-
-    if(mixer) mixer->tick();
 
     return true;
 }
@@ -122,10 +102,6 @@ bool Home::sendInput(SDL_Event& e) {
     }
     if (song && !songRollDetached && mouseOn(&songRect)) {
         song->handleInput(e);
-        return true;
-    }
-    if(mixer && mouseOn(mixerRect)) {
-        mixer->handleInput(e);
         return true;
     }
     return false;
@@ -146,15 +122,9 @@ bool Home::handleInput(SDL_Event& e) {
     switch(e.type) {
         
         case SDL_EVENT_MOUSE_MOTION:
-            instrumentMenu->moveMouse(mouseX,mouseY);
             return true;
             break;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
-            if(mouseOnEditor()) {
-                instrumentMenu->clickMouse(e);
-                return true;
-                break;
-            }
             return true;
 
 
@@ -179,19 +149,6 @@ bool Home::handleInput(SDL_Event& e) {
             return true;
     }
 
-}
-
-bool Home::mouseOnEditor() {
-    if(
-        mouseX > windowWidth-instMenuWidth &&
-        mouseX < windowWidth &&
-        mouseY > 0 &&
-        mouseY < windowHeight-mixerHeight
-    ) {
-        return true;
-    } else {
-        return false;
-    }
 }
 
 bool Home::mouseOn(SDL_FRect* rect) {
