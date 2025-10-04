@@ -15,4 +15,9 @@ class NodeEditor {
     private:
         SDL_Window* window;
         SDL_Renderer* renderer;
+
+        void renderInputs();
+
+        int windowWidth = 800;
+        int windowHeight = 600;
 };
