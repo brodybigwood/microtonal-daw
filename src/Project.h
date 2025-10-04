@@ -62,6 +62,8 @@ class Project {
 
         double effectiveTime = 0;
 
+        void process(void* input, void* output, int bufferSize);
+
     private:
 
 };

@@ -1,27 +1,16 @@
-#include "NodeInstance.h"
-#include "EventManager.h"
 #include <filesystem>
 
 class Wavnode {
 	public:
-		Wavnode(char* path);
+		Wavnode();
 		~Wavnode();
-
-		void toggle();
-		void setup();
-		void process(audioData, EventList*);
-		void showWindow();
-		bool editorTick();
+        
+        static Wavnode* get();
+        
+		void process();
+        void setup();
+        void toggle();
 
 		void serialize(std::filesystem::path);
 		void deSerialize(std::filesystem::path);
-
-        NodeInstance* mainNode;
-
-        typedef NodeInstance* (*nodeGetter)();
-		nodeGetter getNodeInstance = nullptr;
-
-        void* handle;
-        char* path;
-
 };

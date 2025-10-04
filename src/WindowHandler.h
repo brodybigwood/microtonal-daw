@@ -35,7 +35,6 @@ SDL_Event e;
 
         void createPianoRoll(std::shared_ptr<DAW::Region>, SDL_FRect*);
 
-
         Uint32 lastTime;
 
         double fps = 60;
@@ -46,8 +45,6 @@ SDL_Event e;
 
         int windowWidth = 800;
         int windowHeight = 600;
-
-
 };
 
 #endif

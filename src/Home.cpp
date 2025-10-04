@@ -1,5 +1,6 @@
 #include "Home.h"
 #include "SDL_Events.h"
+#include "NodeEditor.h"
 
 Home* Home::get() {
     static Home h(Project::instance());
@@ -91,6 +92,7 @@ bool Home::tick() {
     if(pianoRoll) {
         pianoRoll->tick();
     }
+    NodeEditor::get()->tick();
 
     return true;
 }
