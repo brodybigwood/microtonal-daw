@@ -29,3 +29,11 @@ size_t BusManager::getBusCountE() {
 size_t BusManager::getBusCountW() {
     return waveformBusCount;
 }
+
+EventBus* BusManager::getBusE(uint8_t index) {
+    return &(eventBus[index]);
+}
+
+WaveformBus* BusManager::getBusW(uint8_t index) {
+    return &(waveformBus[index]);
+}
