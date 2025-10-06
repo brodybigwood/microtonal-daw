@@ -1,7 +1,6 @@
 #include "Region.h"
 #include <set>
 #include <functional>
-#include "EventManager.h"
 #include "Project.h"
 #include "fract.h"
 #include "styles.h"

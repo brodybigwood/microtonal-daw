@@ -34,8 +34,6 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
 
     AudioManager::instance()->streamTimeSeconds += static_cast<double>(bufferSize) / audioManager->sampleRate;
 
-    project->em.tick();
-
     unsigned int numChannels = audioManager->outputChannels;
 
     memset(outputBuffer, 0, bufferSize * numChannels * sizeof(float));

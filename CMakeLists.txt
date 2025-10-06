@@ -25,65 +25,16 @@ add_compile_definitions(_DEBUG)
 set(TINYFILEDIALOGS_DIR lib/tinyfiledialogs)
 
 file(GLOB SOURCES CONFIGURE_DEPENDS "src/*.cpp")
+
+file(GLOB_RECURSE SRC_NODE CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/nodes/**/*.cpp")
+
 list(APPEND SOURCES ${TINYFILEDIALOGS_DIR}/tinyfiledialogs.c)
-
-set(VST3_SDK_PATH "${CMAKE_SOURCE_DIR}/lib/VST_SDK/vst3sdk")
-
-set(VST3_HOSTING_SRC
-    ${VST3_SDK_PATH}/public.sdk/source/vst/hosting/plugprovider.cpp
-    ${VST3_SDK_PATH}/public.sdk/source/vst/hosting/hostclasses.cpp
-    ${VST3_SDK_PATH}/public.sdk/source/vst/utility/stringconvert.cpp
-    ${VST3_SDK_PATH}/public.sdk/source/main/pluginfactory.cpp
-    ${VST3_SDK_PATH}/public.sdk/source/vst/utility/testing.cpp
-   # ${VST3_SDK_PATH}/public.sdk/samples/vst-hosting/validator/source/validator.cpp
-    ${VST3_SDK_PATH}/public.sdk/source/vst/hosting/test/hostclassestest.cpp
-    ${VST3_SDK_PATH}/public.sdk/source/vst/hosting/pluginterfacesupport.cpp
-    ${VST3_SDK_PATH}/public.sdk/source/vst/vstinitiids.cpp
-    ${VST3_SDK_PATH}/public.sdk/source/vst/hosting/module.cpp
-    ${VST3_SDK_PATH}/public.sdk/source/vst/moduleinfo/moduleinfocreator.cpp
-    ${VST3_SDK_PATH}/public.sdk/source/vst/moduleinfo/moduleinfoparser.cpp
-
-    ${VST3_SDK_PATH}/public.sdk/source/vst/hosting/connectionproxy.cpp
-
-    ${VST3_SDK_PATH}/public.sdk/source/common/commoniids.cpp
-    ${VST3_SDK_PATH}/public.sdk/source/common/commonstringconvert.cpp
-)
-
-set(VST3_BASE_SRC
-    ${VST3_SDK_PATH}/base/source/fobject.cpp
-    ${VST3_SDK_PATH}/base/source/fdebug.cpp
-    ${VST3_SDK_PATH}/base/thread/source/flock.cpp
-    ${VST3_SDK_PATH}/base/source/fstring.cpp
-    ${VST3_SDK_PATH}/base/source/updatehandler.cpp
-
-)
-
-set(VST3_INTERFACE_SRC
-    ${VST3_SDK_PATH}/pluginterfaces/base/coreiids.cpp
-    ${VST3_SDK_PATH}/pluginterfaces/base/funknown.cpp
-    ${VST3_SDK_PATH}/pluginterfaces/base/ustring.cpp
-    ${VST3_SDK_PATH}/pluginterfaces/base/conststringtable.cpp
-)
-
 
 if(UNIX)
     add_compile_definitions(SMTG_OS_LINUX LINUX)
-    list(APPEND VST3_HOSTING_SRC
-        "${VST3_SDK_PATH}/public.sdk/source/vst/hosting/module_linux.cpp"
-        "${VST3_SDK_PATH}/public.sdk/source/common/threadchecker_linux.cpp"
-    )
 endif()
 
-
-add_library(vst3 STATIC
-    ${VST3_INTERFACE_SRC}
-    ${VST3_BASE_SRC}
-    ${VST3_HOSTING_SRC}
-)
-
-
-
-add_executable(DAW ${SOURCES})
+add_executable(DAW ${SOURCES} ${SRC_NODE})
 target_compile_definitions(DAW PRIVATE _DEBUG)
 
 
@@ -122,10 +73,6 @@ add_dependencies(DAW CopyAssets)  # Ensure assets are copied before running
 
 
 
-include_directories(${VST3_SDK_PATH})
-include_directories(${VST3_SDK_PATH}/pluginterfaces)
-include_directories(${VST3_SDK_PATH}/base)
-
 include_directories(/usr/include/SDL3_ttf/)
 
 find_package(SDL3 REQUIRED)
@@ -148,7 +95,6 @@ target_link_libraries(DAW PRIVATE
     SDL3_ttf::SDL3_ttf
     ${SDL2_LIBRARIES}
     ${RTAUDIO_LIBRARIES}
-    vst3
     ${X11_LIBRARIES}
 )
 

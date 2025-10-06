@@ -6,7 +6,6 @@
 #ifndef PROJECT_H
 #define PROJECT_H
 
-#include "EventManager.h"
 namespace DAW {
 
     class Region;
@@ -53,8 +52,6 @@ class Project {
 
         fract playHeadStart;
         fract playHeadPos = fract(0,1);
-
-        EventManager em;
 
         bool isPlaying = false;
 

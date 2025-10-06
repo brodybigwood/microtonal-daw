@@ -1,7 +1,6 @@
 #include "Project.h"
 #include "WindowHandler.h"
 #include "AudioManager.h"
-#include "EventManager.h"
 
 #include <thread>
 

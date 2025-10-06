@@ -14,9 +14,7 @@ void Project::process(void* input, void* output, int bufferSize) {
     w->process();
 };
 
-Project::Project() {
-    em.project = this;
-}
+Project::Project() {}
 
 Project::~Project() {
 save();
