@@ -30,4 +30,6 @@ class Node {
         void* getInput(inputNode&);
 
         void* getOutput(uint8_t);
+
+        virtual void process() = 0;
 }; 

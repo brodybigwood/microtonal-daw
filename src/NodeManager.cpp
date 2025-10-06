@@ -1,6 +1,8 @@
 #include "NodeManager.h"
 #include "Node.h"
 
+#include "nodes/nodetypes.h"
+
 
 Node* NodeManager::getNode(uint16_t id) {
     auto it = ids.find(id);
@@ -23,7 +25,7 @@ NodeManager::~NodeManager() {
 
 Node* NodeManager::addNode() {
     uint16_t id = id_pool.newID();
-    Node* n = new Node(id);
+    Node* n = new DelayNode(id);
     nodes.push_back(n);
     ids[id] = nodes.size() - 1;
     return n;
