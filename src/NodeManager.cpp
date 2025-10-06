@@ -48,3 +48,6 @@ void NodeManager::removeNode(uint16_t id) {
     nodes.pop_back();
     ids.erase(id);
 }
+
+void NodeManager::process() {
+}

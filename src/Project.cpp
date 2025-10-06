@@ -4,14 +4,14 @@
 #include <filesystem>
 #include <fstream>
 #include "AudioManager.h"
-#include "Wavnode.h"
+#include "NodeManager.h"
 
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
 void Project::process(void* input, void* output, int bufferSize) {
-    Wavnode* w = Wavnode::get();
-    w->process();
+    NodeManager* nm = NodeManager::get();
+    nm->process();
 };
 
 Project::Project() {}

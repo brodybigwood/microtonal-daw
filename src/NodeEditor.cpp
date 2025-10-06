@@ -1,5 +1,4 @@
 #include "NodeEditor.h"
-#include "Wavnode.h"
 #include "BusManager.h"
 
 NodeEditor::NodeEditor() {
@@ -63,7 +62,6 @@ void NodeEditor::renderInputs() {
 }
 
 void NodeEditor::tick() {
-    Wavnode* node = Wavnode::get();
 
     SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
     SDL_RenderClear(renderer);
