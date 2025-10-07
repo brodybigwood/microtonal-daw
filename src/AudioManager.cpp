@@ -41,6 +41,8 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
     float *outBuffer = static_cast<float *>(outputBuffer);
     float *inBuffer = static_cast<float *>(inputBuffer);
 
+    project->process(inBuffer, outBuffer, bufferSize);
+
     if(project->isPlaying) {
         project->effectiveTime = project->timeSeconds -  static_cast<double>(audioManager->latency) / audioManager->sampleRate;
     } else {

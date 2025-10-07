@@ -9,6 +9,8 @@
 #include "WindowHandler.h"
 #include "Playhead.h"
 
+#include "TrackList.h"
+
 #ifndef SONGROLL_H
 #define SONGROLL_H
 
@@ -20,6 +22,9 @@ class SongRoll : public GridView{
     public:
     SongRoll(SDL_FRect* rect, bool* detached);
         ~SongRoll();
+
+        TrackList* tracks;
+        SDL_FRect leftRect;
         
         WindowHandler* windowHandler;
 

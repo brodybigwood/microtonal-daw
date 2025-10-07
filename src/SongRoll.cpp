@@ -41,6 +41,16 @@ SongRoll::SongRoll(SDL_FRect* rect, bool* detached) : GridView(detached, rect, 2
         x++;
     }
     createGridRect();
+
+    tracks = TrackList::get();
+    leftRect = SDL_FRect{
+        dstRect->x, dstRect->y + topMargin, leftMargin, dstRect->h - topMargin
+    };
+
+    tracks->setGeometry(&leftRect);
+
+    tracks->mouseX = &mouseX;
+    tracks->mouseY = &mouseY;
 }
 
 bool SongRoll::customTick() {
@@ -69,6 +79,7 @@ bool SongRoll::customTick() {
 void SongRoll::renderMargins() {
     transport->render();
     regionManager->render();
+    tracks->render(renderer, scrollY, divHeight);
 }
 
 
@@ -96,6 +107,11 @@ void SongRoll::handleCustomInput(SDL_Event& e) {
     if (mouseX > rightRect.x && mouseX <= (rightRect.x + rightRect.w) &&
         mouseY > rightRect.y && mouseY <= (rightRect.y + rightRect.h)) {
         regionManager->handleInput(e);
+    }
+
+    if (mouseX > leftRect.x && mouseX <= (leftRect.x + leftRect.w) &&
+        mouseY > leftRect.y && mouseY <= (leftRect.y + leftRect.h)) {
+        tracks->handleInput(e);
     }
 
 }

@@ -5,11 +5,15 @@
 #include <fstream>
 #include "AudioManager.h"
 #include "NodeManager.h"
-
+#include "TrackList.h"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
-void Project::process(void* input, void* output, int bufferSize) {
+void Project::process(float* input, float* output, int bufferSize) {
+    TrackList* tl = TrackList::get();
+
+    tl->process(input, output, bufferSize);
+
     NodeManager* nm = NodeManager::get();
     nm->process();
 };
