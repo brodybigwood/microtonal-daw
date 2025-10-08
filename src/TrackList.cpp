@@ -134,3 +134,40 @@ void TrackList::process(float* input, int bufferSize) {
         track->process(input, bufferSize);
     }
 }
+
+void TrackList::fromJSON(json j) {
+    soloTracks = j["soloTracks"].get<std::vector<uint16_t>>();
+    muteTracks = j["muteTracks"].get<std::vector<uint16_t>>();
+
+    for(auto t : j["tracks"] ) {
+        Track* tr = new Track;
+        tr->fromJSON(t);
+        tracks.push_back(tr);
+    }
+
+    id_pool.fromJSON(j["id_pool"]);
+
+    for( auto [id, index] : j["ids"].items()) {
+        ids[static_cast<uint16_t>(std::stoi(id))] = index.get<uint16_t>();
+    }
+}
+
+json TrackList::toJSON() {
+    json j;
+    j["soloTracks"] = soloTracks;
+    j["muteTracks"] = muteTracks;
+
+    j["tracks"] = json::array();
+    for( auto t : tracks ){ 
+        j["tracks"].push_back(t->toJSON());
+    };
+
+    j["id_pool"] = id_pool.toJSON();
+
+    j["ids"] = json::object();
+    for( auto [id, index] : ids) {
+        j["ids"][std::to_string(id)] = index;
+    }
+
+    return j;
+}

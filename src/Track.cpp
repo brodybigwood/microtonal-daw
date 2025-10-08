@@ -62,3 +62,21 @@ void Track::render(SDL_Renderer* renderer, SDL_FRect& dstRect) {
 void Track::handleInput(SDL_Event& e) {
 
 }
+
+void Track::fromJSON(json j) {
+    type = static_cast<TrackType>(j["type"].get<uint16_t>());
+    id = j["id"].get<uint16_t>();
+    busID = j["busID"].get<int>();
+    inputChannel = j["inputChannel"].get<uint8_t>();
+}
+
+json Track::toJSON() {
+    json j;
+
+    j["type"] = type;
+    j["id"] = id;
+    j["busID"] = busID;
+    j["inputChannel"] = inputChannel;
+
+    return j;
+}

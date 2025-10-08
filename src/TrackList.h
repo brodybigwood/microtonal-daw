@@ -5,6 +5,9 @@
 #include <unordered_map>
 #include "idManager.h"
 
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
+
 class TrackList {
     public:
 
@@ -38,6 +41,9 @@ class TrackList {
         Track* getTrack(uint16_t);
 
         uint16_t getIndex(uint16_t);
+
+        void fromJSON(json);
+        json toJSON();
 
     private:
         std::vector<uint16_t> soloTracks;

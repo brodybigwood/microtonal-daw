@@ -3,6 +3,9 @@
 #include "Bus.h"
 #include <SDL3/SDL.h>
 
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
+
 enum TrackType{
     Audio = 0,
     Automation = 1,
@@ -23,9 +26,12 @@ class Track {
 
         void process(float* input, int bufferSize);
 
-        uint16_t inputChannel;
+        uint8_t inputChannel;
 
         void render(SDL_Renderer*, SDL_FRect&);
         void handleInput(SDL_Event&);
+
+        void fromJSON(json);
+        json toJSON();
 
 };

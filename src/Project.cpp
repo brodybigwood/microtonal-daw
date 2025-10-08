@@ -70,6 +70,7 @@ void Project::load(std::string path) {
     }
     id_reg = max_id + 1;
 
+    TrackList::get()->fromJSON(j["tracks"]);
 }
 
 void Project::save() {
@@ -87,6 +88,8 @@ void Project::save() {
         json je = e->toJSON();
         j["regions"].push_back(je);
     }
+
+    j["tracks"] = TrackList::get()->toJSON();
 
     std::ofstream outFile(file);
     if (outFile.is_open()) {
