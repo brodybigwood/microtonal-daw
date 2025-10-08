@@ -6,6 +6,7 @@
 
 class Node;
 
+
 class NodeManager {
     public:
         ~NodeManager();

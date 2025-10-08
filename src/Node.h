@@ -2,18 +2,24 @@
 #include <vector>
 #include <string>
 #include "Bus.h"
+#include "idManager.h"
+#include <unordered_map>
 
-enum inputType {
-    BusE = 0,
-    BusW = 1,
-    NodeE = 2,
-    NodeW = 3
+struct sourceNode{
+    ConnectionType type;
+    uint16_t source_id;
+    uint16_t output_id;
 };
 
-struct inputNode {
-    inputType type;
-    uint16_t id;
-    uint8_t index; //for busses, or nodes with multiple outputs
+struct connectionSet{
+    std::vector<Connection*> connections;
+    uint8_t num_outputs;
+    idManager id_pool;
+
+    std::unordered_map<uint16_t,uint16_t> ids;
+
+    uint16_t getIndex(uint16_t id);
+    Connection* getConnection(uint16_t id);
 };
 
 class Node {
@@ -24,12 +30,16 @@ class Node {
         uint16_t id;
         std::string name;
 
-        std::vector<inputNode> inputs;
-        std::vector<Bus*> outputs;
+        connectionSet inputs;
 
-        void* getInput(inputNode&);
+        connectionSet outputs;
 
-        void* getOutput(uint8_t);
+        void* getOutput(uint16_t);
+
+        void* getInput(uint16_t);
+
+        EventBus* getEvents(void*);
+        WaveformBus* getWaveform(void*);
 
         virtual void process() = 0;
 }; 
