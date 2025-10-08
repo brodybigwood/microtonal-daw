@@ -21,7 +21,7 @@ void Track::setBus(uint8_t id) {
     if(dstBus != nullptr) busID = dstBus->id;
 }
 
-void Track::process() {
+void Track::process(float* input, int bufferSize) {
 
 }
 

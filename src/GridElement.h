@@ -18,11 +18,11 @@ class GridElement {
             fract start;
             fract end;
             fract length;
-            int bus;
+            uint16_t trackID;
             int id;
         };
 
-        void createPos(fract, int);
+        void createPos(fract, uint16_t);
 
         std::vector<Position> positions;
 

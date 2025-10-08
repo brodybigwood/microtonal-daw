@@ -77,9 +77,9 @@ bool SongRoll::customTick() {
 }
 
 void SongRoll::renderMargins() {
+    tracks->render(renderer, scrollY, divHeight);
     transport->render();
     regionManager->render();
-    tracks->render(renderer, scrollY, divHeight);
 }
 
 
@@ -138,7 +138,8 @@ void SongRoll::renderRegion(GridElement* region) {
         }
 
         float topLeftCornerX = getX(pos.start);
-        float topLeftCornerY = getY(pos.bus);
+        uint16_t index = tracks->getIndex(pos.trackID);
+        float topLeftCornerY = getY(index);
         SDL_FRect dstRect = {topLeftCornerX, topLeftCornerY, pos.length*dW, divHeight};
         SDL_FRect srcRect = {pos.startOffset * 100, 0, pos.length * 100, 100};
         SDL_RenderFillRect(renderer, &dstRect);
@@ -151,11 +152,12 @@ void SongRoll::getHoveredRegion() {
         auto localRegion = regionPtr;
         GridElement* region = localRegion.get();
         for(auto pos :region->positions) {
+            uint16_t index = tracks->getIndex(pos.trackID);
             if(
                 mouseX > getX(pos.start) &&
                 mouseX < getX(pos.end) &&
-                mouseY > getY(pos.bus) &&
-                mouseY < getY(pos.bus+1)
+                mouseY > getY(index) &&
+                mouseY < getY(index+1)
             ) {
                 hoveredElement = pos.id;
                 return;
@@ -174,7 +176,12 @@ void SongRoll::createElement() {
         return;
     }
     fract start = getHoveredTime();
-    int y = getHoveredLine();
+    int trackIndex = getHoveredLine();
+
+    regionManager->currentRegion->createPos(
+        start, trackIndex
+    );
+
     refreshGrid = true;
 }
 

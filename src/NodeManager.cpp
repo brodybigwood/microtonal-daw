@@ -49,5 +49,5 @@ void NodeManager::removeNode(uint16_t id) {
     ids.erase(id);
 }
 
-void NodeManager::process() {
+void NodeManager::process(float* output, int bufferSize) {
 }

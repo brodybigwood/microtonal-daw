@@ -44,26 +44,40 @@ TrackList::~TrackList() {
 }
 
 void TrackList::addTrack(TrackType tp) {
+    uint16_t id = id_pool.newID();
     Track* t = new Track;
-    t->type = tp;
     tracks.push_back(t);
+    t->id = id;
+    ids[id] = tracks.size() - 1;
+    t->type = tp;
 }
 
-void TrackList::solo(uint16_t index) {
-    auto it = std::find(soloTracks.begin(), soloTracks.end(), index);
+Track* TrackList::getTrack(uint16_t id) {
+    auto index = getIndex(id);
+    return tracks[index];
+}
+
+uint16_t TrackList::getIndex(uint16_t id) {
+    auto it = ids.find(id);
+    if( it == ids.end()) return -1; 
+    return it->second;
+};
+
+void TrackList::solo(uint16_t id) {
+    auto it = std::find(soloTracks.begin(), soloTracks.end(), id);
     if (it != soloTracks.end()) {
         soloTracks.erase(it);
     } else {
-        soloTracks.push_back(index);
+        soloTracks.push_back(id);
     }
 };
 
-void TrackList::mute(uint16_t index) {
-    auto it = std::find(muteTracks.begin(), muteTracks.end(), index);
+void TrackList::mute(uint16_t id) {
+    auto it = std::find(muteTracks.begin(), muteTracks.end(), id);
     if (it != muteTracks.end()) {
         muteTracks.erase(it);
     } else {
-        muteTracks.push_back(index);
+        muteTracks.push_back(id);
     }
 }
 
@@ -115,6 +129,8 @@ TrackList* TrackList::get() {
     return &t;
 }
 
-void TrackList::process(float* input, float* output, int bufferSize) {
-
+void TrackList::process(float* input, int bufferSize) {
+    for(auto track : tracks) {
+        track->process(input, bufferSize);
+    }
 }

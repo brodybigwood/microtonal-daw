@@ -17,7 +17,7 @@ class NodeManager {
         void removeNode(uint16_t);
         Node* addNode();
 
-        void process();
+        void process(float*, int);
 
     private:
         std::unordered_map<uint16_t, uint16_t> ids;

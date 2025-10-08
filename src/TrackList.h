@@ -2,6 +2,8 @@
 
 #include "Track.h"
 #include "Button.h"
+#include <unordered_map>
+#include "idManager.h"
 
 class TrackList {
     public:
@@ -13,8 +15,6 @@ class TrackList {
 
         void addTrack(TrackType);
 
-        std::vector<Track*> tracks;
-
         void solo(uint16_t);
         void mute(uint16_t);
 
@@ -22,7 +22,7 @@ class TrackList {
 
         void handleInput(SDL_Event&);
 
-        void process(float* input, float* output, int bufferSize);
+        void process(float* input, int bufferSize);
 
         void setGeometry(SDL_FRect*);
 
@@ -33,6 +33,12 @@ class TrackList {
         float* mouseX;
         float* mouseY;
 
+        uint8_t getBus(uint16_t);
+
+        Track* getTrack(uint16_t);
+
+        uint16_t getIndex(uint16_t);
+
     private:
         std::vector<uint16_t> soloTracks;
         std::vector<uint16_t> muteTracks;
@@ -42,4 +48,9 @@ class TrackList {
 
         SDL_FRect newTrackRectE;
         SDL_FRect newTrackRectW;
+
+        std::vector<Track*> tracks;
+        idManager id_pool;
+
+        std::unordered_map<uint16_t, uint16_t> ids;
 };

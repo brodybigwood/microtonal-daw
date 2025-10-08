@@ -12,10 +12,10 @@ using json = nlohmann::json;
 void Project::process(float* input, float* output, int bufferSize) {
     TrackList* tl = TrackList::get();
 
-    tl->process(input, output, bufferSize);
+    tl->process(input, bufferSize);
 
     NodeManager* nm = NodeManager::get();
-    nm->process();
+    nm->process(output, bufferSize);
 };
 
 Project::Project() {}

@@ -19,8 +19,9 @@ class Track {
         TrackType& getType();
 
         void setBus(uint8_t);
+        uint16_t id;
 
-        void process();
+        void process(float* input, int bufferSize);
 
         uint16_t inputChannel;
 

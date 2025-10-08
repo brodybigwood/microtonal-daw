@@ -5,7 +5,7 @@
 GridElement::GridElement() {
 }
 
-void GridElement::createPos(fract startTime, int bus) {
+void GridElement::createPos(fract startTime, uint16_t trackID) {
     static int lastId = 0;
     int id = lastId++;
     Position pos{
@@ -13,7 +13,7 @@ void GridElement::createPos(fract startTime, int bus) {
         startTime,
         fract{16,1} + startTime,
         fract{16,1},
-        bus,
+        trackID,
         id
     };
     positions.push_back(pos);
@@ -33,7 +33,7 @@ json GridElement::toJSON() {
         p["start"] = pos.start.toJSON();
         p["end"] = pos.end.toJSON();
         p["length"] = pos.length.toJSON();
-        p["busID"] = pos.bus;
+        p["trackID"] = pos.trackID;
         p["id"] = pos.id;
         j.push_back(p);
     }
@@ -49,7 +49,7 @@ void GridElement::fromJSON(json j) {
             fract::fromJSON(p["start"]),
             fract::fromJSON(p["end"]),
             fract::fromJSON(p["length"]),
-            p["busID"],
+            p["trackID"],
             p["id"],
         };
         positions.push_back(pos);
