@@ -3,6 +3,7 @@
 #include "fract.h"
 #include <SDL3/SDL.h>
 class fract;
+#include "idManager.h"
 
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
@@ -32,4 +33,6 @@ class GridElement {
 
         json toJSON();
         void fromJSON(json);
+
+        static idManager* id_pool();
 };

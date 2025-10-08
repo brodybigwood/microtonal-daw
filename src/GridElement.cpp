@@ -6,8 +6,8 @@ GridElement::GridElement() {
 }
 
 void GridElement::createPos(fract startTime, uint16_t trackID) {
-    static int lastId = 0;
-    int id = lastId++;
+    uint16_t id = GridElement::id_pool()->newID();
+
     Position pos{
         fract{},
         startTime,
@@ -19,6 +19,10 @@ void GridElement::createPos(fract startTime, uint16_t trackID) {
     positions.push_back(pos);
 }
 
+idManager* GridElement::id_pool() {
+    static idManager im;
+    return &im;
+}
 
 
 GridElement::~GridElement() {

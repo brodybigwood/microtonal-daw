@@ -71,6 +71,8 @@ void Project::load(std::string path) {
     id_reg = max_id + 1;
 
     TrackList::get()->fromJSON(j["tracks"]);
+
+    GridElement::id_pool()->fromJSON(j["gridElements"]["id_pool"]);
 }
 
 void Project::save() {
@@ -90,6 +92,8 @@ void Project::save() {
     }
 
     j["tracks"] = TrackList::get()->toJSON();
+
+    j["gridElements"]["id_pool"] = GridElement::id_pool()->toJSON();
 
     std::ofstream outFile(file);
     if (outFile.is_open()) {
