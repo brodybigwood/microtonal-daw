@@ -60,3 +60,15 @@ Connection* connectionSet::getConnection(uint16_t id) {
     auto con = connections[index];
     return con;
 }
+
+void Node::move(float& x, float& y) {
+    dstRect.x = x;
+    dstRect.y = y;
+}
+
+void Node::render(SDL_Renderer* renderer) {
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    SDL_RenderFillRect(renderer, &dstRect);
+    SDL_SetRenderDrawColor(renderer, 120, 120, 120, 255);
+    SDL_RenderRect(renderer, &dstRect); 
+}

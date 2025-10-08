@@ -51,3 +51,11 @@ void NodeManager::removeNode(uint16_t id) {
 
 void NodeManager::process(float* output, int bufferSize) {
 }
+
+void NodeManager::render(SDL_Renderer* renderer, SDL_FRect* dstRect) {
+    SDL_SetRenderDrawColor(renderer, 180, 180, 180, 255);
+    SDL_RenderFillRect(renderer, dstRect);
+    for( auto node : nodes ) {
+        node->render(renderer);
+    }
+}

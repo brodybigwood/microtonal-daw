@@ -4,6 +4,7 @@
 #include "Bus.h"
 #include "idManager.h"
 #include <unordered_map>
+#include <SDL3/SDL.h>
 
 struct sourceNode{
     ConnectionType type;
@@ -42,4 +43,9 @@ class Node {
         WaveformBus* getWaveform(void*);
 
         virtual void process() = 0;
+
+        SDL_FRect dstRect{0,0,50,50};
+        void move(float& x, float& y);
+
+        void render(SDL_Renderer*);
 }; 

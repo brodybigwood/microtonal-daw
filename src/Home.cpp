@@ -81,6 +81,11 @@ bool Home::tick() {
                 }
             }
         }
+
+        auto ne = NodeEditor::get();
+        if(id == ne->getWindowID()) {
+            ne->handleInput(e);
+        }
     }
 
     SDL_SetRenderDrawColor(renderer, 100,100,100,255);
