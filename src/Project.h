@@ -59,7 +59,7 @@ class Project {
 
         double effectiveTime = 0;
 
-        void process(float* input, float* output, int bufferSize);
+        void process(float* input, float* output, int& bufferSize, int& numChannelsIn, int& numChannelsOut, int& sampleRate);
 
     private:
 

@@ -62,6 +62,6 @@ struct WaveformBus : public Bus {
         output.type = DataType::Waveform;
     };
     float* buffer;
-    uint8_t bufferSize;
+    int bufferSize;
 };
 

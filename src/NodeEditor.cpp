@@ -72,9 +72,10 @@ void NodeEditor::tick() {
 
     renderInputs();
 
-    NodeManager::get()->render(renderer, &nodeRect);
+    render(renderer, &nodeRect);
 
     SDL_RenderPresent(renderer);
+
 }
 
 uint32_t NodeEditor::getWindowID() {
@@ -94,19 +95,109 @@ void NodeEditor::handleInput(SDL_Event& e) {
         default:
             break;
     }
+    if(hoveredNode != nullptr) hoveredNode->handleInput(e);
 }
 
 void NodeEditor::moveMouse() {
     SDL_GetMouseState(&mouseX, &mouseY);
+    hover();
+}
+
+bool NodeEditor::inside(float& mouseX, float& mouseY, SDL_FRect* rect) {
+    return (
+        mouseX > rect->x &&
+        mouseX < rect->x + rect->w &&
+        mouseY > rect->y &&
+        mouseY < rect->y + rect->h
+    );
+}
+
+void NodeEditor::hover() {
+
+    bool found_hovered = false;
+
+    for(auto node : NodeManager::get()->getNodes()) {
+        SDL_FRect* rect = &(node->dstRect);
+        if( inside(mouseX, mouseY, rect) ) {
+            hoveredNode = node;
+            found_hovered = true;
+            break;
+        }
+    }
+
+    if(inside(mouseX, mouseY, &(NodeManager::get()->outNode.dstRect))) {
+        hoveredNode = &(NodeManager::get()->outNode);
+        found_hovered = true;
+    }
+
+    if(!found_hovered) hoveredNode = nullptr;
+    found_hovered = false;
+
+    SDL_FRect busRect{leftMargin, topMargin, 15, topMargin/2.0f};
+
+    for(int i = 0; i < BusManager::get()->getBusCountE(); i++) {
+        if( inside(mouseX, mouseY, &busRect) ) {
+            hoveredBus = BusManager::get()->getBusE(i);
+            found_hovered = true;
+            break;
+        }
+        busRect.x += 15;
+    }
+
+    if(!found_hovered) {
+
+        busRect.x = leftMargin;
+        busRect.y = topMargin;
+
+        for(int i = 0; i < BusManager::get()->getBusCountW(); i++) {
+            if( inside(mouseX, mouseY, &busRect) ) {
+                hoveredBus = BusManager::get()->getBusW(i);
+                found_hovered = true;
+                break;
+            }
+            busRect.x += 15;
+        }
+    }
+
+    if(!found_hovered) hoveredBus = nullptr;
 }
 
 void NodeEditor::clickMouse(SDL_Event& e) {
     static uint16_t doubleClickThreshold = 512;
     auto time = SDL_GetTicks();
-    if(time - lastLeftClick < doubleClickThreshold) {
-        doubleClick();
-    }
+    auto interval = time - lastLeftClick;
     lastLeftClick = time;
+    if(interval < doubleClickThreshold) {
+        doubleClick();
+        return;
+    }
+
+    if(hoveredNode != nullptr && hoveredNode->hoveredConnection != -1) {
+        switch(hoveredNode->hoveredDirection) {
+            case Direction::input:
+                dstNode = hoveredNode;
+                dstNodeID = hoveredNode->hoveredConnection;
+                break;
+            case Direction::output:
+                srcNode = hoveredNode;
+                srcNodeID = hoveredNode->hoveredConnection;
+                break;
+            default:
+                break;
+        }
+    }
+    if(srcNode != nullptr && dstNode != nullptr
+            && srcNodeID != -1 && dstNodeID != -1 ) {
+        NodeManager* nm = NodeManager::get();
+        nm->makeNodeConnection(
+                srcNode, srcNodeID,
+                dstNode, dstNodeID );
+
+        srcNode = nullptr;
+        srcNodeID = -1;
+        dstNode = nullptr;
+        dstNodeID = -1;
+    }
 }
 
 void NodeEditor::doubleClick() {
@@ -120,4 +211,17 @@ void NodeEditor::createNode() {
 
 void NodeEditor::keydown(SDL_Event& e) {
 
+}
+
+void NodeEditor::render(SDL_Renderer* renderer, SDL_FRect* dstRect) {
+    SDL_SetRenderDrawColor(renderer, 180, 180, 180, 255);
+    SDL_RenderFillRect(renderer, dstRect);
+    
+    auto nm = NodeManager::get();
+
+    for( auto node : nm->getNodes() ) {
+        node->render(renderer);
+    }
+
+    nm->outNode.render(renderer);
 }

@@ -9,13 +9,13 @@
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
-void Project::process(float* input, float* output, int bufferSize) {
+void Project::process(float* input, float* output, int& bufferSize, int& numChannelsIn, int& numChannelsOut, int& sampleRate) {
     TrackList* tl = TrackList::get();
 
     tl->process(input, bufferSize);
 
     NodeManager* nm = NodeManager::get();
-    nm->process(output, bufferSize);
+    nm->process(output, bufferSize, numChannelsIn, sampleRate);
 };
 
 Project::Project() {}

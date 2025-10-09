@@ -6,13 +6,32 @@ Node::Node(uint16_t id) : id(id) {}
 
 Node::~Node() {}
 
-void* Node::getInput(uint16_t id) {
-    Connection* con = inputs.getConnection(id);
+void* Node::getOutput(uint16_t id) {
+    Connection* con = outputs.getConnection(id);
     return con->data;
 }
 
-void* Node::getOutput(uint16_t id) {
-    Connection* con = outputs.getConnection(id);
+void Node::handleInput(SDL_Event& e) {
+    switch(e.type) {
+        case SDL_EVENT_MOUSE_MOTION:
+            SDL_GetMouseState(&mouseX, &mouseY);
+            break;
+        default:
+            break;
+    }
+}
+
+bool inside(float& mouseX, float& mouseY, SDL_FRect* rect) {
+    return (
+        mouseX > rect->x &&
+        mouseX < rect->x + rect->w &&
+        mouseY > rect->y &&
+        mouseY < rect->y + rect->h
+    );
+}
+
+void* Node::getInput(uint16_t id) {
+    Connection* con = inputs.getConnection(id);
     void* data = con->data;
     sourceNode* src = static_cast<sourceNode*>(data);
 
@@ -43,14 +62,6 @@ void* Node::getOutput(uint16_t id) {
     }
 }
 
-EventBus* getEvents(void* data){
-    return static_cast<EventBus*>(data);
-}
-
-WaveformBus* getWaveform(void* data){
-    return static_cast<WaveformBus*>(data);
-}
-
 uint16_t connectionSet::getIndex(uint16_t id) {
     return ids[id];
 }
@@ -66,9 +77,117 @@ void Node::move(float& x, float& y) {
     dstRect.y = y;
 }
 
+void Node::renderConnection(SDL_Renderer* renderer, uint16_t id) {
+    Connection* c = inputs.getConnection(id);
+
+    auto s = static_cast<sourceNode*>(c->data);
+    
+    float x;
+    float y;
+
+    switch(s->type) {
+        case node:
+            {
+                Node* n = NodeManager::get()->getNode(s->source_id);
+                x = n->dstRect.x;
+                y = n->dstRect.y;
+                break;
+            }
+        default:
+            break;
+    }
+
+    SDL_RenderLine(renderer, dstRect.x, dstRect.y, x, y);
+}
+
 void Node::render(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     SDL_RenderFillRect(renderer, &dstRect);
     SDL_SetRenderDrawColor(renderer, 120, 120, 120, 255);
-    SDL_RenderRect(renderer, &dstRect); 
+    SDL_RenderRect(renderer, &dstRect);
+
+    bool hoverFound = false;
+
+    int numInputs = inputs.connections.size();
+    if(numInputs > 0) {
+        float w = dstRect.w / (numInputs + 1.0f);
+        SDL_FRect inputRect{
+            dstRect.x, dstRect.y,
+            10, 10
+        };
+        for(auto input: inputs.connections) {
+            if( inside(mouseX, mouseY, &inputRect) ) {
+                hoveredConnection = input->id;
+                hoveredDirection = Direction::input;
+                hoverFound = true;
+            }
+            switch (input->type) {
+                case DataType::Events:
+                    SDL_SetRenderDrawColor(renderer, 120,255,120,255);
+                    break;
+                case DataType::Waveform:
+                    SDL_SetRenderDrawColor(renderer, 255,120,120,255);
+                    break;
+            }
+            SDL_RenderFillRect(renderer, &inputRect);
+            SDL_SetRenderDrawColor(renderer, 120,120,120,255);
+            SDL_RenderRect(renderer, &inputRect);
+            inputRect.x += w;
+        }
+    }
+
+
+
+    int numOutputs = outputs.connections.size();
+    if(numOutputs > 0) {
+        float w = dstRect.w / (numOutputs + 1.0f);
+        SDL_FRect outputRect{
+            dstRect.x, dstRect.y+dstRect.h - 10.0f,
+            10, 10
+        };
+        for(auto output: outputs.connections) {
+            if( inside(mouseX, mouseY, &outputRect) ) {
+                hoveredConnection = output->id;
+                hoveredDirection = Direction::output;
+                hoverFound = true;
+            }
+
+            switch (output->type) {
+                case DataType::Events:
+                    SDL_SetRenderDrawColor(renderer, 120,255,120,255);
+                    break;
+                case DataType::Waveform:
+                    SDL_SetRenderDrawColor(renderer, 255,120,120,255);
+                    break;
+            }
+            SDL_RenderFillRect(renderer, &outputRect);
+            SDL_SetRenderDrawColor(renderer, 120,120,120,255);
+            SDL_RenderRect(renderer, &outputRect);
+            outputRect.x += w;
+        }
+    }
+
+    if(!hoverFound) hoveredConnection = -1;
+
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    for(auto c : inputs.connections) {
+        if(c->is_connected) {
+            renderConnection(renderer, c->id);
+        }
+    }
+}
+
+void Node::setup() {}
+
+void Node::update(int bufferSize, int sampleRate) {
+    this->bufferSize = bufferSize;
+    this->sampleRate = sampleRate;
+}
+
+EventBus* Node::getEvents(void* data){
+    return static_cast<EventBus*>(data);
+}
+
+WaveformBus* Node::getWaveform(void* data){
+    return static_cast<WaveformBus*>(data);
 }

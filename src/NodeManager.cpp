@@ -23,6 +23,33 @@ NodeManager::~NodeManager() {
     nodes.clear();
 }
 
+std::vector<Node*>& NodeManager::getNodes() { return nodes; };
+#include <iostream>
+void NodeManager::makeNodeConnection(
+        Node* source, uint16_t outputID,
+        Node* dst, uint16_t inputID
+) {
+    Connection* srcCon = source->outputs.getConnection(inputID); 
+    Connection* dstCon = dst->inputs.getConnection(inputID);
+    
+    if(srcCon->type != dstCon->type || srcCon->is_connected || dstCon->is_connected) return;
+
+    sourceNode* s = new sourceNode;
+    s->type = node;
+    s->source_id = source->id;
+    s->output_id = srcCon->id;
+
+    dstCon->data = s;
+
+    srcCon->is_connected = true;
+    dstCon->is_connected = true;
+}
+
+void NodeManager::makeBusConnection(Bus* source, Node* dst, uint16_t inputID) {
+    Connection* con = dst->inputs.getConnection(inputID);
+
+}
+
 Node* NodeManager::addNode() {
     uint16_t id = id_pool.newID();
     Node* n = new DelayNode(id);
@@ -49,13 +76,33 @@ void NodeManager::removeNode(uint16_t id) {
     ids.erase(id);
 }
 
-void NodeManager::process(float* output, int bufferSize) {
-}
+void NodeManager::process(float* output, int& bufferSize, int& numChannels, int& sampleRate) {
 
-void NodeManager::render(SDL_Renderer* renderer, SDL_FRect* dstRect) {
-    SDL_SetRenderDrawColor(renderer, 180, 180, 180, 255);
-    SDL_RenderFillRect(renderer, dstRect);
-    for( auto node : nodes ) {
-        node->render(renderer);
+    bool update = false;
+    if(bufferSize != this->bufferSize) {
+        update = true;
+        this->bufferSize = bufferSize;
     }
+    if(numChannels != this->numChannels) {
+        update = true;
+        this->numChannels = numChannels;
+    }
+    if(sampleRate != this->sampleRate) {
+        update = true;
+        this->sampleRate = sampleRate;
+    }
+
+    if(update) {
+        for(auto node : nodes) {
+            node->update(bufferSize, sampleRate);
+        }
+        outNode.numChannels = numChannels;
+        outNode.update(bufferSize, sampleRate);
+    }
+
+    for(auto node : nodes) {
+        node->process();
+    }
+    outNode.output = output;
+    outNode.process();
 }

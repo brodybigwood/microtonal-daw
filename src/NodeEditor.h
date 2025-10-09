@@ -2,6 +2,9 @@
 
 #include <SDL3/SDL.h>
 
+class Node;
+class Bus;
+
 class NodeEditor {
     public:
         NodeEditor();
@@ -39,4 +42,20 @@ class NodeEditor {
         void moveMouse();
         void clickMouse(SDL_Event&);
         void keydown(SDL_Event&);
+
+        Node* hoveredNode = nullptr;
+        Bus* hoveredBus = nullptr;
+
+        Node* dstNode = nullptr;
+        int dstNodeID = -1;
+
+        Node* srcNode = nullptr;
+        int srcNodeID = -1;
+
+        Bus* srcBus = nullptr;
+
+        void hover();
+        void render(SDL_Renderer*, SDL_FRect*);
+
+        bool inside(float&, float&, SDL_FRect*);
 };

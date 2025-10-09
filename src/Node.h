@@ -14,7 +14,6 @@ struct sourceNode{
 
 struct connectionSet{
     std::vector<Connection*> connections;
-    uint8_t num_outputs;
     idManager id_pool;
 
     std::unordered_map<uint16_t,uint16_t> ids;
@@ -48,4 +47,22 @@ class Node {
         void move(float& x, float& y);
 
         void render(SDL_Renderer*);
+
+        int bufferSize;
+        int sampleRate;
+
+        virtual void setup();
+
+        void update(int, int);
+
+        float mouseX;
+        float mouseY;
+
+        int hoveredConnection;
+        Direction hoveredDirection;
+
+        void handleInput(SDL_Event&);
+
+       void renderConnection(SDL_Renderer*, uint16_t);
+
 }; 
