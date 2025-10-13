@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <SDL3/SDL.h>
 
 enum noteEventType {
     noteOn = 1,
@@ -37,6 +38,7 @@ struct Connection{
     uint16_t id;
     Direction dir;
 
+    SDL_FRect srcRect();
     void* data;
 };
 

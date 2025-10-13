@@ -77,27 +77,44 @@ void Node::move(float& x, float& y) {
     dstRect.y = y;
 }
 
-void Node::renderConnection(SDL_Renderer* renderer, uint16_t id) {
-    Connection* c = inputs.getConnection(id);
+SDL_FRect Connection::srcRect() {
 
-    auto s = static_cast<sourceNode*>(c->data);
+    auto s = static_cast<sourceNode*>(data);
     
-    float x;
-    float y;
+    SDL_FRect rect{0,0,0,0};
 
     switch(s->type) {
         case node:
             {
                 Node* n = NodeManager::get()->getNode(s->source_id);
-                x = n->dstRect.x;
-                y = n->dstRect.y;
+
+                connectionSet& outputs = n->outputs;
+                uint16_t index = outputs.getIndex(id);
+
+                rect.w = 10.0f; 
+                rect.h = 10.0f;
+
+                rect.x = n->dstRect.x + rect.w * index;
+                rect.y = n->dstRect.y + n->dstRect.h - rect.h;
+
                 break;
             }
         default:
             break;
     }
 
-    SDL_RenderLine(renderer, dstRect.x, dstRect.y, x, y);
+    return rect;
+}
+
+void Node::renderConnection(SDL_Renderer* renderer, uint16_t id) {
+    Connection* c = inputs.getConnection(id);
+    auto src = c->srcRect();
+
+    uint16_t index = inputs.getIndex(id);
+
+    float x = dstRect.x + 10.0f * index + 5.0f; 
+    float y = dstRect.y + 5.0f;
+    SDL_RenderLine(renderer, x, y, src.x+src.w/2.0f, src.y+src.h/2.0f);
 }
 
 void Node::render(SDL_Renderer* renderer) {
@@ -110,7 +127,7 @@ void Node::render(SDL_Renderer* renderer) {
 
     int numInputs = inputs.connections.size();
     if(numInputs > 0) {
-        float w = dstRect.w / (numInputs + 1.0f);
+        float w = dstRect.w / numInputs;
         SDL_FRect inputRect{
             dstRect.x, dstRect.y,
             10, 10
