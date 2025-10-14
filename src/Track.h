@@ -21,10 +21,17 @@ class Track {
         TrackType type = TrackType::Notes;
         TrackType& getType();
 
+        void setType();
+
         void setBus(uint8_t);
         uint16_t id;
 
         void process(float* input, int bufferSize);
+
+        std::vector<Event> events;
+
+        float* buffer;
+        int bufferSize;
 
         uint8_t inputChannel;
 

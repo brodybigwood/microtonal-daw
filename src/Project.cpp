@@ -6,6 +6,7 @@
 #include "AudioManager.h"
 #include "NodeManager.h"
 #include "TrackList.h"
+#include "ElementManager.h"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
@@ -46,33 +47,14 @@ void Project::load(std::string path) {
     }
 
 
-
     json j;
     inFile >> j;
 
     tempo = j.value("tempo", 120.0f);
 
-    constexpr uint16_t NO_ID = std::numeric_limits<uint16_t>::max();
-
-    if (j.contains("regions")) {
-        int i = 0;
-        for (auto& ji : j["regions"]) {
-            id_reg = ji.value("id", NO_ID);
-            auto reg = std::make_shared<DAW::Region>();
-            reg->fromJSON(ji);
-            regions.push_back(reg);
-        }
-    }
-
-    int max_id = 0;
-    for (auto region : regions) {
-        if (region->id > max_id) max_id = region->id;
-    }
-    id_reg = max_id + 1;
+    ElementManager::get()->fromJSON(j["elementManager"]);
 
     TrackList::get()->fromJSON(j["tracks"]);
-
-    GridElement::id_pool()->fromJSON(j["gridElements"]["id_pool"]);
 }
 
 void Project::save() {
@@ -85,15 +67,9 @@ void Project::save() {
     json j;
     j["tempo"] = tempo;
 
-    j["regions"] = json::array();
-    for (auto e : regions) {
-        json je = e->toJSON();
-        j["regions"].push_back(je);
-    }
-
     j["tracks"] = TrackList::get()->toJSON();
 
-    j["gridElements"]["id_pool"] = GridElement::id_pool()->toJSON();
+    j["elementManager"] = ElementManager::get()->toJSON();
 
     std::ofstream outFile(file);
     if (outFile.is_open()) {
@@ -103,7 +79,8 @@ void Project::save() {
 }
 
 void Project::createRegion() {
-    regions.push_back(std::make_shared<DAW::Region>());
+    auto em = ElementManager::get();
+    em->newRegion();
 }
 
 void Project::togglePlaying() {

@@ -81,13 +81,10 @@ find_package(SDL3_ttf REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(RTAUDIO REQUIRED rtaudio)
 
-find_package(X11 REQUIRED)
-
 target_include_directories(DAW PRIVATE
     ${TINYFILEDIALOGS_DIR}
     ${SDL2_INCLUDE_DIRS}
     ${RTAUDIO_INCLUDE_DIRS}
-    ${X11_INCLUDE_DIR}
 )
 
 target_link_libraries(DAW PRIVATE
@@ -95,7 +92,6 @@ target_link_libraries(DAW PRIVATE
     SDL3_ttf::SDL3_ttf
     ${SDL2_LIBRARIES}
     ${RTAUDIO_LIBRARIES}
-    ${X11_LIBRARIES}
 )
 
 

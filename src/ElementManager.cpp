@@ -1,61 +1,75 @@
-#include "RegionManager.h"
-#include "Project.h"
+#include "ElementManager.h"
+#include "Region.h"
 #include <SDL3/SDL_events.h>
 #include <string>
 #include "styles.h"
-#include "Region.h"
+#include "Project.h"
 
-RegionManager::RegionManager() {
-    this->project = Project::instance();
-    this->regions = &(project->regions);
+json ElementManager::toJSON() {
+    json j;
+    j["id_pool"] = id_pool.toJSON();
 
+    j["elements"] = json::array();
 
-}
-
-RegionManager::~RegionManager() {
-
-}
-
-bool RegionManager::handleInput(SDL_Event& e) {
-    bool running = true;
-    switch (e.type) {
-        case SDL_EVENT_MOUSE_BUTTON_DOWN:
-            if (e.button.button == SDL_BUTTON_LEFT) {
-                if(hoverNew) {
-                    project->createRegion();
-                    currentRegion = (*regions).back();
-                    break;
-                }
-                if(hoveredRegion != nullptr) {
-                    currentRegion = hoveredRegion;
-                    break;
-                }
-            }
-            break;
-        case SDL_EVENT_MOUSE_WHEEL:
-            scrollY -= e.wheel.y * 10;
-            if(scrollY < 0) {
-                scrollY = 0;
-            }
+    for(auto e : elements) {
+        json je = e->toJSON();
+        j["elements"].push_back(je);
     }
-    return running;
+
+    return j;
 }
 
-void RegionManager::render() {
+GridElement* ElementManager::getElement(uint16_t id) {
+    auto index = getIndex(id);
+    return elements[index];
+}
 
+void ElementManager::fromJSON(json j) {
+    id_pool.fromJSON(j["id_pool"]);
+
+    for(json e : j["elements"]) {
+        if(e["type"].get<int>() == ElementType::region) {
+            auto r = new Region;
+            r->fromJSON(e);
+            id_pool.reserveID(r->id);
+            elements.push_back(r);
+            ids[r->id] = elements.size() -1;
+        }
+    }
+}
+
+uint16_t ElementManager::getIndex(uint16_t id) {
+    return ids[id];
+}
+
+void ElementManager::newRegion() {
+    auto r = new Region;
+    r->id = id_pool.newID();
+    elements.push_back(r);
+
+    ids[r->id] = elements.size() -1;
+}
+
+ElementManager* ElementManager::get() {
+    static ElementManager e;
+    return &e;
+}
+
+
+void ElementManager::render(SDL_Renderer* renderer) {
 
     float height = 50;
     float topMargin = 5;
     float sideMargin = 5;
     float bottomMargin = 25;
-    float allRegionsHeight = (*regions).size() * (height + topMargin) + topMargin + bottomMargin;
+    float allElementsHeight = elements.size() * (height + topMargin) + topMargin + bottomMargin;
 
 
 
-    if(allRegionsHeight < dstRect->h) {
+    if(allElementsHeight< dstRect->h) {
         scrollY = 0;
-    } else if (scrollY > allRegionsHeight - dstRect->h) {
-        scrollY = allRegionsHeight - dstRect->h;
+    } else if (scrollY > allElementsHeight - dstRect->h) {
+        scrollY = allElementsHeight - dstRect->h;
     }
 
 
@@ -75,22 +89,22 @@ void RegionManager::render() {
     float i = topMargin + dstRect->y - scrollY;
 
 
-    hoveredRegion = nullptr;
+    hoveredElement = -1;
 
     //regions
-    for(auto region : *regions) {
+    for(auto e: elements) {
         SDL_FRect rect{dstRect->x + sideMargin, i, dstRect->w - 2*sideMargin, height};
 
-        if (*mouseX >= rect.x && *mouseX < (rect.x + rect.w) &&
-            *mouseY >= rect.y && *mouseY < (rect.y + rect.h)) {
-            hoveredRegion = region;
-            if(region == currentRegion) {
+        if (mouseX >= rect.x && mouseX < (rect.x + rect.w) &&
+            mouseY >= rect.y && mouseY < (rect.y + rect.h)) {
+            hoveredElement = e->id;
+            if(e->id == currentElement) {
                 SDL_SetRenderDrawColor(renderer, 120, 40, 40, 255);
             } else {
                 SDL_SetRenderDrawColor(renderer, 40, 40, 120, 255);
             }
         } else {
-            if(region == currentRegion) {
+            if(e->id == currentElement) {
                 SDL_SetRenderDrawColor(renderer, 60, 20, 20, 255);
             } else {
                 SDL_SetRenderDrawColor(renderer, 20, 20, 60, 255);
@@ -104,7 +118,7 @@ void RegionManager::render() {
 
 
 
-        std::string regionIdText = std::to_string(region->id);
+        std::string regionIdText = std::to_string(e->id);
         SDL_Color textColor = {255, 255, 255, 255};
 
         SDL_Surface* textSurface = TTF_RenderText_Blended(fonts.mainFont, regionIdText.c_str(), regionIdText.size(), textColor);
@@ -124,9 +138,6 @@ void RegionManager::render() {
         }
 
 
-
-
-
         i += height + topMargin;
     }
 
@@ -137,10 +148,10 @@ void RegionManager::render() {
     //new region btn
     SDL_FRect rect{dstRect->x, dstRect->y + dstRect->h - bottomMargin, dstRect->w, bottomMargin};
     hoverNew = false;
-    if (*mouseX >= rect.x && *mouseX < (rect.x + rect.w) &&
-        *mouseY >= rect.y && *mouseY < (rect.y + rect.h)) {
+    if (mouseX >= rect.x && mouseX < (rect.x + rect.w) &&
+        mouseY >= rect.y && mouseY < (rect.y + rect.h)) {
             SDL_SetRenderDrawColor(renderer, 40, 120, 40, 255);
-            hoveredRegion = nullptr;
+            hoveredElement = -1;
             hoverNew = true;
     } else {
             SDL_SetRenderDrawColor(renderer, 20, 60, 20, 255);
@@ -151,4 +162,31 @@ void RegionManager::render() {
     SDL_RenderRect(renderer, &rect);
 
     SDL_SetRenderClipRect(renderer, NULL);
+}
+
+bool ElementManager::handleInput(SDL_Event& e) {
+    bool running = true;
+    switch (e.type) {
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            if (e.button.button == SDL_BUTTON_LEFT) {
+                if(hoverNew) {
+                    Project::instance()->createRegion(); 
+                    break;
+                }
+                if(hoveredElement != -1) {
+                    currentElement = hoveredElement;
+                    break;
+                }
+            }
+            break;
+        case SDL_EVENT_MOUSE_WHEEL:
+            scrollY -= e.wheel.y * 10;
+            if(scrollY < 0) {
+                scrollY = 0;
+            }
+            break;
+        case SDL_EVENT_MOUSE_MOTION:
+            SDL_GetMouseState(&mouseX, &mouseY);
+    }
+    return running;
 }

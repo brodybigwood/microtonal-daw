@@ -33,7 +33,7 @@ SDL_Event e;
         PianoRoll* findWindow();
         bool tick();
 
-        void createPianoRoll(std::shared_ptr<DAW::Region>, SDL_FRect*);
+        void createPianoRoll(Region*, SDL_FRect*);
 
         Uint32 lastTime;
 

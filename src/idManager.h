@@ -10,6 +10,7 @@ class idManager {
     public:
         uint16_t newID();
         void releaseID(uint16_t);
+        bool reserveID(uint16_t);        
 
         void fromJSON(json j);
         json toJSON();

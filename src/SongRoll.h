@@ -42,13 +42,11 @@ class SongRoll : public GridView{
         SDL_FRect regionRect;
         SDL_FRect rightRect;
 
-        RegionManager* regionManager;
-
         void toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar);
         void handleCustomInput(SDL_Event& e) override;
 
-        void renderRegions();
-        void renderRegion(GridElement*);
+        void renderElements();
+        void renderElement(GridElement*);
 
         void getHoveredRegion();
 

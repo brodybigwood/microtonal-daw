@@ -5,17 +5,15 @@
 #include "fract.h"
 #include "styles.h"
 #include "ScaleManager.h"
-
-using namespace DAW;
-
+#include "ElementManager.h"
 
 TuningTable* Region::getTuning() {
     return scale;
 }
 
 Region::Region() {
-    this->id = (Project::instance()->id_reg)++;
     scale = ScaleManager::instance()->getLastScale();
+    type = ElementType::region;
 }
 
 Region::~Region() {
@@ -74,6 +72,7 @@ json Region::toJSON() {
     j["name"] = name;
     j["releaseMS"] = releaseMS;
     j["id"] = id;
+    j["type"] = ElementType::region;
     j["notes"] = json::array();
     for(auto e : notes) {
         j["notes"].push_back(e->toJSON());
@@ -87,7 +86,8 @@ void Region::fromJSON(json j) {
     name = j["name"];
     releaseMS = j["releaseMS"];
     GridElement::fromJSON(j["positions"]);
-
+    id = j["id"];
+    type = j["type"];
     for (auto e : j["notes"]) {
         notes.push_back(Note::fromJSON(e));
     }

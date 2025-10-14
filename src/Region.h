@@ -17,8 +17,6 @@ using json = nlohmann::json;
 class Instrument;
 class TuningTable;
 
-namespace DAW {
-
 class Region : public GridElement {
     private:
         
@@ -31,8 +29,6 @@ class Region : public GridElement {
 TuningTable* scale;
 TuningTable* getTuning();
  std::vector<std::shared_ptr<Note>> notes;
-
- uint16_t id;
 
 bool updateNoteChannel(std::shared_ptr<Note>);
 
@@ -48,11 +44,9 @@ int releaseMS = 1000;
 
 void draw(SDL_Renderer*) override;
 
-json toJSON();
-void fromJSON(json);
+json toJSON() override;
+void fromJSON(json) override;
 
 };
-
-}
 
 #endif

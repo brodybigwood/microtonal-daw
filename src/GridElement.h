@@ -4,9 +4,13 @@
 #include <SDL3/SDL.h>
 class fract;
 #include "idManager.h"
-
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
+
+enum ElementType{
+    region = 0,
+    audioClip = 1
+};
 
 class GridElement {
     public:
@@ -23,6 +27,8 @@ class GridElement {
             int id;
         };
 
+        ElementType type;
+
         void createPos(fract, uint16_t);
 
         std::vector<Position> positions;
@@ -31,8 +37,10 @@ class GridElement {
 
         virtual void draw(SDL_Renderer*) = 0;
 
-        json toJSON();
-        void fromJSON(json);
+        virtual json toJSON();
+        virtual void fromJSON(json);
 
         static idManager* id_pool();
+
+        uint16_t id;
 };

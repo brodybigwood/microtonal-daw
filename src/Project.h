@@ -44,8 +44,6 @@ class Project {
 
         uint16_t id_reg = 0;
 
-        std::vector<std::shared_ptr<DAW::Region>> regions;
-
         void tick();
 
         void setup();

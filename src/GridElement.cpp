@@ -56,6 +56,7 @@ void GridElement::fromJSON(json j) {
             p["trackID"],
             p["id"],
         };
+        GridElement::id_pool()->reserveID(p["id"]);
         positions.push_back(pos);
     }
 }

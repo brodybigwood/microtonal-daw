@@ -164,6 +164,7 @@ float SongRoll::getHoveredLine() {
 
 void SongRoll::createElement() {
     int id = ElementManager::get()->currentElement;
+    std::cout << id << std::endl;
     if(id == -1) {
         return;
     }
@@ -224,8 +225,8 @@ void SongRoll::clickMouse(SDL_Event& e) {
 }
 
 void SongRoll::deleteElement() {
-    for (auto e : ElementManager::get()->elements) {
-        auto& positions = e->positions;
+    /*for (auto& region : project->regions) {
+        auto& positions = region->positions;
 
         auto it = std::find_if(positions.begin(), positions.end(),
                                [this](const GridElement::Position& p) {
@@ -236,7 +237,7 @@ void SongRoll::deleteElement() {
             positions.erase(it);
             return;
         }
-    }
+    }*/
 }
 
 
