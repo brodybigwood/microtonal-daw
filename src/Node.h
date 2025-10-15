@@ -20,6 +20,8 @@ struct connectionSet{
 
     uint16_t getIndex(uint16_t id);
     Connection* getConnection(uint16_t id);
+
+    void addConnection(Connection*);
 };
 
 class Node {

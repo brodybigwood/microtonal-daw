@@ -73,7 +73,10 @@ add_dependencies(DAW CopyAssets)  # Ensure assets are copied before running
 
 
 
-include_directories(/usr/include/SDL3_ttf/)
+include_directories(
+    /usr/include/SDL3_ttf/
+    ${CMAKE_SOURCE_DIR}/src/
+)
 
 find_package(SDL3 REQUIRED)
 find_package(SDL3_ttf REQUIRED)

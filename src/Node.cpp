@@ -72,6 +72,21 @@ Connection* connectionSet::getConnection(uint16_t id) {
     return con;
 }
 
+void connectionSet::addConnection(Connection* c) {
+    c->id = id_pool.newID();
+    connections.push_back(c);
+    ids[c->id] = connections.size() -1;
+    if(c->dir == Direction::input) return;
+    switch(c->type) {
+        case DataType::Waveform:
+            c->data = new WaveformBus;
+            break;
+        default:
+            break;
+    }
+            
+}
+
 void Node::move(float& x, float& y) {
     dstRect.x = x;
     dstRect.y = y;
@@ -199,6 +214,17 @@ void Node::setup() {}
 void Node::update(int bufferSize, int sampleRate) {
     this->bufferSize = bufferSize;
     this->sampleRate = sampleRate;
+    for(auto c : outputs.connections) {
+        if (c->type == DataType::Waveform) {
+            auto b = getWaveform(c->data);
+            if(b->buffer != nullptr) {
+                delete[] b->buffer;
+            }
+            b->buffer = new float[bufferSize];
+            b->bufferSize = bufferSize;
+        }
+    }
+    setup();
 }
 
 EventBus* Node::getEvents(void* data){

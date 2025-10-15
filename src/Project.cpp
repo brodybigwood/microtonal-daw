@@ -16,7 +16,7 @@ void Project::process(float* input, float* output, int& bufferSize, int& numChan
     tl->process(input, bufferSize);
 
     NodeManager* nm = NodeManager::get();
-    nm->process(output, bufferSize, numChannelsIn, sampleRate);
+    nm->process(output, bufferSize, numChannelsOut, sampleRate);
 };
 
 Project::Project() {}

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../nodetypes.h"
+#include "Node.h"
 
 class DelayNode : public Node {
     public:

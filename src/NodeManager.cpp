@@ -24,7 +24,6 @@ NodeManager::~NodeManager() {
 }
 
 std::vector<Node*>& NodeManager::getNodes() { return nodes; };
-#include <iostream>
 void NodeManager::makeNodeConnection(
         Node* source, uint16_t outputID,
         Node* dst, uint16_t inputID
@@ -52,9 +51,11 @@ void NodeManager::makeBusConnection(Bus* source, Node* dst, uint16_t inputID) {
 
 Node* NodeManager::addNode() {
     uint16_t id = id_pool.newID();
-    Node* n = new DelayNode(id);
+    Node* n = new OscillatorNode(id);
     nodes.push_back(n);
     ids[id] = nodes.size() - 1;
+
+    n->update(bufferSize, sampleRate);
     return n;
 }
 
@@ -99,10 +100,11 @@ void NodeManager::process(float* output, int& bufferSize, int& numChannels, int&
         outNode.numChannels = numChannels;
         outNode.update(bufferSize, sampleRate);
     }
-
+   
     for(auto node : nodes) {
         node->process();
     }
+
     outNode.output = output;
     outNode.process();
 }

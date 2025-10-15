@@ -3,6 +3,13 @@
 OutputNode::OutputNode() : Node(0) {
     dstRect.x = 50.0f;
     dstRect.y = 50.0f;
+
+    for(int i = 0; i < 4; i++) {
+        Connection* c = new Connection;
+        c->type = DataType::Waveform;
+        c->dir = Direction::input;
+        inputs.addConnection(c);
+    }
 }
 
 void OutputNode::process() {
@@ -12,9 +19,11 @@ void OutputNode::process() {
 
         if(!c->is_connected) {
             std::memset(output + i*bufferSize, 0, bufferSize * sizeof(float));
+            return;
         }
 
-        void* data = c->data;
+        void* data = getInput(c->id);
+
         auto bus = getWaveform(data);
 
         float* inputBuffer = bus->buffer;
@@ -25,11 +34,4 @@ void OutputNode::process() {
 }
 
 void OutputNode::setup() {
-    for(int i = 0; i < 32; i++) {
-        Connection* c = new Connection;
-        c->id = inputs.id_pool.newID();
-        c->type = DataType::Waveform;
-        c->dir = Direction::input;
-        inputs.connections.push_back(c);
-    }
 }
