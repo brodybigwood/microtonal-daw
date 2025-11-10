@@ -17,6 +17,8 @@ struct TuningTable {
     std::vector<ScaleNote> notes;
     std::vector<float> getNoteNums();
 
+    int byID(std::string);
+
     int id;
 
     TuningTable(bool=true);

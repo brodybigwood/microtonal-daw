@@ -12,6 +12,19 @@ WindowHandler::WindowHandler() {
     
     lastTime = SDL_GetTicks();
 
+    SDL_FRect txtRect{
+        windowWidth/2.0f - 40,
+        windowHeight/2.0f - 40,
+        windowWidth/2.0f + 40,
+        windowHeight/2.0f + 40
+    };
+
+    txtInput = TextInput::get();
+
+    txtInput->dstRect = txtRect;
+    txtInput->renderer = renderer;
+    SDL_StartTextInput(mainWindow);
+    txtInput->active = false;
 }
 
 void WindowHandler::createHome(Project* project) {
@@ -40,15 +53,24 @@ void WindowHandler::createPianoRoll(Region* region, SDL_FRect* pRect) {
 
 bool WindowHandler::tick() {
 
-    bool running = true;
-                
     double timeSinceLastFrame = double(SDL_GetTicks())-double(lastTime);
     if(timeSinceLastFrame >= frameTime) {
         lastTime = double(SDL_GetTicks())-frameTime;
-        running = home->tick();
+
+        SDL_Event e;
+        while(SDL_PollEvent(&e)) {
+            if(txtInput->active) {
+                txtInput->tick(e);
+            } else {
+                if( !home->tick(e)) {
+                    return false;
+                }
+            }
+            std::cout<<txtInput->active<<std::endl;
+        }
         SDL_RenderPresent(renderer);
     }
-    return running;
+    return true;
 
 }
 

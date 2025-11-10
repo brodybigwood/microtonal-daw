@@ -8,7 +8,7 @@ class ScaleManager{
 
         std::vector<TuningTable*> scales;
 
-        void addScale(TuningTable);
+        void addScale(TuningTable&);
 
         TuningTable* lastScale;
         TuningTable* getLastScale();

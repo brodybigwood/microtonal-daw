@@ -11,6 +11,7 @@
 #include "Transport.h"
 #include "TuningTable.h"
 #include "ScaleManager.h"
+#include "TextInput.h"
 
 void PianoRoll::newTuning() {
     TuningTable t (true);
@@ -24,6 +25,10 @@ void PianoRoll::setTuning(TuningTable* t) {
     region->scale = t;
     tuning_table = t;
     updateLines();
+
+    //trigger a re-render
+    RenderGridTexture();
+    RenderDestinations();
 }
 
 void PianoRoll::updateLines() {
@@ -318,7 +323,38 @@ void PianoRoll::clickMouse(SDL_Event& e) {
             if (e.button.button == SDL_BUTTON_RIGHT) {
                 rmb = true;
                 if(mouseX > leftMargin && stretchingNote == nullptr) {
-                    deleteElement();
+                    if(isShiftPressed) {
+                        auto textInput = TextInput::get();
+                        textInput->active = true;
+                        SDL_StartTextInput(window);
+                        textInput->enter = [this, textInput]() {
+                            auto sm = ScaleManager::instance();
+    
+                            int index = tuning_table->byID(textInput->text);
+    
+                            float midiNum = tuning_table->notes[index].midiNum;
+                            float diff = midiNum - hoveredElement->num;
+    
+                            TuningTable* newTuning = new TuningTable(false);
+    
+                            newTuning->notes.clear();
+                            for(auto& n : tuning_table->notes) {
+                                ScaleNote note = {
+                                    .midiNum = n.midiNum - diff,
+                                    .identifier = n.identifier
+                                };
+                                newTuning->notes.push_back(note);
+                            }
+
+                            isShiftPressed = false;
+                            rmb = false;
+    
+                            setTuning(newTuning);
+                            sm->addScale(*newTuning);
+                        };
+                    } else {
+                        deleteElement();
+                    }
                 }
 
             }
@@ -546,7 +582,7 @@ void PianoRoll::handleMouse() {
 
     if(rmb) {
         SDL_SetCursor(cursors.pencil);
-        if(hoveredElement != nullptr) {
+        if(hoveredElement != nullptr && !TextInput::get()->active) {
             deleteElement();
         } 
     } else {

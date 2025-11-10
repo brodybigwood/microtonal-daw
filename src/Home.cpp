@@ -44,12 +44,8 @@ void Home::createRoll() {
 
 }
 
-bool Home::tick() {
+bool Home::tick(SDL_Event& e) {
 
-
-    SDL_Event e;
-    while (SDL_PollEvent(&e)) {
-        
         if(e.type == SDL_EVENT_KEY_DOWN && e.key.scancode == SDL_SCANCODE_SPACE) {
             project->togglePlaying();
             return true;
@@ -86,7 +82,6 @@ bool Home::tick() {
         if(id == ne->getWindowID()) {
             ne->handleInput(e);
         }
-    }
 
     SDL_SetRenderDrawColor(renderer, 100,100,100,255);
     SDL_RenderClear(renderer);

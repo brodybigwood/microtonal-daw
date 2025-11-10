@@ -23,7 +23,7 @@ TuningTable* ScaleManager::getLastScale() {
     return lastScale;
 }
 
-void ScaleManager::addScale(TuningTable t) {
+void ScaleManager::addScale(TuningTable& t) {
     bool exists = std::any_of(scales.begin(), scales.end(),
             [t](auto tt) {
             return tt->id == t.id;
@@ -31,7 +31,7 @@ void ScaleManager::addScale(TuningTable t) {
 
     if(exists) return;
 
-    TuningTable* n = new TuningTable;
+    TuningTable* n = new TuningTable(false);
     n->filepath = t.filepath;
     n->name = t.name;
     n->notes = t.notes;

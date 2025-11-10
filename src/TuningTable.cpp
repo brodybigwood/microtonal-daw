@@ -11,6 +11,20 @@ std::vector<float> TuningTable::getNoteNums() {
     return nums;
 }
 
+int TuningTable::byID(std::string id) {
+    auto it = std::find_if(notes.begin(), notes.end(),
+                       [&id](const ScaleNote& note) {
+                           return note.identifier == id;
+                       });
+
+    if (it != notes.end()) {
+        size_t index = std::distance(notes.begin(), it);
+        return index;
+    } else {
+        return 0;
+    }   
+}
+
 TuningTable::TuningTable(bool dialog) {
 
     if(!dialog) {
