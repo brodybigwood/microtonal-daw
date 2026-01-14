@@ -43,5 +43,8 @@ int main() {
         std::this_thread::sleep_for(std::chrono::milliseconds(5)); // 1000ms / 200Hz = 5ms
     }
 
+    audioManager->stop();
     project->save();
+
+    return 0;
 }

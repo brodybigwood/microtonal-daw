@@ -22,4 +22,7 @@ struct TuningTable {
     int id;
 
     TuningTable(bool=true);
+
+    json serialize();
+    void deSerialize(json);
 };

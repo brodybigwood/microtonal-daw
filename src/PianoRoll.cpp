@@ -313,7 +313,12 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                         createElement();
                     } else {
                         notesPerOctave = std::dynamic_pointer_cast<Note>(hoveredElement)->temperament;
-                        setTuning(std::dynamic_pointer_cast<Note>(hoveredElement)->getScale());
+
+                        auto s = std::dynamic_pointer_cast<Note>(hoveredElement)->getScale();
+
+                        ScaleManager::instance()->addScale(*s);
+                        setTuning(ScaleManager::instance()->getLastScale());
+
                         UpdateGrid();
                         Scroll();
                         movingNote = std::dynamic_pointer_cast<Note>(hoveredElement);
@@ -349,8 +354,10 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                             isShiftPressed = false;
                             rmb = false;
     
-                            setTuning(newTuning);
                             sm->addScale(*newTuning);
+                            setTuning(sm->getLastScale());
+
+                            std::dynamic_pointer_cast<Note>(hoveredElement)->scale = tuning_table;
                         };
                     } else {
                         deleteElement();

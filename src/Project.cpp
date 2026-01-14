@@ -7,6 +7,7 @@
 #include "NodeManager.h"
 #include "TrackList.h"
 #include "ElementManager.h"
+#include "ScaleManager.h"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
@@ -52,6 +53,8 @@ void Project::load(std::string path) {
 
     tempo = j.value("tempo", 120.0f);
 
+
+    ScaleManager::instance()->deSerialize(j["scaleManager"]);
     ElementManager::get()->fromJSON(j["elementManager"]);
 
     TrackList::get()->fromJSON(j["tracks"]);
@@ -68,6 +71,8 @@ void Project::save() {
     j["tempo"] = tempo;
 
     j["tracks"] = TrackList::get()->toJSON();
+
+    j["scaleManager"] = ScaleManager::instance()->serialize();
 
     j["elementManager"] = ElementManager::get()->toJSON();
 

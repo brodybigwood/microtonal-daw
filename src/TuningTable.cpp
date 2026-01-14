@@ -2,6 +2,7 @@
 #include <iostream>
 #include "tinyfiledialogs.h"
 #include <fstream>
+#include "WindowHandler.h"
 
 std::vector<float> TuningTable::getNoteNums() {
     std::vector<float> nums;
@@ -26,6 +27,8 @@ int TuningTable::byID(std::string id) {
 }
 
 TuningTable::TuningTable(bool dialog) {
+
+    id = -1;
 
     if(!dialog) {
 
@@ -75,5 +78,44 @@ TuningTable::TuningTable(bool dialog) {
         std::cerr << "json parse error: " << e.what() << std::endl;
     }
 
-    
+    auto win = WindowHandler::instance()->home->pianoRoll->window;
+    SDL_RaiseWindow(win);        // Brings window to front
+    SDL_SetWindowKeyboardGrab(win, true); // Grab keyboard input
+}
+
+json TuningTable::serialize() {
+    json j;
+
+    j["filepath"] = filepath;
+    j["name"] = name;
+
+    j["notes"] = json::array();
+    for( auto n : notes) {
+        json note;
+        note["midiNum"] = n.midiNum;
+        note["identifier"] = n.identifier;
+
+        j["notes"].push_back(note);
+    }
+
+    j["id"] = id;
+
+    return j;
+}
+
+void TuningTable::deSerialize(json j) {
+    filepath = j["filepath"];
+    name = j["name"];
+
+    notes.clear();
+
+    for( auto note : j["notes"] ) {
+        ScaleNote n = {
+            .midiNum = note["midiNum"],
+            .identifier = note["identifier"]
+        };
+        notes.push_back(n);
+    }
+
+    id = j["id"];
 }

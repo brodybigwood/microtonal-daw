@@ -31,6 +31,8 @@ json Note::toJSON() {
     j["channel"] = channel;
     j["temperament"] = temperament;
 
+    j["scaleID"] = scale->id;
+
     return j;
 }
 
@@ -49,6 +51,8 @@ std::shared_ptr<Note> Note::fromJSON(json& input) {
     std::shared_ptr<Note> n = std::make_shared<Note>(start,end,num,temperament);
     n->id = id;
     n->channel = channel;
+
+    n->scale = ScaleManager::instance()->byID(input["scaleID"]);
 
     return n;
 }
