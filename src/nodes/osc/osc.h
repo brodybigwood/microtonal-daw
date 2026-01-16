@@ -1,12 +1,15 @@
-#pragma oce
+#pragma once
 
 #include "Node.h"
 
 struct Voice {
     bool active = false;
-
+    float frequency;
+    void reset();
+    int noteId = -1;
     float phase = 0;
-    void process(float frequency, float* out0, float* out1, int& bufferSize, int& sampleRate); //stereo out
+    int wait = 0;
+    void process (float* out0, float* out1, int& bufferSize, int& sampleRate); //stereo out
 };
 
 

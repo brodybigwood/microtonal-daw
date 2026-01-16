@@ -1,5 +1,6 @@
 #include "osc.h"
 #include <cmath>
+#include <iostream>
 
 OscillatorNode::OscillatorNode(uint16_t id) : Node(id) {
     output0 = new Connection;
@@ -27,10 +28,37 @@ void OscillatorNode::process() {
     auto eBus = getEvents(inputN->data);
     auto& events = eBus->events;
 
-    for (auto event : events) {
-        // assign to voices
+    for (auto& event : events) {
+        switch (event.type) {
+            case noteEventType::noteOn: {
+                    //assign to a voice
+                    for (auto voice : voices) {
+                        if (!voice.active) {
+                            voice.noteId = event.id;
+                            voice.frequency = 440 * pow(2.0f,(event.num - 69) / 12.0f);
+                            voice.wait = event.sampleOffset;
+                            break;
+                        }
+                    }
+                }
+                break;
+            case noteEventType::noteOff: {
+                    //deactivate the corresponding voice
+                    for (auto voice : voices) {
+                        if (event.id == voice.noteId) {
+                            voice.reset();
+                            break;
+                        }   
+                    }
+                }
+                break;
+            default:
+                std::cerr << "unrecognized event type" << std::endl;
+        }
     }
 
+    voices[0].active = true;
+    voices[1].active = true;
 
 // now do output
 
@@ -51,15 +79,19 @@ void OscillatorNode::process() {
         auto& voice = voices[i];
         if (!voice.active) return;
 
-        voice.process(500, b0, b1, bufferSize, sampleRate);
+        voice.process(b0, b1, bufferSize, sampleRate);
     }
 }
 
 void OscillatorNode::setup() {
 }
 
-void Voice::process(float frequency, float* out0, float* out1, int& bufferSize, int& sampleRate) {
+void Voice::process(float* out0, float* out1, int& bufferSize, int& sampleRate) {
     for (int i = 0; i < bufferSize; i++) {
+        if (wait > 0) {
+            wait -=1;
+            continue;
+        }
         float smp = sin(phase);
         if (out0) out0[i] = smp;
         if (out1) out1[i] = smp;
@@ -68,4 +100,11 @@ void Voice::process(float frequency, float* out0, float* out1, int& bufferSize, 
 
         if (phase >= 2* M_PI) phase -= 2 * M_PI;
     } 
+}
+
+void Voice::reset() {
+    active = false;
+    phase = 0;
+    noteId = -1;   
+    wait = 0;
 }
