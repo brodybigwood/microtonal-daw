@@ -46,7 +46,7 @@ void OscillatorNode::process() {
         switch (event.type) {
             case noteEventType::noteOn: {
                     //assign to a voice
-                    for (int i = 0; i < 64; ++i) {
+                    for (int i = 0; i < NUM_VOICES; ++i) {
                         auto& voice = voices[i];
                         if (!voice.active) {
                             voice.noteId = event.id;
@@ -65,7 +65,7 @@ void OscillatorNode::process() {
                 break;
             case noteEventType::noteOff: {
                     //deactivate the corresponding voice
-                    for (int i = 0; i < 64; ++i) {
+                    for (int i = 0; i < NUM_VOICES; ++i) {
                         auto& voice = voices[i];
                         if (event.id == voice.noteId) {
                             
@@ -100,7 +100,7 @@ void OscillatorNode::process() {
         std::memset(b1, 0, bufferSize * sizeof(float));
     }
 
-    for (int i = 0; i < 64; i++) {
+    for (int i = 0; i < NUM_VOICES; i++) {
         auto& voice = voices[i];
         if (!voice.active) continue;
         voice.process(b0, b1, bufferSize, sampleRate);

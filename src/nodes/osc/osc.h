@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Node.h"
+#define NUM_VOICES 32
 
 struct Voice {
     bool active = false;
@@ -26,5 +27,5 @@ class OscillatorNode : public Node {
         void process() override;
 
         void setup() override;
-        Voice voices[64];
+        Voice voices[NUM_VOICES];
 };
