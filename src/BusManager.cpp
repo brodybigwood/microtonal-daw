@@ -6,8 +6,18 @@ BusManager* BusManager::get() {
 }
 
 BusManager::BusManager() {
-    eventBus = new EventBus[eventBusCount];
-    waveformBus = new WaveformBus[waveformBusCount];
+
+    for (size_t i = 0; i < eventBusCount; ++i) {
+        auto& bus = eventBus[i];
+        bus.id = i;
+        bus.output.data = &bus;
+    }
+
+    for (size_t i = 0; i < waveformBusCount; ++i) {
+        auto& bus = waveformBus[i];
+        bus.id = i;
+        bus.output.data = &bus;
+    }
 }
 
 BusManager::~BusManager() {

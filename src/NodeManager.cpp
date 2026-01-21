@@ -1,6 +1,8 @@
 #include "NodeManager.h"
 #include "Node.h"
 
+#include <iostream>
+
 #include "nodes/nodetypes.h"
 
 
@@ -45,8 +47,22 @@ void NodeManager::makeNodeConnection(
 }
 
 void NodeManager::makeBusConnection(Bus* source, Node* dst, uint16_t inputID) {
-    Connection* con = dst->inputs.getConnection(inputID);
+    Connection* dstCon = dst->inputs.getConnection(inputID);
+    Connection* srcCon = &(source->output);
 
+    if (srcCon->type != dstCon->type || srcCon->is_connected || dstCon->is_connected) return;
+
+    sourceNode* s = new sourceNode;
+    s->type = bus;
+    s->source_id = source->id;
+    s->output_id = srcCon->id;
+    
+    dstCon->data = s;
+    
+    srcCon->is_connected = true;
+    dstCon->is_connected = true;
+
+    std::cout << "connected bus " << source->id << " to node." << std::endl;
 }
 
 Node* NodeManager::addNode() {

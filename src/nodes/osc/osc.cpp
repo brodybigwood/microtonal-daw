@@ -20,15 +20,28 @@ OscillatorNode::OscillatorNode(uint16_t id) : Node(id) {
 }
 
 void OscillatorNode::process() {
-
 // first process input
 
-    if (!inputN->is_connected) return;
+    if (!inputN->is_connected) { // just do zeroes
+        if (output0->is_connected) {
+            auto bus = getWaveform(output0->data);
+            std::memset(bus->buffer, 0, bufferSize * sizeof(float));
+        }
+    
+        if (output1->is_connected) {
+            auto bus = getWaveform(output1->data);
+            std::memset(bus->buffer, 0, bufferSize * sizeof(float));
+        }
+        return;
+    }
 
-    auto eBus = getEvents(inputN->data);
-    auto& events = eBus->events;
+    auto input = getInput(inputN);
+    EventBus* eBus = getEvents(input);
+    Event* events = eBus->events;
 
-    for (auto& event : events) {
+return;
+    for (size_t i = 0; i < eBus->numEvents; ++i) {
+        auto& event = events[i];
         switch (event.type) {
             case noteEventType::noteOn: {
                     //assign to a voice
@@ -36,6 +49,8 @@ void OscillatorNode::process() {
                         if (!voice.active) {
                             voice.noteId = event.id;
                             voice.frequency = 440 * pow(2.0f,(event.num - 69) / 12.0f);
+
+                            std::cout << "detected note: " << event.num << std::endl;
                             voice.wait = event.sampleOffset;
                             break;
                         }
@@ -71,14 +86,13 @@ void OscillatorNode::process() {
     }
 
     if (output1->is_connected) {
-        auto bus = getWaveform(output0->data);
+        auto bus = getWaveform(output1->data);
         b1 = bus->buffer;
     }
 
     for (int i = 0; i < 64; i++) {
         auto& voice = voices[i];
-        if (!voice.active) return;
-
+        if (!voice.active) continue;
         voice.process(b0, b1, bufferSize, sampleRate);
     }
 }

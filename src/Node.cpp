@@ -1,13 +1,13 @@
 #include "Node.h"
 #include "NodeManager.h"
 #include "BusManager.h"
+#include "NodeEditor.h"
 
 Node::Node(uint16_t id) : id(id) {}
 
 Node::~Node() {}
 
-void* Node::getOutput(uint16_t id) {
-    Connection* con = outputs.getConnection(id);
+void* Node::getOutput(Connection* con) {
     return con->data;
 }
 
@@ -30,8 +30,7 @@ bool inside(float& mouseX, float& mouseY, SDL_FRect* rect) {
     );
 }
 
-void* Node::getInput(uint16_t id) {
-    Connection* con = inputs.getConnection(id);
+void* Node::getInput(Connection* con) {
     void* data = con->data;
     sourceNode* src = static_cast<sourceNode*>(data);
 
@@ -44,10 +43,12 @@ void* Node::getInput(uint16_t id) {
                 case DataType::Events:
                 {                            
                     b = bm->getBusE(src->source_id);
+                    break;
                 }
                 case DataType::Waveform:
                 {
                     b = bm->getBusW(src->source_id);
+                    break;
                 }
             }
             Connection* c = &(b->output);
@@ -57,7 +58,8 @@ void* Node::getInput(uint16_t id) {
         {
             auto nm = NodeManager::get();
             auto n = nm->getNode(src->source_id);
-            return n->getOutput(src->output_id);
+            auto oc = inputs.getConnection(src->output_id);
+            return n->getOutput(oc);
         }
     }
 }
@@ -114,6 +116,25 @@ SDL_FRect Connection::srcRect() {
 
                 break;
             }
+        case bus: {
+                auto bm = BusManager::get();
+                uint16_t& index = s->source_id; // id = index for busses
+
+                Bus* srcBus;
+                switch(type) {
+                    case DataType::Events: {
+                        srcBus = bm->getBusE(index);
+                        break;
+                    }
+                    case DataType::Waveform: {
+                        srcBus = bm->getBusW(index);
+                        break;
+                    }
+                }
+
+                rect = srcBus->dstRect;
+            }
+            break;
         default:
             break;
     }

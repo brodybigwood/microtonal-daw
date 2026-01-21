@@ -4,6 +4,8 @@
 #include <vector>
 #include <SDL3/SDL.h>
 
+#define MAX_EVENTS 256
+
 enum noteEventType {
     noteOn = 1,
     noteOff = 0,
@@ -39,7 +41,7 @@ struct Connection{
     Direction dir;
 
     SDL_FRect srcRect();
-    void* data;
+    void* data = nullptr;
 };
 
 struct Bus {
@@ -48,6 +50,7 @@ struct Bus {
         .dir = Direction::output
     };
     uint16_t id;
+    SDL_FRect dstRect;
 };
 
 struct EventBus : public Bus {
@@ -55,7 +58,8 @@ struct EventBus : public Bus {
         type = DataType::Events; 
         output.type = DataType::Events;
     };
-    std::vector<Event> events;
+    int numEvents = 0;
+    Event events[MAX_EVENTS];
 };
 
 struct WaveformBus : public Bus {

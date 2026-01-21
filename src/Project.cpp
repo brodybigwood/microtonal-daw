@@ -12,8 +12,11 @@
 using json = nlohmann::json;
 
 void Project::process(float* input, float* output, int& bufferSize, int& numChannelsIn, int& numChannelsOut, int& sampleRate) {
-    TrackList* tl = TrackList::get();
 
+    auto* em = ElementManager::get();
+    em->process(bufferSize);    
+
+    TrackList* tl = TrackList::get();
     tl->process(input, bufferSize);
 
     NodeManager* nm = NodeManager::get();

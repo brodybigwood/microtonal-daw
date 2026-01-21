@@ -15,6 +15,28 @@ NodeEditor::NodeEditor() {
     };
 
     renderer = SDL_CreateRenderer(window, NULL);
+
+    BusManager* bm = BusManager::get();
+    
+    for (int i = 0; i < bm->getBusCountW(); i++) {
+        auto bus = bm->getBusW(i);
+        auto& rect = bus->dstRect;
+        
+        rect.w = 15.0f;
+        rect.h = topMargin/2.0f;
+        rect.x = leftMargin + i*rect.w;
+        rect.y = 0.0f;    
+    }
+
+    for (int i = 0; i < bm->getBusCountE(); i++) {
+        auto bus = bm->getBusE(i);
+        auto& rect = bus->dstRect;
+    
+        rect.w = 15.0f;
+        rect.h = topMargin/2.0f;
+        rect.x = leftMargin + i*rect.w;
+        rect.y = rect.h;
+    }
 }
 
 NodeEditor::~NodeEditor() {
@@ -30,41 +52,25 @@ NodeEditor* NodeEditor::get() {
 void NodeEditor::renderInputs() {
 
     BusManager* bm = BusManager::get();
-    
-    float w = 15;
-    float h = topMargin/2.0f;
-    float x = leftMargin;
 
-    size_t i = 0;
-
-    while(x < windowWidth && i < bm->getBusCountW()) {
-        SDL_FRect busRect{
-            x, 0, w, h
-        };
-
+    for (int i = 0; i < bm->getBusCountW(); i++) {
+        auto* bus = bm->getBusW(i);
+        auto& busRect = bus->dstRect;        
+ 
         SDL_SetRenderDrawColor(renderer, 50,50,50,255);
         SDL_RenderFillRect(renderer, &busRect);
         SDL_SetRenderDrawColor(renderer, 80,80,80,255);
         SDL_RenderRect(renderer, &busRect);
-
-        x += w;
     }
 
-    x = leftMargin;
-
-    while(x < windowWidth && i < bm->getBusCountE()) {
-        SDL_FRect busRect{
-            x, h, w, h 
-        };
+    for (int i = 0; i < bm->getBusCountE(); i++) {
+        auto* bus = bm->getBusE(i);
+        auto& busRect = bus->dstRect;
 
         SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
-
         SDL_RenderFillRect(renderer, &busRect);
         SDL_SetRenderDrawColor(renderer, 80,80,80,255);
-
         SDL_RenderRect(renderer, &busRect);
-
-        x += w;
     }
 }
 
@@ -133,29 +139,29 @@ void NodeEditor::hover() {
     if(!found_hovered) hoveredNode = nullptr;
     found_hovered = false;
 
-    SDL_FRect busRect{leftMargin, topMargin, 15, topMargin/2.0f};
 
     for(int i = 0; i < BusManager::get()->getBusCountE(); i++) {
+        auto* bus = BusManager::get()->getBusE(i);
+        auto& busRect = bus->dstRect;
+
         if( inside(mouseX, mouseY, &busRect) ) {
-            hoveredBus = BusManager::get()->getBusE(i);
+            hoveredBus = bus;
             found_hovered = true;
             break;
         }
-        busRect.x += 15;
     }
 
     if(!found_hovered) {
 
-        busRect.x = leftMargin;
-        busRect.y = topMargin;
-
         for(int i = 0; i < BusManager::get()->getBusCountW(); i++) {
+            auto* bus = BusManager::get()->getBusW(i);
+            auto& busRect = bus->dstRect;
+
             if( inside(mouseX, mouseY, &busRect) ) {
-                hoveredBus = BusManager::get()->getBusW(i);
+                hoveredBus = bus;
                 found_hovered = true;
                 break;
             }
-            busRect.x += 15;
         }
     }
 
@@ -172,6 +178,8 @@ void NodeEditor::clickMouse(SDL_Event& e) {
         return;
     }
 
+    if(hoveredBus != nullptr) srcBus = hoveredBus;
+
     if(hoveredNode != nullptr && hoveredNode->hoveredConnection != -1) {
         switch(hoveredNode->hoveredDirection) {
             case Direction::input:
@@ -186,6 +194,8 @@ void NodeEditor::clickMouse(SDL_Event& e) {
                 break;
         }
     }
+
+    // srcNodeID & dstNodeID are the connection/io ids, not node identifiers
     if(srcNode != nullptr && dstNode != nullptr
             && srcNodeID != -1 && dstNodeID != -1 ) {
         NodeManager* nm = NodeManager::get();
@@ -197,6 +207,10 @@ void NodeEditor::clickMouse(SDL_Event& e) {
         srcNodeID = -1;
         dstNode = nullptr;
         dstNodeID = -1;
+    } else if (srcBus != nullptr && dstNode != nullptr
+            && dstNodeID != -1) { // bus does not need connection id (only has one output)
+        NodeManager* nm = NodeManager::get();
+        nm->makeBusConnection(srcBus, dstNode, dstNodeID);
     }
 }
 

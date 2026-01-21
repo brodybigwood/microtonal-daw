@@ -1,5 +1,6 @@
 #include "Track.h"
 #include "BusManager.h"
+#include <iostream>
 
 void Track::setBus(uint8_t id) {
     BusManager* bm = BusManager::get();
@@ -13,6 +14,7 @@ void Track::setBus(uint8_t id) {
             break;
         case TrackType::Notes:
             dstBus = bm->getBusE(id);
+            events = bm->getBusE(id)->events;
             break;
         default:
             break;
@@ -21,8 +23,26 @@ void Track::setBus(uint8_t id) {
     if(dstBus != nullptr) busID = dstBus->id;
 }
 
-void Track::process(float* input, int bufferSize) {
+void Track::addEvent(Event event) {
+    if (eventNum > MAX_EVENTS) return;
 
+    if (events == nullptr) return;
+    events[eventNum] = event;
+
+    eventNum++;
+}
+
+void Track::process(float* input, int bufferSize) {
+    switch(type) {
+        case TrackType::Audio:
+            break;
+        case TrackType::Automation:
+            break;
+        case TrackType::Notes:
+            break;
+    }
+
+    eventNum = 0;
 }
 
 TrackType& Track::getType() {

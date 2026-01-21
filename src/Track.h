@@ -2,7 +2,7 @@
 
 #include "Bus.h"
 #include <SDL3/SDL.h>
-
+#include "Note.h"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
@@ -14,6 +14,8 @@ enum TrackType{
 
 class Track {
     public:
+
+        std::vector<std::shared_ptr<Note>> dispatched;
 
         int busID = -1;
         Bus* dstBus;
@@ -28,10 +30,12 @@ class Track {
 
         void process(float* input, int bufferSize);
 
-        std::vector<Event> events;
-
         float* buffer;
         int bufferSize;
+
+        Event* events = nullptr;
+        void addEvent(Event);
+        int eventNum = 0;
 
         uint8_t inputChannel;
 

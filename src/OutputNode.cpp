@@ -14,6 +14,7 @@ OutputNode::OutputNode() : Node(0) {
 
 void OutputNode::process() {
     for(int i = 0; i < numChannels; i++) {
+        return;
         if(i > inputs.connections.size() - 1) return;
         Connection* c = inputs.connections[i];
 
@@ -22,7 +23,7 @@ void OutputNode::process() {
             return;
         }
 
-        void* data = getInput(c->id);
+        void* data = getInput(c);
 
         auto bus = getWaveform(data);
 

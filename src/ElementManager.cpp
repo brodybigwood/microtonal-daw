@@ -4,6 +4,8 @@
 #include <string>
 #include "styles.h"
 #include "Project.h"
+#include "AudioManager.h"
+#include "TrackList.h"
 
 json ElementManager::toJSON() {
     json j;
@@ -17,6 +19,74 @@ json ElementManager::toJSON() {
     }
 
     return j;
+}
+
+void ElementManager::process(int bufferSize) {
+    float epsilon = 1e-6;
+
+    float window = (Project::instance()->tempo * (float)AudioManager::instance()->bufferSize / AudioManager::instance()->sampleRate) / 60.0f;
+    float time = Project::instance()->tempo * Project::instance()->timeSeconds/60.0f;
+
+    TrackList* tl = TrackList::get();
+
+    for (auto* element : elements)
+        for (auto& pos : element->positions) {
+            float regTime = pos.start;
+
+            Track* track = tl->getTrack(pos.trackID);            
+            auto& dispatched = track->dispatched;            
+            switch (element->type) {
+                case ElementType::region:
+                    {
+                        if (!Project::instance()->isPlaying) {
+                            for (auto& note : dispatched) {
+                                Event event {
+                                    noteEventType::noteOff,
+                                    note->num,
+                                    -1,
+                                    0
+                                };
+                                track->addEvent(event);
+                            }
+                            break;
+                        }
+                        auto* region = static_cast<Region*>(element);
+                        for (auto& note : region->notes) {
+                            float start = note->start + regTime;
+                            float end = note->end + regTime;
+                            int offset = AudioManager::instance()->sampleRate * 60.0f * (end - time)/Project::instance()->tempo;
+
+                            if (std::find(dispatched.begin(), dispatched.end(), note) == dispatched.end() && start < time+window+epsilon && start+epsilon >= time) {
+                                
+                                Event event {
+                                    noteEventType::noteOn,
+                                    note->num,
+                                    -1,
+                                    offset
+                                };
+            
+                                track->addEvent(event);
+
+                                dispatched.push_back(note);
+                            } else if (std::find(dispatched.begin(), dispatched.end(), note) != dispatched.end() && end < time+window+epsilon && end+epsilon >= time) {
+
+                                Event event {
+                                    noteEventType::noteOff,
+                                    note->num,
+                                    -1,
+                                    offset
+                                };
+
+                                track->addEvent(event);
+
+                                dispatched.erase(std::remove(dispatched.begin(), dispatched.end(), note), dispatched.end());
+                            }
+                        }
+                    }
+                default:
+                    break;
+            }
+        }
 }
 
 GridElement* ElementManager::getElement(uint16_t id) {

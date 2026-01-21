@@ -54,10 +54,11 @@ void TrackList::addTrack(TrackType tp) {
 
 Track* TrackList::getTrack(uint16_t id) {
     auto index = getIndex(id);
+    if (index == -1) return nullptr;
     return tracks[index];
 }
 
-uint16_t TrackList::getIndex(uint16_t id) {
+int TrackList::getIndex(uint16_t id) {
     auto it = ids.find(id);
     if( it == ids.end()) return -1; 
     return it->second;

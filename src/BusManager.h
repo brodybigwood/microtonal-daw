@@ -4,6 +4,9 @@
 #include <vector>
 #include <cstddef>
 
+#define BUSCOUNT_E 256
+#define BUSCOUNT_W 256
+
 class BusManager {
 
     public:
@@ -19,9 +22,9 @@ class BusManager {
         WaveformBus* getBusW(uint8_t);
 
     private:
-        EventBus* eventBus;
-        WaveformBus* waveformBus;
+        EventBus eventBus[BUSCOUNT_E];
+        WaveformBus waveformBus[BUSCOUNT_W];
 
-        size_t eventBusCount = 256;
-        size_t waveformBusCount = 256;
+        size_t eventBusCount = BUSCOUNT_E;
+        size_t waveformBusCount = BUSCOUNT_W;
 };

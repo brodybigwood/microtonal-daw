@@ -164,11 +164,14 @@ float SongRoll::getHoveredLine() {
 
 void SongRoll::createElement() {
     int id = ElementManager::get()->currentElement;
+
     if(id == -1) {
         return;
     }
     fract start = getHoveredTime();
     int trackIndex = getHoveredLine();
+
+    if (TrackList::get()->getTrack(trackIndex) == nullptr) return; 
 
     auto elem = ElementManager::get()->getElement(id);
 

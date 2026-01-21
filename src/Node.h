@@ -36,9 +36,8 @@ class Node {
 
         connectionSet outputs;
 
-        void* getOutput(uint16_t);
-
-        void* getInput(uint16_t);
+        void* getOutput(Connection*);
+        void* getInput(Connection*);
 
         EventBus* getEvents(void*);
         WaveformBus* getWaveform(void*);

@@ -19,8 +19,9 @@ class ElementManager {
         json toJSON();
         void fromJSON(json);
 
+        void process(int bufferSize);
 
-        uint16_t currentElement;
+        int currentElement = -1;
         int hoveredElement = -1;
 
         SDL_FRect* dstRect;

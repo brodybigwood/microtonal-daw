@@ -40,7 +40,7 @@ class TrackList {
 
         Track* getTrack(uint16_t);
 
-        uint16_t getIndex(uint16_t);
+        int getIndex(uint16_t);
 
         void fromJSON(json);
         json toJSON();
