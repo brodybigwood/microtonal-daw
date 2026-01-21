@@ -22,6 +22,10 @@ void AudioManager::setProject(Project* project) {
 
 int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int bufferSize, double streamTimeSeconds, RtAudioStreamStatus status, void* userData) {
 
+    if (status != 0) {
+        std::cerr << "[Warning] Buffer underrun/overrun occurred!" << std::endl;
+    }
+
     AudioManager *audioManager = static_cast<AudioManager *>(userData);
 
     Project* project = audioManager->project;
