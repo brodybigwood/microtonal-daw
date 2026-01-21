@@ -51,14 +51,13 @@ void* Node::getInput(Connection* con) {
                     break;
                 }
             }
-            Connection* c = &(b->output);
-            return c->data;
+            return b;
         }
         case ConnectionType::node:
         {
             auto nm = NodeManager::get();
             auto n = nm->getNode(src->source_id);
-            auto oc = inputs.getConnection(src->output_id);
+            auto oc = n->outputs.getConnection(src->output_id);
             return n->getOutput(oc);
         }
     }

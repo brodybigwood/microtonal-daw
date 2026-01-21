@@ -50,6 +50,10 @@ void TrackList::addTrack(TrackType tp) {
     t->id = id;
     ids[id] = tracks.size() - 1;
     t->type = tp;
+
+    t->setBus(id);
+
+    std::cout << "set track bus to: " << id << std::endl;
 }
 
 Track* TrackList::getTrack(uint16_t id) {

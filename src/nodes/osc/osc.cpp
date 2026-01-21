@@ -39,19 +39,25 @@ void OscillatorNode::process() {
     EventBus* eBus = getEvents(input);
     Event* events = eBus->events;
 
-return;
-    for (size_t i = 0; i < eBus->numEvents; ++i) {
+    int& numEvents = eBus->numEvents; 
+
+    for (size_t i = 0; i < numEvents; ++i) {
         auto& event = events[i];
         switch (event.type) {
             case noteEventType::noteOn: {
                     //assign to a voice
-                    for (auto voice : voices) {
+                    for (int i = 0; i < 64; ++i) {
+                        auto& voice = voices[i];
                         if (!voice.active) {
                             voice.noteId = event.id;
                             voice.frequency = 440 * pow(2.0f,(event.num - 69) / 12.0f);
 
-                            std::cout << "detected note: " << event.num << std::endl;
+                            std::cout << "noteOn: " << event.num << std::endl;
                             voice.wait = event.sampleOffset;
+                            std::cout << "offset: " << voice.wait << std::endl;
+
+                            voice.active = true;
+                            std::cout << "activated voice " << i << std::endl;
                             break;
                         }
                     }
@@ -59,9 +65,13 @@ return;
                 break;
             case noteEventType::noteOff: {
                     //deactivate the corresponding voice
-                    for (auto voice : voices) {
-                        if (event.id == voice.noteId) {
+                    for (int i = 0; i < 64; ++i) {
+                        auto& voice = voices[i];
+                        if (voice.active && event.id == voice.noteId) {
+                            std::cout << "noteOff: " << event.num << std::endl;
+
                             voice.reset();
+                            std::cout << "deactivated voice " << i << std::endl;
                             break;
                         }   
                     }
@@ -72,22 +82,21 @@ return;
         }
     }
 
-    voices[0].active = true;
-    voices[1].active = true;
-
 // now do output
 
-    float* b0;
-    float* b1;
+    float* b0 = nullptr;
+    float* b1 = nullptr;
 
     if (output0->is_connected) {
         auto bus = getWaveform(output0->data);
         b0 = bus->buffer;
+        std::memset(b0, 0, bufferSize * sizeof(float));
     }
 
     if (output1->is_connected) {
         auto bus = getWaveform(output1->data);
         b1 = bus->buffer;
+        std::memset(b1, 0, bufferSize * sizeof(float));
     }
 
     for (int i = 0; i < 64; i++) {
@@ -107,8 +116,8 @@ void Voice::process(float* out0, float* out1, int& bufferSize, int& sampleRate) 
             continue;
         }
         float smp = sin(phase);
-        if (out0) out0[i] = smp;
-        if (out1) out1[i] = smp;
+        if (out0) out0[i] += smp;
+        if (out1) out1[i] += smp;
 
         phase += 2 * M_PI * frequency / sampleRate;
 

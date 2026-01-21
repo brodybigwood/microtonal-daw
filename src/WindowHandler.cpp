@@ -66,7 +66,6 @@ bool WindowHandler::tick() {
                     return false;
                 }
             }
-            std::cout<<txtInput->active<<std::endl;
         }
         SDL_RenderPresent(renderer);
     }

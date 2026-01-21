@@ -48,16 +48,19 @@ void ElementManager::process(int bufferSize) {
                                 };
                                 track->addEvent(event);
                             }
+
+                            dispatched.clear();
                             break;
                         }
                         auto* region = static_cast<Region*>(element);
                         for (auto& note : region->notes) {
                             float start = note->start + regTime;
                             float end = note->end + regTime;
-                            int offset = AudioManager::instance()->sampleRate * 60.0f * (end - time)/Project::instance()->tempo;
 
                             if (std::find(dispatched.begin(), dispatched.end(), note) == dispatched.end() && start < time+window+epsilon && start+epsilon >= time) {
-                                
+                               
+                                int offset = AudioManager::instance()->sampleRate * 60.0f * (start - time)/Project::instance()->tempo;
+ 
                                 Event event {
                                     noteEventType::noteOn,
                                     note->num,
@@ -69,6 +72,9 @@ void ElementManager::process(int bufferSize) {
 
                                 dispatched.push_back(note);
                             } else if (std::find(dispatched.begin(), dispatched.end(), note) != dispatched.end() && end < time+window+epsilon && end+epsilon >= time) {
+
+                                int offset = AudioManager::instance()->sampleRate * 60.0f * (end - time)/Project::instance()->tempo;
+
 
                                 Event event {
                                     noteEventType::noteOff,

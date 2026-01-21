@@ -1,5 +1,5 @@
 #include "OutputNode.h"
-
+#include <iostream>
 OutputNode::OutputNode() : Node(0) {
     dstRect.x = 50.0f;
     dstRect.y = 50.0f;
@@ -14,10 +14,9 @@ OutputNode::OutputNode() : Node(0) {
 
 void OutputNode::process() {
     for(int i = 0; i < numChannels; i++) {
-        return;
         if(i > inputs.connections.size() - 1) return;
         Connection* c = inputs.connections[i];
-
+        
         if(!c->is_connected) {
             std::memset(output + i*bufferSize, 0, bufferSize * sizeof(float));
             return;

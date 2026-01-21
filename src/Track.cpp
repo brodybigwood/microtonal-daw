@@ -25,10 +25,9 @@ void Track::setBus(uint8_t id) {
 
 void Track::addEvent(Event event) {
     if (eventNum > MAX_EVENTS) return;
-
     if (events == nullptr) return;
+    
     events[eventNum] = event;
-
     eventNum++;
 }
 
@@ -42,6 +41,7 @@ void Track::process(float* input, int bufferSize) {
             break;
     }
 
+    BusManager::get()->getBusE(busID)->numEvents = eventNum;
     eventNum = 0;
 }
 
@@ -86,7 +86,8 @@ void Track::handleInput(SDL_Event& e) {
 void Track::fromJSON(json j) {
     type = static_cast<TrackType>(j["type"].get<uint16_t>());
     id = j["id"].get<uint16_t>();
-    busID = j["busID"].get<int>();
+    int bid = j["busID"].get<int>();
+    setBus(bid);
     inputChannel = j["inputChannel"].get<uint8_t>();
 }
 
