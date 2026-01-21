@@ -8,7 +8,8 @@ struct Voice {
     void reset();
     int noteId = -1;
     float phase = 0;
-    int wait = 0;
+    int wait_on = 0;
+    int wait_off = -1;
     void process (float* out0, float* out1, int& bufferSize, int& sampleRate); //stereo out
 };
 

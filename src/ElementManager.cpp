@@ -43,7 +43,7 @@ void ElementManager::process(int bufferSize) {
                                 Event event {
                                     noteEventType::noteOff,
                                     note->num,
-                                    -1,
+                                    note->id,
                                     0
                                 };
                                 track->addEvent(event);
@@ -64,7 +64,7 @@ void ElementManager::process(int bufferSize) {
                                 Event event {
                                     noteEventType::noteOn,
                                     note->num,
-                                    -1,
+                                    note->id,
                                     offset
                                 };
             
@@ -79,7 +79,7 @@ void ElementManager::process(int bufferSize) {
                                 Event event {
                                     noteEventType::noteOff,
                                     note->num,
-                                    -1,
+                                    note->id,
                                     offset
                                 };
 

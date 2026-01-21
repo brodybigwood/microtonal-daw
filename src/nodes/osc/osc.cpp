@@ -53,8 +53,8 @@ void OscillatorNode::process() {
                             voice.frequency = 440 * pow(2.0f,(event.num - 69) / 12.0f);
 
                             std::cout << "noteOn: " << event.num << std::endl;
-                            voice.wait = event.sampleOffset;
-                            std::cout << "offset: " << voice.wait << std::endl;
+                            voice.wait_on = event.sampleOffset;
+                            std::cout << "offset: " << voice.wait_on << std::endl;
 
                             voice.active = true;
                             std::cout << "activated voice " << i << std::endl;
@@ -67,11 +67,12 @@ void OscillatorNode::process() {
                     //deactivate the corresponding voice
                     for (int i = 0; i < 64; ++i) {
                         auto& voice = voices[i];
-                        if (voice.active && event.id == voice.noteId) {
+                        if (event.id == voice.noteId) {
+                            
                             std::cout << "noteOff: " << event.num << std::endl;
-
-                            voice.reset();
+                            voice.wait_off = event.sampleOffset;
                             std::cout << "deactivated voice " << i << std::endl;
+                            std::cout << "offset: " << voice.wait_off << std::endl;
                             break;
                         }   
                     }
@@ -111,10 +112,18 @@ void OscillatorNode::setup() {
 
 void Voice::process(float* out0, float* out1, int& bufferSize, int& sampleRate) {
     for (int i = 0; i < bufferSize; i++) {
-        if (wait > 0) {
-            wait -=1;
+        if (wait_on > 0) {
+            wait_on -=1;
             continue;
         }
+
+        if (wait_off > 0) {
+            wait_off -=1;
+        } else if (wait_off == 0) {
+            reset();
+            return;
+        }
+
         float smp = sin(phase);
         if (out0) out0[i] += smp;
         if (out1) out1[i] += smp;
@@ -129,5 +138,6 @@ void Voice::reset() {
     active = false;
     phase = 0;
     noteId = -1;   
-    wait = 0;
+    wait_on = 0;
+    wait_off = -1;
 }
