@@ -88,6 +88,11 @@ bool AudioManager::start() {
     //std::cout << "Using buffer size: " << bufferSize << std::endl;
     //std::cout << "Using output channels: " << outputChannels << std::endl;
 
+
+    RtAudio::StreamOptions options;
+    options.flags = RTAUDIO_NONINTERLEAVED;
+    options.streamName = "DAW";
+
     try {
 
         rtaudio.openStream(
@@ -97,7 +102,8 @@ bool AudioManager::start() {
             sampleRate, 
             &bufferSize, 
             &AudioManager::callback, 
-            this
+            this,
+            &options
         );
 
     } catch (RtAudioErrorType& e) {
@@ -114,7 +120,7 @@ bool AudioManager::start() {
 
     latency = rtaudio.getStreamLatency();
 
-    int bufferedFrames = 2;
+    int bufferedFrames = 0;
 
     latency += bufferSize * bufferedFrames;
 
