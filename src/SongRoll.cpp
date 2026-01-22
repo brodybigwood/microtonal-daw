@@ -109,7 +109,7 @@ void SongRoll::handleCustomInput(SDL_Event& e) {
     if (mouseX > leftRect.x && mouseX <= (leftRect.x + leftRect.w) &&
         mouseY > leftRect.y && mouseY <= (leftRect.y + leftRect.h)) {
         tracks->handleInput(e);
-    }
+    } else tracks->hoveredTrack = nullptr;
 
 }
 
