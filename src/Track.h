@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Bus.h"
-#include <SDL3/SDL.h>
 #include "Note.h"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
@@ -14,7 +13,7 @@ enum TrackType{
 
 class Track {
     public:
-
+        
         std::vector<std::shared_ptr<Note>> dispatched;
 
         int busID = -1;
@@ -38,9 +37,6 @@ class Track {
         int eventNum = 0;
 
         uint8_t inputChannel;
-
-        void render(SDL_Renderer*, SDL_FRect&);
-        void handleInput(SDL_Event&);
 
         void fromJSON(json);
         json toJSON();

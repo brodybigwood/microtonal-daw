@@ -44,7 +44,7 @@ class GridView {
         Playhead* playHead;
         Project* project;
 
-        float divHeight;
+        float divHeight = 5;
         float maxHeight = 1000;
         float minHeight = 5;
 

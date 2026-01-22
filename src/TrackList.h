@@ -21,9 +21,11 @@ class TrackList {
         void solo(uint16_t);
         void mute(uint16_t);
 
-        void render(SDL_Renderer*, int, float);
+        void render(SDL_Renderer*);
+        void renderTrack(SDL_Renderer*, Track*, SDL_FRect*);
 
         void handleInput(SDL_Event&);
+        void handleTrackInput(Track*, int);
 
         void process(float* input, int bufferSize);
 
@@ -35,10 +37,13 @@ class TrackList {
 
         float* mouseX;
         float* mouseY;
+        int* scrollY;
+        float* divHeight = nullptr;
 
         uint8_t getBus(uint16_t);
 
         Track* getTrack(uint16_t);
+        Track* hoveredTrack = nullptr;
 
         int getIndex(uint16_t);
 

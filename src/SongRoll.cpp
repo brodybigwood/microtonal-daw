@@ -43,6 +43,8 @@ SongRoll::SongRoll(SDL_FRect* rect, bool* detached) : GridView(detached, rect, 2
     };
 
     tracks->setGeometry(&leftRect);
+    tracks->divHeight = &divHeight;
+    tracks->scrollY = &scrollY;
 
     tracks->mouseX = &mouseX;
     tracks->mouseY = &mouseY;
@@ -72,7 +74,7 @@ bool SongRoll::customTick() {
 }
 
 void SongRoll::renderMargins() {
-    tracks->render(renderer, scrollY, divHeight);
+    tracks->render(renderer);
     transport->render();
     ElementManager::get()->render(renderer);
 }

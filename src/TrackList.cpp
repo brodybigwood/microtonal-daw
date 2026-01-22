@@ -97,18 +97,18 @@ bool TrackList::mouseOn(SDL_FRect* rect) {
         );
 }
 
-void TrackList::render(SDL_Renderer* renderer, int scrollY, float h) {
+void TrackList::render(SDL_Renderer* renderer) {
+    
     SDL_FRect trackRect{
-        dstRect->x, dstRect->y - scrollY, dstRect->w, h
+        dstRect->x, dstRect->y - *scrollY, dstRect->w, *divHeight
     };
-
 
     SDL_SetRenderDrawColor(renderer, 220, 220, 220, 255);
     SDL_RenderFillRect(renderer, dstRect);
 
     for(auto track : tracks) {
-        track->render(renderer, trackRect);
-        trackRect.y += h;
+        renderTrack(renderer, track, &trackRect);
+        trackRect.y += *divHeight;
         if(trackRect.y >= dstRect->y + dstRect->h) break;
     }
 
@@ -116,17 +116,78 @@ void TrackList::render(SDL_Renderer* renderer, int scrollY, float h) {
     newTrackW->render();
 }
 
+void TrackList::handleTrackInput(Track* track, int y) {
+    SDL_FRect trackRect{
+        dstRect->x, y + dstRect->y - *scrollY, dstRect->w, *divHeight
+    };
+
+    
+}
+
 void TrackList::handleInput(SDL_Event& e) {
+    
+    hoveredTrack = nullptr;
+
+    int y = dstRect->y;
+    for (auto track : tracks) {
+        if (*mouseY >= y && *mouseY < y + *divHeight) {
+            hoveredTrack = track;
+            
+            handleTrackInput(track, y);
+            break;
+        }
+        y += *divHeight;
+    }
+
     switch(e.type) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             if (e.button.button == SDL_BUTTON_LEFT) {
                 if( newTrackE->hover()) newTrackE->onClick();
-                else if( newTrackW->hover()) newTrackW->onClick();
+                else if( newTrackW->hover()) {
+                    newTrackW->onClick();
+                }
             }
+
             break;
         default:
             break;
     };
+}
+
+void TrackList::renderTrack(SDL_Renderer* renderer, Track* track, SDL_FRect* rect) {
+
+    //body
+
+    if (track == hoveredTrack) {
+        SDL_SetRenderDrawColor(renderer, 230, 230, 230, 255);
+    } else {
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    }
+    SDL_RenderFillRect(renderer, rect);
+
+    //type indicator
+    SDL_FRect typeRect{
+        rect->x, rect->y, rect->w / 10.0f, rect->h
+    };
+    switch(track->type) {
+        case TrackType::Audio:
+            SDL_SetRenderDrawColor(renderer, 255, 120, 120, 255);
+            break;
+        case TrackType::Automation:
+            SDL_SetRenderDrawColor(renderer, 255, 220, 50, 255);
+            break;
+        case TrackType::Notes:
+            SDL_SetRenderDrawColor(renderer, 120, 255, 120, 255);
+            break;
+        default:
+            break;
+    }
+    SDL_RenderFillRect(renderer, &typeRect);
+
+    //borders
+    SDL_SetRenderDrawColor(renderer, 120, 120, 120, 255);
+    SDL_RenderRect(renderer, &typeRect); //type
+    SDL_RenderRect(renderer, rect); //outer
 }
 
 TrackList* TrackList::get() {
