@@ -25,7 +25,7 @@ class TrackList {
         void renderTrack(SDL_Renderer*, Track*, SDL_FRect*);
 
         void handleInput(SDL_Event&);
-        void handleTrackInput(Track*, int);
+        void handleTrackInput(Track*, int, SDL_Event& e);
 
         void process(float* input, int bufferSize);
 

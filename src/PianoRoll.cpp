@@ -11,7 +11,7 @@
 #include "Transport.h"
 #include "TuningTable.h"
 #include "ScaleManager.h"
-#include "TextInput.h"
+#include "ContextMenu.h"
 
 void PianoRoll::newTuning() {
     TuningTable t (true);
@@ -328,37 +328,46 @@ void PianoRoll::clickMouse(SDL_Event& e) {
             if (e.button.button == SDL_BUTTON_RIGHT) {
                 rmb = true;
                 if(mouseX > leftMargin && stretchingNote == nullptr) {
+                    std::cout << "here now" <<std::endl;
                     if(isShiftPressed) {
-                        auto textInput = TextInput::get();
-                        textInput->active = true;
+                        auto ctxMenu = ContextMenu::get();
+                        ctxMenu->active = true;
+                        ctxMenu->window_id = SDL_GetWindowID(window);
+                        ctxMenu->renderer = renderer;
                         SDL_StartTextInput(window);
-                        textInput->enter = [this, textInput]() {
-                            auto sm = ScaleManager::instance();
-    
-                            int index = tuning_table->byID(textInput->text);
-    
-                            float midiNum = tuning_table->notes[index].midiNum;
-                            float diff = midiNum - hoveredElement->num;
-    
-                            TuningTable* newTuning = new TuningTable(false);
-    
-                            newTuning->notes.clear();
-                            for(auto& n : tuning_table->notes) {
-                                ScaleNote note = {
-                                    .midiNum = n.midiNum - diff,
-                                    .identifier = n.identifier
-                                };
-                                newTuning->notes.push_back(note);
-                            }
 
-                            isShiftPressed = false;
-                            rmb = false;
-    
-                            sm->addScale(*newTuning);
-                            setTuning(sm->getLastScale());
+                        ctxMenu->locX = mouseX;
+                        ctxMenu->locY = mouseY;
 
-                            std::dynamic_pointer_cast<Note>(hoveredElement)->scale = tuning_table;
-                        };
+                        ctxMenu->dynamicTick = getTextInputTicker([this](std::string text)
+{
+    auto sm = ScaleManager::instance();
+
+    int index = tuning_table->byID(text);
+
+    float midiNum = tuning_table->notes[index].midiNum;
+    float diff = midiNum - hoveredElement->num;
+
+    TuningTable* newTuning = new TuningTable(false);
+
+    newTuning->notes.clear();
+    for(auto& n : tuning_table->notes) {
+        ScaleNote note = {
+            .midiNum = n.midiNum - diff,
+            .identifier = n.identifier
+        };
+        newTuning->notes.push_back(note);
+    }
+
+    isShiftPressed = false;
+    rmb = false;
+
+    sm->addScale(*newTuning);
+    setTuning(sm->getLastScale());
+
+    std::dynamic_pointer_cast<Note>(hoveredElement)->scale = tuning_table;
+}
+                        );
                     } else {
                         deleteElement();
                     }
@@ -589,7 +598,7 @@ void PianoRoll::handleMouse() {
 
     if(rmb) {
         SDL_SetCursor(cursors.pencil);
-        if(hoveredElement != nullptr && !TextInput::get()->active) {
+        if(hoveredElement != nullptr && !ContextMenu::get()->active) {
             deleteElement();
         } 
     } else {

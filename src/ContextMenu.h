@@ -1,18 +1,28 @@
+#pragma once
+
 #include <SDL3/SDL.h>
 #include <SDL_ttf.h>
-
-#ifndef CONTEXTMENU_H
-#define CONTEXTMENU_H
+#include <functional>
+#include <string>
 
 class ContextMenu {
 
     public:
-        ContextMenu();
-        ~ContextMenu();
-        
-        void render(SDL_Renderer* renderer);  // Add method to render the context menu
-        void handleInput(SDL_Event& e);  // Handle input like clicks, etc.
 
+        float locX;
+        float locY;
+
+        bool active = false;
+
+        static ContextMenu* get();
+        
+        SDL_Renderer* renderer;        
+       
+        uint32_t window_id;
+    
+        void tick(SDL_Event& e);
+
+        std::function<bool(SDL_Event& e)> dynamicTick;
 };
 
-#endif
+std::function<bool(SDL_Event& e)> getTextInputTicker(std::function<void(std::string text)> enter);

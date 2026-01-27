@@ -1,6 +1,7 @@
 #include "WindowHandler.h"
 #include <X11/Xlib.h>
 #include "SDL_Events.h"
+
 WindowHandler::WindowHandler() {
 
     SDL_SetHint(SDL_HINT_APP_NAME, "EDITOR");
@@ -19,12 +20,7 @@ WindowHandler::WindowHandler() {
         windowHeight/2.0f + 40
     };
 
-    txtInput = TextInput::get();
-
-    txtInput->dstRect = txtRect;
-    txtInput->renderer = renderer;
-    SDL_StartTextInput(mainWindow);
-    txtInput->active = false;
+    ctxMenu = ContextMenu::get();
 }
 
 void WindowHandler::createHome(Project* project) {
@@ -59,8 +55,14 @@ bool WindowHandler::tick() {
 
         SDL_Event e;
         while(SDL_PollEvent(&e)) {
-            if(txtInput->active) {
-                txtInput->tick(e);
+            if (ctxMenu->active) {
+                SDL_Event a{
+                    .type = SDL_EVENT_MOUSE_MOTION
+                };
+                
+                if (!home->tick(a)) return false;
+                ctxMenu->tick(e);
+                SDL_RenderPresent(ctxMenu->renderer);
             } else {
                 if( !home->tick(e)) {
                     return false;

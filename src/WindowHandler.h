@@ -8,7 +8,7 @@
 #include <thread>
 #include <algorithm>
 #include "Project.h"
-#include "TextInput.h"
+#include "ContextMenu.h"
 
 class WindowHandler {
     public:
@@ -47,7 +47,7 @@ SDL_Event e;
         int windowWidth = 800;
         int windowHeight = 600;
 
-        TextInput* txtInput;
+        ContextMenu* ctxMenu;
 };
 
 #endif

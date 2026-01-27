@@ -116,12 +116,20 @@ void TrackList::render(SDL_Renderer* renderer) {
     newTrackW->render();
 }
 
-void TrackList::handleTrackInput(Track* track, int y) {
+void TrackList::handleTrackInput(Track* track, int y, SDL_Event& e) {
     SDL_FRect trackRect{
         dstRect->x, y + dstRect->y - *scrollY, dstRect->w, *divHeight
     };
 
-    
+    switch (e.type) {
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            if (e.button.button == SDL_BUTTON_RIGHT) {
+                
+            }
+            break;
+        default:
+            break;
+    }
 }
 
 void TrackList::handleInput(SDL_Event& e) {
@@ -132,8 +140,7 @@ void TrackList::handleInput(SDL_Event& e) {
     for (auto track : tracks) {
         if (*mouseY >= y && *mouseY < y + *divHeight) {
             hoveredTrack = track;
-            
-            handleTrackInput(track, y);
+            handleTrackInput(track, y, e);
             break;
         }
         y += *divHeight;
