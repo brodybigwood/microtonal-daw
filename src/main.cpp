@@ -3,10 +3,12 @@
 #include "AudioManager.h"
 
 #include <thread>
-
+#include <csignal>
 
 
 int main() {
+
+    std::signal(SIGINT, [](int){ exit(130); });
     
     if(!initFonts()) {
         std::cerr << "ttf init failed failed" << std::endl;
