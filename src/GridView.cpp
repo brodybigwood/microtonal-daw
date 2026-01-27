@@ -2,7 +2,15 @@
 #include "Playhead.h"
 #include "SDL_Events.h"
 #include "Transport.h"
-GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin) : detached(detached), leftMargin(leftMargin) {
+#include "WindowHandler.h"
+
+GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin) : 
+    detached(detached), 
+    leftMargin(leftMargin), 
+    isShiftPressed(WindowHandler::instance()->isShiftPressed), 
+    isAltPressed(WindowHandler::instance()->isAltPressed), 
+    isCtrlPressed(WindowHandler::instance()->isCtrlPressed) 
+{
 
     if(rect != nullptr && !*detached) {
         dstRect = rect;
@@ -62,10 +70,6 @@ bool GridView::tick() {
 
 
 bool GridView::handleInput(SDL_Event& e) {
-
-    toggleKey(e, SDL_SCANCODE_LSHIFT, isShiftPressed);
-    toggleKey(e, SDL_SCANCODE_LCTRL, isCtrlPressed);
-    toggleKey(e, SDL_SCANCODE_LALT, isAltPressed);
 
     bool running = true;
 

@@ -92,10 +92,9 @@ class GridView {
         float last_lmb_x, last_lmb_y;
 
         //keyboard
-        bool isShiftPressed = false;
-        bool isCtrlPressed = false;
-        bool isAltPressed = false;
-
+        bool& isShiftPressed;
+        bool& isCtrlPressed;
+        bool& isAltPressed;
 
         void moveMouse();
         bool handleInput(SDL_Event&);

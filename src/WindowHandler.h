@@ -48,6 +48,13 @@ SDL_Event e;
         int windowHeight = 600;
 
         ContextMenu* ctxMenu;
+
+        //keyboard
+        bool isShiftPressed = false;
+        bool isCtrlPressed = false;
+        bool isAltPressed = false;
+
+        void toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar);
 };
 
 #endif

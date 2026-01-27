@@ -66,7 +66,6 @@ class PianoRoll : public GridView {
 
         void clickMouse(SDL_Event&) override;
 
-        void toggleKey(SDL_Event&, SDL_Scancode, bool&);
         void initWindow();
 
         void Scroll();

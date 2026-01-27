@@ -55,6 +55,18 @@ bool WindowHandler::tick() {
 
         SDL_Event e;
         while(SDL_PollEvent(&e)) {
+
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+                SDL_Window* clickedWindow = SDL_GetWindowFromID(e.button.windowID);
+                if (clickedWindow) {
+                    SDL_RaiseWindow(clickedWindow);
+                }
+            }
+
+            toggleKey(e, SDL_SCANCODE_LSHIFT, isShiftPressed);
+            toggleKey(e, SDL_SCANCODE_LCTRL, isCtrlPressed);
+            toggleKey(e, SDL_SCANCODE_LALT, isAltPressed);
+
             if (ctxMenu->active) {
                 SDL_Event a{
                     .type = SDL_EVENT_MOUSE_MOTION
@@ -73,5 +85,18 @@ bool WindowHandler::tick() {
     }
     return true;
 
+}
+
+void WindowHandler::toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar) {
+
+    if (e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_KEY_UP) {
+        if (e.key.scancode == keycode) {
+            if (e.type == SDL_EVENT_KEY_DOWN) {
+                keyVar = true;
+            } else if (e.type == SDL_EVENT_KEY_UP) {
+                keyVar = false;
+            }
+        }
+    }
 }
 

@@ -23,11 +23,9 @@ std::function<bool(SDL_Event& e)> getTextInputTicker(std::function<void(std::str
 return [enter](SDL_Event& e) {
     auto ctxMenu = ContextMenu::get();
     auto& renderer = ctxMenu->renderer;
-    auto& locX = ctxMenu->locX;
-    auto& locY = ctxMenu->locY;
+    auto& x = ctxMenu->locX;
+    auto& y = ctxMenu->locY;
 
-    static int x = locX;
-    static int y = locY;
     SDL_FRect rect{x,y,100,100};
 
     bool done = false;
