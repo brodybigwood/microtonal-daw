@@ -147,6 +147,7 @@ void SongRoll::getHoveredRegion() {
         for(auto pos :e->positions) {
             uint16_t index = tracks->getIndex(pos.trackID);
             if(
+                mouseX < rightRect.x && 
                 mouseX > getX(pos.start) &&
                 mouseX < getX(pos.end) &&
                 mouseY > getY(index) &&
