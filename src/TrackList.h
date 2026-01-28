@@ -50,6 +50,15 @@ class TrackList {
         void fromJSON(json);
         json toJSON();
 
+        void assign(Track*, int);
+
+        struct busList {
+            std::vector<int> event;
+            std::vector<int> waveform;
+        };
+        
+        busList assignedBusses;
+
     private:
         std::vector<uint16_t> soloTracks;
         std::vector<uint16_t> muteTracks;

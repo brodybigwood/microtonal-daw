@@ -1,6 +1,9 @@
 #include "TrackList.h"
 #include <algorithm>
 #include "WindowHandler.h"
+#include <ranges>
+#include "BusManager.h"
+#include "styles.h"
 
 TrackList::TrackList() {}
 
@@ -124,7 +127,23 @@ void TrackList::handleTrackInput(Track* track, int y, SDL_Event& e) {
     switch (e.type) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             if (e.button.button == SDL_BUTTON_RIGHT) {
-                
+                auto* ctxMenu = ContextMenu::get();
+                ctxMenu->active = true;
+
+                auto window = Home::get()->song->window;
+                ctxMenu->window_id = SDL_GetWindowID(window);
+                ctxMenu->renderer = Home::get()->song->renderer;
+                SDL_StartTextInput(window);
+
+                ctxMenu->locX = *mouseX;
+                ctxMenu->locY = *mouseY;
+    
+                ctxMenu->dynamicTick = getTextInputTicker([this,track](std::string text)
+{
+    uint8_t index = std::stoi(text);
+    assign(track, index);
+}
+                );
             }
             break;
         default:
@@ -191,6 +210,19 @@ void TrackList::renderTrack(SDL_Renderer* renderer, Track* track, SDL_FRect* rec
     }
     SDL_RenderFillRect(renderer, &typeRect);
 
+    // bus text - needs optimization
+
+    std::string text = std::to_string(track->busID);
+    SDL_Color color{0, 0, 0, 255};    
+
+    SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, text.c_str(), 0, color);
+    SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
+
+    SDL_RenderTexture(renderer, tex, nullptr, &typeRect);
+
+    SDL_DestroySurface(surf);
+    SDL_DestroyTexture(tex);
+
     //borders
     SDL_SetRenderDrawColor(renderer, 120, 120, 120, 255);
     SDL_RenderRect(renderer, &typeRect); //type
@@ -223,6 +255,9 @@ void TrackList::fromJSON(json j) {
     for( auto [id, index] : j["ids"].items()) {
         ids[static_cast<uint16_t>(std::stoi(id))] = index.get<uint16_t>();
     }
+
+    assignedBusses.event = j["assignedBusses"]["event"].get<std::vector<int>>();
+    assignedBusses.waveform = j["assignedBusses"]["waveform"].get<std::vector<int>>();
 }
 
 json TrackList::toJSON() {
@@ -242,5 +277,43 @@ json TrackList::toJSON() {
         j["ids"][std::to_string(id)] = index;
     }
 
+    json ab;
+    ab["event"] = assignedBusses.event;
+    ab["waveform"] = assignedBusses.waveform;
+
+    j["assignedBusses"] = ab;
     return j;
+}
+
+void TrackList::assign(Track* track, int busID) {
+    BusManager* bm = BusManager::get();
+
+    bool success = false;
+
+    switch(track->type) {
+        case TrackType::Notes:
+            if (std::ranges::find(assignedBusses.event, busID) == assignedBusses.event.end())
+            {
+                std::erase(assignedBusses.event, track->busID);
+
+                track->dstBus = bm->getBusE(busID);
+                track->events = bm->getBusE(busID)->events;
+                assignedBusses.event.push_back(busID);
+                success = true;
+            }
+            break;
+        default:
+            if (std::ranges::find(assignedBusses.waveform, busID) == assignedBusses.waveform.end())
+            {
+                std::erase(assignedBusses.waveform, track->busID);            
+
+                track->dstBus = bm->getBusW(busID);
+                assignedBusses.waveform.push_back(busID);
+                success = true;
+            }
+            break;
+    }
+
+    if (success) track->busID = track->dstBus->id;
+
 }
