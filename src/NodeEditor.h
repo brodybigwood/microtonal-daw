@@ -54,6 +54,8 @@ class NodeEditor {
 
         Bus* srcBus = nullptr;
 
+        void renderConnector(SDL_Renderer*);
+
         void hover();
         void render(SDL_Renderer*, SDL_FRect*);
 

@@ -74,11 +74,45 @@ void NodeEditor::renderInputs() {
     }
 }
 
+void NodeEditor::renderConnector(SDL_Renderer* renderer) {
+
+    int x;
+    int y;
+
+    BusManager* bm = BusManager::get();
+
+    if (dstNode != nullptr) {
+        if (dstNodeID != -1) {
+            auto rect = dstNode->dstRect;
+            auto index = dstNode->inputs.getIndex(dstNodeID);
+            x = rect.x + 5.0f + 10.0f * index;
+            y = rect.y + 5.0f; 
+        }
+    } else if (srcNode != nullptr) {
+        if (srcNodeID != -1) {
+            auto rect = srcNode->dstRect;
+            auto index = srcNode->outputs.getIndex(srcNodeID);
+            x = rect.x + 5.0f + 10.0f * index;
+            y = rect.y + rect.h - 5.0f;
+        }
+    } else if (srcBus != nullptr) {
+        auto rect = srcBus->dstRect;
+        x = rect.x + 0.5 * rect.w;
+        y = rect.y + 0.5 * rect.h;
+    } else {
+        return;
+    }
+
+    SDL_RenderLine(renderer, mouseX, mouseY, x, y);
+}
+
 void NodeEditor::tick() {
 
     renderInputs();
 
     render(renderer, &nodeRect);
+
+    renderConnector(renderer);
 
     SDL_RenderPresent(renderer);
 
@@ -178,7 +212,12 @@ void NodeEditor::clickMouse(SDL_Event& e) {
         return;
     }
 
-    if(hoveredBus != nullptr) srcBus = hoveredBus;
+    bool selected_connector = false;
+
+    if(hoveredBus != nullptr) {
+        srcBus = hoveredBus;
+        selected_connector = true;
+    }
 
     if(hoveredNode != nullptr && hoveredNode->hoveredConnection != -1) {
         switch(hoveredNode->hoveredDirection) {
@@ -189,10 +228,13 @@ void NodeEditor::clickMouse(SDL_Event& e) {
             case Direction::output:
                 srcNode = hoveredNode;
                 srcNodeID = hoveredNode->hoveredConnection;
+                srcBus = nullptr;
                 break;
             default:
                 break;
         }
+
+        selected_connector = true;
     }
 
     // srcNodeID & dstNodeID are the connection/io ids, not node identifiers
@@ -211,6 +253,15 @@ void NodeEditor::clickMouse(SDL_Event& e) {
             && dstNodeID != -1) { // bus does not need connection id (only has one output)
         NodeManager* nm = NodeManager::get();
         nm->makeBusConnection(srcBus, dstNode, dstNodeID);
+        srcBus = nullptr;
+        dstNode = nullptr;
+        dstNodeID = -1;
+    } else if (!selected_connector) {
+        srcNode = nullptr;
+        srcNodeID = -1;
+        dstNode = nullptr;
+        dstNodeID = -1;
+        srcBus = nullptr;
     }
 }
 
