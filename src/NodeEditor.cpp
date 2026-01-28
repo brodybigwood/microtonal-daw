@@ -18,7 +18,7 @@ NodeEditor::NodeEditor() {
 
     BusManager* bm = BusManager::get();
     
-    for (int i = 0; i < bm->getBusCountW(); i++) {
+    for (int i = 0; i < bm->busCount; i++) {
         auto bus = bm->getBusW(i);
         auto& rect = bus->dstRect;
         
@@ -28,7 +28,7 @@ NodeEditor::NodeEditor() {
         rect.y = 0.0f;    
     }
 
-    for (int i = 0; i < bm->getBusCountE(); i++) {
+    for (int i = 0; i < bm->busCount; i++) {
         auto bus = bm->getBusE(i);
         auto& rect = bus->dstRect;
     
@@ -53,7 +53,7 @@ void NodeEditor::renderInputs() {
 
     BusManager* bm = BusManager::get();
 
-    for (int i = 0; i < bm->getBusCountW(); i++) {
+    for (int i = 0; i < bm->busCount; i++) {
         auto* bus = bm->getBusW(i);
         auto& busRect = bus->dstRect;        
  
@@ -63,7 +63,7 @@ void NodeEditor::renderInputs() {
         SDL_RenderRect(renderer, &busRect);
     }
 
-    for (int i = 0; i < bm->getBusCountE(); i++) {
+    for (int i = 0; i < bm->busCount; i++) {
         auto* bus = bm->getBusE(i);
         auto& busRect = bus->dstRect;
 
@@ -140,7 +140,7 @@ void NodeEditor::hover() {
     found_hovered = false;
 
 
-    for(int i = 0; i < BusManager::get()->getBusCountE(); i++) {
+    for(int i = 0; i < BusManager::get()->busCount; i++) {
         auto* bus = BusManager::get()->getBusE(i);
         auto& busRect = bus->dstRect;
 
@@ -153,7 +153,7 @@ void NodeEditor::hover() {
 
     if(!found_hovered) {
 
-        for(int i = 0; i < BusManager::get()->getBusCountW(); i++) {
+        for(int i = 0; i < BusManager::get()->busCount; i++) {
             auto* bus = BusManager::get()->getBusW(i);
             auto& busRect = bus->dstRect;
 

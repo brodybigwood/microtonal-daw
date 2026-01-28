@@ -53,10 +53,6 @@ void TrackList::addTrack(TrackType tp) {
     t->id = id;
     ids[id] = tracks.size() - 1;
     t->type = tp;
-
-    t->setBus(id);
-
-    std::cout << "set track bus to: " << id << std::endl;
 }
 
 Track* TrackList::getTrack(uint16_t id) {
@@ -140,8 +136,15 @@ void TrackList::handleTrackInput(Track* track, int y, SDL_Event& e) {
     
                 ctxMenu->dynamicTick = getTextInputTicker([this,track](std::string text)
 {
-    uint8_t index = std::stoi(text);
-    assign(track, index);
+    try {
+        int index = std::stoi(text);
+        
+        auto bm = BusManager::get();
+        if (index >= bm->busCount) throw std::out_of_range("bus index out of range");
+        assign(track, index);
+    } catch(...) {
+    std::cerr << "invalid input: " << text << std::endl;
+    }
 }
                 );
             }
