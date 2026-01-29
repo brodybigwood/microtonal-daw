@@ -78,7 +78,7 @@ return [enter](SDL_Event& e) {
     } else {
         SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
         SDL_RenderFillRect(renderer, &rect);
-        SDL_SetRenderDrawColor(renderer, 0,0,0,0);
+        SDL_SetRenderDrawColor(renderer, 0,0,0,255);
         SDL_RenderRect(renderer, &rect);
 
         if (surf && tex) {
@@ -91,3 +91,75 @@ return [enter](SDL_Event& e) {
 };
 }
 
+std::function<bool(SDL_Event& e)> getTreeMenuTicker(std::shared_ptr<TreeEntry> t)
+{
+    auto listTick = std::make_shared<
+        std::function<bool(SDL_Event&, std::shared_ptr<TreeEntry>, int, int, SDL_Renderer*)>
+    >();
+    
+    *listTick = [listTick] (SDL_Event& e, std::shared_ptr<TreeEntry> t, int x, int y, SDL_Renderer* renderer) {
+
+        float padding = 5.0f;
+        SDL_FRect rect{x, y, padding * 2, 10.0f};
+
+        for (auto c : t->children) {
+            if (!c->labelTexture) {
+                SDL_Color textColor{0,0,0,255};
+                SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, c->label.c_str(), 0, textColor);
+                c->labelTexture = SDL_CreateTextureFromSurface(renderer, surf);
+                c->textWidth = surf->w;
+                c->textHeight = surf->h;
+                SDL_DestroySurface(surf);
+            }
+
+            if (c->textWidth > rect.w) rect.w = c->textWidth + padding * 2;
+            if (c->textHeight > rect.h) rect.h = c->textHeight;
+        }
+
+        for (auto c : t->children) {
+
+            if (MouseOn(&rect)) {
+                SDL_SetRenderDrawColor(renderer, 250, 250, 250, 255);
+
+                switch (e.type) {
+                    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+                        if (e.button.button == SDL_BUTTON_LEFT) {
+                            if (c->isParent()) {
+                                c->isOpen = true;
+                                for (auto k : t->children) if (c != k) k->isOpen = false;
+                            } else {
+                                c->click();
+                                return false;
+                            }
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            } else {
+                SDL_SetRenderDrawColor(renderer, 220, 220, 220, 255);
+            }
+            SDL_RenderFillRect(renderer, &rect);
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+            SDL_RenderRect(renderer, &rect);
+
+            SDL_FRect textRect{rect.x + padding, rect.y, c->textWidth, c->textHeight};
+            SDL_RenderTexture(renderer, c->labelTexture, nullptr, &textRect);
+
+            if (c->isOpen) if (!(*listTick)(e, c, rect.x + rect.w, rect.y, renderer)) return false;
+
+            rect.y += rect.h;
+        }
+
+        return true;
+    };
+    return [t,listTick] (SDL_Event& e)
+    {
+        auto ctxMenu = ContextMenu::get();
+        auto& renderer = ctxMenu->renderer;
+        auto& x = ctxMenu->locX;
+        auto& y = ctxMenu->locY;
+
+        return (*listTick)(e, t, x, y, renderer);
+    };
+}

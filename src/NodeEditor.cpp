@@ -2,6 +2,7 @@
 #include "BusManager.h"
 #include "NodeManager.h"
 #include "Node.h"
+#include "ContextMenu.h"
 
 NodeEditor::NodeEditor() {
 
@@ -203,70 +204,105 @@ void NodeEditor::hover() {
 }
 
 void NodeEditor::clickMouse(SDL_Event& e) {
-    static uint16_t doubleClickThreshold = 512;
-    auto time = SDL_GetTicks();
-    auto interval = time - lastLeftClick;
-    lastLeftClick = time;
-    if(interval < doubleClickThreshold) {
-        doubleClick();
-        return;
-    }
-
-    bool selected_connector = false;
-
-    if(hoveredBus != nullptr) {
-        srcBus = hoveredBus;
-        selected_connector = true;
-    }
-
-    if(hoveredNode != nullptr && hoveredNode->hoveredConnection != -1) {
-        switch(hoveredNode->hoveredDirection) {
-            case Direction::input:
-                dstNode = hoveredNode;
-                dstNodeID = hoveredNode->hoveredConnection;
-                break;
-            case Direction::output:
-                srcNode = hoveredNode;
-                srcNodeID = hoveredNode->hoveredConnection;
-                srcBus = nullptr;
-                break;
-            default:
-                break;
+    if (e.button.button == SDL_BUTTON_LEFT) {
+        static uint16_t doubleClickThreshold = 512;
+        auto time = SDL_GetTicks();
+        auto interval = time - lastLeftClick;
+        lastLeftClick = time;
+        if(interval < doubleClickThreshold) {
+            doubleClick();
+            return;
         }
+    
+        bool selected_connector = false;
+    
+        if(hoveredBus != nullptr) {
+            srcBus = hoveredBus;
+            selected_connector = true;
+        }
+    
+        if(hoveredNode != nullptr && hoveredNode->hoveredConnection != -1) {
+            switch(hoveredNode->hoveredDirection) {
+                case Direction::input:
+                    dstNode = hoveredNode;
+                    dstNodeID = hoveredNode->hoveredConnection;
+                    break;
+                case Direction::output:
+                    srcNode = hoveredNode;
+                    srcNodeID = hoveredNode->hoveredConnection;
+                    srcBus = nullptr;
+                    break;
+                default:
+                    break;
+            }
+    
+            selected_connector = true;
+        }
+    
+        // srcNodeID & dstNodeID are the connection/io ids, not node identifiers
+        if(srcNode != nullptr && dstNode != nullptr
+                && srcNodeID != -1 && dstNodeID != -1 ) {
+            NodeManager* nm = NodeManager::get();
+            nm->makeNodeConnection(
+                    srcNode, srcNodeID,
+                    dstNode, dstNodeID );
+    
+            srcNode = nullptr;
+            srcNodeID = -1;
+            dstNode = nullptr;
+            dstNodeID = -1;
+        } else if (srcBus != nullptr && dstNode != nullptr
+                && dstNodeID != -1) { // bus does not need connection id (only has one output)
+            NodeManager* nm = NodeManager::get();
+            nm->makeBusConnection(srcBus, dstNode, dstNodeID);
+            srcBus = nullptr;
+            dstNode = nullptr;
+            dstNodeID = -1;
+        } else if (!selected_connector) {
+            srcNode = nullptr;
+            srcNodeID = -1;
+            dstNode = nullptr;
+            dstNodeID = -1;
+            srcBus = nullptr;
+        }
+    } else if (e.button.button == SDL_BUTTON_RIGHT) {
+        auto* ctxMenu = ContextMenu::get();
+        ctxMenu->active = true;
 
-        selected_connector = true;
-    }
+        ctxMenu->window_id = SDL_GetWindowID(window);
+        ctxMenu->renderer = renderer;
 
-    // srcNodeID & dstNodeID are the connection/io ids, not node identifiers
-    if(srcNode != nullptr && dstNode != nullptr
-            && srcNodeID != -1 && dstNodeID != -1 ) {
-        NodeManager* nm = NodeManager::get();
-        nm->makeNodeConnection(
-                srcNode, srcNodeID,
-                dstNode, dstNodeID );
+        ctxMenu->locX = mouseX;
+        ctxMenu->locY = mouseY;
 
-        srcNode = nullptr;
-        srcNodeID = -1;
-        dstNode = nullptr;
-        dstNodeID = -1;
-    } else if (srcBus != nullptr && dstNode != nullptr
-            && dstNodeID != -1) { // bus does not need connection id (only has one output)
-        NodeManager* nm = NodeManager::get();
-        nm->makeBusConnection(srcBus, dstNode, dstNodeID);
-        srcBus = nullptr;
-        dstNode = nullptr;
-        dstNodeID = -1;
-    } else if (!selected_connector) {
-        srcNode = nullptr;
-        srcNodeID = -1;
-        dstNode = nullptr;
-        dstNodeID = -1;
-        srcBus = nullptr;
+        auto t = getClickMenu();
+
+        ctxMenu->dynamicTick = getTreeMenuTicker(t);         
     }
 }
-
 void NodeEditor::doubleClick() {
-    createNode();
+    //createNode();
+}
+
+std::shared_ptr<TreeEntry> NodeEditor::getClickMenu() {
+    auto t = uTreeEntry();
+    t->label = "Menu";
+
+    auto create = uTreeEntry();
+    create->label = "Add Node";
+    
+    {
+        auto nodeType = uTreeEntry();
+        nodeType->label = "Oscillator";
+
+        nodeType->click = [this]() { createNode(); };
+
+        create->addChild(nodeType);
+    }   
+    
+    t->addChild(create);
+
+    return t;
 }
 
 void NodeEditor::createNode() {

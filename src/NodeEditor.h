@@ -1,6 +1,7 @@
 #pragma once
 
 #include <SDL3/SDL.h>
+#include "TreeEntry.h"
 
 class Node;
 class Bus;
@@ -60,4 +61,6 @@ class NodeEditor {
         void render(SDL_Renderer*, SDL_FRect*);
 
         bool inside(float&, float&, SDL_FRect*);
+
+        std::shared_ptr<TreeEntry> getClickMenu();
 };

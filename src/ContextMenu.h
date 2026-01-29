@@ -4,6 +4,7 @@
 #include <SDL_ttf.h>
 #include <functional>
 #include <string>
+#include "TreeEntry.h"
 
 class ContextMenu {
 
@@ -26,3 +27,5 @@ class ContextMenu {
 };
 
 std::function<bool(SDL_Event& e)> getTextInputTicker(std::function<void(std::string text)> enter);
+
+std::function<bool(SDL_Event& e)> getTreeMenuTicker(std::shared_ptr<TreeEntry> t);

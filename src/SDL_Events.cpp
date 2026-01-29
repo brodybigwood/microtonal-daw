@@ -58,3 +58,17 @@ uint32_t getEventWindowID(const SDL_Event& e) {
             return 0; // unknown or global event
     }
 }
+
+bool MouseOn(SDL_FRect* rect) {
+
+    float mouseX;
+    float mouseY;
+    SDL_GetMouseState(&mouseX, &mouseY);
+
+    return 
+        mouseX >= rect->x &&
+        mouseX < rect->x + rect->w &&
+        mouseY >= rect->y &&
+        mouseY < rect->y + rect->h
+    ;
+}
