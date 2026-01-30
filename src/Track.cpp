@@ -33,17 +33,17 @@ void Track::addEvent(Event event) {
 }
 
 void Track::process(float* input, int bufferSize) {
+    if (!dstBus) return;
     switch(type) {
         case TrackType::Audio:
             break;
         case TrackType::Automation:
             break;
         case TrackType::Notes:
+            BusManager::get()->getBusE(busID)->numEvents = eventNum;
+            eventNum = 0;
             break;
     }
-
-    BusManager::get()->getBusE(busID)->numEvents = eventNum;
-    eventNum = 0;
 }
 
 TrackType& Track::getType() {

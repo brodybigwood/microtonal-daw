@@ -17,7 +17,7 @@ class Track {
         std::vector<std::shared_ptr<Note>> dispatched;
 
         int busID = -1;
-        Bus* dstBus;
+        Bus* dstBus = nullptr;
 
         TrackType type = TrackType::Notes;
         TrackType& getType();
