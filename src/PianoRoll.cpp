@@ -455,17 +455,18 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
 
             } else if(lmb && movingNote != nullptr) {
                 refreshGrid = true;
+
                 float dX = mouseX - last_lmb_x;
-                float dirX = std::abs(dX)/dX;
+                float step = dW / notesPerBar;
+                int steps = dX / step;
 
-                float dY = mouseY - last_lmb_y;
-                float dirY = std::abs(dY)/dY;
+                if(steps) {
+                    moveNote(movingNote, steps, 0);
+                    last_lmb_x += steps * step;
+                } 
 
-                if(std::abs(dX) >= dW/notesPerBar) {
-                    moveNote(movingNote, std::ceil(dirX*dX)/dX,0);
-                    last_lmb_x += dW*dirX/notesPerBar;
-                } if (getHoveredLine() != movingNote->num) {
-                    moveNote(movingNote, 0,getHoveredLine() - movingNote->num);
+                if (getHoveredLine() != movingNote->num) {
+                    moveNote(movingNote, 0, getHoveredLine() - movingNote->num);
                     lastHoveredLine = getHoveredLine();
                 }
                 
