@@ -45,6 +45,9 @@ void Home::createRoll() {
 }
 
 void Home::render() {
+
+    SDL_GetMouseState(&mouseX, &mouseY);
+
     SDL_SetRenderDrawColor(renderer, 100,100,100,255);
     SDL_RenderClear(renderer);
 
@@ -105,10 +108,6 @@ bool Home::handleInput(SDL_Event& e) {
     if (id != SDL_GetWindowID(window)) return true;
 
     const auto* windowHandler = WindowHandler::instance();
-
-    if(e.type == SDL_EVENT_MOUSE_MOTION) {
-        SDL_GetMouseState(&mouseX, &mouseY);
-    }
 
     if(sendInput(e)) {
         return true;

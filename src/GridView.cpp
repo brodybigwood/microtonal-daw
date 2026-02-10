@@ -68,6 +68,7 @@ GridView::~GridView() {
 
 bool GridView::tick() {
 
+    moveMouse();
     customTick();
     if(*detached){
         SDL_RenderPresent(renderer);
@@ -82,7 +83,6 @@ bool GridView::handleInput(SDL_Event& e) {
 
     switch (e.type) {
         case SDL_EVENT_MOUSE_MOTION:
-            moveMouse();
             break;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             transport->clickMouse();
@@ -200,7 +200,7 @@ void GridView::toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar) {
 }
 
 fract GridView::getHoveredTime() {
-    return fract(std::floor((mouseX+scrollX-leftMargin)/dW),1);
+    return fract(std::floor((mouseX+scrollX-leftMargin)/(dW / notesPerBar)),notesPerBar);
 }
 
 float GridView::getX(float time) {

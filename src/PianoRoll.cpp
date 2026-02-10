@@ -434,7 +434,6 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
         
 
         case SDL_EVENT_MOUSE_MOTION:
-            moveMouse();
 
             handleMouse();
 
