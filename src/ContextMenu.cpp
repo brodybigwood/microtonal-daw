@@ -15,6 +15,8 @@ void ContextMenu::tick(SDL_Event& e) {
         active = false;
         return;
     }
+    
+    SDL_RenderPresent(renderer);
 }
 
 std::function<bool(SDL_Event& e)> getTextInputTicker(std::function<void(std::string text)> enter)

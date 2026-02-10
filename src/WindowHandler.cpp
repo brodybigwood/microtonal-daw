@@ -53,6 +53,8 @@ bool WindowHandler::tick() {
     if(timeSinceLastFrame >= frameTime) {
         lastTime = double(SDL_GetTicks())-frameTime;
 
+        if (ctxMenu->active) home->render(); // need to render behind ctxmenu first
+
         SDL_Event e;
         while(SDL_PollEvent(&e)) {
 
@@ -67,20 +69,11 @@ bool WindowHandler::tick() {
             toggleKey(e, SDL_SCANCODE_LCTRL, isCtrlPressed);
             toggleKey(e, SDL_SCANCODE_LALT, isAltPressed);
 
-            if (ctxMenu->active) {
-                SDL_Event a{
-                    .type = SDL_EVENT_MOUSE_MOTION
-                };
-                
-                if (!home->tick(a)) return false;
-                ctxMenu->tick(e);
-                SDL_RenderPresent(ctxMenu->renderer);
-            } else {
-                if( !home->tick(e)) {
-                    return false;
-                }
-            }
+            if (ctxMenu->active) ctxMenu->tick(e);
+            else if (!home->handleInput(e)) return false;
         }
+        
+        if (!ctxMenu->active) home->render(); // render on top if ctxmenu not open
         SDL_RenderPresent(renderer);
     }
     return true;

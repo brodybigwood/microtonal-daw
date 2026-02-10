@@ -44,45 +44,7 @@ void Home::createRoll() {
 
 }
 
-bool Home::tick(SDL_Event& e) {
-
-        if(e.type == SDL_EVENT_KEY_DOWN && e.key.scancode == SDL_SCANCODE_SPACE) {
-            project->togglePlaying();
-            return true;
-        }
-
-        uint32_t id = getEventWindowID(e);
-
-
-        if (id == SDL_GetWindowID(window)) {
-            if(!handleInput(e)) {
-                return false;
-            }
-        }
-
-        if(pianoRoll != nullptr && pianoRollDetached) {
-            if (id == SDL_GetWindowID(pianoRoll->window)) {
-                if(!pianoRoll->handleInput(e)) {
-                    delete pianoRoll;
-                    pianoRoll = nullptr;
-                }
-            }
-        }
-
-        if(song != nullptr && songRollDetached) {
-            if (id == SDL_GetWindowID(song->window)) {
-                if(!song->handleInput(e)) {
-                    delete song;
-                    song = nullptr;
-                }
-            }
-        }
-
-        auto ne = NodeEditor::get();
-        if(id == ne->getWindowID()) {
-            ne->handleInput(e);
-        }
-
+void Home::render() {
     SDL_SetRenderDrawColor(renderer, 100,100,100,255);
     SDL_RenderClear(renderer);
 
@@ -93,8 +55,6 @@ bool Home::tick(SDL_Event& e) {
         pianoRoll->tick();
     }
     NodeEditor::get()->tick();
-
-    return true;
 }
 
 bool Home::sendInput(SDL_Event& e) {
@@ -111,6 +71,38 @@ bool Home::sendInput(SDL_Event& e) {
 
 
 bool Home::handleInput(SDL_Event& e) {
+
+    if(e.type == SDL_EVENT_KEY_DOWN && e.key.scancode == SDL_SCANCODE_SPACE) {
+        project->togglePlaying();
+        return true;
+    }
+
+    uint32_t id = getEventWindowID(e);
+
+    if(pianoRoll != nullptr && pianoRollDetached) {
+        if (id == SDL_GetWindowID(pianoRoll->window)) {
+            if(!pianoRoll->handleInput(e)) {
+                delete pianoRoll;
+                pianoRoll = nullptr;
+            }
+        }
+    }
+
+    if(song != nullptr && songRollDetached) {
+        if (id == SDL_GetWindowID(song->window)) {
+            if(!song->handleInput(e)) {
+                delete song;
+                song = nullptr;
+            }
+        }
+    }
+
+    auto ne = NodeEditor::get();
+    if(id == ne->getWindowID()) {
+        ne->handleInput(e);
+    }
+    
+    if (id != SDL_GetWindowID(window)) return true;
 
     const auto* windowHandler = WindowHandler::instance();
 

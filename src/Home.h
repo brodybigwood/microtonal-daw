@@ -45,7 +45,7 @@ class Home {
         SDL_Window* window;
         SDL_Renderer* renderer;
 
-        bool tick(SDL_Event& e);
+        void render();
 
         bool handleInput(SDL_Event& e);
 
