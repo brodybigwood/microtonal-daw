@@ -26,7 +26,6 @@ void Project::process(float* input, float* output, int& bufferSize, int& numChan
 Project::Project() {}
 
 Project::~Project() {
-save();
 }
 
 Project* Project::instance() {

@@ -61,6 +61,11 @@ void Transport::clickMouse() {
 }
 
 Transport::~Transport() {
+    delete togglePlay->dstRect;
+    delete stop->dstRect;
+
+    delete togglePlay;
+    delete stop;
 }
 
 void Transport::render() {

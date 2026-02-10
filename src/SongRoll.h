@@ -21,7 +21,7 @@ class SongRoll : public GridView{
 
     public:
     SongRoll(SDL_FRect* rect, bool* detached);
-        ~SongRoll();
+        ~SongRoll() override;
 
         TrackList* tracks;
         SDL_FRect leftRect;

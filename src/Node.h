@@ -28,7 +28,7 @@ struct connectionSet{
 class Node {
     public:
         Node(uint16_t);
-        ~Node();
+        virtual ~Node();
 
         uint16_t id;
         std::string name;

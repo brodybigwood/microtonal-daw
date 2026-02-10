@@ -16,7 +16,7 @@ class GridElement {
     public:
 
         GridElement();
-        ~GridElement();
+        virtual ~GridElement();
 
         struct Position {
             fract startOffset;

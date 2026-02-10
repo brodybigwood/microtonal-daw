@@ -54,9 +54,16 @@ void GridView::createGridRect() {
 }
 
 GridView::~GridView() {
+    
+    if (*detached) {
+        if (renderer) SDL_DestroyRenderer(renderer);
+        if (window) SDL_DestroyWindow(window);
+        if (dstRect) delete dstRect;
+    }
+
     delete playHead;
-    if (renderer) SDL_DestroyRenderer(renderer);
-    if (window) SDL_DestroyWindow(window);
+    delete transport;
+    delete startTime;
 }
 
 bool GridView::tick() {

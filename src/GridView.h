@@ -11,7 +11,7 @@ class GridView {
     public:
         GridView(bool*, SDL_FRect*, float leftMargin);
 
-        ~GridView();
+        virtual ~GridView();
 
         float yMin = 0;
 

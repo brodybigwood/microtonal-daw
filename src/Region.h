@@ -23,7 +23,7 @@ class Region : public GridElement {
 
     public:
         Region();
-        ~Region();
+        ~Region() override;
 
         std::string name = "MIDI Region FX Rack";
 TuningTable* scale;

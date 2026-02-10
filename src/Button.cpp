@@ -35,13 +35,9 @@ void Button::render() {
 
 
 Button::~Button() {
-    if (dstRect) {
-        delete dstRect;
-        dstRect = nullptr;
-    }
-
-    if (texture) {
-        SDL_DestroyTexture(texture);
-        texture = nullptr;
-    }
+    if (texture) SDL_DestroyTexture(texture);
+    texture = nullptr;
+    activated = nullptr;
+    hover = nullptr;
+    onClick = nullptr;
 }

@@ -6,6 +6,7 @@
 class ElementManager {
     public:
         static ElementManager* get();
+        ~ElementManager();
 
         std::vector<GridElement*> elements;
 

@@ -7,6 +7,13 @@
 #include "AudioManager.h"
 #include "TrackList.h"
 
+ElementManager::~ElementManager() {
+    for (auto e : elements) {
+        delete e;
+    }
+    elements.clear();
+}
+
 json ElementManager::toJSON() {
     json j;
     j["id_pool"] = id_pool.toJSON();

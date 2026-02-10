@@ -26,7 +26,7 @@ idManager* GridElement::id_pool() {
 
 
 GridElement::~GridElement() {
-
+    SDL_DestroyTexture(texture);
 }
 
 json GridElement::toJSON() {

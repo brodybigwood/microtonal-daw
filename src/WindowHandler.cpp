@@ -30,7 +30,7 @@ void WindowHandler::createHome(Project* project) {
 
 
 WindowHandler::~WindowHandler() {
-
+    if (home->pianoRoll) delete home->pianoRoll;
 }
 
 WindowHandler* WindowHandler::instance() {

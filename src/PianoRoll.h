@@ -23,7 +23,7 @@ class PianoRoll : public GridView {
     
 
     PianoRoll(SDL_FRect*, Region*, bool*);
-    virtual ~PianoRoll();
+    ~PianoRoll() override;
     
         SDL_Texture* backgroundTexture;
         SDL_Texture* PianoTexture;

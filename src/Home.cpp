@@ -30,7 +30,7 @@ Home::Home(Project* project) {
 }
 
 Home::~Home() {
-
+    if (song) delete song;
 }
 
 void Home::createRoll() {

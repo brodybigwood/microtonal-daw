@@ -44,6 +44,13 @@ void TrackList::setGeometry(SDL_FRect* dstRect) {
 
 TrackList::~TrackList() {
 
+    delete newTrackE;
+    delete newTrackW;
+
+    for (auto t : tracks) {
+        delete t;
+    }
+    tracks.clear();
 }
 
 void TrackList::addTrack(TrackType tp) {
