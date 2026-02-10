@@ -7,6 +7,18 @@ Node::Node(uint16_t id) : id(id) {}
 
 Node::~Node() {}
 
+connectionSet::~connectionSet() {
+    for (auto c : connections) {
+        if(c->dir == Direction::output && c->type == DataType::Waveform && c->data) {
+            auto ptr = static_cast<WaveformBus*>(c->data);
+            delete ptr;
+        }
+
+        delete c;
+    }
+}
+
+
 void* Node::getOutput(Connection* con) {
     return con->data;
 }

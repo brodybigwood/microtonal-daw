@@ -22,14 +22,9 @@ BusManager::BusManager() {
 
 BusManager::~BusManager() {
 
-    delete[] eventBus;
-
     for(size_t i = 0; i < busCount; ++i) {
         delete[] waveformBus[i].buffer;
     }
-
-    delete[] waveformBus;
-
 }
 
 EventBus* BusManager::getBusE(size_t index) {

@@ -22,6 +22,7 @@ struct connectionSet{
     Connection* getConnection(uint16_t id);
 
     void addConnection(Connection*);
+    ~connectionSet();
 };
 
 class Node {

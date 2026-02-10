@@ -144,7 +144,9 @@ bool AudioManager::stop() {
         std::cerr << "Error in RtAudio stop: " << e << std::endl;
         return false;
     }
-    audioThreadHandle.join();  // Wait for the audio thread to finish before exiting
+    if (audioThreadHandle.joinable()) {
+        audioThreadHandle.join(); 
+    }
 
     return true;
 }
