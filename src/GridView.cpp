@@ -80,7 +80,6 @@ bool GridView::tick() {
 bool GridView::handleInput(SDL_Event& e) {
 
     bool running = true;
-
     switch (e.type) {
         case SDL_EVENT_MOUSE_MOTION:
             break;
@@ -131,9 +130,24 @@ bool GridView::handleInput(SDL_Event& e) {
 
         case SDL_EVENT_QUIT:
             running =  false;
+            break;
         case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
             running = false;
+            break;
+        case SDL_EVENT_DROP_BEGIN:
+            dropping = true;
+            beginDrop(e.drop);
+            break;
+        case SDL_EVENT_DROP_COMPLETE:
+            dropping = false;
+            break;
+        case SDL_EVENT_DROP_POSITION:
+            break;
+        case SDL_EVENT_DROP_FILE:
+            dropFile(e.drop);
+            break;
         default:
+//            std::cout << e.type << std::endl;
             break;
     }
 

@@ -57,6 +57,10 @@ class SongRoll : public GridView{
         void UpdateGrid() override;
 
         float getHoveredLine();
+
+        void beginDrop(SDL_DropEvent&) override;
+        void renderDrop(SDL_Renderer*) override;
+        void dropFile(SDL_DropEvent&) override;        
 };
 
 #endif

@@ -115,4 +115,9 @@ class GridView {
         float lastHoveredLine;
         float lastHoveredTime;
 
+        bool dropping = false;
+
+        virtual void beginDrop(SDL_DropEvent&) {};
+        virtual void dropFile(SDL_DropEvent&) {};
+        virtual void renderDrop(SDL_Renderer*) {};
 };

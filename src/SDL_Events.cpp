@@ -24,6 +24,11 @@ bool isEventForWindow(const SDL_Event& e, uint32_t windowID) {
         case SDL_EVENT_WINDOW_MOUSE_ENTER:
         case SDL_EVENT_WINDOW_MOUSE_LEAVE:
             return e.window.windowID == windowID;
+        case SDL_EVENT_DROP_BEGIN:
+        case SDL_EVENT_DROP_COMPLETE:
+        case SDL_EVENT_DROP_FILE:
+        case SDL_EVENT_DROP_POSITION:
+            return e.drop.windowID == windowID;
         default:
             return false;
     }
@@ -54,6 +59,11 @@ uint32_t getEventWindowID(const SDL_Event& e) {
         case SDL_EVENT_WINDOW_FOCUS_GAINED:
         case SDL_EVENT_WINDOW_FOCUS_LOST:
             return e.window.windowID;
+        case SDL_EVENT_DROP_BEGIN:
+        case SDL_EVENT_DROP_COMPLETE:
+        case SDL_EVENT_DROP_FILE:
+        case SDL_EVENT_DROP_POSITION:
+            return e.drop.windowID;
         default:
             return 0; // unknown or global event
     }

@@ -120,6 +120,8 @@ void SongRoll::renderElements() {
     for (auto element : ElementManager::get()->elements) {
         renderElement(element);
     }
+
+    renderDrop(renderer);
 }
 
 void SongRoll::renderElement(GridElement* element) {
@@ -259,4 +261,22 @@ void SongRoll::UpdateGrid() {
         lines.push_back(y);
         y++;
     }
+}
+
+void SongRoll::renderDrop(SDL_Renderer* renderer) {
+    std::cout << "dropping: " << dropping << std::endl;
+    std::cout << "mousex y : " << mouseX << " " << mouseY << std::endl;
+    if (!dropping) return;
+    SDL_FRect dropRect{mouseX, mouseY, 150.0f, divHeight};
+
+    SDL_SetRenderDrawColor(renderer, 185, 181, 222, 128);
+    SDL_RenderFillRect(renderer, &dropRect);
+}
+
+void SongRoll::beginDrop(SDL_DropEvent& d) {
+    std::cout << "began drop" << std::endl;
+}
+
+void SongRoll::dropFile(SDL_DropEvent& d) {
+    std::cout << "DROPPED: " << d.data << std::endl;    
 }

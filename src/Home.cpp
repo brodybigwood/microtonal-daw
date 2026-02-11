@@ -81,13 +81,14 @@ bool Home::handleInput(SDL_Event& e) {
     }
 
     uint32_t id = getEventWindowID(e);
-
+    
     if(pianoRoll != nullptr && pianoRollDetached) {
         if (id == SDL_GetWindowID(pianoRoll->window)) {
             if(!pianoRoll->handleInput(e)) {
                 delete pianoRoll;
                 pianoRoll = nullptr;
             }
+            return true;
         }
     }
 
@@ -97,14 +98,16 @@ bool Home::handleInput(SDL_Event& e) {
                 delete song;
                 song = nullptr;
             }
+            return true;
         }
     }
 
     auto ne = NodeEditor::get();
     if(id == ne->getWindowID()) {
         ne->handleInput(e);
+        return true;
     }
-    
+
     if (id != SDL_GetWindowID(window)) return true;
 
     const auto* windowHandler = WindowHandler::instance();
