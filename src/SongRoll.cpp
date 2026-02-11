@@ -264,8 +264,6 @@ void SongRoll::UpdateGrid() {
 }
 
 void SongRoll::renderDrop(SDL_Renderer* renderer) {
-    std::cout << "dropping: " << dropping << std::endl;
-    std::cout << "mousex y : " << mouseX << " " << mouseY << std::endl;
     if (!dropping) return;
     SDL_FRect dropRect{mouseX, mouseY, 150.0f, divHeight};
 
