@@ -6,6 +6,7 @@
 #include "Project.h"
 #include "AudioManager.h"
 #include "TrackList.h"
+#include "AudioClip.h"
 
 ElementManager::~ElementManager() {
     for (auto e : elements) {
@@ -131,6 +132,15 @@ void ElementManager::newRegion() {
     elements.push_back(r);
 
     ids[r->id] = elements.size() -1;
+}
+
+void ElementManager::newAudioClip(std::string filepath) {
+    auto a = new AudioClip;
+    a->setFile(filepath);
+    a->id = id_pool.newID();
+    elements.push_back(a);
+
+    ids[a->id] = elements.size() - 1;
 }
 
 ElementManager* ElementManager::get() {

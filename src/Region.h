@@ -37,9 +37,6 @@ bool updateNoteChannel(std::shared_ptr<Note>);
 
  void sort();
 
- void moveX(fract);
- void resize(bool, fract);
-
 int releaseMS = 1000;
 
 void draw(SDL_Renderer*) override;

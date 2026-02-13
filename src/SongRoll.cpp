@@ -277,4 +277,5 @@ void SongRoll::beginDrop(SDL_DropEvent& d) {
 
 void SongRoll::dropFile(SDL_DropEvent& d) {
     std::cout << "DROPPED: " << d.data << std::endl;    
+    ElementManager::get()->newAudioClip(d.data); 
 }
