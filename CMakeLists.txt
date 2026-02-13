@@ -75,6 +75,7 @@ add_dependencies(DAW CopyAssets)  # Ensure assets are copied before running
 
 include_directories(
     /usr/include/SDL3_ttf/
+    /usr/local/include/SDL3_gfx/
     ${CMAKE_SOURCE_DIR}/src/
 )
 
@@ -93,6 +94,7 @@ target_include_directories(DAW PRIVATE
 target_link_libraries(DAW PRIVATE
     SDL3::SDL3
     SDL3_ttf::SDL3_ttf
+    /usr/local/lib/SDL3_gfx/libSDL3_gfx.a
     ${SDL2_LIBRARIES}
     ${RTAUDIO_LIBRARIES}
 )
