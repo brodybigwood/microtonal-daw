@@ -12,7 +12,7 @@ class ElementManager {
 
         GridElement* getElement(uint16_t);
         void newRegion();
-        void newAudioClip(std::string);
+        GridElement* newAudioClip(std::string);
 
         uint16_t getIndex(uint16_t);
         idManager id_pool;

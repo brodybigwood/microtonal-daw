@@ -291,5 +291,19 @@ void SongRoll::beginDrop(SDL_DropEvent& d) {
 
 void SongRoll::dropFile(SDL_DropEvent& d) {
     std::cout << "DROPPED: " << d.data << std::endl;    
-    ElementManager::get()->newAudioClip(d.data); 
+    GridElement* e = ElementManager::get()->newAudioClip(d.data); 
+    if (!e) return;
+
+    fract start = getHoveredTime();
+    int trackIndex = getHoveredLine();
+
+    auto track = TrackList::get()->getTrack(trackIndex);
+    if (track  == nullptr) return;
+    if (track->type != TrackType::Audio) return; // cant put audioclip on region track
+
+    e->createPos(
+        start, trackIndex
+    );
+
+    refreshGrid = true;
 }

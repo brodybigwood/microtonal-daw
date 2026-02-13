@@ -2,6 +2,7 @@
 #include <cmath>
 #include "SDL3_gfx/SDL3_gfxPrimitives.h"
 #include <iostream>
+#include <sndfile.h>
 
 AudioClip::AudioClip() {
     type = ElementType::audioClip;
@@ -82,14 +83,25 @@ void AudioClip::draw(SDL_Renderer* renderer, float pixelsPerSecond, int h) {
 }
 
 void AudioClip::setFile(std::string file_path) {
+
+    SF_INFO sfinfo{};
+    SNDFILE* sndfile = sf_open(file_path.c_str(), SFM_READ, &sfinfo);
+    if (!sndfile) {
+        std::cerr << "cant open audio file: " << sf_strerror(NULL) << std::endl;
+        return;
+    }
+
     if (buffer) delete[] buffer;
 
-    filepath = file_path;
-    num_samples = 48000 * 5;
-
-    buffer = new float[num_samples];
+    buffer = new float[sfinfo.frames];
+    float* interleaved = new float[sfinfo.frames * sfinfo.channels * sizeof(float)];
+    num_samples = sf_readf_float(sndfile, interleaved, sfinfo.frames);
 
     for (size_t i = 0; i < num_samples; ++i) {
-        buffer[i] = std::sin(2.0f * M_PI * i / 1000);
+        buffer[i] = interleaved[i * sfinfo.channels]; // audioClips only support mono currently, so take the first channel
     }
+
+    filepath = file_path;
+    sf_close(sndfile);
+    delete[] interleaved;
 }

@@ -134,13 +134,22 @@ void ElementManager::newRegion() {
     ids[r->id] = elements.size() -1;
 }
 
-void ElementManager::newAudioClip(std::string filepath) {
+GridElement* ElementManager::newAudioClip(std::string filepath) {
+
     auto a = new AudioClip;
+
     a->setFile(filepath);
+    if (a->filepath == "") {
+        delete a;
+        return nullptr;
+    }
+
     a->id = id_pool.newID();
     elements.push_back(a);
 
     ids[a->id] = elements.size() - 1;
+
+    return a;
 }
 
 ElementManager* ElementManager::get() {
