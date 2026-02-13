@@ -24,14 +24,13 @@ int main() {
 
     Project* project = Project::instance();
     AudioManager* audioManager = AudioManager::instance();
-
     audioManager->setProject(project);
+
+    project->load("test");
 
     WindowHandler* windowHandler = WindowHandler::instance();
 
     windowHandler->createHome(project);
-
-    project->load("test");
 
     if (!audioManager->start()) {
         std::cout << "audiomanager failed" << std::endl;
