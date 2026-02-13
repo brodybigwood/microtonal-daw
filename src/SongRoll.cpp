@@ -125,7 +125,10 @@ void SongRoll::renderElements() {
 }
 
 void SongRoll::renderElement(GridElement* element) {
-    element->draw(renderer);
+    float tempo = Project::instance()->tempo; // notes per minute
+    float barsPerSecond = tempo / (60 * notesPerBar);   
+    float pixelsPerSecond = dW * barsPerSecond;
+    element->draw(renderer, pixelsPerSecond, (int)divHeight);
     SDL_SetRenderTarget(renderer, regionTexture);
     for(auto pos : element->positions) {
         if(hoveredElement == pos.id) {
@@ -137,10 +140,21 @@ void SongRoll::renderElement(GridElement* element) {
         float topLeftCornerX = getX(pos.start);
         uint16_t index = tracks->getIndex(pos.trackID);
         float topLeftCornerY = getY(index);
-        SDL_FRect dstRect = {topLeftCornerX, topLeftCornerY, pos.length*dW, divHeight};
-        SDL_FRect srcRect = {pos.startOffset * 100, 0, pos.length * 100, 100};
-        SDL_RenderFillRect(renderer, &dstRect);
-        SDL_RenderTexture(renderer, element->texture, &srcRect, &dstRect);
+        SDL_FRect dstRectE = {topLeftCornerX, topLeftCornerY, pos.length*dW, divHeight};
+
+        SDL_FRect srcRect;
+        switch (element->type) {
+            case ElementType::region:
+                srcRect = {pos.startOffset * 100, 0, pos.length * 100, 100};
+                break;
+            case ElementType::audioClip:
+                srcRect = {0, 0, dstRectE.w, dstRectE.h};
+                break;
+            default:
+                break;
+        }
+        SDL_RenderFillRect(renderer, &dstRectE);
+        SDL_RenderTexture(renderer, element->texture, &srcRect, &dstRectE);
     }
 }
 
