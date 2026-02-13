@@ -20,12 +20,12 @@ Region::~Region() {
 
 }
 
-void Region::draw(SDL_Renderer* renderer) {
+void Region::draw(SDL_Renderer* renderer, float pixelsPerSecond, int h) {
 
     if(!texture) {
         texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, 10000, 100);
     }
-
+    
     SDL_SetRenderTarget(renderer, texture);
     SDL_SetRenderDrawColor(renderer,0,0,0,0);
     SDL_RenderClear(renderer);

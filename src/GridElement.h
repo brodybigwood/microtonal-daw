@@ -35,7 +35,9 @@ class GridElement {
 
         SDL_Texture* texture = nullptr;
 
-        virtual void draw(SDL_Renderer*) = 0;
+        virtual void draw(SDL_Renderer*, float, int) = 0;
+        float pixelsPerSecond = 0;
+        int h = 0;
 
         virtual json toJSON();
         virtual void fromJSON(json);

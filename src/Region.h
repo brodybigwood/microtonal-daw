@@ -39,7 +39,7 @@ bool updateNoteChannel(std::shared_ptr<Note>);
 
 int releaseMS = 1000;
 
-void draw(SDL_Renderer*) override;
+void draw(SDL_Renderer*, float, int) override;
 
 json toJSON() override;
 void fromJSON(json) override;
