@@ -1,7 +1,4 @@
 #include "AudioManager.h"
-#include <cmath>
-#include <endian.h>
-#include "Processing.h"
 
 AudioManager::AudioManager() {
 
