@@ -65,9 +65,22 @@ void NodeManager::makeBusConnection(Bus* source, Node* dst, uint16_t inputID) {
     std::cout << "connected bus " << source->id << " to node." << std::endl;
 }
 
-Node* NodeManager::addNode() {
+Node* NodeManager::addNode(NodeType t) {
+
     uint16_t id = id_pool.newID();
-    Node* n = new OscillatorNode(id);
+    Node* n = nullptr;
+
+    switch (t) {
+        case NodeType::Oscillator:
+            n = new OscillatorNode(id);
+            break;
+        case NodeType::Merger:
+            n = new MergerNode(id);
+            break;
+        default:
+            break;
+    }
+    
     nodes.push_back(n);
     ids[id] = nodes.size() - 1;
 

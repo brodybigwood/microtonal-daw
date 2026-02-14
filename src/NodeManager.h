@@ -5,6 +5,7 @@
 #include "idManager.h"
 #include <SDL3/SDL.h>
 #include "OutputNode.h"
+#include "nodes/nodetypes.h"
 
 class Bus;
 class Node;
@@ -18,7 +19,7 @@ class NodeManager {
         Node* getNode(uint16_t);
 
         void removeNode(uint16_t);
-        Node* addNode();
+        Node* addNode(NodeType);
 
         void process(float*, int&, int&, int&);
 

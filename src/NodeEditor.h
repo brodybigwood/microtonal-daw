@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL.h>
 #include "TreeEntry.h"
+#include "nodes/nodetypes.h"
 
 class Node;
 class Bus;
@@ -38,7 +39,7 @@ class NodeEditor {
         uint32_t lastLeftClick;
 
         void doubleClick();
-        void createNode();
+        void createNode(NodeType);
 
         void moveMouse();
         void clickMouse(SDL_Event&);

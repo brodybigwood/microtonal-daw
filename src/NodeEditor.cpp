@@ -291,11 +291,12 @@ std::shared_ptr<TreeEntry> NodeEditor::getClickMenu() {
     auto create = uTreeEntry();
     create->label = "Add Node";
     
-    {
-        auto nodeType = uTreeEntry();
-        nodeType->label = "Oscillator";
+    // create buttons for all node types
 
-        nodeType->click = [this]() { createNode(); };
+    for (int i = 0; i < NodeType::Count; ++i) {
+        auto nodeType = uTreeEntry();
+        nodeType->label = NodeTypeStr[i];
+        nodeType->click = [this, i]() { createNode(static_cast<NodeType>(i)); };
 
         create->addChild(nodeType);
     }   
@@ -305,8 +306,8 @@ std::shared_ptr<TreeEntry> NodeEditor::getClickMenu() {
     return t;
 }
 
-void NodeEditor::createNode() {
-    auto node = NodeManager::get()->addNode();
+void NodeEditor::createNode(NodeType t) {
+    auto node = NodeManager::get()->addNode(t);
     node->move(mouseX, mouseY);
 }
 
