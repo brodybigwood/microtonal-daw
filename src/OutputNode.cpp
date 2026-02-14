@@ -19,7 +19,7 @@ void OutputNode::process() {
         
         if(!c->is_connected) {
             std::memset(output + i*bufferSize, 0, bufferSize * sizeof(float));
-            return;
+            continue;
         }
 
         void* data = getInput(c);
@@ -28,7 +28,7 @@ void OutputNode::process() {
 
         float* inputBuffer = bus->buffer;
         int& bufferSize = bus->bufferSize;
-
+        
         std::memcpy(output + i*bufferSize, inputBuffer, bufferSize * sizeof(float));
     }
 }

@@ -1,4 +1,5 @@
 #include "BusManager.h"
+#include <cstring> 
 
 BusManager* BusManager::get() {
     static BusManager bm;
@@ -17,6 +18,25 @@ BusManager::BusManager() {
         auto& bus = waveformBus[i];
         bus.id = i;
         bus.output.data = &bus;
+    }
+}
+
+void BusManager::process(int bufferSize) {
+
+    if (bufferSize != this->bufferSize) {
+        this->bufferSize = bufferSize;
+    
+        for (size_t i = 0; i < busCount; ++i) {
+            auto& bus = waveformBus[i];
+            bus.bufferSize = bufferSize;
+            if (bus.buffer) delete[] bus.buffer;
+            bus.buffer = new float[bufferSize];
+        }
+    }
+
+    for (size_t i = 0; i < busCount; ++i) {
+        auto& bus = waveformBus[i];
+        std::memset(bus.buffer, 0, bufferSize * sizeof(float));
     }
 }
 

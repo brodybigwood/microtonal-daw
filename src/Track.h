@@ -29,7 +29,7 @@ class Track {
 
         void process(float* input, int bufferSize);
 
-        float* buffer;
+        float* buffer = nullptr;
         int bufferSize;
 
         Event* events = nullptr;

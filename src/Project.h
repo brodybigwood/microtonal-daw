@@ -23,6 +23,8 @@ class Project {
 
         int sampleTime = 0;
 
+        int beatsToSamples(float);
+
         std::string filepath = "";
 
         float tempo = 120;

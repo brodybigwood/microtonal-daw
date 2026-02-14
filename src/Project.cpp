@@ -8,10 +8,19 @@
 #include "TrackList.h"
 #include "ElementManager.h"
 #include "ScaleManager.h"
+#include "BusManager.h"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
+int Project::beatsToSamples(float beats) {
+    float minutes = beats / tempo;
+    return AudioManager::instance()->sampleRate * 60 * minutes;
+}
+
 void Project::process(float* input, float* output, int& bufferSize, int& numChannelsIn, int& numChannelsOut, int& sampleRate) {
+
+    BusManager* bm = BusManager::get();
+    bm->process(bufferSize);
 
     auto* em = ElementManager::get();
     em->process(bufferSize);    

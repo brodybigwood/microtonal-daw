@@ -318,6 +318,10 @@ void TrackList::assign(Track* track, int busID) {
                 std::erase(assignedBusses.waveform, track->busID);            
 
                 track->dstBus = bm->getBusW(busID);
+
+                auto* b = static_cast<WaveformBus*>(track->dstBus);
+                track->buffer = b->buffer;
+
                 assignedBusses.waveform.push_back(busID);
                 success = true;
             }

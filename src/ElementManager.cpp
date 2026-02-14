@@ -97,6 +97,34 @@ void ElementManager::process(int bufferSize) {
                             }
                         }
                     }
+                    break;
+                case ElementType::audioClip:
+                    {
+// first find out if there is overlap with current block
+// pos.start is start of this position in beats
+// pos.end is the end of this position in beats
+// time is current processing time in beats
+// audio range is pos.start to pos.end
+// time must be anywhere between    
+                        if (!Project::instance()->isPlaying) break;
+                        if (!track->buffer) break;
+
+                        int readIdx = Project::instance()->beatsToSamples(time - pos.start);
+                        if (readIdx < 0) break;
+                        std::cout << " got here " << std::endl;
+                        AudioClip* ac = static_cast<AudioClip*>(element);
+                        float* rbuffer = ac->buffer;
+                        float* wbuffer = track->buffer;
+                        for (size_t i = 0; i < bufferSize; ++i) {
+                            if (readIdx >= ac->num_samples) {
+                                wbuffer[i] += 0;
+                            } else {
+                                wbuffer[i] += rbuffer[readIdx];
+                            }
+                            readIdx++;
+                        }
+                    }
+                    break;
                 default:
                     break;
             }

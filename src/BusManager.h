@@ -19,6 +19,9 @@ class BusManager {
         EventBus* getBusE(size_t);
         WaveformBus* getBusW(size_t);
 
+        void process(int bufferSize);
+        int bufferSize;
+
     private:
         EventBus eventBus[BUSCOUNT];
         WaveformBus waveformBus[BUSCOUNT];
