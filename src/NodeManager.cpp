@@ -77,6 +77,9 @@ Node* NodeManager::addNode(NodeType t) {
         case NodeType::Merger:
             n = new MergerNode(id);
             break;
+        case NodeType::Splitter:
+            n = new SplitterNode(id);
+            break;
         default:
             break;
     }
@@ -130,10 +133,6 @@ void NodeManager::process(float* output, int& bufferSize, int& numChannels, int&
         outNode.update(bufferSize, sampleRate);
     }
    
-    for(auto node : nodes) {
-        node->process();
-    }
-
     outNode.output = output;
-    outNode.process();
+    outNode.processTree();
 }

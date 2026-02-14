@@ -75,6 +75,25 @@ void* Node::getInput(Connection* con) {
     }
 }
 
+Node* Node::getNodeInput(Connection* con) {
+
+    if (!con->is_connected) return nullptr;
+
+    void* data = con->data;
+    sourceNode* src = static_cast<sourceNode*>(data);
+
+    switch(src->type) {
+        case ConnectionType::bus:
+            return nullptr;
+        case ConnectionType::node:
+        {
+            auto nm = NodeManager::get();
+            auto n = nm->getNode(src->source_id);
+            return n;
+        }
+    }
+}
+
 uint16_t connectionSet::getIndex(uint16_t id) {
     return ids[id];
 }
@@ -265,4 +284,16 @@ EventBus* Node::getEvents(void* data){
 
 WaveformBus* Node::getWaveform(void* data){
     return static_cast<WaveformBus*>(data);
+}
+
+void Node::processTree() {
+
+    // process prerequisites
+    for (Connection * c : inputs.connections) {
+        Node* n = getNodeInput(c);
+        if (n) n->processTree();
+    }
+
+    // process final
+    process();
 }

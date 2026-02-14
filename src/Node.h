@@ -39,10 +39,12 @@ class Node {
 
         void* getOutput(Connection*);
         void* getInput(Connection*);
+        Node* getNodeInput(Connection*);
 
         EventBus* getEvents(void*);
         WaveformBus* getWaveform(void*);
 
+        void processTree();
         virtual void process() = 0;
 
         SDL_FRect dstRect{0,0,50,50};
