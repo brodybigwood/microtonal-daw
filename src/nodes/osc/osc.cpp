@@ -1,6 +1,7 @@
 #include "osc.h"
 #include <cmath>
 #include <iostream>
+#include "AudioManager.h"
 
 OscillatorNode::OscillatorNode(uint16_t id) : Node(id) {
     output0 = new Connection;
@@ -124,7 +125,8 @@ void Voice::process(float* out0, float* out1, int& bufferSize, int& sampleRate) 
             return;
         }
 
-        float smp = sin(phase);
+        float smp = sin(phase) * adsr[samplesPassed++];
+
         if (out0) out0[i] += smp;
         if (out1) out1[i] += smp;
 
@@ -140,4 +142,41 @@ void Voice::reset() {
     noteId = -1;   
     wait_on = 0;
     wait_off = -1;
+    samplesPassed = 0;
+}
+
+Voice::Voice() {
+    update();
+}
+
+Voice::~Voice() {
+    if (adsr) delete[] adsr;
+}
+
+void Voice::updateADSR() {
+    const int& sampleRate = AudioManager::instance()->sampleRate;
+    const int limit = MAX_ADSR * sampleRate;
+    const int attackSamples = attack * sampleRate;
+    const int decaySamples = decay * sampleRate;
+    const int releaseSamples = release * sampleRate;
+
+    const int decayEnd = attackSamples + decaySamples;
+    const int releaseEnd = decayEnd + releaseSamples;
+    for (int i = 0; i < limit; i++) {
+        if (i < attackSamples) {
+            adsr[i] = (float)i / attackSamples;
+        } else if (i < decayEnd) {
+            adsr[i] = 1.0f - (1.0f - sustain) * (float)(i - attackSamples) / decaySamples;
+        } else if (i < releaseEnd) {
+            adsr[i] = sustain - sustain * (float)(i - decayEnd) / releaseSamples;
+        } else {
+            adsr[i] = 0.0f;
+        }
+    }
+}
+
+void Voice::update() {
+    if (adsr) delete[] adsr;
+    adsr = new float[MAX_ADSR * AudioManager::instance()->sampleRate];
+    updateADSR();
 }
