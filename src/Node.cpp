@@ -5,8 +5,48 @@
 #include "SDL_Events.h"
 #include <iostream>
 
-Node::Node(uint16_t id) : 
+json Node::serialize() {
+    json j;
+
+    j["id"] = id;
+    j["name"] = name;
+    j["zoomRatio"] = zoomRatio;
+    j["nodeType"] = nodeType;
+    j["x"] = dstRect.x;
+    j["y"] = dstRect.y;
+
+    return j;
+}
+
+Node* Node::deSerialize(json j) {
+    Node* n = nullptr;
+    int id = j["id"];
+
+    switch (j["nodeType"].get<int>()) {
+        case NodeType::Oscillator:
+            n = new OscillatorNode(id);
+            break;
+        case NodeType::Merger:
+            n = new MergerNode(id);
+            break;
+        case NodeType::Splitter:
+            n = new SplitterNode(id);
+            break;
+        case NodeType::Delay:
+            n = new DelayNode(id);
+            break;
+    }
+
+    n->name = j["name"];
+    n->zoomRatio = j["zoomRatio"];
+    n->move(j["x"], j["y"]);
+
+    return n;
+}
+
+Node::Node(uint16_t id, NodeType nt) : 
     id(id),
+    nodeType(nt),
     mouseX(NodeEditor::get()->mouseX),
     mouseY(NodeEditor::get()->mouseY) {
 

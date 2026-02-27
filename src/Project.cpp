@@ -67,6 +67,7 @@ void Project::load(std::string path) {
 
     ScaleManager::instance()->deSerialize(j["scaleManager"]);
     ElementManager::get()->fromJSON(j["elementManager"]);
+    NodeManager::get()->deSerialize(j["nodeManager"]);
 
     TrackList::get()->fromJSON(j["tracks"]);
 }
@@ -84,8 +85,8 @@ void Project::save() {
     j["tracks"] = TrackList::get()->toJSON();
 
     j["scaleManager"] = ScaleManager::instance()->serialize();
-
     j["elementManager"] = ElementManager::get()->toJSON();
+    j["nodeManager"] = NodeManager::get()->serialize();
 
     std::ofstream outFile(file);
     if (outFile.is_open()) {

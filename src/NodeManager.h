@@ -12,8 +12,12 @@ class Node;
 
 class NodeManager {
     public:
+        NodeManager();
         ~NodeManager();
 
+        json serialize();
+        void deSerialize(json);
+       
         static NodeManager* get();
 
         Node* getNode(uint16_t);

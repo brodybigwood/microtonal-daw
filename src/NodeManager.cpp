@@ -1,10 +1,122 @@
 #include "NodeManager.h"
 #include "Node.h"
+#include "BusManager.h"
 
 #include <iostream>
-
 #include "nodes/nodetypes.h"
 
+NodeManager::NodeManager() {
+    id_pool.reserveID(0); // id of outputnode
+}
+
+json NodeManager::serialize() {
+    json j;
+    j["idManager"] = id_pool.toJSON();
+
+    j["nodes"] = json::array();
+    j["connections"] = json::array();
+
+    j["outNode"] = outNode.serialize();
+
+    for (auto c : outNode.inputs.connections) if (c->is_connected) {
+        json s;
+        auto src = static_cast<sourceNode*>(c->data);
+        json ss;
+
+        switch (src->type) {
+            case ConnectionType::bus:
+                ss = -1;
+                break;
+            case ConnectionType::node:
+                ss = getNode(src->source_id)->id;
+                break;
+        }
+
+        s["dataType"] = c->type;
+        s["connectionType"] = src->type;
+
+        s["source_id"] = src->source_id;
+        s["source_node"] = ss;
+        s["output_id"] = src->output_id;
+        s["output_node"] = outNode.id;
+
+        j["connections"].push_back(s);
+    }
+
+    for (auto n : nodes) {
+        j["nodes"].push_back(n->serialize());
+        for (auto c : n->inputs.connections) if (c->is_connected) {
+            json s;
+            auto src = static_cast<sourceNode*>(c->data);
+            json ss;
+
+            switch (src->type) {
+                case ConnectionType::bus:
+                    ss = -1;
+                    break;
+                case ConnectionType::node:
+                    ss = getNode(src->source_id)->id;
+                    break;
+            }
+
+            s["dataType"] = c->type;
+            s["connectionType"] = src->type;
+
+            s["source_id"] = src->source_id;
+            s["source_node"] = ss;
+            s["output_id"] = src->output_id;
+            s["output_node"] = n->id;
+
+            j["connections"].push_back(s);
+        }
+    }
+
+    return j;
+}
+
+void NodeManager::deSerialize(json j) {
+    id_pool.fromJSON(j["idManager"]);
+
+    for (auto n : j["nodes"]) {
+        auto node = Node::deSerialize(n);
+        if (node) {
+            nodes.push_back(node); 
+            ids[node->id] = nodes.size() - 1;
+        }
+    }
+
+    for (auto s : j["connections"]) {
+        Node* dstNode;
+        int i = s["output_node"];
+        if (i) dstNode = getNode(i);
+        else dstNode = &outNode;
+        
+        auto dstNodeID = s["output_id"];
+        switch (s["connectionType"].get<int>()) {
+            case ConnectionType::bus: {
+                    Bus* source;
+                    int source_id = s["source_id"];
+                    auto bm = BusManager::get();
+                    switch (s["dataType"].get<int>()) {
+                        case DataType::Events:
+                            source = bm->getBusE(source_id);
+                            break;
+                        case DataType::Waveform:
+                            source = bm->getBusW(source_id);
+                            break;
+                    }
+                    makeBusConnection(source, dstNode, dstNodeID);
+                }
+                break;
+            case ConnectionType::node: {
+                    auto srcNode = getNode(s["source_node"]);
+                    auto srcNodeID = s["source_id"];
+                    makeNodeConnection(srcNode, srcNodeID, dstNode, dstNodeID);
+                }
+                break;
+        }
+    }
+}
 
 Node* NodeManager::getNode(uint16_t id) {
     auto it = ids.find(id);

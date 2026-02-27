@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <SDL3/SDL.h>
 #include "SDL3_gfx/SDL3_gfxPrimitives.h"
+#include "nodes/nodetype.h"
 
 #define TEX_W 1920
 #define TEX_H 1080
@@ -31,7 +32,9 @@ struct connectionSet{
 
 class Node {
     public:
-        Node(uint16_t);
+        NodeType nodeType = NodeType::Count;
+
+        Node(uint16_t, NodeType);
         virtual ~Node();
 
         uint16_t id;
@@ -90,4 +93,7 @@ class Node {
 
         bool handleInput(SDL_Event&);
         void clickMouse(SDL_Event&);
+
+        json serialize();
+        static Node* deSerialize(json);
 }; 

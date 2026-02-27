@@ -3,7 +3,7 @@
 #include <iostream>
 #include "AudioManager.h"
 
-OscillatorNode::OscillatorNode(uint16_t id) : Node(id) {
+OscillatorNode::OscillatorNode(uint16_t id) : Node(id, NodeType::Oscillator) {
     output0 = new Connection;
     output0->type = DataType::Waveform;
     output0->dir = Direction::output;
@@ -109,6 +109,10 @@ void OscillatorNode::process() {
 }
 
 void OscillatorNode::setup() {
+    for (int i = 0; i < NUM_VOICES; ++i) {
+        auto& voice = voices[i];
+        voice.update();
+    }
 }
 
 void Voice::process(float* out0, float* out1, int& bufferSize, int& sampleRate) {

@@ -5,14 +5,6 @@
 #include "nodes/merger/merger.h"
 #include "nodes/splitter/splitter.h"
 
-enum NodeType {
-    Oscillator,
-    Merger,
-    Splitter,
-    Delay,
-    Count // for iteration
-};
-
 inline std::string NodeTypeStr[] = {
     "Oscillator",
     "Merger",
