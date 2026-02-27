@@ -30,6 +30,8 @@ void NodeManager::makeNodeConnection(
         Node* source, uint16_t outputID,
         Node* dst, uint16_t inputID
 ) {
+    if (source->depends(dst)) return; // prevent circular dependency
+
     Connection* srcCon = source->outputs.getConnection(inputID); 
     Connection* dstCon = dst->inputs.getConnection(inputID);
     
@@ -135,4 +137,5 @@ void NodeManager::process(float* output, int& bufferSize, int& numChannels, int&
    
     outNode.output = output;
     outNode.processTree();
+    outNode.resetProcessTree();
 }

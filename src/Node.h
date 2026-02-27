@@ -48,7 +48,11 @@ class Node {
         EventBus* getEvents(void*);
         WaveformBus* getWaveform(void*);
 
+        bool depends(Node*); // check if this node has another node as an input somewhere down the tree
         void processTree();
+        bool isProcessed = false;
+        void resetProcessTree();
+
         virtual void process() = 0;
 
         SDL_FRect dstRect;

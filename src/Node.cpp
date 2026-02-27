@@ -368,8 +368,15 @@ WaveformBus* Node::getWaveform(void* data){
     return static_cast<WaveformBus*>(data);
 }
 
-void Node::processTree() {
+bool Node::depends(Node* d) {
+    for (Connection * c : inputs.connections)
+        if (Node* n = getNodeInput(c))
+            if (n == d || n->depends(d)) return true;
+    return false;
+}
 
+void Node::processTree() {
+    if (isProcessed) return;
     // process prerequisites
     for (Connection * c : inputs.connections) {
         Node* n = getNodeInput(c);
@@ -378,4 +385,17 @@ void Node::processTree() {
 
     // process final
     process();
+    isProcessed = true;
 }
+
+void Node::resetProcessTree() {
+    if (!isProcessed) return;
+
+    for (Connection * c : inputs.connections) {
+        Node* n = getNodeInput(c);
+        if (n) n->resetProcessTree();
+    }
+
+    isProcessed = false;
+}
+
