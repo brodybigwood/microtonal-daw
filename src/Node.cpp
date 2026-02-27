@@ -13,7 +13,9 @@ Node::Node(uint16_t id) :
 }
 
 Node::~Node() {
-    SDL_DestroyTexture(texture);
+    if (texture) SDL_DestroyTexture(texture);
+    if (vx) delete[] vx;
+    if (vy) delete[] vy;
 }
 
 connectionSet::~connectionSet() {
