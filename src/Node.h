@@ -5,6 +5,10 @@
 #include "idManager.h"
 #include <unordered_map>
 #include <SDL3/SDL.h>
+#include "SDL3_gfx/SDL3_gfxPrimitives.h"
+
+#define TEX_W 1920
+#define TEX_H 1080
 
 struct sourceNode{
     ConnectionType type;
@@ -47,8 +51,23 @@ class Node {
         void processTree();
         virtual void process() = 0;
 
-        SDL_FRect dstRect{0,0,50,50};
-        void move(float& x, float& y);
+        SDL_FRect dstRect;
+
+        bool moving = false;
+        void move(float, float);
+        void resize(float, float);
+
+        // bounding polygon (for gui)
+        float* vx = nullptr; 
+        float* vy = nullptr;
+        // fixed size, no position
+        size_t vCount = 0;
+
+        float zoomRatio = 50.0f / TEX_H; // 50px for every TEX_H texture pixels, so 50px height default
+
+        SDL_Texture* texture = nullptr;
+        void renderContentHelper(SDL_Renderer*);
+        virtual void renderContent(SDL_Renderer*);
 
         void render(SDL_Renderer*);
 
@@ -59,14 +78,12 @@ class Node {
 
         void update(int, int);
 
-        float mouseX;
-        float mouseY;
+        float& mouseX;
+        float& mouseY;
 
         int hoveredConnection;
         Direction hoveredDirection;
 
-        void handleInput(SDL_Event&);
-
-       void renderConnection(SDL_Renderer*, uint16_t);
-
+        bool handleInput(SDL_Event&);
+        void clickMouse(SDL_Event&);
 }; 

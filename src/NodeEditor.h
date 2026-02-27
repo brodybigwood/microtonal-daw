@@ -19,6 +19,14 @@ class NodeEditor {
 
         uint32_t getWindowID();
 
+        float mouseX = 0;
+        float mouseY = 0;
+    
+        void setDstConn(Node*, int);
+        void setSrcConn(Node*, int);
+        void setMovingNode(Node*);
+        void releaseMovingNode();
+
     private:
         SDL_Window* window;
         SDL_Renderer* renderer;
@@ -32,9 +40,6 @@ class NodeEditor {
 
         float topMargin = 20.0f;
         float leftMargin = 0.0f;
-
-        float mouseX = 0;
-        float mouseY = 0;
 
         uint32_t lastLeftClick;
 
@@ -56,6 +61,7 @@ class NodeEditor {
 
         Bus* srcBus = nullptr;
 
+        void makeConnection();
         void renderConnector(SDL_Renderer*);
 
         void hover();
@@ -64,4 +70,8 @@ class NodeEditor {
         bool inside(float&, float&, SDL_FRect*);
 
         std::shared_ptr<TreeEntry> getClickMenu();
+
+        Node* movingNode = nullptr;
+        float moveOffX;
+        float moveOffY;
 };

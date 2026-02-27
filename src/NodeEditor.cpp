@@ -3,6 +3,58 @@
 #include "NodeManager.h"
 #include "Node.h"
 #include "ContextMenu.h"
+#include <iostream>
+
+void NodeEditor::setMovingNode(Node* node) {
+    releaseMovingNode();
+    movingNode = node;
+    node->moving = true;
+    moveOffX = mouseX - node->dstRect.x;
+    moveOffY = mouseY - node->dstRect.y;
+}
+
+void NodeEditor::releaseMovingNode() {
+    if (!movingNode) return;
+    movingNode->moving = false;
+    movingNode = nullptr;
+}
+
+void NodeEditor::setDstConn(Node* node, int id) {
+    dstNodeID = id;
+    dstNode = node;
+
+    makeConnection();
+}
+
+void NodeEditor::setSrcConn(Node* node, int id) {
+    srcNodeID = id;
+    srcNode = node;
+
+    makeConnection();
+}
+
+void NodeEditor::makeConnection() {
+    // srcNodeID & dstNodeID are the connection/io ids, not node identifiers
+    if(srcNode != nullptr && dstNode != nullptr
+            && srcNodeID != -1 && dstNodeID != -1 ) {
+        NodeManager* nm = NodeManager::get();
+        nm->makeNodeConnection(
+                srcNode, srcNodeID,
+                dstNode, dstNodeID );
+        std::cout << "made connection here" << std::endl;
+        srcNode = nullptr;
+        srcNodeID = -1;
+        dstNode = nullptr;
+        dstNodeID = -1;
+    } else if (srcBus != nullptr && dstNode != nullptr
+            && dstNodeID != -1) { // bus does not need connection id (only has one output)
+        NodeManager* nm = NodeManager::get();
+        nm->makeBusConnection(srcBus, dstNode, dstNodeID);
+        srcBus = nullptr;
+        dstNode = nullptr;
+        dstNodeID = -1;
+    }
+}
 
 NodeEditor::NodeEditor() {
 
@@ -80,21 +132,17 @@ void NodeEditor::renderConnector(SDL_Renderer* renderer) {
     int x;
     int y;
 
-    BusManager* bm = BusManager::get();
-
     if (dstNode != nullptr) {
         if (dstNodeID != -1) {
-            auto rect = dstNode->dstRect;
-            auto index = dstNode->inputs.getIndex(dstNodeID);
-            x = rect.x + 5.0f + 10.0f * index;
-            y = rect.y + 5.0f; 
+            auto rect = dstNode->inputs.getConnection(dstNodeID)->rect;
+            x = rect.x + rect.w/2.0f;
+            y = rect.y + rect.h/2.0f; 
         }
     } else if (srcNode != nullptr) {
         if (srcNodeID != -1) {
-            auto rect = srcNode->dstRect;
-            auto index = srcNode->outputs.getIndex(srcNodeID);
-            x = rect.x + 5.0f + 10.0f * index;
-            y = rect.y + rect.h - 5.0f;
+            auto rect = srcNode->outputs.getConnection(srcNodeID)->rect;
+            x = rect.x + rect.w/2.0f;
+            y = rect.y + rect.h/2.0f;        
         }
     } else if (srcBus != nullptr) {
         auto rect = srcBus->dstRect;
@@ -124,9 +172,20 @@ uint32_t NodeEditor::getWindowID() {
 }
 
 void NodeEditor::handleInput(SDL_Event& e) {
+    switch (e.type) {
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+            releaseMovingNode();
+            break;
+        default:
+            break;
+    }
+    moveMouse();
+    if (NodeManager::get()->outNode.handleInput(e)) return;
+    for (auto n : NodeManager::get()->getNodes()) {
+        if (n->handleInput(e)) return;
+    }
     switch(e.type) {
         case SDL_EVENT_MOUSE_MOTION:
-            moveMouse();
             break;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             clickMouse(e);
@@ -136,11 +195,12 @@ void NodeEditor::handleInput(SDL_Event& e) {
         default:
             break;
     }
-    if(hoveredNode != nullptr) hoveredNode->handleInput(e);
 }
 
 void NodeEditor::moveMouse() {
     SDL_GetMouseState(&mouseX, &mouseY);
+    
+    if (movingNode) movingNode->move(mouseX - moveOffX, mouseY - moveOffY);
     hover();
 }
 
@@ -156,24 +216,6 @@ bool NodeEditor::inside(float& mouseX, float& mouseY, SDL_FRect* rect) {
 void NodeEditor::hover() {
 
     bool found_hovered = false;
-
-    for(auto node : NodeManager::get()->getNodes()) {
-        SDL_FRect* rect = &(node->dstRect);
-        if( inside(mouseX, mouseY, rect) ) {
-            hoveredNode = node;
-            found_hovered = true;
-            break;
-        }
-    }
-
-    if(inside(mouseX, mouseY, &(NodeManager::get()->outNode.dstRect))) {
-        hoveredNode = &(NodeManager::get()->outNode);
-        found_hovered = true;
-    }
-
-    if(!found_hovered) hoveredNode = nullptr;
-    found_hovered = false;
-
 
     for(int i = 0; i < BusManager::get()->busCount; i++) {
         auto* bus = BusManager::get()->getBusE(i);
@@ -214,57 +256,13 @@ void NodeEditor::clickMouse(SDL_Event& e) {
             return;
         }
     
-        bool selected_connector = false;
-    
-        if(hoveredBus != nullptr) {
-            srcBus = hoveredBus;
-            selected_connector = true;
-        }
-    
-        if(hoveredNode != nullptr && hoveredNode->hoveredConnection != -1) {
-            switch(hoveredNode->hoveredDirection) {
-                case Direction::input:
-                    dstNode = hoveredNode;
-                    dstNodeID = hoveredNode->hoveredConnection;
-                    break;
-                case Direction::output:
-                    srcNode = hoveredNode;
-                    srcNodeID = hoveredNode->hoveredConnection;
-                    srcBus = nullptr;
-                    break;
-                default:
-                    break;
-            }
-    
-            selected_connector = true;
-        }
-    
-        // srcNodeID & dstNodeID are the connection/io ids, not node identifiers
-        if(srcNode != nullptr && dstNode != nullptr
-                && srcNodeID != -1 && dstNodeID != -1 ) {
-            NodeManager* nm = NodeManager::get();
-            nm->makeNodeConnection(
-                    srcNode, srcNodeID,
-                    dstNode, dstNodeID );
-    
-            srcNode = nullptr;
-            srcNodeID = -1;
-            dstNode = nullptr;
-            dstNodeID = -1;
-        } else if (srcBus != nullptr && dstNode != nullptr
-                && dstNodeID != -1) { // bus does not need connection id (only has one output)
-            NodeManager* nm = NodeManager::get();
-            nm->makeBusConnection(srcBus, dstNode, dstNodeID);
-            srcBus = nullptr;
-            dstNode = nullptr;
-            dstNodeID = -1;
-        } else if (!selected_connector) {
-            srcNode = nullptr;
-            srcNodeID = -1;
-            dstNode = nullptr;
-            dstNodeID = -1;
-            srcBus = nullptr;
-        }
+        srcBus = hoveredBus;
+        makeConnection();
+        srcNodeID = -1;
+        dstNodeID = -1;
+        srcNode = nullptr;
+        dstNode = nullptr;
+
     } else if (e.button.button == SDL_BUTTON_RIGHT) {
         auto* ctxMenu = ContextMenu::get();
         ctxMenu->active = true;

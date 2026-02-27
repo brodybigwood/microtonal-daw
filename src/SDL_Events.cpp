@@ -82,3 +82,22 @@ bool MouseOn(SDL_FRect* rect) {
         mouseY < rect->y + rect->h
     ;
 }
+
+bool inPolygon(float* vx, float* vy, size_t vCount, float mouseX, float mouseY) {
+    bool inside = false;
+
+    for (int i = 0, j = vCount - 1; i < vCount; j = i++)
+    {
+        float xi = vx[i], yi = vy[i];
+        float xj = vx[j], yj = vy[j];
+
+        bool intersect =
+            ((yi > mouseY) != (yj > mouseY)) &&
+            (mouseX < (xj - xi) * (mouseY - yi) / (yj - yi) + xi);
+
+        if (intersect)
+            inside = !inside;
+    }
+
+    return inside;
+}

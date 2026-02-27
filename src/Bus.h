@@ -40,7 +40,9 @@ struct Connection{
     uint16_t id;
     Direction dir;
 
+    void render(SDL_Renderer*, bool);
     SDL_FRect srcRect();
+    SDL_FRect rect;
     void* data = nullptr;
 };
 

@@ -1,15 +1,14 @@
 #include "OutputNode.h"
 #include <iostream>
 OutputNode::OutputNode() : Node(0) {
-    dstRect.x = 50.0f;
-    dstRect.y = 50.0f;
-
     for(int i = 0; i < 4; i++) {
         Connection* c = new Connection;
         c->type = DataType::Waveform;
         c->dir = Direction::input;
         inputs.addConnection(c);
     }
+
+    move(50, 50);
 }
 
 void OutputNode::process() {

@@ -2,10 +2,19 @@
 #include "NodeManager.h"
 #include "BusManager.h"
 #include "NodeEditor.h"
+#include "SDL_Events.h"
+#include <iostream>
 
-Node::Node(uint16_t id) : id(id) {}
+Node::Node(uint16_t id) : 
+    id(id),
+    mouseX(NodeEditor::get()->mouseX),
+    mouseY(NodeEditor::get()->mouseY) {
 
-Node::~Node() {}
+}
+
+Node::~Node() {
+    SDL_DestroyTexture(texture);
+}
 
 connectionSet::~connectionSet() {
     for (auto c : connections) {
@@ -23,13 +32,73 @@ void* Node::getOutput(Connection* con) {
     return con->data;
 }
 
-void Node::handleInput(SDL_Event& e) {
-    switch(e.type) {
-        case SDL_EVENT_MOUSE_MOTION:
-            SDL_GetMouseState(&mouseX, &mouseY);
-            break;
-        default:
-            break;
+bool Node::handleInput(SDL_Event& e) {
+    bool handled = false;
+
+    float x = (mouseX - dstRect.x) / zoomRatio;
+    float y = (mouseY - dstRect.y) / zoomRatio;
+
+    if (inPolygon(vx, vy, vCount, x, y)) {
+        handled = true;
+    } else {
+        bool hoverFound = false;
+
+        // check if the mouse is hovering over any of the connectors           
+
+        for (auto conn : inputs.connections) {
+            if (MouseOn(&conn->rect)) {
+                hoverFound = true;
+                hoveredConnection = conn->id;
+                hoveredDirection = Direction::input;
+                break;
+            }
+        }
+
+        if (!hoverFound) {
+            for (auto conn : outputs.connections) {
+                if (MouseOn(&conn->rect)) {
+                    hoverFound = true;
+                    hoveredConnection = conn->id;
+                    hoveredDirection = Direction::output;
+                    break;
+                }
+            }
+        }
+
+        if (hoverFound) {
+            handled = true;
+        } else {
+            hoveredConnection = -1;
+        }
+    }
+    
+    if (handled) {
+        switch (e.type) {
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+                clickMouse(e);
+                break;
+            default:
+                break;
+        }
+    }
+
+    return handled;
+}
+
+void Node::clickMouse(SDL_Event& e) {
+    if (e.button.button == SDL_BUTTON_LEFT) {
+        auto ne = NodeEditor::get();
+        ne->setMovingNode(this);
+        if (hoveredConnection != -1) {
+            switch (hoveredDirection) {
+                case Direction::input:
+                    ne->setDstConn(this, hoveredConnection);
+                    break;
+                case Direction::output:
+                    ne->setSrcConn(this, hoveredConnection);
+                    break;
+            }    
+        }
     }
 }
 
@@ -119,9 +188,50 @@ void connectionSet::addConnection(Connection* c) {
             
 }
 
-void Node::move(float& x, float& y) {
+void Node::resize(float rx, float ry) {
+
+    float new_w = dstRect.w + rx;
+    float new_h = dstRect.h + ry;
+
+    if (new_w > new_h) {
+        zoomRatio = new_w / TEX_W;
+    } else {
+        zoomRatio = new_h / TEX_H;
+    } 
+
+    if (zoomRatio < 0.05) zoomRatio = 0.05;
+
+    dstRect.w = TEX_W * zoomRatio;
+    dstRect.h = TEX_H * zoomRatio;
+
+    float dy = 2;
+    float w = 10; 
+    float h = 10; 
+
+    SDL_FRect connRect{
+        dstRect.x + dstRect.w / 2 - inputs.connections.size() * w/2, dstRect.y - h - dy,
+        w, h
+    };
+
+    for (auto conn: inputs.connections) {
+        conn->rect = connRect;
+        connRect.x += w;
+    }
+
+    connRect.x = dstRect.x + dstRect.w / 2 - outputs.connections.size() * w/2,
+    connRect.y = dstRect.y + dstRect.h + dy;
+
+    for (auto conn : outputs.connections) {
+        conn->rect = connRect;
+        connRect.x += w;
+    }
+
+}
+
+void Node::move(float x, float y) {
     dstRect.x = x;
     dstRect.y = y;
+    resize(0, 0);
 }
 
 SDL_FRect Connection::srcRect() {
@@ -136,15 +246,9 @@ SDL_FRect Connection::srcRect() {
                 Node* n = NodeManager::get()->getNode(s->source_id);
 
                 connectionSet& outputs = n->outputs;
-                uint16_t index = outputs.getIndex(id);
+                auto conn = outputs.getConnection(id);
 
-                rect.w = 10.0f; 
-                rect.h = 10.0f;
-
-                rect.x = n->dstRect.x + rect.w * index;
-                rect.y = n->dstRect.y + n->dstRect.h - rect.h;
-
-                break;
+                return conn->rect;
             }
         case bus: {
                 auto bm = BusManager::get();
@@ -172,92 +276,70 @@ SDL_FRect Connection::srcRect() {
     return rect;
 }
 
-void Node::renderConnection(SDL_Renderer* renderer, uint16_t id) {
-    Connection* c = inputs.getConnection(id);
-    auto src = c->srcRect();
+void Node::renderContent(SDL_Renderer* renderer) {
+    if (!vCount) {
+        vCount = 4;
+        vx = new float[vCount];
+        vy = new float[vCount];
 
-    uint16_t index = inputs.getIndex(id);
+        vx[0] = 0;
+        vx[1] = 1920;
+        vx[2] = 1620;
+        vx[3] = 300;
 
-    float x = dstRect.x + 10.0f * index + 5.0f; 
-    float y = dstRect.y + 5.0f;
-    SDL_RenderLine(renderer, x, y, src.x+src.w/2.0f, src.y+src.h/2.0f);
+        vy[0] = 0;
+        vy[1] = 0;
+        vy[2] = 1080;
+        vy[3] = 1080;
+    }
+
+    filledPolygonRGBA(renderer, vx, vy, vCount, 255, 255, 255, 255);
+    aapolygonRGBA(renderer, vx, vy, vCount, 0, 0, 0, 255);
+}
+
+void Node::renderContentHelper(SDL_Renderer* renderer) {
+    auto target = SDL_GetRenderTarget(renderer);
+    SDL_SetRenderTarget(renderer, texture);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+    SDL_RenderClear(renderer);
+    renderContent(renderer);
+    SDL_SetRenderTarget(renderer, target);
+    SDL_FRect tRect{0,0,TEX_W,TEX_H};
+    SDL_RenderTexture(renderer, texture, &tRect, &dstRect);
 }
 
 void Node::render(SDL_Renderer* renderer) {
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    SDL_RenderFillRect(renderer, &dstRect);
-    SDL_SetRenderDrawColor(renderer, 120, 120, 120, 255);
-    SDL_RenderRect(renderer, &dstRect);
+
+    if (!texture) {
+        texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, TEX_W, TEX_H);
+    }
+
+    renderContentHelper(renderer);
 
     bool hoverFound = false;
 
-    int numInputs = inputs.connections.size();
-    if(numInputs > 0) {
-        float w = dstRect.w / numInputs;
-        SDL_FRect inputRect{
-            dstRect.x, dstRect.y,
-            10, 10
-        };
-        for(auto input: inputs.connections) {
-            if( inside(mouseX, mouseY, &inputRect) ) {
-                hoveredConnection = input->id;
-                hoveredDirection = Direction::input;
-                hoverFound = true;
-            }
-            switch (input->type) {
-                case DataType::Events:
-                    SDL_SetRenderDrawColor(renderer, 120,255,120,255);
-                    break;
-                case DataType::Waveform:
-                    SDL_SetRenderDrawColor(renderer, 255,120,120,255);
-                    break;
-            }
-            SDL_RenderFillRect(renderer, &inputRect);
-            SDL_SetRenderDrawColor(renderer, 120,120,120,255);
-            SDL_RenderRect(renderer, &inputRect);
-            inputRect.x += w;
-        }
+    for(auto conn : inputs.connections) conn->render(renderer, conn->id == hoveredConnection);
+    for(auto conn : outputs.connections) conn->render(renderer, conn->id == hoveredConnection);
+}
+
+void Connection::render(SDL_Renderer* renderer, bool hover) {
+    switch (type) {
+        case DataType::Events:
+            SDL_SetRenderDrawColor(renderer, 120,255,120,255);
+            break;
+        case DataType::Waveform:
+            SDL_SetRenderDrawColor(renderer, 255,120,120,255);
+            break;        
     }
 
+    SDL_RenderFillRect(renderer, &rect);
+    SDL_SetRenderDrawColor(renderer, 120,120,120,255);
+    SDL_RenderRect(renderer, &rect);
 
-
-    int numOutputs = outputs.connections.size();
-    if(numOutputs > 0) {
-        float w = dstRect.w / (numOutputs + 1.0f);
-        SDL_FRect outputRect{
-            dstRect.x, dstRect.y+dstRect.h - 10.0f,
-            10, 10
-        };
-        for(auto output: outputs.connections) {
-            if( inside(mouseX, mouseY, &outputRect) ) {
-                hoveredConnection = output->id;
-                hoveredDirection = Direction::output;
-                hoverFound = true;
-            }
-
-            switch (output->type) {
-                case DataType::Events:
-                    SDL_SetRenderDrawColor(renderer, 120,255,120,255);
-                    break;
-                case DataType::Waveform:
-                    SDL_SetRenderDrawColor(renderer, 255,120,120,255);
-                    break;
-            }
-            SDL_RenderFillRect(renderer, &outputRect);
-            SDL_SetRenderDrawColor(renderer, 120,120,120,255);
-            SDL_RenderRect(renderer, &outputRect);
-            outputRect.x += w;
-        }
-    }
-
-    if(!hoverFound) hoveredConnection = -1;
-
+    if (!is_connected || dir == Direction::output) return;
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    for(auto c : inputs.connections) {
-        if(c->is_connected) {
-            renderConnection(renderer, c->id);
-        }
-    }
+    auto src = srcRect();
+    SDL_RenderLine(renderer, rect.x+rect.w/2.0f, rect.y+rect.h/2.0f, src.x+src.w/2.0f, src.y+src.h/2.0f);
 }
 
 void Node::setup() {}
