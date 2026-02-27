@@ -15,8 +15,6 @@ void ContextMenu::tick(SDL_Event& e) {
         active = false;
         return;
     }
-    
-    SDL_RenderPresent(renderer);
 }
 
 std::function<bool(SDL_Event& e)> getTextInputTicker(std::function<void(std::string text)> enter)
@@ -42,8 +40,6 @@ return [enter](SDL_Event& e) {
    if(e.type == SDL_EVENT_TEXT_INPUT) {
         new_text += e.text.text;
     }
-        std::cout<<new_text<<std::endl;
-
 
     if (e.type == SDL_EVENT_KEY_DOWN) {
         if (e.key.key == SDLK_BACKSPACE && !text.empty()) {
@@ -63,7 +59,6 @@ return [enter](SDL_Event& e) {
         e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_RETURN
         )
         ) {
-        std::cout<<"RETURN"<<std::endl;
 
         enter(text);
 

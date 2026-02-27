@@ -46,6 +46,7 @@ class Home {
         SDL_Renderer* renderer;
 
         void render();
+        void renderPresent();
 
         bool handleInput(SDL_Event& e);
 

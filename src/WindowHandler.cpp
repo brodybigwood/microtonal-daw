@@ -54,39 +54,12 @@ bool WindowHandler::tick() {
         lastTime = double(SDL_GetTicks())-frameTime;
 
         if (ctxMenu->active) home->render(); // need to render behind ctxmenu first
-
-        static SDL_Event motion;
-        if (motion.type != 0) {
-            if (ctxMenu->active) ctxMenu->tick(motion);
-            else if (!home->handleInput(motion)) return false;
-        }
-        SDL_zero(motion);
-
+        bool eventHandled = false;
+ 
         SDL_Event e;
         while(SDL_PollEvent(&e)) {
-            if (e.type == SDL_EVENT_MOUSE_MOTION) {
-                if (motion.type == 0) { //
-                    motion.type = SDL_EVENT_MOUSE_MOTION;
-                    motion.motion.windowID = e.motion.windowID; // the accumulated motion will be for this window
-                }
-                if (motion.motion.windowID == e.motion.windowID) { // if the new event is for the accumulated event's window, accumulate it
-                    motion.motion.xrel += e.motion.xrel;
-                    motion.motion.yrel += e.motion.yrel;
-                } else { // if not, handle the accumulated motion for the previous window and then reset it
-                    if (ctxMenu->active) ctxMenu->tick(motion);
-                    else if (!home->handleInput(motion)) return false;
-                    SDL_zero(motion);
-                    motion.type = SDL_EVENT_MOUSE_MOTION; // accumulate the motion for the new window 
-                    motion.motion.windowID = e.motion.windowID;
-                    motion.motion.xrel += e.motion.xrel;
-                    motion.motion.yrel += e.motion.yrel;
-                }
-                continue; // e already saved or handled
-            } else if (motion.type != 0) { // if there is a non motion event but there is previous motion, handle the previous motion first
-                if (ctxMenu->active) ctxMenu->tick(motion);
-                else if (!home->handleInput(motion)) return false;
-                SDL_zero(motion);
-            }
+            eventHandled = true;
+
             if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
                 SDL_Window* clickedWindow = SDL_GetWindowFromID(e.button.windowID);
                 if (clickedWindow) {
@@ -101,9 +74,16 @@ bool WindowHandler::tick() {
             if (ctxMenu->active) ctxMenu->tick(e);
             else if (!home->handleInput(e)) return false;
         }
+
+        if (!eventHandled && ctxMenu->active) { // home was already rendered, but ctxMenu hasn't rendered yet. so render on top by triggering with fake event
+            e.type = SDL_EVENT_USER;
+            e.window.windowID = ctxMenu->window_id;
+            ctxMenu->tick(e);
+        } else if (!ctxMenu->active) {
+            home->render();
+        }
         
-        if (!ctxMenu->active) home->render(); // render on top if ctxmenu not open
-        SDL_RenderPresent(renderer);
+        home->renderPresent();
     }
     return true;
 

@@ -60,6 +60,13 @@ void Home::render() {
     NodeEditor::get()->tick();
 }
 
+void Home::renderPresent() {
+    SDL_RenderPresent(renderer);
+    if (pianoRoll && pianoRollDetached) SDL_RenderPresent(pianoRoll->renderer);
+    if (song && songRollDetached) SDL_RenderPresent(song->renderer);
+    NodeEditor::get()->renderPresent();
+}
+
 bool Home::sendInput(SDL_Event& e) {
     if (pianoRoll && !pianoRollDetached && mouseOn(&pianoRollRect)) {
         pianoRoll->handleInput(e);

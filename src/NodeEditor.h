@@ -18,6 +18,7 @@ class NodeEditor {
         void handleInput(SDL_Event&);
 
         uint32_t getWindowID();
+        void renderPresent();
 
         float mouseX = 0;
         float mouseY = 0;

@@ -29,6 +29,8 @@ bool isEventForWindow(const SDL_Event& e, uint32_t windowID) {
         case SDL_EVENT_DROP_FILE:
         case SDL_EVENT_DROP_POSITION:
             return e.drop.windowID == windowID;
+        case SDL_EVENT_USER:
+            return e.window.windowID == windowID;
         default:
             return false;
     }

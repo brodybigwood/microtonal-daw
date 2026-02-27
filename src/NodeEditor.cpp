@@ -161,9 +161,10 @@ void NodeEditor::tick() {
     render(renderer, &nodeRect);
 
     renderConnector(renderer);
+}
 
+void NodeEditor::renderPresent() {
     SDL_RenderPresent(renderer);
-
 }
 
 uint32_t NodeEditor::getWindowID() {

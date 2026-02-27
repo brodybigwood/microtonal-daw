@@ -70,9 +70,6 @@ bool GridView::tick() {
 
     moveMouse();
     customTick();
-    if(*detached){
-        SDL_RenderPresent(renderer);
-    }
     return true;
 }
 
