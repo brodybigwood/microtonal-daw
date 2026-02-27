@@ -41,7 +41,6 @@ void NodeEditor::makeConnection() {
         nm->makeNodeConnection(
                 srcNode, srcNodeID,
                 dstNode, dstNodeID );
-        std::cout << "made connection here" << std::endl;
         srcNode = nullptr;
         srcNodeID = -1;
         dstNode = nullptr;
