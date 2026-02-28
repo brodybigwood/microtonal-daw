@@ -37,6 +37,8 @@ return [enter](SDL_Event& e) {
 
     std::string new_text = text;
 
+    if (!MouseOn(&rect) && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) done = true;
+
    if(e.type == SDL_EVENT_TEXT_INPUT) {
         new_text += e.text.text;
     }
@@ -113,13 +115,17 @@ std::function<bool(SDL_Event& e)> getTreeMenuTicker(std::shared_ptr<TreeEntry> t
             if (c->textHeight > rect.h) rect.h = c->textHeight;
         }
 
+        bool mouseOn = false;
         for (auto c : t->children) {
-
+            bool clickedNow = false;
             if (MouseOn(&rect)) {
+                mouseOn = true;
+
                 SDL_SetRenderDrawColor(renderer, 250, 250, 250, 255);
 
                 switch (e.type) {
                     case SDL_EVENT_MOUSE_BUTTON_DOWN:
+                        clickedNow = true;
                         if (e.button.button == SDL_BUTTON_LEFT) {
                             if (c->isParent()) {
                                 c->isOpen = true;
@@ -143,11 +149,13 @@ std::function<bool(SDL_Event& e)> getTreeMenuTicker(std::shared_ptr<TreeEntry> t
             SDL_FRect textRect{rect.x + padding, rect.y, c->textWidth, c->textHeight};
             SDL_RenderTexture(renderer, c->labelTexture, nullptr, &textRect);
 
-            if (c->isOpen) if (!(*listTick)(e, c, rect.x + rect.w, rect.y, renderer)) return false;
+            if (c->isOpen && !clickedNow) if (!(*listTick)(e, c, rect.x + rect.w, rect.y, renderer)) return false;
 
             rect.y += rect.h;
         }
 
+        // exit the menu if clicked somewhere else
+        if (!mouseOn && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) return false;
         return true;
     };
     return [t,listTick] (SDL_Event& e)
