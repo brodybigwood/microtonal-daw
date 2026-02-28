@@ -36,6 +36,9 @@ Node* Node::deSerialize(json j) {
         case NodeType::Delay:
             n = new DelayNode(id);
             break;
+        case NodeType::Panner:
+            n = new PannerNode(id);
+            break;
     }
 
     n->name = j["name"];

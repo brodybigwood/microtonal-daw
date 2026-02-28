@@ -250,6 +250,12 @@ Node* NodeManager::addNode(NodeType t) {
         case NodeType::Splitter:
             n = new SplitterNode(id);
             break;
+        case NodeType::Delay:
+            n = new DelayNode(id);
+            break;
+        case NodeType::Panner:
+            n = new PannerNode(id);
+            break;
         default:
             break;
     }
