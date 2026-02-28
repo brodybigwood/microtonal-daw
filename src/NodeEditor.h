@@ -28,6 +28,9 @@ class NodeEditor {
         void setMovingNode(Node*);
         void releaseMovingNode();
 
+        bool& isAltPressed;
+        bool& isCtrlPressed;
+
     private:
         SDL_Window* window;
         SDL_Renderer* renderer;
@@ -35,6 +38,8 @@ class NodeEditor {
         SDL_FRect nodeRect;
 
         void renderInputs();
+
+        void zoom(float);
 
         int windowWidth = 800;
         int windowHeight = 600;

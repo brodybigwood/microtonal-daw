@@ -3,6 +3,7 @@
 #include "NodeManager.h"
 #include "Node.h"
 #include "ContextMenu.h"
+#include "WindowHandler.h"
 #include <iostream>
 
 void NodeEditor::setMovingNode(Node* node) {
@@ -55,7 +56,9 @@ void NodeEditor::makeConnection() {
     }
 }
 
-NodeEditor::NodeEditor() {
+NodeEditor::NodeEditor() :
+    isAltPressed(WindowHandler::instance()->isAltPressed),
+    isCtrlPressed(WindowHandler::instance()->isCtrlPressed) {
 
     window = SDL_CreateWindow("Node Editor",
         windowWidth, windowHeight, 0 
@@ -171,10 +174,17 @@ uint32_t NodeEditor::getWindowID() {
     return SDL_GetWindowID(window);
 }
 
+void NodeEditor::zoom(float amount) {
+    
+}
+
 void NodeEditor::handleInput(SDL_Event& e) {
     switch (e.type) {
         case SDL_EVENT_MOUSE_BUTTON_UP:
             releaseMovingNode();
+            break;
+        case SDL_EVENT_MOUSE_WHEEL:
+            zoom(std::pow(1.1, e.wheel.y));
             break;
         default:
             break;

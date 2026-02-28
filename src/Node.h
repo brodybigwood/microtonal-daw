@@ -63,6 +63,7 @@ class Node {
         bool moving = false;
         void move(float, float);
         void resize(float, float);
+        void zoom(float);
 
         // bounding polygon (for gui)
         float* vx = nullptr; 
@@ -87,6 +88,9 @@ class Node {
 
         float& mouseX;
         float& mouseY;
+
+        bool& isAltPressed;
+        bool& isCtrlPressed;
 
         int hoveredConnection;
         Direction hoveredDirection;

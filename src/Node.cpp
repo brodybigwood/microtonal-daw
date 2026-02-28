@@ -38,7 +38,10 @@ Node* Node::deSerialize(json j) {
     }
 
     n->name = j["name"];
+
     n->zoomRatio = j["zoomRatio"];
+    n->zoom(1.0f);
+
     n->move(j["x"], j["y"]);
 
     return n;
@@ -48,7 +51,9 @@ Node::Node(uint16_t id, NodeType nt) :
     id(id),
     nodeType(nt),
     mouseX(NodeEditor::get()->mouseX),
-    mouseY(NodeEditor::get()->mouseY) {
+    mouseY(NodeEditor::get()->mouseY),
+    isAltPressed(NodeEditor::get()->isAltPressed),
+    isCtrlPressed(NodeEditor::get()->isCtrlPressed) {
 
 }
 
@@ -118,6 +123,11 @@ bool Node::handleInput(SDL_Event& e) {
         switch (e.type) {
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
                 clickMouse(e);
+                break;
+            case SDL_EVENT_MOUSE_WHEEL:
+                if (isAltPressed) {
+                    zoom(std::pow(1.1, e.wheel.y));
+                }
                 break;
             default:
                 break;
@@ -240,6 +250,12 @@ void Node::resize(float rx, float ry) {
     } else {
         zoomRatio = new_h / TEX_H;
     } 
+
+    zoom(1.0f);
+}
+
+void Node::zoom(float amount) {
+    zoomRatio *= amount;
 
     if (zoomRatio < 0.05) zoomRatio = 0.05;
 
