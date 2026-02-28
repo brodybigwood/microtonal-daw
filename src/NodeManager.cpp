@@ -186,9 +186,6 @@ void NodeManager::makeBusConnection(Bus* source, Node* dst, uint16_t inputID) {
 }
 
 void NodeManager::severConnection(Connection* c) {
-
-    auto outputNode = getNode(c->output_node);
-
     if (!c->is_connected) return;
 
     Connection* dstCon;
@@ -221,7 +218,10 @@ void NodeManager::severConnection(Connection* c) {
         }
         case Direction::output: {
             srcCon = c;
-            dstCon = outputNode->inputs.getConnection(srcCon->output_connection);
+            Node* dstNode;
+            if (srcCon->output_node) dstNode = getNode(srcCon->output_node);
+            else dstNode = &outNode;
+            dstCon = dstNode->inputs.getConnection(srcCon->output_connection);
             delete static_cast<sourceNode*>(dstCon->data);
             dstCon->data = nullptr;
             break;
@@ -267,22 +267,23 @@ Node* NodeManager::addNode(NodeType t) {
     return n;
 }
 
-void NodeManager::removeNode(uint16_t id) {
-    auto it = ids.find(id);
-    if (it == ids.end()) return;
+void NodeManager::removeNode(Node* n) {
 
-    uint16_t index = it->second;
+    for (auto c : n->inputs.connections) severConnection(c);
+    for (auto c : n->outputs.connections) severConnection(c);
 
-    id_pool.releaseID(id);
+    id_pool.releaseID(n->id);
+    auto index = ids[n->id];
 
     if (index != nodes.size() - 1) {
         std::swap(nodes[index], nodes.back());
         ids[nodes[index]->id] = index;
     }
 
+    ids.erase(n->id);
+
     delete nodes.back();
     nodes.pop_back();
-    ids.erase(id);
 }
 
 void NodeManager::process(float* output, int& bufferSize, int& numChannels, int& sampleRate) {

@@ -22,7 +22,7 @@ class NodeManager {
 
         Node* getNode(uint16_t);
 
-        void removeNode(uint16_t);
+        void removeNode(Node*);
         Node* addNode(NodeType);
 
         void process(float*, int&, int&, int&);

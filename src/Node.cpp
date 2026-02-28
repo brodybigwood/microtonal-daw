@@ -157,13 +157,13 @@ void Node::clickMouse(SDL_Event& e) {
         }
     } else if (e.button.button == SDL_BUTTON_RIGHT) {
         auto ne = NodeEditor::get();
-        if (hoveredConnection != -1) {
-            auto* ctxMenu = ContextMenu::get();
-            ctxMenu->active = true;
 
-            ctxMenu->window_id = SDL_GetWindowID(ne->getWindow());
-            ctxMenu->renderer = ne->getRenderer();
-    
+        auto* ctxMenu = ContextMenu::get();
+        ctxMenu->active = true;
+        ctxMenu->window_id = SDL_GetWindowID(ne->getWindow());
+        ctxMenu->renderer = ne->getRenderer();
+
+        if (hoveredConnection != -1) {
             ctxMenu->locX = mouseX;
             ctxMenu->locY = mouseY;
     
@@ -180,8 +180,28 @@ void Node::clickMouse(SDL_Event& e) {
             auto t = getConnectionMenu(c);
     
             ctxMenu->dynamicTick = getTreeMenuTicker(t);
+        } else {
+            ctxMenu->locX = mouseX;
+            ctxMenu->locY = mouseY;
+        
+            auto t = getNodeMenu();
+            ctxMenu->dynamicTick = getTreeMenuTicker(t);
         }
     }
+}
+
+std::shared_ptr<TreeEntry> Node::getNodeMenu() {
+    auto t = uTreeEntry();
+    t->label = "Node Menu";
+
+    if (this->id) { // if there is no id then this is the output node which should not be deleted
+        auto remove = uTreeEntry();
+        remove->label = "Remove Node";
+        remove->click = [this] () { NodeManager::get()->removeNode(this); };
+        t->addChild(remove);
+    }
+
+    return t;
 }
 
 std::shared_ptr<TreeEntry> Node::getConnectionMenu(Connection* c) {

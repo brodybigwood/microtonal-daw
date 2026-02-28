@@ -107,6 +107,7 @@ class Node {
         void clickMouse(SDL_Event&);
 
         std::shared_ptr<TreeEntry> getConnectionMenu(Connection*);
+        std::shared_ptr<TreeEntry> getNodeMenu();
 
         json serialize();
         static Node* deSerialize(json);
