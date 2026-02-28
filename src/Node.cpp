@@ -473,6 +473,7 @@ WaveformBus* Node::getWaveform(void* data){
 }
 
 bool Node::depends(Node* d) {
+    if (d == this) return true;
     for (Connection * c : inputs.connections)
         if (Node* n = getNodeInput(c))
             if (n == d || n->depends(d)) return true;
