@@ -18,6 +18,8 @@ OscillatorNode::OscillatorNode(uint16_t id) : Node(id, NodeType::Oscillator) {
     inputN->type = DataType::Events;
     inputN->dir = Direction::input;
     inputs.addConnection(inputN);
+
+    params.push_back(&volume);
 }
 
 void OscillatorNode::process() {
@@ -104,7 +106,7 @@ void OscillatorNode::process() {
     for (int i = 0; i < NUM_VOICES; i++) {
         auto& voice = voices[i];
         if (!voice.active) continue;
-        voice.process(b0, b1, bufferSize, sampleRate);
+        voice.process(b0, b1, bufferSize, sampleRate, volume);
     }
 }
 
@@ -115,7 +117,7 @@ void OscillatorNode::setup() {
     }
 }
 
-void Voice::process(float* out0, float* out1, int& bufferSize, int& sampleRate) {
+void Voice::process(float* out0, float* out1, int& bufferSize, int& sampleRate, Parameter& volume) {
     for (int i = 0; i < bufferSize; i++) {
         if (wait_on > 0) {
             wait_on -=1;
@@ -129,7 +131,7 @@ void Voice::process(float* out0, float* out1, int& bufferSize, int& sampleRate) 
             return;
         }
 
-        float smp = sin(phase) * adsr[samplesPassed++];
+        float smp = sin(phase) * adsr[samplesPassed++] * volume[i];
 
         if (out0) out0[i] += smp;
         if (out1) out1[i] += smp;

@@ -16,7 +16,7 @@ struct Voice {
     float phase = 0;
     int wait_on = 0;
     int wait_off = -1;
-    void process (float* out0, float* out1, int& bufferSize, int& sampleRate); //stereo out
+    void process (float* out0, float* out1, int& bufferSize, int& sampleRate, Parameter& vol); //stereo out
 
     int samplesPassed = 0; // how many samples have passed since activation
 
@@ -44,4 +44,6 @@ class OscillatorNode : public Node {
 
         void setup() override;
         Voice voices[NUM_VOICES];
+
+        Parameter volume = Parameter(0.5, {860, 440, 200, 200});
 };

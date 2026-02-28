@@ -8,6 +8,7 @@
 #include "SDL3_gfx/SDL3_gfxPrimitives.h"
 #include "nodes/nodetype.h"
 #include "TreeEntry.h"
+#include "Parameter.h"
 
 #define TEX_W 1920
 #define TEX_H 1080
@@ -82,6 +83,9 @@ class Node {
         virtual void renderContent(SDL_Renderer*);
 
         void render(SDL_Renderer*);
+
+        std::vector<Parameter*> params;
+        void renderParams(SDL_Renderer*);
 
         int bufferSize;
         int sampleRate;

@@ -2,7 +2,6 @@
 #include <cmath>
 
 PannerNode::PannerNode(uint16_t id) : Node(id, NodeType::Panner) {
-
     in = new Connection;
     in->type = DataType::Waveform;
     in->dir = Direction::input;
@@ -17,6 +16,8 @@ PannerNode::PannerNode(uint16_t id) : Node(id, NodeType::Panner) {
     r->type = DataType::Waveform;
     r->dir = Direction::output;
     outputs.addConnection(r);
+
+    params.push_back(&pan);
 }
 
 void PannerNode::process() {
@@ -33,8 +34,6 @@ void PannerNode::process() {
     auto inBus = getWaveform(data);
     float* inBuffer = inBus->buffer;
 
-    float pan = 0.75;
-    
     auto getBufferOut = [this] (Connection* c) {
         void* data = getOutput(c);
         auto outBus = getWaveform(data);
@@ -45,7 +44,7 @@ void PannerNode::process() {
     auto outBufferR = getBufferOut(r);
 
     for (size_t i = 0; i < bufferSize; ++i) {
-        auto angle = pan * M_PI_2; // will use a buffer for per-sample pan in the future
+        auto angle = pan[i] * M_PI_2;
         outBufferL[i] = inBuffer[i] * cosf(angle);
         outBufferR[i] = inBuffer[i] * sinf(angle);
     }

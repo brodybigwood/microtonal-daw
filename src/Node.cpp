@@ -402,6 +402,8 @@ void Node::renderContent(SDL_Renderer* renderer) {
 
     filledPolygonRGBA(renderer, vx, vy, vCount, 255, 255, 255, 255);
     aapolygonRGBA(renderer, vx, vy, vCount, 0, 0, 0, 255);
+
+    renderParams(renderer);
 }
 
 void Node::renderContentHelper(SDL_Renderer* renderer) {
@@ -447,6 +449,10 @@ void Connection::render(SDL_Renderer* renderer, bool hover) {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     auto src = srcRect();
     SDL_RenderLine(renderer, rect.x+rect.w/2.0f, rect.y+rect.h/2.0f, src.x+src.w/2.0f, src.y+src.h/2.0f);
+}
+
+void Node::renderParams(SDL_Renderer* renderer) {
+    for (auto p : params) p->render(renderer);
 }
 
 void Node::setup() {}
