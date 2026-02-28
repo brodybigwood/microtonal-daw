@@ -44,6 +44,9 @@ struct Connection{
     SDL_FRect srcRect();
     SDL_FRect rect;
     void* data = nullptr;
+
+    int output_node = -1;
+    int output_connection = -1;
 };
 
 struct Bus {

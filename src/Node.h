@@ -7,6 +7,7 @@
 #include <SDL3/SDL.h>
 #include "SDL3_gfx/SDL3_gfxPrimitives.h"
 #include "nodes/nodetype.h"
+#include "TreeEntry.h"
 
 #define TEX_W 1920
 #define TEX_H 1080
@@ -28,6 +29,8 @@ struct connectionSet{
 
     void addConnection(Connection*);
     ~connectionSet();
+
+    int nodeID = -1;
 };
 
 class Node {
@@ -98,6 +101,8 @@ class Node {
 
         bool handleInput(SDL_Event&);
         void clickMouse(SDL_Event&);
+
+        std::shared_ptr<TreeEntry> getConnectionMenu(Connection*);
 
         json serialize();
         static Node* deSerialize(json);

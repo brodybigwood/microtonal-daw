@@ -32,6 +32,9 @@ class NodeEditor {
         bool& isAltPressed;
         bool& isCtrlPressed;
 
+        SDL_Window* getWindow() { return window; };
+        SDL_Renderer* getRenderer() { return renderer; };
+
     private:
         SDL_Window* window;
         SDL_Renderer* renderer;

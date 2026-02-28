@@ -3,6 +3,7 @@
 #include "BusManager.h"
 #include "NodeEditor.h"
 #include "SDL_Events.h"
+#include "ContextMenu.h"
 #include <iostream>
 
 json Node::serialize() {
@@ -53,7 +54,8 @@ Node::Node(uint16_t id, NodeType nt) :
     mouseY(NodeEditor::get()->mouseY),
     isAltPressed(NodeEditor::get()->isAltPressed),
     isCtrlPressed(NodeEditor::get()->isCtrlPressed) {
-
+    outputs.nodeID = id;
+    inputs.nodeID = id;
 }
 
 Node::~Node() {
@@ -150,7 +152,46 @@ void Node::clickMouse(SDL_Event& e) {
                     break;
             }    
         }
+    } else if (e.button.button == SDL_BUTTON_RIGHT) {
+        auto ne = NodeEditor::get();
+        if (hoveredConnection != -1) {
+            auto* ctxMenu = ContextMenu::get();
+            ctxMenu->active = true;
+
+            ctxMenu->window_id = SDL_GetWindowID(ne->getWindow());
+            ctxMenu->renderer = ne->getRenderer();
+    
+            ctxMenu->locX = mouseX;
+            ctxMenu->locY = mouseY;
+    
+            Connection* c;
+            switch (hoveredDirection) {
+                case Direction::input:
+                    c = inputs.getConnection(hoveredConnection);
+                    break;
+                case Direction::output:
+                    c = outputs.getConnection(hoveredConnection);
+                    break;
+            }
+
+            auto t = getConnectionMenu(c);
+    
+            ctxMenu->dynamicTick = getTreeMenuTicker(t);
+        }
     }
+}
+
+std::shared_ptr<TreeEntry> Node::getConnectionMenu(Connection* c) {
+    auto t = uTreeEntry();
+    t->label = "Connection Menu";
+
+    auto sever = uTreeEntry();
+    sever->label = "Sever Connection";
+    sever->click = [c]() {NodeManager::get()->severConnection(c); };
+
+    t->addChild(sever);
+
+    return t;
 }
 
 bool inside(float& mouseX, float& mouseY, SDL_FRect* rect) {
@@ -225,6 +266,7 @@ Connection* connectionSet::getConnection(uint16_t id) {
 }
 
 void connectionSet::addConnection(Connection* c) {
+    if (c->dir == Direction::input) c->output_node = nodeID;
     c->id = id_pool.newID();
     connections.push_back(c);
     ids[c->id] = connections.size() -1;

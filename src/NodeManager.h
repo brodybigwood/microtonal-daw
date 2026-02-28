@@ -35,6 +35,8 @@ class NodeManager {
                 ); 
         void makeBusConnection(Bus*, Node*, uint16_t);
 
+        void severConnection(Connection*);
+
         std::vector<Node*>& getNodes();
 
         OutputNode outNode;

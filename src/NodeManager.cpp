@@ -156,6 +156,9 @@ void NodeManager::makeNodeConnection(
 
     dstCon->data = s;
 
+    srcCon->output_node = dst->id;
+    srcCon->output_connection = dstCon->id;
+
     srcCon->is_connected = true;
     dstCon->is_connected = true;
 }
@@ -173,10 +176,63 @@ void NodeManager::makeBusConnection(Bus* source, Node* dst, uint16_t inputID) {
     
     dstCon->data = s;
     
+    srcCon->output_node = dst->id;
+    srcCon->output_connection = dstCon->id;
+
     srcCon->is_connected = true;
     dstCon->is_connected = true;
 
     std::cout << "connected bus " << source->id << " to node." << std::endl;
+}
+
+void NodeManager::severConnection(Connection* c) {
+
+    auto outputNode = getNode(c->output_node);
+
+    if (!c->is_connected) return;
+
+    Connection* dstCon;
+    Connection* srcCon;
+
+    switch (c->dir) {
+        case Direction::input: {
+            dstCon = c;
+            auto s = static_cast<sourceNode*>(c->data);
+            switch (s->type) {
+                case ConnectionType::bus: {
+                    auto bm = BusManager::get();
+                    switch (c->type) {
+                        case DataType::Events:
+                            srcCon = &(bm->getBusE(s->source_id)->output);
+                            break;
+                        case DataType::Waveform:
+                            srcCon = &(bm->getBusW(s->source_id)->output);
+                            break;
+                    }
+                    break;
+                }
+                case ConnectionType::node:
+                    srcCon = getNode(s->source_id)->outputs.getConnection(s->output_id);
+                    break;
+            }
+            delete s;
+            c->data = nullptr;
+            break;
+        }
+        case Direction::output: {
+            srcCon = c;
+            dstCon = outputNode->inputs.getConnection(srcCon->output_connection);
+            delete static_cast<sourceNode*>(dstCon->data);
+            dstCon->data = nullptr;
+            break;
+        }
+    }
+    
+    srcCon->output_node = -1;
+    srcCon->output_connection = -1;
+
+    srcCon->is_connected = false;
+    dstCon->is_connected = false;
 }
 
 Node* NodeManager::addNode(NodeType t) {
