@@ -63,6 +63,7 @@ class Node {
         bool moving = false;
         void move(float, float);
         void resize(float, float);
+        bool canZoom(float);
         void zoom(float);
 
         // bounding polygon (for gui)

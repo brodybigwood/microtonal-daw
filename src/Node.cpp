@@ -39,8 +39,7 @@ Node* Node::deSerialize(json j) {
 
     n->name = j["name"];
 
-    n->zoomRatio = j["zoomRatio"];
-    n->zoom(1.0f);
+    n->zoom(j["zoomRatio"].get<float>()/n->zoomRatio);
 
     n->move(j["x"], j["y"]);
 
@@ -246,18 +245,24 @@ void Node::resize(float rx, float ry) {
     float new_h = dstRect.h + ry;
 
     if (new_w > new_h) {
-        zoomRatio = new_w / TEX_W;
+        zoom((new_w / TEX_W)/zoomRatio);
     } else {
-        zoomRatio = new_h / TEX_H;
+        zoom((new_h / TEX_H)/zoomRatio);
+
     } 
 
     zoom(1.0f);
 }
 
-void Node::zoom(float amount) {
-    zoomRatio *= amount;
+bool Node::canZoom(float amount) {
+    return zoomRatio * amount >= 0.01;
+}
 
-    if (zoomRatio < 0.05) zoomRatio = 0.05;
+void Node::zoom(float amount) {
+ 
+    if (!canZoom(amount)) return;
+
+    zoomRatio *= amount;
 
     dstRect.w = TEX_W * zoomRatio;
     dstRect.h = TEX_H * zoomRatio;
@@ -283,7 +288,6 @@ void Node::zoom(float amount) {
         conn->rect = connRect;
         connRect.x += w;
     }
-
 }
 
 void Node::move(float x, float y) {

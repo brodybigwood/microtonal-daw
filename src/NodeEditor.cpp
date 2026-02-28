@@ -175,7 +175,20 @@ uint32_t NodeEditor::getWindowID() {
 }
 
 void NodeEditor::zoom(float amount) {
+    for (auto n : NodeManager::get()->getNodes()) if (!n->canZoom(amount)) return;
+    if (!NodeManager::get()->outNode.canZoom(amount)) return;
     
+    auto zoomNode = [this, amount] (Node* n) {        
+
+        float mx = (n->dstRect.x - mouseX) * amount + mouseX;
+        float my = (n->dstRect.y - mouseY) * amount + mouseY;
+        
+        n->zoom(amount);
+        n->move(mx, my);
+    };
+
+    for (auto n : NodeManager::get()->getNodes()) zoomNode(n);
+    zoomNode(&(NodeManager::get()->outNode));
 }
 
 void NodeEditor::handleInput(SDL_Event& e) {
@@ -184,7 +197,7 @@ void NodeEditor::handleInput(SDL_Event& e) {
             releaseMovingNode();
             break;
         case SDL_EVENT_MOUSE_WHEEL:
-            zoom(std::pow(1.1, e.wheel.y));
+            if (isCtrlPressed) zoom(std::pow(1.1, e.wheel.y));
             break;
         default:
             break;
