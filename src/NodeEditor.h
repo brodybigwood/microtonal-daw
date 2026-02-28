@@ -22,6 +22,7 @@ class NodeEditor {
 
         float mouseX = 0;
         float mouseY = 0;
+        bool leftClick = false;
     
         void setDstConn(Node*, int);
         void setSrcConn(Node*, int);
@@ -40,6 +41,7 @@ class NodeEditor {
         void renderInputs();
 
         void zoom(float);
+        void move();
 
         int windowWidth = 800;
         int windowHeight = 600;

@@ -174,6 +174,21 @@ uint32_t NodeEditor::getWindowID() {
     return SDL_GetWindowID(window);
 }
 
+void NodeEditor::move() {
+    auto x = mouseX - moveOffX;
+    auto y = mouseY - moveOffY;
+
+    auto moveNode = [x, y] (Node* n) {
+        n->move(n->dstRect.x + x, n->dstRect.y + y);
+    };
+
+    for (auto n : NodeManager::get()->getNodes()) moveNode(n);
+    moveNode(&(NodeManager::get()->outNode));
+
+    moveOffX = mouseX;
+    moveOffY = mouseY;
+}
+
 void NodeEditor::zoom(float amount) {
     for (auto n : NodeManager::get()->getNodes()) if (!n->canZoom(amount)) return;
     if (!NodeManager::get()->outNode.canZoom(amount)) return;
@@ -193,8 +208,17 @@ void NodeEditor::zoom(float amount) {
 
 void NodeEditor::handleInput(SDL_Event& e) {
     switch (e.type) {
+        case SDL_EVENT_MOUSE_MOTION:
+            if (isCtrlPressed && leftClick) move();
+            break;
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            leftClick = true;
+            moveOffX = mouseX;
+            moveOffY = mouseY;
+            break;
         case SDL_EVENT_MOUSE_BUTTON_UP:
             releaseMovingNode();
+            leftClick = false;
             break;
         case SDL_EVENT_MOUSE_WHEEL:
             if (isCtrlPressed) zoom(std::pow(1.1, e.wheel.y));
