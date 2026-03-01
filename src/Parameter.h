@@ -2,6 +2,8 @@
 
 #include <vector>
 #include <SDL3/SDL.h>
+#include <string>
+#include "Geometry.h"
 
 struct Modulator {
     bool centered;
@@ -21,8 +23,23 @@ struct Parameter {
 
     void addModulator(Modulator*);
 
-    SDL_FRect rect;
-    void render(SDL_Renderer*);
+    std::vector<float> vx;
+    std::vector<float> vy;
 
-    Parameter(float, SDL_FRect);
+    virtual void render(SDL_Renderer*) {}
+    virtual void handleInput(SDL_Event&) {}
+
+    Parameter(float, std::pair<std::vector<float>, std::vector<float>>);
+    virtual ~Parameter() {}
+};
+
+struct Knob : Parameter {
+
+    void handleInput(SDL_Event&) override;
+    std::string filepath;        
+    SDL_FRect knobRect;
+    SDL_Texture* texture = nullptr;
+    void render(SDL_Renderer*) override;
+    Knob(float, float, float, float, std::string);
+    ~Knob();
 };

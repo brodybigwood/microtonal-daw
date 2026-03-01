@@ -9,6 +9,7 @@
 #include "nodes/nodetype.h"
 #include "TreeEntry.h"
 #include "Parameter.h"
+#include "Geometry.h"
 
 #define TEX_W 1920
 #define TEX_H 1080

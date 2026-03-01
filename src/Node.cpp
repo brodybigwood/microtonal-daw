@@ -124,6 +124,7 @@ bool Node::handleInput(SDL_Event& e) {
     }
     
     if (handled) {
+        for (auto p : params) if (inPolygon(p->vx.data(), p->vy.data(), p->vx.size(), x, y)) p->handleInput(e);
         switch (e.type) {
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
                 clickMouse(e);

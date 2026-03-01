@@ -81,6 +81,7 @@ include_directories(
 
 find_package(SDL3 REQUIRED)
 find_package(SDL3_ttf REQUIRED)
+find_package(SDL3_image REQUIRED)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(RTAUDIO REQUIRED rtaudio)
@@ -96,6 +97,7 @@ target_include_directories(DAW PRIVATE
 target_link_libraries(DAW PRIVATE
     SDL3::SDL3
     SDL3_ttf::SDL3_ttf
+    SDL3_image::SDL3_image
     /usr/local/lib/SDL3_gfx/libSDL3_gfx.a
     ${SDL2_LIBRARIES}
     ${RTAUDIO_LIBRARIES}

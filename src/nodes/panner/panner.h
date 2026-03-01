@@ -11,5 +11,5 @@ class PannerNode : public Node {
         Connection* l = nullptr;
         Connection* r = nullptr;
 
-        Parameter pan = Parameter(0.5, {860, 440, 200, 200});
+        Knob pan = Knob(0.5, 960, 540, 200, "assets/knobs/1.png");
 };
