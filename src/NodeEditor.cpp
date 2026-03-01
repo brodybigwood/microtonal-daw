@@ -112,9 +112,9 @@ void NodeEditor::renderInputs() {
         auto* bus = bm->getBusW(i);
         auto& busRect = bus->dstRect;        
  
-        SDL_SetRenderDrawColor(renderer, 50,50,50,255);
+        SDL_SetRenderDrawColor(renderer, 255, 120, 120, 255);
         SDL_RenderFillRect(renderer, &busRect);
-        SDL_SetRenderDrawColor(renderer, 80,80,80,255);
+        SDL_SetRenderDrawColor(renderer, 120, 120, 120, 255);
         SDL_RenderRect(renderer, &busRect);
     }
 
@@ -122,9 +122,9 @@ void NodeEditor::renderInputs() {
         auto* bus = bm->getBusE(i);
         auto& busRect = bus->dstRect;
 
-        SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
+        SDL_SetRenderDrawColor(renderer, 120, 255, 120, 255);
         SDL_RenderFillRect(renderer, &busRect);
-        SDL_SetRenderDrawColor(renderer, 80,80,80,255);
+        SDL_SetRenderDrawColor(renderer, 120, 120, 120, 255);
         SDL_RenderRect(renderer, &busRect);
     }
 }
@@ -159,11 +159,9 @@ void NodeEditor::renderConnector(SDL_Renderer* renderer) {
 
 void NodeEditor::tick() {
 
-    renderInputs();
-
-    render(renderer, &nodeRect);
-
-    renderConnector(renderer);
+    render(renderer, &nodeRect); // render background and nodes
+    renderInputs(); // busses on top
+    renderConnector(renderer); // connector line from mouse
 }
 
 void NodeEditor::renderPresent() {
@@ -361,7 +359,7 @@ void NodeEditor::keydown(SDL_Event& e) {
 }
 
 void NodeEditor::render(SDL_Renderer* renderer, SDL_FRect* dstRect) {
-    SDL_SetRenderDrawColor(renderer, 180, 180, 180, 255);
+    SDL_SetRenderDrawColor(renderer, 220, 220, 220, 255);
     SDL_RenderFillRect(renderer, dstRect);
     
     auto nm = NodeManager::get();

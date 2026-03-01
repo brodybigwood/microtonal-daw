@@ -46,8 +46,8 @@ class NodeEditor {
         void zoom(float);
         void move();
 
-        int windowWidth = 800;
-        int windowHeight = 600;
+        int windowWidth = 1920;
+        int windowHeight = 1080;
 
         float topMargin = 20.0f;
         float leftMargin = 0.0f;
