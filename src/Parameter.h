@@ -35,11 +35,14 @@ struct Parameter {
 
 struct Knob : Parameter {
 
+    float thetaMin;
+    float thetaMax;
+
     void handleInput(SDL_Event&) override;
     std::string filepath;        
     SDL_FRect knobRect;
     SDL_Texture* texture = nullptr;
     void render(SDL_Renderer*) override;
-    Knob(float, float, float, float, std::string);
+    Knob(float, float, float, float, std::string, float, float);
     ~Knob();
 };

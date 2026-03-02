@@ -35,13 +35,19 @@ void Knob::render(SDL_Renderer* renderer) {
         }
     }
 
-    SDL_RenderTexture(renderer, texture, NULL, &knobRect);
+    auto range = thetaMax - thetaMin;
+    auto angle = thetaMin + value * range;
+    SDL_FPoint center = { knobRect.w/2, knobRect.h/2 };
+
+    SDL_RenderTextureRotated(renderer, texture, NULL, &knobRect, angle, &center, SDL_FLIP_NONE);
 }
 
-Knob::Knob(float value, float x, float y, float r, std::string filepath) : 
+Knob::Knob(float value, float x, float y, float r, std::string filepath, float thetaMin, float thetaMax) : 
     Parameter(value, generateCircle(x, y, r)), 
     knobRect{x - r, y - r, 2 * r, 2 * r}, 
-    filepath(filepath) {
+    filepath(filepath),
+    thetaMin(thetaMin),
+    thetaMax(thetaMax) {
 
 }
 
