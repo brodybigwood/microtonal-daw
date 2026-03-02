@@ -36,6 +36,7 @@ void Track::process(float* input, int bufferSize) {
     if (!dstBus) return;
     switch(type) {
         case TrackType::Audio:
+            if (!buffer) buffer = static_cast<WaveformBus*>(dstBus)->buffer;
             break;
         case TrackType::Automation:
             break;
