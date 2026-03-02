@@ -70,7 +70,7 @@ void OscillatorNode::process() {
                     //deactivate the corresponding voice
                     for (int i = 0; i < NUM_VOICES; ++i) {
                         auto& voice = voices[i];
-                        if (event.id == voice.noteId) {
+                        if (event.id == voice.noteId && voice.active) {
                             
                             std::cout << "noteOff: " << event.num << std::endl;
                             voice.wait_off = event.sampleOffset;
@@ -118,7 +118,19 @@ void OscillatorNode::setup() {
 }
 
 void Voice::process(float* out0, float* out1, int& bufferSize, int& sampleRate, Parameter& volume) {
+
+    const int limit = MAX_ADSR * sampleRate;
+    const int attackSamples = attack * sampleRate;
+    const int decaySamples = decay * sampleRate;
+    const int releaseSamples = release * sampleRate;
+    const int decayEnd = attackSamples + decaySamples;
+
+    float rtr = 1.0f / releaseSamples;
+
     for (int i = 0; i < bufferSize; i++) {
+
+        if (releaseSamples >= limit) return;
+
         if (wait_on > 0) {
             wait_on -=1;
             continue;
@@ -126,12 +138,26 @@ void Voice::process(float* out0, float* out1, int& bufferSize, int& sampleRate, 
 
         if (wait_off > 0) {
             wait_off -=1;
-        } else if (wait_off == 0) {
-            reset();
-            return;
         }
 
-        float smp = sin(phase) * adsr[samplesPassed++] * volume[i];
+        if (!wait_off && releaseTime == -1) { // only noteoff triggers release
+            releaseTime = samplesPassed;
+            releaseLevel = adsr[samplesPassed];
+        }
+
+        float adsrLevel;
+        if (releaseTime != -1) {
+            if (samplesPassed >= releaseTime + releaseSamples) {
+                reset();
+                return;
+            }
+            // release gain, minus ( time since release, divided by release length, times release gain
+            adsrLevel = releaseLevel - ((samplesPassed - releaseTime) * rtr * releaseLevel);
+        } else adsrLevel = adsr[samplesPassed];
+
+        if (!(wait_off == -1 && releaseTime == decaySamples && releaseTime == -1)) samplesPassed++;
+
+        float smp = sin(phase) * adsrLevel * volume[i];    
 
         if (out0) out0[i] += smp;
         if (out1) out1[i] += smp;
@@ -149,6 +175,7 @@ void Voice::reset() {
     wait_on = 0;
     wait_off = -1;
     samplesPassed = 0;
+    releaseTime = -1;
 }
 
 Voice::Voice() {

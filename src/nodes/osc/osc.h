@@ -21,10 +21,13 @@ struct Voice {
     int samplesPassed = 0; // how many samples have passed since activation
 
     // adsr in seconds
-    float attack = 0.25;
+    float attack = 0.1;
     float decay = 2;
     float sustain = 0.5; // sustain level out of 1.0
-    float release = 0.5;
+    float release = 0.3;
+
+    int releaseTime = -1;
+    float releaseLevel;
 
     float* adsr = nullptr;
     void updateADSR();
