@@ -53,8 +53,8 @@ class Node {
         void* getInput(Connection*);
         Node* getNodeInput(Connection*);
 
-        EventBus* getEvents(void*);
-        WaveformBus* getWaveform(void*);
+        static EventBus* getEvents(void*);
+        static WaveformBus* getWaveform(void*);
 
         bool depends(Node*); // check if this node has another node as an input somewhere down the tree
         void processTree();

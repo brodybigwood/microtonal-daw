@@ -69,11 +69,20 @@ Node::~Node() {
 
 connectionSet::~connectionSet() {
     for (auto c : connections) {
-        if(c->dir == Direction::output && c->type == DataType::Waveform && c->data) {
-            auto ptr = static_cast<WaveformBus*>(c->data);
-            delete ptr;
-        }
-
+        if(c->dir == Direction::output) {
+            if (c->data) {
+                switch (c->type) {
+                    case DataType::Events:
+                        // havent implemented anything yet
+                        break;
+                    case DataType::Waveform:
+                        auto b = Node::getWaveform(c->data);
+                        if (b->buffer) delete[] b->buffer;
+                        delete b;
+                        break;
+                }
+            }
+        } else if (c->is_connected) if (c->data) delete static_cast<sourceNode*>(c->data);
         delete c;
     }
 }
