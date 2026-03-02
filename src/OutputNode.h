@@ -14,4 +14,7 @@ class OutputNode : public Node {
         void process() override;
 
         void setup() override;
+
+        void deSerialize(json);
+        json serialize();
 };

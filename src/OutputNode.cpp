@@ -34,3 +34,19 @@ void OutputNode::process() {
 
 void OutputNode::setup() {
 }
+
+json OutputNode::serialize() {
+    json j;
+
+    j["x"] = dstRect.x;
+    j["y"] = dstRect.y;
+    j["zoomRatio"] = zoomRatio;
+
+    return j;
+}
+
+void OutputNode::deSerialize(json j) {
+    zoom(j["zoomRatio"].get<float>()/zoomRatio);
+    move(j["x"], j["y"]);
+}
+

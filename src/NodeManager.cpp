@@ -18,57 +18,28 @@ json NodeManager::serialize() {
 
     j["outNode"] = outNode.serialize();
 
-    for (auto c : outNode.inputs.connections) if (c->is_connected) {
-        json s;
-        auto src = static_cast<sourceNode*>(c->data);
-        json ss;
-
-        switch (src->type) {
-            case ConnectionType::bus:
-                ss = -1;
-                break;
-            case ConnectionType::node:
-                ss = getNode(src->source_id)->id;
-                break;
-        }
-
-        s["dataType"] = c->type;
-        s["connectionType"] = src->type;
-
-        s["source_id"] = src->source_id;
-        s["source_node"] = ss;
-        s["output_id"] = src->output_id;
-        s["output_node"] = outNode.id;
-
-        j["connections"].push_back(s);
-    }
-
-    for (auto n : nodes) {
-        j["nodes"].push_back(n->serialize());
-        for (auto c : n->inputs.connections) if (c->is_connected) {
+    auto serializeConnections = [&j] (Node* n) {
+        for (auto c : n->inputs.connections) {
+            if (!c->is_connected) continue;
             json s;
             auto src = static_cast<sourceNode*>(c->data);
-            json ss;
-
-            switch (src->type) {
-                case ConnectionType::bus:
-                    ss = -1;
-                    break;
-                case ConnectionType::node:
-                    ss = getNode(src->source_id)->id;
-                    break;
-            }
 
             s["dataType"] = c->type;
             s["connectionType"] = src->type;
 
-            s["source_id"] = src->source_id;
-            s["source_node"] = ss;
-            s["output_id"] = src->output_id;
-            s["output_node"] = n->id;
+            s["srcNodeID"] = src->source_id;
+            s["srcConID"] = src->output_id;
+            s["dstNodeID"] = n->id;
+            s["dstConID"] = c->id;
 
             j["connections"].push_back(s);
         }
+    };
+
+    serializeConnections(&outNode);
+    for (auto n : nodes) {
+        serializeConnections(n);
+        j["nodes"].push_back(n->serialize());
     }
 
     return j;
@@ -84,34 +55,36 @@ void NodeManager::deSerialize(json j) {
             ids[node->id] = nodes.size() - 1;
         }
     }
+    
+    outNode.deSerialize(j["outNode"]);
 
     for (auto s : j["connections"]) {
         Node* dstNode;
-        int i = s["output_node"];
-        if (i) dstNode = getNode(i);
+        int dstNodeID = s["dstNodeID"];
+        if (dstNodeID) dstNode = getNode(dstNodeID);
         else dstNode = &outNode;
         
-        auto dstNodeID = s["output_id"];
+        auto dstConID = s["dstConID"];
         switch (s["connectionType"].get<int>()) {
             case ConnectionType::bus: {
-                    Bus* source;
-                    int source_id = s["source_id"];
+                    Bus* srcBus;
+                    int busID = s["srcNodeID"];
                     auto bm = BusManager::get();
                     switch (s["dataType"].get<int>()) {
                         case DataType::Events:
-                            source = bm->getBusE(source_id);
+                            srcBus = bm->getBusE(busID);
                             break;
                         case DataType::Waveform:
-                            source = bm->getBusW(source_id);
+                            srcBus = bm->getBusW(busID);
                             break;
                     }
-                    makeBusConnection(source, dstNode, dstNodeID);
+                    makeBusConnection(srcBus, dstNode, dstConID);
                 }
                 break;
             case ConnectionType::node: {
-                    auto srcNode = getNode(s["source_node"]);
-                    auto srcNodeID = s["source_id"];
-                    makeNodeConnection(srcNode, srcNodeID, dstNode, dstNodeID);
+                    auto srcNode = getNode(s["srcNodeID"]);
+                    auto srcConID = s["srcConID"];
+                    makeNodeConnection(srcNode, srcConID, dstNode, dstConID);
                 }
                 break;
         }

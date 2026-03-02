@@ -366,15 +366,13 @@ SDL_FRect Connection::srcRect() {
 
     auto s = static_cast<sourceNode*>(data);
     
-    SDL_FRect rect{0,0,0,0};
-
     switch(s->type) {
         case node:
             {
                 Node* n = NodeManager::get()->getNode(s->source_id);
 
                 connectionSet& outputs = n->outputs;
-                auto conn = outputs.getConnection(id);
+                auto conn = outputs.getConnection(s->output_id);
 
                 return conn->rect;
             }
@@ -394,7 +392,7 @@ SDL_FRect Connection::srcRect() {
                     }
                 }
 
-                rect = srcBus->dstRect;
+                return srcBus->dstRect;
             }
             break;
         default:
@@ -453,14 +451,20 @@ void Node::render(SDL_Renderer* renderer) {
 }
 
 void Connection::render(SDL_Renderer* renderer, bool hover) {
+    SDL_Color c;
+
     switch (type) {
         case DataType::Events:
-            SDL_SetRenderDrawColor(renderer, 120,255,120,255);
+            if (is_connected) c = {160, 255, 160, 255};
+            else c = {120, 255, 120, 255};
             break;
         case DataType::Waveform:
-            SDL_SetRenderDrawColor(renderer, 255,120,120,255);
+            if (is_connected) c = {255, 160, 160, 255};
+            else c = {255, 120, 120, 255};
             break;        
     }
+
+    SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
 
     SDL_RenderFillRect(renderer, &rect);
     SDL_SetRenderDrawColor(renderer, 120,120,120,255);
