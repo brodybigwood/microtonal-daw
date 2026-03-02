@@ -139,25 +139,25 @@ NodeManager::~NodeManager() {
 
 std::vector<Node*>& NodeManager::getNodes() { return nodes; };
 void NodeManager::makeNodeConnection(
-        Node* source, uint16_t outputID,
-        Node* dst, uint16_t inputID
+        Node* srcNode, uint16_t srcConID,
+        Node* dstNode, uint16_t dstConID
 ) {
-    if (source->depends(dst)) return; // prevent circular dependency
+    if (srcNode->depends(dstNode)) return; // prevent circular dependency
 
-    Connection* srcCon = source->outputs.getConnection(inputID); 
-    Connection* dstCon = dst->inputs.getConnection(inputID);
+    Connection* srcCon = srcNode->outputs.getConnection(srcConID); 
+    Connection* dstCon = dstNode->inputs.getConnection(dstConID);
     
     if(srcCon->type != dstCon->type || srcCon->is_connected || dstCon->is_connected) return;
 
     sourceNode* s = new sourceNode;
     s->type = node;
-    s->source_id = source->id;
-    s->output_id = srcCon->id;
+    s->source_id = srcNode->id;
+    s->output_id = srcConID;
 
     dstCon->data = s;
 
-    srcCon->output_node = dst->id;
-    srcCon->output_connection = dstCon->id;
+    srcCon->output_node = dstNode->id;
+    srcCon->output_connection = dstConID;
 
     srcCon->is_connected = true;
     dstCon->is_connected = true;
