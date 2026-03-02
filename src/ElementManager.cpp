@@ -111,7 +111,6 @@ void ElementManager::process(int bufferSize) {
 
                         int readIdx = Project::instance()->beatsToSamples(time - pos.start);
                         if (readIdx < 0) break;
-                        std::cout << " got here " << std::endl;
                         AudioClip* ac = static_cast<AudioClip*>(element);
                         float* rbuffer = ac->buffer;
                         float* wbuffer = track->buffer;
