@@ -298,36 +298,22 @@ json TrackList::toJSON() {
 void TrackList::assign(Track* track, int busID) {
     BusManager* bm = BusManager::get();
 
-    bool success = false;
-
     switch(track->type) {
         case TrackType::Notes:
             if (std::ranges::find(assignedBusses.event, busID) == assignedBusses.event.end())
             {
                 std::erase(assignedBusses.event, track->busID);
-
-                track->dstBus = bm->getBusE(busID);
-                track->events = bm->getBusE(busID)->events;
                 assignedBusses.event.push_back(busID);
-                success = true;
-            }
+            } else return;
             break;
         default:
             if (std::ranges::find(assignedBusses.waveform, busID) == assignedBusses.waveform.end())
             {
                 std::erase(assignedBusses.waveform, track->busID);            
-
-                track->dstBus = bm->getBusW(busID);
-
-                auto* b = static_cast<WaveformBus*>(track->dstBus);
-                track->buffer = b->buffer;
-
                 assignedBusses.waveform.push_back(busID);
-                success = true;
-            }
+            } else return;
             break;
     }
 
-    if (success) track->busID = track->dstBus->id;
-
+    track->setBus(busID);
 }
