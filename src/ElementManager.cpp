@@ -140,13 +140,23 @@ void ElementManager::fromJSON(json j) {
     id_pool.fromJSON(j["id_pool"]);
 
     for(json e : j["elements"]) {
-        if(e["type"].get<int>() == ElementType::region) {
-            auto r = new Region;
-            r->fromJSON(e);
-            id_pool.reserveID(r->id);
-            elements.push_back(r);
-            ids[r->id] = elements.size() -1;
+        GridElement* ge;
+
+        switch (e["type"].get<int>()) {
+            case ElementType::region:
+                ge = new Region;
+                break;
+            case ElementType::audioClip:
+                ge = new AudioClip;
+                break;
+            default:
+                return; // unknown type, give up
         }
+
+        ge->fromJSON(e);
+        id_pool.reserveID(ge->id);
+        elements.push_back(ge);
+        ids[ge->id] = elements.size() -1;
     }
 }
 

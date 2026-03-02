@@ -30,6 +30,8 @@ void AudioClip::fromJSON(json j) {
     id = j["id"];
     type = j["type"];
     GridElement::fromJSON(j["positions"]);
+
+    setFile(j["filepath"]);
 }
 
 void AudioClip::draw(SDL_Renderer* renderer, float pixelsPerSecond, int h) {
