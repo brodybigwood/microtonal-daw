@@ -45,18 +45,28 @@ class SongRoll : public GridView{
         void toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar);
         void handleCustomInput(SDL_Event& e) override;
 
+        Uint32 doubleClickTime = 500; // 500ms
+        Uint32 lastLmbTime;
+        void doubleClick();
+
         void renderElements();
         void renderElement(GridElement*);
 
-        void getHoveredRegion();
+        GridElement::Position* hoveredPosition = nullptr;
+        void getHoveredPosition();
 
         void clickMouse(SDL_Event& e) override;
 
         void deleteElement() override;
 
+        GridElement::Position lastPosition;
+        GridElement::Position* movingPosition = nullptr; 
+        void movePosition();
+
         void UpdateGrid() override;
 
         float getHoveredLine();
+        int getHoveredTrack(); // returns id
 
         void beginDrop(SDL_DropEvent&) override;
         void renderDrop(SDL_Renderer*) override;

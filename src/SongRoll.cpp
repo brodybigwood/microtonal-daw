@@ -4,8 +4,10 @@
 #include "Home.h"
 #include <SDL3/SDL_events.h>
 #include "Region.h"
+#include "AudioClip.h"
 #include "Transport.h"
 #include "ElementManager.h"
+#include "SDL_Events.h"
 
 SongRoll::SongRoll(SDL_FRect* rect, bool* detached) : GridView(detached, rect, 200) {
     this->windowHandler = WindowHandler::instance();
@@ -84,12 +86,32 @@ SongRoll::~SongRoll() {
 
 }
 
+void SongRoll::movePosition() {
+    if (!movingPosition) return;
+    
+    auto amnt_x = mouseX - last_lmb_x;
+    auto amnt_y = mouseY - last_lmb_x;
+
+    auto oldPos = fract(std::floor((last_lmb_x+scrollX-leftMargin)/(dW / notesPerBar)),notesPerBar);
+    auto newPos = fract(std::floor((mouseX+scrollX-leftMargin)/(dW / notesPerBar)),notesPerBar);
+    auto change = newPos - oldPos;
+    // change = fract(std::floor((amnt_x)/(dW / notesPerBar)),notesPerBar)
+    
+    movingPosition->start = lastPosition.start + change;
+
+    int trackID = getHoveredTrack(); 
+    auto track = TrackList::get()->getTrack(trackID);
+    auto oldTrack = TrackList::get()->getTrack(lastPosition.trackID);
+    if (track && oldTrack && track->type == oldTrack->type) movingPosition->trackID = trackID;
+}
+
 void SongRoll::handleCustomInput(SDL_Event& e) {
     
     switch (e.type) {
 
         case SDL_EVENT_MOUSE_MOTION:
-            getHoveredRegion();
+            getHoveredPosition();
+            movePosition();
             break;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             break;
@@ -130,8 +152,9 @@ void SongRoll::renderElement(GridElement* element) {
     float pixelsPerSecond = dW * barsPerSecond;
     element->draw(renderer, pixelsPerSecond, (int)divHeight);
     SDL_SetRenderTarget(renderer, regionTexture);
-    for(auto pos : element->positions) {
-        if(hoveredElement == pos.id) {
+    for(auto position : element->positions) {
+        auto& pos = *position;
+        if(hoveredPosition == &pos) {
             SDL_SetRenderDrawColor(renderer, 90,90,100,127);
         } else {
             SDL_SetRenderDrawColor(renderer, 20,20,100,127);
@@ -155,12 +178,15 @@ void SongRoll::renderElement(GridElement* element) {
         }
         SDL_RenderFillRect(renderer, &dstRectE);
         SDL_RenderTexture(renderer, element->texture, &srcRect, &dstRectE);
+        SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
+        SDL_RenderRect(renderer, &dstRectE);
     }
 }
 
-void SongRoll::getHoveredRegion() {
+void SongRoll::getHoveredPosition() {
     for (auto e : ElementManager::get()->elements) {
-        for(auto pos :e->positions) {
+        for(auto position :e->positions) {
+            auto& pos = *position;
             uint16_t index = tracks->getIndex(pos.trackID);
             if(
                 mouseX < rightRect.x && 
@@ -169,16 +195,21 @@ void SongRoll::getHoveredRegion() {
                 mouseY > getY(index) &&
                 mouseY < getY(index+1)
             ) {
-                hoveredElement = pos.id;
+                hoveredPosition = &pos;
                 return;
             }
         }
     }
-    hoveredElement = -1;
+    hoveredPosition = nullptr;
 }
 
 float SongRoll::getHoveredLine() {
     return (mouseY + scrollY - topMargin)/divHeight;
+}
+
+int SongRoll::getHoveredTrack() {
+    auto trackIndex = getHoveredLine();
+    return TrackList::get()->getID(trackIndex);
 }
 
 void SongRoll::createElement() {
@@ -188,17 +219,38 @@ void SongRoll::createElement() {
         return;
     }
     fract start = getHoveredTime();
-    int trackIndex = getHoveredLine();
 
-    if (TrackList::get()->getTrack(trackIndex) == nullptr) return; 
+    auto trackID = getHoveredTrack();
+    auto track = TrackList::get()->getTrack(trackID);
+    if (!track) return;
 
     auto elem = ElementManager::get()->getElement(id);
+    
+    if (track->getType() == TrackType::Notes && elem->type != ElementType::region) return;
 
     elem->createPos(
-        start, trackIndex
+        start, trackID
     );
 
     refreshGrid = true;
+}
+
+void SongRoll::doubleClick() {
+    if (hoveredPosition) {
+        auto e = hoveredPosition->element;
+        if (e->type == ElementType::region) {
+            auto reg = static_cast<Region*>(e);
+            windowHandler->createPianoRoll(reg, &(windowHandler->home->pianoRollRect));
+        }
+    } else {
+        auto trackID = getHoveredTrack();
+        auto track = TrackList::get()->getTrack(trackID);
+        if (track && track->type == TrackType::Notes) {
+            auto reg = ElementManager::get()->newRegion();
+            fract start = getHoveredTime();
+            reg->createPos(start, trackID);
+        }
+    }
 }
 
 void SongRoll::clickMouse(SDL_Event& e) {
@@ -207,36 +259,30 @@ void SongRoll::clickMouse(SDL_Event& e) {
 
             if (e.button.button == SDL_BUTTON_LEFT) {
                 lmb = true;
-                for (auto e : ElementManager::get()->elements) {
-                    auto& positions = e->positions;
-                    auto it = std::find_if(positions.begin(), positions.end(),
-                                           [this](const GridElement::Position& pos) {
-                                               return pos.id == hoveredElement;
-                                           });
+                last_lmb_x = mouseX;
+                last_lmb_y = mouseY;
 
-                    if (it != positions.end()) {
-                        if(e->type == ElementType::region) {
-                            auto reg = static_cast<Region*>(e);
-                            windowHandler->createPianoRoll(reg, &(windowHandler->home->pianoRollRect));
-                            return;
-                        }
-                    }
-                }
-
-                if (mouseX > gridRect.x && mouseX < gridRect.x + gridRect.w &&
+                movingPosition = hoveredPosition;
+                if (movingPosition) lastPosition = *movingPosition;
+               
+                if (SDL_GetTicks() - lastLmbTime < doubleClickTime) doubleClick();
+                else if (!hoveredPosition &&
+                    mouseX > gridRect.x && mouseX < gridRect.x + gridRect.w &&
                     mouseY > gridRect.y && mouseY < gridRect.y + gridRect.h) {
                     createElement();
                 }
 
+                lastLmbTime = SDL_GetTicks();
             }
             if (e.button.button == SDL_BUTTON_RIGHT) {
                 rmb = true;
-                deleteElement();
+                if (!MouseOn(&rightRect) && !MouseOn(&leftRect)) deleteElement();
             }
             break;
         case SDL_EVENT_MOUSE_BUTTON_UP:
             if (e.button.button == SDL_BUTTON_LEFT) {
                 lmb = false;
+                movingPosition = nullptr;
             }
             if (e.button.button == SDL_BUTTON_RIGHT) {
                 rmb = false;
@@ -250,8 +296,8 @@ void SongRoll::deleteElement() {
         auto& positions = e->positions;
 
         auto it = std::find_if(positions.begin(), positions.end(),
-                               [this](const GridElement::Position& p) {
-                                   return p.id == hoveredElement;
+                               [this](const GridElement::Position* p) {
+                                   return p == hoveredPosition;
                                });
 
         if (it != positions.end()) {
@@ -291,18 +337,18 @@ void SongRoll::beginDrop(SDL_DropEvent& d) {
 
 void SongRoll::dropFile(SDL_DropEvent& d) {
     std::cout << "DROPPED: " << d.data << std::endl;    
-    GridElement* e = ElementManager::get()->newAudioClip(d.data); 
+    AudioClip* e = ElementManager::get()->newAudioClip(d.data); 
     if (!e) return;
 
     fract start = getHoveredTime();
-    int trackIndex = getHoveredLine();
+    int trackID = getHoveredTrack();
 
-    auto track = TrackList::get()->getTrack(trackIndex);
+    auto track = TrackList::get()->getTrack(trackID);
     if (track  == nullptr) return;
     if (track->type != TrackType::Audio) return; // cant put audioclip on region track
 
     e->createPos(
-        start, trackIndex
+        start, trackID
     );
 
     refreshGrid = true;

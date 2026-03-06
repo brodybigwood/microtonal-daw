@@ -72,7 +72,12 @@ int TrackList::getIndex(uint16_t id) {
     auto it = ids.find(id);
     if( it == ids.end()) return -1; 
     return it->second;
-};
+}
+
+int TrackList::getID(int index) {
+    if (index < tracks.size()) return tracks[index]->id;
+    else return -1;
+}
 
 void TrackList::solo(uint16_t id) {
     auto it = std::find(soloTracks.begin(), soloTracks.end(), id);

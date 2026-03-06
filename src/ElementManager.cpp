@@ -38,7 +38,8 @@ void ElementManager::process(int bufferSize) {
     TrackList* tl = TrackList::get();
 
     for (auto* element : elements)
-        for (auto& pos : element->positions) {
+        for (auto position : element->positions) {
+            auto& pos = *position;
             float regTime = pos.start;
 
             Track* track = tl->getTrack(pos.trackID);            
@@ -163,15 +164,17 @@ uint16_t ElementManager::getIndex(uint16_t id) {
     return ids[id];
 }
 
-void ElementManager::newRegion() {
+Region* ElementManager::newRegion() {
     auto r = new Region;
     r->id = id_pool.newID();
     elements.push_back(r);
 
     ids[r->id] = elements.size() -1;
+
+    return r;
 }
 
-GridElement* ElementManager::newAudioClip(std::string filepath) {
+AudioClip* ElementManager::newAudioClip(std::string filepath) {
 
     auto a = new AudioClip;
 

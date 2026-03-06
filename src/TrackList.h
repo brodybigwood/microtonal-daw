@@ -46,6 +46,7 @@ class TrackList {
         Track* hoveredTrack = nullptr;
 
         int getIndex(uint16_t);
+        int getID(int);
 
         void fromJSON(json);
         json toJSON();

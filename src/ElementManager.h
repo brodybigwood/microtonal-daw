@@ -3,6 +3,9 @@
 #include <unordered_map>
 #include "GridElement.h"
 
+class Region;
+class AudioClip;
+
 class ElementManager {
     public:
         static ElementManager* get();
@@ -11,8 +14,8 @@ class ElementManager {
         std::vector<GridElement*> elements;
 
         GridElement* getElement(uint16_t);
-        void newRegion();
-        GridElement* newAudioClip(std::string);
+        Region* newRegion();
+        AudioClip* newAudioClip(std::string);
 
         uint16_t getIndex(uint16_t);
         idManager id_pool;
