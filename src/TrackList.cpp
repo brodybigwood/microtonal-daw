@@ -4,6 +4,7 @@
 #include <ranges>
 #include "BusManager.h"
 #include "styles.h"
+#include <SDL3_gfx/SDL3_gfxPrimitives.h>
 
 TrackList::TrackList() {}
 
@@ -121,6 +122,16 @@ void TrackList::render(SDL_Renderer* renderer) {
         renderTrack(renderer, track, &trackRect);
         trackRect.y += *divHeight;
         if(trackRect.y >= dstRect->y + dstRect->h) break;
+    }
+
+    if (movingTrack) {
+        size_t moveFromIDX = ids[movingTrack->id];
+        int raw_new_idx = static_cast<int>(moveFromIDX) + moveAmount;
+        size_t new_idx = std::max(0, std::min(raw_new_idx, static_cast<int>(tracks.size())));
+        if (moveAmount > 0 && new_idx != tracks.size()) new_idx++;
+
+        float y = new_idx * *divHeight - *scrollY + dstRect->y;
+        thickLineRGBA(renderer, dstRect->x, y, dstRect->x + dstRect->w, y, 3, 0, 0, 255, 255);
     }
 
     newTrackE->render();
