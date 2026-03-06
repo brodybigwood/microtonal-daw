@@ -8,13 +8,14 @@ GridElement::GridElement() {
 void GridElement::createPos(fract startTime, uint16_t trackID) {
     uint16_t id = GridElement::id_pool()->newID();
 
-    Position pos{
+    Position* pos = new Position{
         fract{},
         startTime,
         fract{16,1} + startTime,
         fract{16,1},
         trackID,
-        id
+        id,
+        this
     };
     positions.push_back(pos);
 }
@@ -31,7 +32,8 @@ GridElement::~GridElement() {
 
 json GridElement::toJSON() {
     json j = json::array();
-    for(auto& pos : positions) {
+    for(auto position : positions) {
+        auto& pos = *position;
         json p;
         p["startOffset"] = pos.startOffset.toJSON();
         p["start"] = pos.start.toJSON();
@@ -48,13 +50,14 @@ void GridElement::fromJSON(json j) {
     auto project = Project::instance();
     for(json& p : j) {
 
-        Position pos{
+        Position* pos = new Position{
             fract::fromJSON(p["startOffset"]),
             fract::fromJSON(p["start"]),
             fract::fromJSON(p["end"]),
             fract::fromJSON(p["length"]),
             p["trackID"],
             p["id"],
+            this
         };
         GridElement::id_pool()->reserveID(p["id"]);
         positions.push_back(pos);

@@ -25,13 +25,14 @@ class GridElement {
             fract length;
             uint16_t trackID;
             int id;
+            GridElement* element = nullptr;
         };
 
         ElementType type;
 
         void createPos(fract, uint16_t);
 
-        std::vector<Position> positions;
+        std::vector<Position*> positions;
 
         SDL_Texture* texture = nullptr;
 
