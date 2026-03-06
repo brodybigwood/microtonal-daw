@@ -227,6 +227,7 @@ void SongRoll::createElement() {
     auto elem = ElementManager::get()->getElement(id);
     
     if (track->getType() == TrackType::Notes && elem->type != ElementType::region) return;
+    if (elem->type == ElementType::region && track->getType() != TrackType::Notes) return;
 
     elem->createPos(
         start, trackID
