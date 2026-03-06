@@ -45,6 +45,11 @@ class TrackList {
         Track* getTrack(uint16_t);
         Track* hoveredTrack = nullptr;
 
+        int moveAmount;
+        Track* movingTrack = nullptr;
+        float last_lmb_y;
+        void moveTrack();
+
         int getIndex(uint16_t);
         int getID(int);
 

@@ -166,6 +166,25 @@ void TrackList::handleTrackInput(Track* track, int y, SDL_Event& e) {
     }
 }
 
+void TrackList::moveTrack() {
+    if (!movingTrack) return;
+
+    auto it = std::find(tracks.begin(), tracks.end(), movingTrack);
+    size_t idx = std::distance(tracks.begin(), it);
+
+    tracks.erase(it);
+
+    int raw_new_idx = static_cast<int>(idx) + moveAmount;
+    size_t new_idx = std::max(0, std::min(raw_new_idx, static_cast<int>(tracks.size())));
+    tracks.insert(tracks.begin() + new_idx, movingTrack);
+
+    // that messed up the id map so rebuild it
+    ids.clear();
+    for (size_t i = 0; i < tracks.size(); ++i) ids[tracks[i]->id] = i;       
+
+    movingTrack = nullptr;
+}
+
 void TrackList::handleInput(SDL_Event& e) {
     
     hoveredTrack = nullptr;
@@ -187,8 +206,17 @@ void TrackList::handleInput(SDL_Event& e) {
                 else if( newTrackW->hover()) {
                     newTrackW->onClick();
                 }
+                movingTrack = hoveredTrack;
+                last_lmb_y = *mouseY;
             }
-
+            break;
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+            if (e.button.button == SDL_BUTTON_LEFT) {
+                moveTrack();
+            }
+            break;
+        case SDL_EVENT_MOUSE_MOTION:
+            moveAmount = std::round((*mouseY - last_lmb_y) / *divHeight);
             break;
         default:
             break;
