@@ -69,6 +69,8 @@ void Project::load(std::string path) {
     ElementManager::get()->fromJSON(j["elementManager"]);
     NodeManager::get()->deSerialize(j["nodeManager"]);
 
+    um.deSerialize(j["undoManager"]);
+
     TrackList::get()->fromJSON(j["tracks"]);
 }
 
@@ -87,6 +89,7 @@ void Project::save() {
     j["scaleManager"] = ScaleManager::instance()->serialize();
     j["elementManager"] = ElementManager::get()->toJSON();
     j["nodeManager"] = NodeManager::get()->serialize();
+    j["undoManager"] = um.serialize();
 
     std::ofstream outFile(file);
     if (outFile.is_open()) {
@@ -98,6 +101,11 @@ void Project::save() {
 void Project::createRegion() {
     auto em = ElementManager::get();
     em->newRegion();
+}
+
+void Project::createNote(fract start, fract length, float pitch, TuningTable* t, int regionID) {
+    auto pa = new CreateNoteAction(regionID, start, length, pitch, t);
+    um.newAction(pa);
 }
 
 void Project::togglePlaying() {

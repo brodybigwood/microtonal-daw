@@ -2,6 +2,7 @@
 #include <vector>
 #include "fract.h"
 #include <iostream>
+#include "UndoManager.h"
 
 #ifndef PROJECT_H
 #define PROJECT_H
@@ -34,6 +35,7 @@ class Project {
         void save();
 
         void createRegion();
+        void createNote(fract, fract, float, TuningTable*, int);
 
         fract startTime;
 
@@ -60,6 +62,11 @@ class Project {
         double effectiveTime = 0;
 
         void process(float* input, float* output, int& bufferSize, int& numChannelsIn, int& numChannelsOut, int& sampleRate);
+
+        UndoManager um;
+        void doAction(ProjectAction);
+        void undo() { um.undo(); }
+        void redo() { um.redo(); }
 
     private:
 

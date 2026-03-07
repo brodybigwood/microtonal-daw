@@ -78,6 +78,7 @@ json Region::toJSON() {
         j["notes"].push_back(e->toJSON());
     }
     j["positions"] = GridElement::toJSON();
+    j["idManager"] = id_pool.toJSON();
 
     return j;
 }
@@ -90,5 +91,31 @@ void Region::fromJSON(json j) {
     type = j["type"];
     for (auto e : j["notes"]) {
         notes.push_back(Note::fromJSON(e));
+        id_to_index[e["id"]] = notes.size() - 1;
     }
+    id_pool.fromJSON(j["idManager"]);
+}
+
+int Region::createNote(fract start, fract length, float pitch, TuningTable* t) {
+    auto n = std::make_shared<Note>(start, start + length, pitch);
+    n->scale = t;
+    notes.push_back(n);
+    n->id = id_pool.newID();
+    id_to_index[n->id] = notes.size() - 1;
+    return n->id;
+}
+
+void Region::deleteNote(int id) {
+
+    auto idx = id_to_index[id];
+    
+    notes.erase(notes.begin() + idx);
+    id_to_index.erase(id);
+
+    for (auto& [k, v] : id_to_index) {
+        if (v > idx)
+            --v;
+    }
+
+    id_pool.releaseID(id);
 }

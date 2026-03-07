@@ -10,7 +10,7 @@ class TuningTable;
 
 class Note {
     public:
-        Note(fract start, fract end, float num, double temperament);
+        Note(fract start, fract end, float num);
         ~Note();
 
         float num;  // Frequency or pitch of the note
@@ -23,8 +23,6 @@ class Note {
         int id;
         int channel;
 
-        double temperament;
-        
         void move(fract x, fract y);
 
         json toJSON();

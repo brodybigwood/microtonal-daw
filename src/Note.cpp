@@ -11,10 +11,9 @@ TuningTable* Note::getScale() {
     }
 }
 
-Note::Note(fract start, fract end, float num, double temperament) {
+Note::Note(fract start, fract end, float num) {
     this->end = end;
     this->num = num;
-    this->temperament = temperament;
     this->start = start;
 }
 
@@ -29,7 +28,6 @@ json Note::toJSON() {
     j["end"] = { {"num", end.num}, {"den", end.den} };
     j["id"] = id;
     j["channel"] = channel;
-    j["temperament"] = temperament;
 
     j["scaleID"] = scale->id;
 
@@ -46,9 +44,8 @@ std::shared_ptr<Note> Note::fromJSON(json& input) {
     end.den = input.at("end").at("den").get<int>();
     auto id = input.at("id").get<int>();
     auto channel = input.at("channel").get<int>();
-    auto temperament = input.at("temperament").get<double>();
 
-    std::shared_ptr<Note> n = std::make_shared<Note>(start,end,num,temperament);
+    std::shared_ptr<Note> n = std::make_shared<Note>(start,end,num);
     n->id = id;
     n->channel = channel;
 

@@ -312,8 +312,6 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     if(hoveredElement == nullptr) {
                         createElement();
                     } else {
-                        notesPerOctave = std::dynamic_pointer_cast<Note>(hoveredElement)->temperament;
-
                         auto s = std::dynamic_pointer_cast<Note>(hoveredElement)->getScale();
 
                         ScaleManager::instance()->addScale(*s);
@@ -489,16 +487,8 @@ void PianoRoll::createElement() {
     fract start = getHoveredTime();
     float pitch = getHoveredLine();
     std::cout<<pitch<<std::endl;
-    auto n = std::make_shared<Note>(start, lastLength + start, pitch, notesPerOctave);
 
-    static int nextId = 0;
-    n->id = nextId++;
-    n->scale = tuning_table;
-
-    region->updateNoteChannel(n);
-
-    region->notes.push_back(n);
-
+    project->createNote(start, lastLength, pitch, tuning_table, region->id);
     refreshGrid = true;
 }
 
@@ -513,7 +503,7 @@ void PianoRoll::RenderNotes() {
         float noteX = getNotePosX(note) +1;
         float noteY = getY(note->num);
         float noteEnd = getNoteEnd(note) -2;
-        float noteTop = noteY + getNoteHeight(note);
+        float noteTop = noteY + noteHeight;
 
 
         setRenderColor(colors.noteBackground);
@@ -525,7 +515,6 @@ void PianoRoll::RenderNotes() {
             float noteX = getNotePosX(note) +1;
             float noteY = getY(note->num);
             float noteEnd = getNoteEnd(note) -2;
-            float noteTop = noteY + getNoteHeight(note);
 
             //noteRadius = (noteTop - noteY)/2;
 
@@ -575,17 +564,10 @@ float PianoRoll::getNoteEnd(std::shared_ptr<Note> note) {
     return getX(note->end);
 }
 
-float PianoRoll::getNoteHeight(std::shared_ptr<Note> note) {
-    return -cellHeight12*12/note->temperament + lineWidth;
-}
-
 void PianoRoll::deleteElement() {
     if(hoveredElement != nullptr) {
-        auto& notes = region->notes;
-        auto it = std::find(notes.begin(), notes.end(), hoveredElement);
-        if (it != notes.end()) {
-            notes.erase(it);
-        }
+        region->deleteNote(std::dynamic_pointer_cast<Note>(hoveredElement)->id);
+        hoveredElement = nullptr;
         Scroll();
     }
 

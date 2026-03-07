@@ -33,7 +33,8 @@ TuningTable* getTuning();
 bool updateNoteChannel(std::shared_ptr<Note>);
 
 
- void createNote(fract, fract);
+    int createNote(fract, fract, float, TuningTable*);
+    void deleteNote(int);
 
  void sort();
 
@@ -43,6 +44,9 @@ void draw(SDL_Renderer*, float, int) override;
 
 json toJSON() override;
 void fromJSON(json) override;
+
+std::unordered_map<int, int> id_to_index;
+idManager id_pool;
 
 };
 
