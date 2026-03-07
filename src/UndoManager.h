@@ -26,12 +26,7 @@ struct ProjectAction {
 
     ProjectAction* parent = nullptr;
     int index;
-
-    int size() {
-        int size = 1;
-        for (auto c : children) size += c->size();
-        return size;
-    }
+    int last_index = 0;
 
     std::vector<int> version() {
         std::vector<int> v;
@@ -59,6 +54,7 @@ struct UndoManager {
 
     void newAction(ProjectAction* pa) {
         current->newAction(pa);
+        current->last_index = pa->index;
         current = pa;
         pa->doAction();
     }
@@ -86,7 +82,13 @@ struct UndoManager {
         current = current->parent;
     }
 
-    void redo() {}
+    void redo() {
+        auto idx = current->last_index;
+        if (current->children.size()) {
+            current = current->children[idx];
+            current->doAction();
+        }
+    }
 };
 
 struct CreateNoteAction : ProjectAction {
