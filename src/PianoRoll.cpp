@@ -203,16 +203,14 @@ void PianoRoll::Scroll() {
 }
 
 bool PianoRoll::customTick() {
-    //refreshGrid = true;
-    //handleCustomInput(e);
+    
     if(refreshGrid) {
         refreshGrid = false;
         RenderGridTexture();
-
         RenderDestinations();
-        RenderNotes();
-
     }
+
+    RenderNotes();
 
     SDL_SetRenderTarget(renderer, NULL);
 
