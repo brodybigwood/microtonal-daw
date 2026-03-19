@@ -42,6 +42,12 @@ struct ProjectAction {
     static ProjectAction* deSerialize(json);
 
     ProjectAction(ActionType type) : type(type) {}
+
+    bool open = false;
+    int hoveredIndex = -1;
+
+    std::string name;
+    SDL_Texture* texture = nullptr;
 };
 
 struct UndoManager {
@@ -79,16 +85,24 @@ struct UndoManager {
     void undo() {
         if (current == head) return;
         current->undoAction();
+        current->parent->last_index = current->index;
         current = current->parent;
     }
 
-    void redo() {
-        auto idx = current->last_index;
+    void redo(size_t idx = -1) {
+        if (idx == -1) idx = current->last_index;
         if (current->children.size()) {
             current = current->children[idx];
             current->doAction();
         }
     }
+
+    void goTo(ProjectAction*);
+    bool clicked = false; 
+
+    SDL_FRect* baseRect;   
+    bool render(SDL_Renderer*);
+    bool renderAction(SDL_Renderer*, SDL_FRect*, ProjectAction*);
 };
 
 struct CreateNoteAction : ProjectAction {
@@ -111,6 +125,7 @@ struct CreateNoteAction : ProjectAction {
         doAction = [this] () {
             auto region = static_cast<Region*>(ElementManager::get()->getElement(this->regionID));
             noteID = region->createNote(this->start, this->length, this->pitch, ScaleManager::instance()->byID(this->scaleID));
+            name = "Create Note " + std::to_string(noteID) + " " + std::to_string(this->regionID);
         };
 
         undoAction = [this] () {
