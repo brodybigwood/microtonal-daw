@@ -7,10 +7,11 @@
 using json = nlohmann::json;
 
 class TuningTable;
+class ScaleManager;
 
 class Note {
     public:
-        Note(fract start, fract end, float num);
+        Note(fract start, fract end, float num, ScaleManager*);
         ~Note();
 
         float num;  // Frequency or pitch of the note
@@ -26,8 +27,9 @@ class Note {
         void move(fract x, fract y);
 
         json toJSON();
-        static std::shared_ptr<Note> fromJSON(json&);
-
+        static std::shared_ptr<Note> fromJSON(json&, ScaleManager*);
+        
+        ScaleManager* sm;
 };
 
 #endif

@@ -16,22 +16,21 @@ using json = nlohmann::json;
 
 class Instrument;
 class TuningTable;
+class ScaleManager;
 
 class Region : public GridElement {
     private:
         
 
     public:
-        Region();
+        Region(Project*);
         ~Region() override;
 
+ScaleManager* sm;
         std::string name = "MIDI Region FX Rack";
 TuningTable* scale;
 TuningTable* getTuning();
  std::vector<std::shared_ptr<Note>> notes;
-
-bool updateNoteChannel(std::shared_ptr<Note>);
-
 
     int createNote(fract, fract, float, TuningTable*);
     void deleteNote(int);

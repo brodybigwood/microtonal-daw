@@ -39,9 +39,11 @@ struct ProjectAction {
     }
 
     static json serialize(ProjectAction*);
-    static ProjectAction* deSerialize(json);
+    static ProjectAction* deSerialize(json, Project*);
 
-    ProjectAction(ActionType type) : type(type) {}
+    Project* p;
+
+    ProjectAction(Project* p, ActionType type) : p(p), type(type) {}
 
     bool open = false;
     int hoveredIndex = -1;
@@ -51,10 +53,11 @@ struct ProjectAction {
 };
 
 struct UndoManager {
-    ProjectAction* head = new ProjectAction(NullAction);
+    ProjectAction* head;
     ProjectAction* current;
 
-    UndoManager() {
+    UndoManager(Project* p) {
+        head = new ProjectAction(p, NullAction);
         current = head;
     }
 
@@ -72,9 +75,9 @@ struct UndoManager {
         return j;
     }
 
-    void deSerialize(json j) {
+    void deSerialize(json j, Project* p) {
         if (head) delete head;
-        head = ProjectAction::deSerialize(j["head"]);
+        head = ProjectAction::deSerialize(j["head"], p);
         std::vector<int> version = j["version"];
         current = head;
         for (auto i : version) {
@@ -113,24 +116,5 @@ struct CreateNoteAction : ProjectAction {
     float pitch;
     int scaleID;
 
-    CreateNoteAction(int regionID, fract start, fract length, float pitch, TuningTable* scale) :
-        regionID(regionID),
-        start(start),
-        length(length),
-        pitch(pitch),
-        scaleID(scale->id),
-        ProjectAction(CreateNote)
-        {
-
-        doAction = [this] () {
-            auto region = static_cast<Region*>(ElementManager::get()->getElement(this->regionID));
-            noteID = region->createNote(this->start, this->length, this->pitch, ScaleManager::instance()->byID(this->scaleID));
-            name = "Create Note " + std::to_string(noteID) + " " + std::to_string(this->regionID);
-        };
-
-        undoAction = [this] () {
-            auto region = static_cast<Region*>(ElementManager::get()->getElement(this->regionID));
-            region->deleteNote(this->noteID);
-        };
-    }
+    CreateNoteAction(Project* p, int regionID, fract start, fract length, float pitch, TuningTable* scale);
 };

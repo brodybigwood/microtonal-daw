@@ -4,7 +4,7 @@
 #include <iostream>
 #include <sndfile.h>
 
-AudioClip::AudioClip() {
+AudioClip::AudioClip(Project* p) : GridElement(p) {
     type = ElementType::audioClip;
 }
 

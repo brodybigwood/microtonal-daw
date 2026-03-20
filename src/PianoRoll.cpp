@@ -10,13 +10,12 @@
 #include "Playhead.h"
 #include "Transport.h"
 #include "TuningTable.h"
-#include "ScaleManager.h"
 #include "ContextMenu.h"
 
 void PianoRoll::newTuning() {
     TuningTable t (true);
-    ScaleManager::instance()->addScale(t);
-    tuning_table = ScaleManager::instance()->getLastScale();
+    sm->addScale(t);
+    tuning_table = sm->getLastScale();
     region->scale = tuning_table;
     updateLines();
 }
@@ -46,7 +45,9 @@ PianoRoll::PianoRoll(SDL_FRect* rect, Region* region, bool* detached) : region(r
     }
     SDL_SetCursor(cursors.grabber);
 
-    this->project = Project::instance();
+    this->project = region->project;
+    
+    sm = project->sm;
 
     scrollY = 800;
 
@@ -312,8 +313,8 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     } else {
                         auto s = std::dynamic_pointer_cast<Note>(hoveredElement)->getScale();
 
-                        ScaleManager::instance()->addScale(*s);
-                        setTuning(ScaleManager::instance()->getLastScale());
+                        sm->addScale(*s);
+                        setTuning(sm->getLastScale());
 
                         UpdateGrid();
                         Scroll();
@@ -337,8 +338,6 @@ void PianoRoll::clickMouse(SDL_Event& e) {
 
                         ctxMenu->dynamicTick = getTextInputTicker([this](std::string text)
 {
-    auto sm = ScaleManager::instance();
-
     int index = tuning_table->byID(text);
 
     float midiNum = tuning_table->notes[index].midiNum;
@@ -648,7 +647,6 @@ void PianoRoll::moveNote(std::shared_ptr<Note> note, int moveX, float y) {
     note->end = note->end + x;
     note->num = note->num + y;
 
-    region->updateNoteChannel(note);
     Scroll();
 }
 

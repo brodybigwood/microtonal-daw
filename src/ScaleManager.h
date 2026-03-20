@@ -6,15 +6,13 @@
 
 class ScaleManager{
     public:
-        static ScaleManager* instance();
-
         std::vector<TuningTable*> scales;
 
         TuningTable* byID(uint16_t);
 
         void addScale(TuningTable&);
 
-        TuningTable* lastScale;
+        TuningTable* lastScale = nullptr;
         TuningTable* getLastScale();
 
         json serialize();

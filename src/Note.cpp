@@ -5,13 +5,14 @@
 
 TuningTable* Note::getScale() {
     if(scale == nullptr) {
-        return ScaleManager::instance()->getLastScale();
+        return sm->getLastScale();
     } else {
         return scale;
     }
 }
 
-Note::Note(fract start, fract end, float num) {
+Note::Note(fract start, fract end, float num, ScaleManager* sm) {
+    this->sm = sm;
     this->end = end;
     this->num = num;
     this->start = start;
@@ -34,7 +35,7 @@ json Note::toJSON() {
     return j;
 }
 
-std::shared_ptr<Note> Note::fromJSON(json& input) {
+std::shared_ptr<Note> Note::fromJSON(json& input, ScaleManager* sm) {
     auto num = input.at("num").get<float>();
     fract start;
     start.num = input.at("start").at("num").get<int>();
@@ -45,11 +46,11 @@ std::shared_ptr<Note> Note::fromJSON(json& input) {
     auto id = input.at("id").get<int>();
     auto channel = input.at("channel").get<int>();
 
-    std::shared_ptr<Note> n = std::make_shared<Note>(start,end,num);
+    std::shared_ptr<Note> n = std::make_shared<Note>(start,end,num, sm);
     n->id = id;
     n->channel = channel;
 
-    n->scale = ScaleManager::instance()->byID(input["scaleID"]);
+    n->scale = sm->byID(input["scaleID"]);
 
     return n;
 }

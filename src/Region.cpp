@@ -11,8 +11,9 @@ TuningTable* Region::getTuning() {
     return scale;
 }
 
-Region::Region() {
-    scale = ScaleManager::instance()->getLastScale();
+Region::Region(Project* p) : GridElement(p) {
+    this->sm = p->sm;
+    scale = sm->getLastScale();
     type = ElementType::region;
 }
 
@@ -42,31 +43,6 @@ void Region::draw(SDL_Renderer* renderer, float pixelsPerSecond, int h) {
 
 }
 
-bool Region::updateNoteChannel(std::shared_ptr<Note> n) {
-    std::set<int> usedChannels;
-
-    static std::function<int(fract)> toMS = [](fract f) {
-        return static_cast<int>(60000.0 * f.num / f.den / Project::instance()->tempo);
-    };
-
-
-    for (std::shared_ptr<Note> other : notes) {
-        bool overlap = !(toMS(n->end) + releaseMS <= toMS(other->start) || toMS(n->start) >= toMS(other->end) + releaseMS);
-        if (overlap) {
-            usedChannels.insert(other->channel);
-        }
-    }
-
-    for (int ch = 1; ch <= 15; ++ch) {
-        if (!usedChannels.count(ch)) {
-            n->channel = ch;
-            return true;
-        }
-    }
-
-    return false;
-}
-
 json Region::toJSON() {
     json j;
     j["name"] = name;
@@ -90,14 +66,14 @@ void Region::fromJSON(json j) {
     id = j["id"];
     type = j["type"];
     for (auto e : j["notes"]) {
-        notes.push_back(Note::fromJSON(e));
+        notes.push_back(Note::fromJSON(e, sm));
         id_to_index[e["id"]] = notes.size() - 1;
     }
     id_pool.fromJSON(j["idManager"]);
 }
 
 int Region::createNote(fract start, fract length, float pitch, TuningTable* t) {
-    auto n = std::make_shared<Note>(start, start + length, pitch);
+    auto n = std::make_shared<Note>(start, start + length, pitch, sm);
     n->scale = t;
     notes.push_back(n);
     n->id = id_pool.newID();

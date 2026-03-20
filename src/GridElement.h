@@ -12,10 +12,14 @@ enum ElementType{
     audioClip = 1
 };
 
+class Project;
+
 class GridElement {
     public:
+    
+        Project* project;
 
-        GridElement();
+        GridElement(Project*);
         virtual ~GridElement();
 
         struct Position {

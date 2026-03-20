@@ -25,6 +25,8 @@ class Project {
         static Project* instance();
         NodeManager* nm;
         NodeEditor* ne;
+        
+        ScaleManager* sm;
 
         int sampleTime = 0;
 
@@ -67,10 +69,9 @@ class Project {
 
         void process(float* input, float* output, int& bufferSize, int& numChannelsIn, int& numChannelsOut, int& sampleRate);
 
-        UndoManager um;
-        void doAction(ProjectAction);
-        void undo() { um.undo(); }
-        void redo() { um.redo(); }
+        UndoManager* um;
+        void undo() { um->undo(); }
+        void redo() { um->redo(); }
 
     private:
 

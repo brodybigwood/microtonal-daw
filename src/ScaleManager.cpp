@@ -1,10 +1,6 @@
 #include "ScaleManager.h"
 #include <algorithm>
 #include <iostream>
-ScaleManager* ScaleManager::instance() {
-    static ScaleManager sm;
-    return &sm;
-}
 
 ScaleManager::~ScaleManager() {
     for(auto s : scales) {
@@ -22,8 +18,6 @@ TuningTable* ScaleManager::getLastScale() {
 	    id_to_index[s->id] = scales.size() - 1;
         }
         lastScale = scales.front();
-
-        std::cout << "it was a nullptr" << std::endl;
     }
     return lastScale;
 }

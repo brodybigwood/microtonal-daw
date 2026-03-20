@@ -1,27 +1,27 @@
 #include "UndoManager.h"
 #include "SDL_Events.h"
 #include "styles.h"
+#include "Project.h"
 
-ProjectAction* ProjectAction::deSerialize(json j) {
+ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
     ProjectAction* pa;
     switch (j["type"].get<int>()) {
         case CreateNote: {
             auto cn = new CreateNoteAction(
-                j["regionID"], fract::fromJSON(j["start"]), fract::fromJSON(j["length"]),
-                j["pitch"], ScaleManager::instance()->byID(j["scaleID"])
-            
+                p, j["regionID"], fract::fromJSON(j["start"]), fract::fromJSON(j["length"]),
+                j["pitch"], p->sm->byID(j["scaleID"])
             );
             cn->noteID = j["noteID"];
             pa = cn;
             break;
         }
         default:
-            pa = new ProjectAction(NullAction); // head
+            pa = new ProjectAction(p, NullAction); // head
             break;
     }
 
     for (auto jc : j["children"]) {
-        auto c = ProjectAction::deSerialize(jc);
+        auto c = ProjectAction::deSerialize(jc, p);
         pa->newAction(c);
     }
 
@@ -160,4 +160,26 @@ void UndoManager::goTo(ProjectAction* target) {
         redo(headToTarget[i]);
         i++;
     }
+}
+
+
+CreateNoteAction::CreateNoteAction(Project* p, int regionID, fract start, fract length, float pitch, TuningTable* scale) :
+        ProjectAction(p, CreateNote),
+        regionID(regionID),
+        start(start),
+        length(length),
+        pitch(pitch),
+        scaleID(scale->id)
+        {
+
+        doAction = [this] () {
+            auto region = static_cast<Region*>(ElementManager::get()->getElement(this->regionID));
+            noteID = region->createNote(this->start, this->length, this->pitch, this->p->sm->byID(this->scaleID));
+            name = "Create Note " + std::to_string(noteID) + " " + std::to_string(this->regionID);
+        };
+
+        undoAction = [this] () {
+            auto region = static_cast<Region*>(ElementManager::get()->getElement(this->regionID));
+            region->deleteNote(this->noteID);
+        };
 }

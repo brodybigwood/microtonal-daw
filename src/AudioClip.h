@@ -11,7 +11,7 @@ using json = nlohmann::json;
 class AudioClip : public GridElement {
 
 public:
-    AudioClip();
+    AudioClip(Project*);
     ~AudioClip() override;
 
     std::string name = "Audio Region";

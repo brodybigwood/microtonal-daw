@@ -11,6 +11,7 @@
 #define PIANOROLL_H
 
 struct TuningTable;
+class ScaleManager;
 
 class PianoRoll : public GridView {
 
@@ -35,6 +36,7 @@ class PianoRoll : public GridView {
         SDL_Texture* keys[128];
 
         Region* region;
+        ScaleManager* sm;
 
         double referenceOffset;
 

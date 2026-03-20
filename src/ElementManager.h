@@ -5,6 +5,7 @@
 
 class Region;
 class AudioClip;
+class Project;
 
 class ElementManager {
     public:
@@ -40,4 +41,6 @@ class ElementManager {
         int scrollY;
 
         bool handleInput(SDL_Event&);
+
+        Project* project;
 };

@@ -32,8 +32,8 @@ json ElementManager::toJSON() {
 void ElementManager::process(int bufferSize) {
     float epsilon = 1e-6;
 
-    float window = (Project::instance()->tempo * (float)AudioManager::instance()->bufferSize / AudioManager::instance()->sampleRate) / 60.0f;
-    float time = Project::instance()->tempo * Project::instance()->timeSeconds/60.0f;
+    float window = (project->tempo * (float)AudioManager::instance()->bufferSize / AudioManager::instance()->sampleRate) / 60.0f;
+    float time = project->tempo * project->timeSeconds/60.0f;
 
     TrackList* tl = TrackList::get();
 
@@ -47,7 +47,7 @@ void ElementManager::process(int bufferSize) {
             switch (element->type) {
                 case ElementType::region:
                     {
-                        if (!Project::instance()->isPlaying) {
+                        if (!project->isPlaying) {
                             for (auto& note : dispatched) {
                                 Event event {
                                     noteEventType::noteOff,
@@ -68,7 +68,7 @@ void ElementManager::process(int bufferSize) {
 
                             if (std::find(dispatched.begin(), dispatched.end(), note) == dispatched.end() && start < time+window+epsilon && start+epsilon >= time) {
                                
-                                int offset = AudioManager::instance()->sampleRate * 60.0f * (start - time)/Project::instance()->tempo;
+                                int offset = AudioManager::instance()->sampleRate * 60.0f * (start - time)/project->tempo;
  
                                 Event event {
                                     noteEventType::noteOn,
@@ -82,7 +82,7 @@ void ElementManager::process(int bufferSize) {
                                 dispatched.push_back(note);
                             } else if (std::find(dispatched.begin(), dispatched.end(), note) != dispatched.end() && end < time+window+epsilon && end+epsilon >= time) {
 
-                                int offset = AudioManager::instance()->sampleRate * 60.0f * (end - time)/Project::instance()->tempo;
+                                int offset = AudioManager::instance()->sampleRate * 60.0f * (end - time)/project->tempo;
 
 
                                 Event event {
@@ -107,10 +107,10 @@ void ElementManager::process(int bufferSize) {
 // time is current processing time in beats
 // audio range is pos.start to pos.end
 // time must be anywhere between    
-                        if (!Project::instance()->isPlaying) break;
+                        if (!project->isPlaying) break;
                         if (!track->buffer) break;
 
-                        int readIdx = Project::instance()->beatsToSamples(time - pos.start);
+                        int readIdx = project->beatsToSamples(time - pos.start);
                         if (readIdx < 0) break;
                         AudioClip* ac = static_cast<AudioClip*>(element);
                         float* rbuffer = ac->buffer;
@@ -144,10 +144,10 @@ void ElementManager::fromJSON(json j) {
 
         switch (e["type"].get<int>()) {
             case ElementType::region:
-                ge = new Region;
+                ge = new Region(project);
                 break;
             case ElementType::audioClip:
-                ge = new AudioClip;
+                ge = new AudioClip(project);
                 break;
             default:
                 return; // unknown type, give up
@@ -165,7 +165,7 @@ uint16_t ElementManager::getIndex(uint16_t id) {
 }
 
 Region* ElementManager::newRegion() {
-    auto r = new Region;
+    auto r = new Region(project);
     r->id = id_pool.newID();
     elements.push_back(r);
 
@@ -176,7 +176,7 @@ Region* ElementManager::newRegion() {
 
 AudioClip* ElementManager::newAudioClip(std::string filepath) {
 
-    auto a = new AudioClip;
+    auto a = new AudioClip(project);
 
     a->setFile(filepath);
     if (a->filepath == "") {
@@ -194,6 +194,7 @@ AudioClip* ElementManager::newAudioClip(std::string filepath) {
 
 ElementManager* ElementManager::get() {
     static ElementManager e;
+    e.project = Project::instance();
     return &e;
 }
 
@@ -312,7 +313,7 @@ bool ElementManager::handleInput(SDL_Event& e) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             if (e.button.button == SDL_BUTTON_LEFT) {
                 if(hoverNew) {
-                    Project::instance()->createRegion(); 
+                    project->createRegion(); 
                     break;
                 }
                 if(hoveredElement != -1) {

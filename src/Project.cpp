@@ -35,9 +35,17 @@ void Project::process(float* input, float* output, int& bufferSize, int& numChan
 Project::Project() {
     nm = new NodeManager(this);
     ne = nm->ne;
+
+    sm = new ScaleManager;
+
+    um = new UndoManager(this);
 }
 
 Project::~Project() {
+    delete um;
+    delete sm;
+    delete nm;
+    delete ne;
 }
 
 Project* Project::instance() {
@@ -68,11 +76,11 @@ void Project::load(std::string path) {
     tempo = j.value("tempo", 120.0f);
 
 
-    ScaleManager::instance()->deSerialize(j["scaleManager"]);
+    sm->deSerialize(j["scaleManager"]);
     ElementManager::get()->fromJSON(j["elementManager"]);
     nm->deSerialize(j["nodeManager"]);
 
-    um.deSerialize(j["undoManager"]);
+    um->deSerialize(j["undoManager"], this);
 
     TrackList::get()->fromJSON(j["tracks"]);
 }
@@ -89,10 +97,10 @@ void Project::save() {
 
     j["tracks"] = TrackList::get()->toJSON();
 
-    j["scaleManager"] = ScaleManager::instance()->serialize();
+    j["scaleManager"] = sm->serialize();
     j["elementManager"] = ElementManager::get()->toJSON();
     j["nodeManager"] = nm->serialize();
-    j["undoManager"] = um.serialize();
+    j["undoManager"] = um->serialize();
 
     std::ofstream outFile(file);
     if (outFile.is_open()) {
@@ -107,8 +115,8 @@ void Project::createRegion() {
 }
 
 void Project::createNote(fract start, fract length, float pitch, TuningTable* t, int regionID) {
-    auto pa = new CreateNoteAction(regionID, start, length, pitch, t);
-    um.newAction(pa);
+    auto pa = new CreateNoteAction(this, regionID, start, length, pitch, t);
+    um->newAction(pa);
 }
 
 void Project::togglePlaying() {

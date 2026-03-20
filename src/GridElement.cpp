@@ -2,7 +2,7 @@
 #include "fract.h"
 #include "Project.h"
 
-GridElement::GridElement() {
+GridElement::GridElement(Project* p) : project(p) {
 }
 
 void GridElement::createPos(fract startTime, uint16_t trackID) {
@@ -47,9 +47,7 @@ json GridElement::toJSON() {
 }
 
 void GridElement::fromJSON(json j) {
-    auto project = Project::instance();
     for(json& p : j) {
-
         Position* pos = new Position{
             fract::fromJSON(p["startOffset"]),
             fract::fromJSON(p["start"]),
