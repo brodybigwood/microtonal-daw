@@ -23,7 +23,7 @@ WindowHandler::WindowHandler() {
     ctxMenu = ContextMenu::get();
 }
 
-void WindowHandler::createHome(Project* project) {
+void WindowHandler::createHome() {
     home = new Home(project);
     home->createRoll();
 }
@@ -63,8 +63,8 @@ bool WindowHandler::tick() {
             }
 
             if (isCtrlPressed && e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_Z) 
-                if (isShiftPressed) Project::instance()->redo();
-                    else Project::instance()->undo();
+                if (isShiftPressed) project->redo();
+                    else project->undo();
 
             toggleKey(e, SDL_SCANCODE_LSHIFT, isShiftPressed);
             toggleKey(e, SDL_SCANCODE_LCTRL, isCtrlPressed);

@@ -22,15 +22,15 @@ int main() {
 
     createCursors();
 
-    Project* project = Project::instance();
+    Project* project = new Project;
     AudioManager* audioManager = AudioManager::instance();
     audioManager->setProject(project);
 
     project->load("test");
 
     WindowHandler* windowHandler = WindowHandler::instance();
-
-    windowHandler->createHome(project);
+    windowHandler->project = project;
+    windowHandler->createHome();
 
     if (!audioManager->start()) {
         std::cout << "audiomanager failed" << std::endl;

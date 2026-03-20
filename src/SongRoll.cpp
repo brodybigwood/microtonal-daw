@@ -149,7 +149,7 @@ void SongRoll::renderElements() {
 }
 
 void SongRoll::renderElement(GridElement* element) {
-    float tempo = Project::instance()->tempo; // notes per minute
+    float tempo = project->tempo; // notes per minute
     float barsPerSecond = tempo / (60 * notesPerBar);   
     float pixelsPerSecond = dW * barsPerSecond;
     element->draw(renderer, pixelsPerSecond, (int)divHeight);

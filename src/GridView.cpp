@@ -42,7 +42,7 @@ GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin, Home* h) :
     }
 
 
-    this->playHead = new Playhead(&gridRect, dstRect, detached, startTime);
+    this->playHead = new Playhead(&gridRect, dstRect, detached, startTime, project);
     this->transport = new Transport(this);
 }
 

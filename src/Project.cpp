@@ -49,11 +49,6 @@ Project::~Project() {
     delete ne;
 }
 
-Project* Project::instance() {
-    static Project proj;
-    return &proj;
-}
-
 void Project::load(std::string path) {
 
     if (!path.empty()) {

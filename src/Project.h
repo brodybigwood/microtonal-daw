@@ -24,7 +24,6 @@ class Project {
 
         bool processing = false;
 
-        static Project* instance();
         NodeManager* nm;
         NodeEditor* ne;
         TrackManager* tm;

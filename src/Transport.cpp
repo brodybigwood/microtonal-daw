@@ -7,8 +7,8 @@
 Transport::Transport(GridView* view) : view(view), renderer(view->renderer), dstRect(view->dstRect) {
 
     togglePlay = new Button(renderer);
-    togglePlay->activated = [] {
-        return Project::instance()->isPlaying;
+    togglePlay->activated = [project = view->project] {
+        return project->isPlaying;
     };
     togglePlay->dstRect = new SDL_FRect {
     view->dstRect->x + 50,view->dstRect->y + 15,25,25
@@ -19,15 +19,15 @@ Transport::Transport(GridView* view) : view(view), renderer(view->renderer), dst
             this->mouseY >= togglePlay->dstRect->y && this->mouseY <= togglePlay->dstRect->y + togglePlay->dstRect->h
         );
     };
-    togglePlay->onClick = [] {
-        Project::instance()->togglePlaying();
+    togglePlay->onClick = [project = view->project] {
+        project->togglePlaying();
     };
 
 
 
     stop = new Button(renderer);
-    stop->activated = [] {
-        return !Project::instance()->processing;
+    stop->activated = [project = view->project] {
+        return !project->processing;
     };
     stop->dstRect = new SDL_FRect {
         view->dstRect->x + 100 ,view->dstRect->y + 15,25,25
@@ -38,8 +38,8 @@ Transport::Transport(GridView* view) : view(view), renderer(view->renderer), dst
             this->mouseY >= stop->dstRect->y && this->mouseY <= stop->dstRect->y + stop->dstRect->h
         );
     };
-    stop->onClick = [] {
-        Project::instance()->stop();
+    stop->onClick = [project = view->project] {
+        project->stop();
     };
 
 

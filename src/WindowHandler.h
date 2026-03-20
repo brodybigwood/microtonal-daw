@@ -18,7 +18,7 @@ SDL_Event e;
         WindowHandler();
         ~WindowHandler();
 
-        void createHome(Project* project);
+        void createHome();
 
         SDL_Renderer* renderer;
 

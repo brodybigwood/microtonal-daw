@@ -2,8 +2,7 @@
 #include "fract.h"
 
 
-Playhead::Playhead(SDL_FRect* gridRect, SDL_FRect* dstRect, bool* detached, fract* startTime) :startTime(startTime) {
-    this->project = Project::instance();
+Playhead::Playhead(SDL_FRect* gridRect, SDL_FRect* dstRect, bool* detached, fract* startTime, Project* p) : startTime(startTime), project(p) {
     this->detached = detached;
     this->gridRect = gridRect;
     this->dstRect = dstRect;
