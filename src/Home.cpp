@@ -2,11 +2,6 @@
 #include "SDL_Events.h"
 #include "NodeEditor.h"
 
-Home* Home::get() {
-    static Home h(Project::instance());
-    return &h;
-}
-
 Home::Home(Project* project) {
     this->project = project;
     ne = project->ne;
@@ -40,10 +35,17 @@ void Home::createRoll() {
     }
     song = new SongRoll(
         &songRect,
-        &songRollDetached
+        &songRollDetached,
+        this
     );
 
 }
+
+void Home::createPianoRoll(Region* region, SDL_FRect* pRect) {
+    if (pianoRoll) return;
+    pianoRoll = new PianoRoll(pRect, region, this);    
+}
+
 
 void Home::render() {
 

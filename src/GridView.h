@@ -6,10 +6,12 @@
 class Playhead;
 class Project;
 class Transport;
+class Home;
 
 class GridView {
     public:
-        GridView(bool*, SDL_FRect*, float leftMargin);
+        Home* home;
+        GridView(bool*, SDL_FRect*, float leftMargin, Home*);
 
         virtual ~GridView();
 

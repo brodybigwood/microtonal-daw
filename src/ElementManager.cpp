@@ -5,7 +5,7 @@
 #include "styles.h"
 #include "Project.h"
 #include "AudioManager.h"
-#include "TrackList.h"
+#include "TrackManager.h"
 #include "AudioClip.h"
 
 ElementManager::~ElementManager() {
@@ -35,14 +35,12 @@ void ElementManager::process(int bufferSize) {
     float window = (project->tempo * (float)AudioManager::instance()->bufferSize / AudioManager::instance()->sampleRate) / 60.0f;
     float time = project->tempo * project->timeSeconds/60.0f;
 
-    TrackList* tl = TrackList::get();
-
     for (auto* element : elements)
         for (auto position : element->positions) {
             auto& pos = *position;
             float regTime = pos.start;
 
-            Track* track = tl->getTrack(pos.trackID);            
+            Track* track = tm->getTrack(pos.trackID);            
             auto& dispatched = track->dispatched;            
             switch (element->type) {
                 case ElementType::region:
@@ -192,12 +190,7 @@ AudioClip* ElementManager::newAudioClip(std::string filepath) {
     return a;
 }
 
-ElementManager* ElementManager::get() {
-    static ElementManager e;
-    e.project = Project::instance();
-    return &e;
-}
-
+ElementManager::ElementManager(Project* p) : project(p), tm(p->tm) {}
 
 void ElementManager::render(SDL_Renderer* renderer) {
 

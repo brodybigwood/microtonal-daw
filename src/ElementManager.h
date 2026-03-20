@@ -6,10 +6,11 @@
 class Region;
 class AudioClip;
 class Project;
+class TrackManager;
 
 class ElementManager {
     public:
-        static ElementManager* get();
+        ElementManager(Project*);
         ~ElementManager();
 
         std::vector<GridElement*> elements;
@@ -43,4 +44,5 @@ class ElementManager {
         bool handleInput(SDL_Event&);
 
         Project* project;
+        TrackManager* tm;
 };

@@ -35,8 +35,8 @@ void PianoRoll::updateLines() {
     Scroll();
 }
 
-PianoRoll::PianoRoll(SDL_FRect* rect, Region* region, bool* detached) : region(region), GridView(detached, rect, 40) {
-
+PianoRoll::PianoRoll(SDL_FRect* rect, Region* region, Home* h) : region(region), GridView(&(h->pianoRollDetached), rect, 40, h) {
+    
     tuning_table = region->getTuning();
     updateLines();
 

@@ -4,7 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include "AudioManager.h"
-#include "TrackList.h"
+#include "TrackManager.h"
 #include "ElementManager.h"
 #include "ScaleManager.h"
 #include "BusManager.h"
@@ -23,11 +23,9 @@ void Project::process(float* input, float* output, int& bufferSize, int& numChan
     BusManager* bm = BusManager::get();
     bm->process(bufferSize);
 
-    auto* em = ElementManager::get();
     em->process(bufferSize);    
 
-    TrackList* tl = TrackList::get();
-    tl->process(input, bufferSize);
+    tm->process(input, bufferSize);
 
     nm->process(output, bufferSize, numChannelsOut, sampleRate);
 };
@@ -39,6 +37,9 @@ Project::Project() {
     sm = new ScaleManager;
 
     um = new UndoManager(this);
+
+    tm = new TrackManager;
+    em = new ElementManager(this);
 }
 
 Project::~Project() {
@@ -77,12 +78,12 @@ void Project::load(std::string path) {
 
 
     sm->deSerialize(j["scaleManager"]);
-    ElementManager::get()->fromJSON(j["elementManager"]);
+    em->fromJSON(j["elementManager"]);
     nm->deSerialize(j["nodeManager"]);
 
     um->deSerialize(j["undoManager"], this);
 
-    TrackList::get()->fromJSON(j["tracks"]);
+    tm->fromJSON(j["tracks"]);
 }
 
 void Project::save() {
@@ -95,10 +96,10 @@ void Project::save() {
     json j;
     j["tempo"] = tempo;
 
-    j["tracks"] = TrackList::get()->toJSON();
+    j["tracks"] = tm->toJSON();
 
     j["scaleManager"] = sm->serialize();
-    j["elementManager"] = ElementManager::get()->toJSON();
+    j["elementManager"] = em->toJSON();
     j["nodeManager"] = nm->serialize();
     j["undoManager"] = um->serialize();
 
@@ -110,7 +111,6 @@ void Project::save() {
 }
 
 void Project::createRegion() {
-    auto em = ElementManager::get();
     em->newRegion();
 }
 

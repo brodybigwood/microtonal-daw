@@ -1,4 +1,4 @@
-#include "TrackList.h"
+#include "TrackManager.h"
 #include <algorithm>
 #include "WindowHandler.h"
 #include <ranges>
@@ -6,10 +6,10 @@
 #include "styles.h"
 #include <SDL3_gfx/SDL3_gfxPrimitives.h>
 
-TrackList::TrackList() {}
+TrackManager::TrackManager() {}
 
 
-void TrackList::setGeometry(SDL_FRect* dstRect) {
+void TrackManager::setGeometry(SDL_FRect* dstRect) {
 
     auto wm = WindowHandler::instance();
     auto r = wm->renderer;
@@ -43,7 +43,7 @@ void TrackList::setGeometry(SDL_FRect* dstRect) {
     newTrackW->onClick = [this] { this->addTrack(TrackType::Audio); };
 }
 
-TrackList::~TrackList() {
+TrackManager::~TrackManager() {
 
     delete newTrackE;
     delete newTrackW;
@@ -54,7 +54,7 @@ TrackList::~TrackList() {
     tracks.clear();
 }
 
-void TrackList::addTrack(TrackType tp) {
+void TrackManager::addTrack(TrackType tp) {
     uint16_t id = id_pool.newID();
     Track* t = new Track;
     tracks.push_back(t);
@@ -63,24 +63,24 @@ void TrackList::addTrack(TrackType tp) {
     t->type = tp;
 }
 
-Track* TrackList::getTrack(uint16_t id) {
+Track* TrackManager::getTrack(uint16_t id) {
     auto index = getIndex(id);
     if (index == -1) return nullptr;
     return tracks[index];
 }
 
-int TrackList::getIndex(uint16_t id) {
+int TrackManager::getIndex(uint16_t id) {
     auto it = ids.find(id);
     if( it == ids.end()) return -1; 
     return it->second;
 }
 
-int TrackList::getID(int index) {
+int TrackManager::getID(int index) {
     if (index < tracks.size()) return tracks[index]->id;
     else return -1;
 }
 
-void TrackList::solo(uint16_t id) {
+void TrackManager::solo(uint16_t id) {
     auto it = std::find(soloTracks.begin(), soloTracks.end(), id);
     if (it != soloTracks.end()) {
         soloTracks.erase(it);
@@ -89,7 +89,7 @@ void TrackList::solo(uint16_t id) {
     }
 };
 
-void TrackList::mute(uint16_t id) {
+void TrackManager::mute(uint16_t id) {
     auto it = std::find(muteTracks.begin(), muteTracks.end(), id);
     if (it != muteTracks.end()) {
         muteTracks.erase(it);
@@ -98,7 +98,7 @@ void TrackList::mute(uint16_t id) {
     }
 }
 
-bool TrackList::mouseOn(SDL_FRect* rect) {
+bool TrackManager::mouseOn(SDL_FRect* rect) {
     int x = *mouseX;
     int y = *mouseY;
     return (
@@ -109,7 +109,7 @@ bool TrackList::mouseOn(SDL_FRect* rect) {
         );
 }
 
-void TrackList::render(SDL_Renderer* renderer) {
+void TrackManager::render(SDL_Renderer* renderer) {
     
     SDL_FRect trackRect{
         dstRect->x, dstRect->y - *scrollY, dstRect->w, *divHeight
@@ -138,7 +138,7 @@ void TrackList::render(SDL_Renderer* renderer) {
     newTrackW->render();
 }
 
-void TrackList::handleTrackInput(Track* track, int y, SDL_Event& e) {
+void TrackManager::handleTrackInput(Track* track, int y, SDL_Event& e) {
     SDL_FRect trackRect{
         dstRect->x, y + dstRect->y - *scrollY, dstRect->w, *divHeight
     };
@@ -149,9 +149,9 @@ void TrackList::handleTrackInput(Track* track, int y, SDL_Event& e) {
                 auto* ctxMenu = ContextMenu::get();
                 ctxMenu->active = true;
 
-                auto window = Home::get()->song->window;
+                auto window = songRoll->window;
                 ctxMenu->window_id = SDL_GetWindowID(window);
-                ctxMenu->renderer = Home::get()->song->renderer;
+                ctxMenu->renderer = songRoll->renderer;
                 SDL_StartTextInput(window);
 
                 ctxMenu->locX = *mouseX;
@@ -177,7 +177,7 @@ void TrackList::handleTrackInput(Track* track, int y, SDL_Event& e) {
     }
 }
 
-void TrackList::moveTrack() {
+void TrackManager::moveTrack() {
     if (!movingTrack) return;
 
     auto it = std::find(tracks.begin(), tracks.end(), movingTrack);
@@ -196,7 +196,7 @@ void TrackList::moveTrack() {
     movingTrack = nullptr;
 }
 
-void TrackList::handleInput(SDL_Event& e) {
+void TrackManager::handleInput(SDL_Event& e) {
     
     hoveredTrack = nullptr;
 
@@ -234,7 +234,7 @@ void TrackList::handleInput(SDL_Event& e) {
     };
 }
 
-void TrackList::renderTrack(SDL_Renderer* renderer, Track* track, SDL_FRect* rect) {
+void TrackManager::renderTrack(SDL_Renderer* renderer, Track* track, SDL_FRect* rect) {
 
     //body
 
@@ -283,18 +283,13 @@ void TrackList::renderTrack(SDL_Renderer* renderer, Track* track, SDL_FRect* rec
     SDL_RenderRect(renderer, rect); //outer
 }
 
-TrackList* TrackList::get() {
-    static TrackList t;
-    return &t;
-}
-
-void TrackList::process(float* input, int bufferSize) {
+void TrackManager::process(float* input, int bufferSize) {
     for(auto track : tracks) {
         track->process(input, bufferSize);
     }
 }
 
-void TrackList::fromJSON(json j) {
+void TrackManager::fromJSON(json j) {
     soloTracks = j["soloTracks"].get<std::vector<uint16_t>>();
     muteTracks = j["muteTracks"].get<std::vector<uint16_t>>();
 
@@ -314,7 +309,7 @@ void TrackList::fromJSON(json j) {
     assignedBusses.waveform = j["assignedBusses"]["waveform"].get<std::vector<int>>();
 }
 
-json TrackList::toJSON() {
+json TrackManager::toJSON() {
     json j;
     j["soloTracks"] = soloTracks;
     j["muteTracks"] = muteTracks;
@@ -339,7 +334,7 @@ json TrackList::toJSON() {
     return j;
 }
 
-void TrackList::assign(Track* track, int busID) {
+void TrackManager::assign(Track* track, int busID) {
     BusManager* bm = BusManager::get();
 
     switch(track->type) {

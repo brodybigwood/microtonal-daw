@@ -173,13 +173,13 @@ CreateNoteAction::CreateNoteAction(Project* p, int regionID, fract start, fract 
         {
 
         doAction = [this] () {
-            auto region = static_cast<Region*>(ElementManager::get()->getElement(this->regionID));
+            auto region = static_cast<Region*>(this->p->em->getElement(this->regionID));
             noteID = region->createNote(this->start, this->length, this->pitch, this->p->sm->byID(this->scaleID));
             name = "Create Note " + std::to_string(noteID) + " " + std::to_string(this->regionID);
         };
 
         undoAction = [this] () {
-            auto region = static_cast<Region*>(ElementManager::get()->getElement(this->regionID));
+            auto region = static_cast<Region*>(this->p->em->getElement(this->regionID));
             region->deleteNote(this->noteID);
         };
 }

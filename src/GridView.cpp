@@ -4,12 +4,14 @@
 #include "Transport.h"
 #include "WindowHandler.h"
 
-GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin) : 
+GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin, Home* h) : 
     detached(detached), 
     leftMargin(leftMargin), 
     isShiftPressed(WindowHandler::instance()->isShiftPressed), 
     isAltPressed(WindowHandler::instance()->isAltPressed), 
-    isCtrlPressed(WindowHandler::instance()->isCtrlPressed) 
+    isCtrlPressed(WindowHandler::instance()->isCtrlPressed),
+    home(h),
+    project(h->project)
 {
 
     if(rect != nullptr && !*detached) {
@@ -31,12 +33,12 @@ GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin) :
     if(*detached) {
         window = SDL_CreateWindow("Piano Roll", width, height, SDL_WINDOW_RESIZABLE | SDL_WINDOW_UTILITY);
 
-        SDL_SetWindowParent(window, Home::get()->window);
+        SDL_SetWindowParent(window, home->window);
 
         renderer = SDL_CreateRenderer(window, NULL);
     } else {
-        window = Home::get()->window;
-        renderer = Home::get()->renderer;
+        window = home->window;
+        renderer = home->renderer;
     }
 
 

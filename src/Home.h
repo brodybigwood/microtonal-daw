@@ -28,14 +28,13 @@ class Home {
     bool sendInput(SDL_Event&);
 
     SDL_FRect songRect;
-    SongRoll* song;
+    SongRoll* song = nullptr;
 
     bool pianoRollDetached = true;
     bool songRollDetached = false;
     
-        static Home* get();
-
         void createRoll();
+        void createPianoRoll(Region*, SDL_FRect*);
 
         Home(Project* project);
         ~Home();

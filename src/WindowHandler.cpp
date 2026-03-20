@@ -24,7 +24,7 @@ WindowHandler::WindowHandler() {
 }
 
 void WindowHandler::createHome(Project* project) {
-    home = Home::get();
+    home = new Home(project);
     home->createRoll();
 }
 
@@ -39,12 +39,7 @@ WindowHandler* WindowHandler::instance() {
 }
 
 void WindowHandler::createPianoRoll(Region* region, SDL_FRect* pRect) {
-    if(home->pianoRoll) {
-        return;
-    }
-    std::cout<<"creating"<<std::endl;
-
-    home->pianoRoll = new PianoRoll(pRect, region, &(home->pianoRollDetached));
+    home->createPianoRoll(region, pRect);
 }
 
 bool WindowHandler::tick() { 

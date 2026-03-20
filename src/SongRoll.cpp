@@ -9,10 +9,9 @@
 #include "ElementManager.h"
 #include "SDL_Events.h"
 
-SongRoll::SongRoll(SDL_FRect* rect, bool* detached) : GridView(detached, rect, 200) {
+SongRoll::SongRoll(SDL_FRect* rect, bool* detached, Home* h) : GridView(detached, rect, 200, h) {
     this->windowHandler = WindowHandler::instance();
-    this->project = Project::instance();
-
+    
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
     gridTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
     regionTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
@@ -27,7 +26,8 @@ SongRoll::SongRoll(SDL_FRect* rect, bool* detached) : GridView(detached, rect, 2
 
     rightRect = SDL_FRect{dstRect->x + dstRect->w - rightMargin, dstRect->y + topMargin, rightMargin, dstRect->h - topMargin};
 
-    ElementManager::get()->dstRect = &rightRect;
+    em = project->em;
+    em->dstRect = &rightRect;
 
 
 
@@ -39,7 +39,9 @@ SongRoll::SongRoll(SDL_FRect* rect, bool* detached) : GridView(detached, rect, 2
     }
     createGridRect();
 
-    tracks = TrackList::get();
+    tracks = project->tm;
+    tracks->songRoll = this;
+
     leftRect = SDL_FRect{
         dstRect->x, dstRect->y + topMargin, leftMargin, dstRect->h - topMargin
     };
@@ -78,7 +80,7 @@ bool SongRoll::customTick() {
 void SongRoll::renderMargins() {
     tracks->render(renderer);
     transport->render();
-    ElementManager::get()->render(renderer);
+    em->render(renderer);
 }
 
 
@@ -100,8 +102,8 @@ void SongRoll::movePosition() {
     movingPosition->start = lastPosition.start + change;
 
     int trackID = getHoveredTrack(); 
-    auto track = TrackList::get()->getTrack(trackID);
-    auto oldTrack = TrackList::get()->getTrack(lastPosition.trackID);
+    auto track = tracks->getTrack(trackID);
+    auto oldTrack = tracks->getTrack(lastPosition.trackID);
     if (track && oldTrack && track->type == oldTrack->type) movingPosition->trackID = trackID;
 }
 
@@ -125,7 +127,7 @@ void SongRoll::handleCustomInput(SDL_Event& e) {
     }
     if (mouseX > rightRect.x && mouseX <= (rightRect.x + rightRect.w) &&
         mouseY > rightRect.y && mouseY <= (rightRect.y + rightRect.h)) {
-        ElementManager::get()->handleInput(e);
+        em->handleInput(e);
     }
 
     if (mouseX > leftRect.x && mouseX <= (leftRect.x + leftRect.w) &&
@@ -139,7 +141,7 @@ void SongRoll::renderElements() {
     SDL_SetRenderTarget(renderer, regionTexture);
     SDL_SetRenderDrawColor(renderer, 0,0,0,0);
     SDL_RenderClear(renderer);
-    for (auto element : ElementManager::get()->elements) {
+    for (auto element : em->elements) {
         renderElement(element);
     }
 
@@ -184,7 +186,7 @@ void SongRoll::renderElement(GridElement* element) {
 }
 
 void SongRoll::getHoveredPosition() {
-    for (auto e : ElementManager::get()->elements) {
+    for (auto e : em->elements) {
         for(auto position :e->positions) {
             auto& pos = *position;
             uint16_t index = tracks->getIndex(pos.trackID);
@@ -209,11 +211,11 @@ float SongRoll::getHoveredLine() {
 
 int SongRoll::getHoveredTrack() {
     auto trackIndex = getHoveredLine();
-    return TrackList::get()->getID(trackIndex);
+    return tracks->getID(trackIndex);
 }
 
 void SongRoll::createElement() {
-    int id = ElementManager::get()->currentElement;
+    int id = em->currentElement;
 
     if(id == -1) {
         return;
@@ -221,10 +223,10 @@ void SongRoll::createElement() {
     fract start = getHoveredTime();
 
     auto trackID = getHoveredTrack();
-    auto track = TrackList::get()->getTrack(trackID);
+    auto track = tracks->getTrack(trackID);
     if (!track) return;
 
-    auto elem = ElementManager::get()->getElement(id);
+    auto elem = em->getElement(id);
     
     if (track->getType() == TrackType::Notes && elem->type != ElementType::region) return;
     if (elem->type == ElementType::region && track->getType() != TrackType::Notes) return;
@@ -245,9 +247,9 @@ void SongRoll::doubleClick() {
         }
     } else {
         auto trackID = getHoveredTrack();
-        auto track = TrackList::get()->getTrack(trackID);
+        auto track = tracks->getTrack(trackID);
         if (track && track->type == TrackType::Notes) {
-            auto reg = ElementManager::get()->newRegion();
+            auto reg = em->newRegion();
             fract start = getHoveredTime();
             reg->createPos(start, trackID);
         }
@@ -293,7 +295,7 @@ void SongRoll::clickMouse(SDL_Event& e) {
 }
 
 void SongRoll::deleteElement() {
-    for (auto e : ElementManager::get()->elements) {
+    for (auto e : em->elements) {
         auto& positions = e->positions;
 
         auto it = std::find_if(positions.begin(), positions.end(),
@@ -338,13 +340,13 @@ void SongRoll::beginDrop(SDL_DropEvent& d) {
 
 void SongRoll::dropFile(SDL_DropEvent& d) {
     std::cout << "DROPPED: " << d.data << std::endl;    
-    AudioClip* e = ElementManager::get()->newAudioClip(d.data); 
+    AudioClip* e = em->newAudioClip(d.data); 
     if (!e) return;
 
     fract start = getHoveredTime();
     int trackID = getHoveredTrack();
 
-    auto track = TrackList::get()->getTrack(trackID);
+    auto track = tracks->getTrack(trackID);
     if (track  == nullptr) return;
     if (track->type != TrackType::Audio) return; // cant put audioclip on region track
 

@@ -8,13 +8,15 @@
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
-class TrackList {
+class SongRoll;
+
+class TrackManager {
     public:
 
-        TrackList();
-        ~TrackList();
+        TrackManager();
+        ~TrackManager();
        
-        static TrackList* get();
+        SongRoll* songRoll;
 
         void addTrack(TrackType);
 

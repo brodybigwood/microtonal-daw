@@ -9,21 +9,22 @@
 #include "WindowHandler.h"
 #include "Playhead.h"
 
-#include "TrackList.h"
+#include "TrackManager.h"
 
 #ifndef SONGROLL_H
 #define SONGROLL_H
 
 class WindowHandler;  // forward declaration
-class RegionManager;
+class ElementManager;
 
 class SongRoll : public GridView{
 
     public:
-    SongRoll(SDL_FRect* rect, bool* detached);
+    SongRoll(SDL_FRect* rect, bool* detached, Home*);
         ~SongRoll() override;
 
-        TrackList* tracks;
+        TrackManager* tracks;
+        ElementManager* em;
         SDL_FRect leftRect;
         
         WindowHandler* windowHandler;

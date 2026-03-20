@@ -14,6 +14,8 @@ namespace DAW {
 
 class NodeManager;
 class NodeEditor;
+class TrackManager;
+class ElementManager;
 
 class Project {
     public:
@@ -25,7 +27,8 @@ class Project {
         static Project* instance();
         NodeManager* nm;
         NodeEditor* ne;
-        
+        TrackManager* tm;
+        ElementManager* em;        
         ScaleManager* sm;
 
         int sampleTime = 0;
