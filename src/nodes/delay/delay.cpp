@@ -4,7 +4,7 @@ void DelayNode::process() {
 
 }
 
-DelayNode::DelayNode(uint16_t id) : Node(id, NodeType::Delay) {
+DelayNode::DelayNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::Delay) {
     Connection* input = new Connection;
     input->type = DataType::Waveform;
     inputs.addConnection(input);

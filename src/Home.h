@@ -11,6 +11,7 @@
 #define HOME_H
 
 class WindowHandler;  // Forward declaration
+class NodeEditor;
 
 class Home {
 
@@ -40,6 +41,7 @@ class Home {
         ~Home();
 
         Project* project;
+        NodeEditor* ne;
 
         WindowHandler* windowHandler;
         SDL_Window* window;

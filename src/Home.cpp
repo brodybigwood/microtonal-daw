@@ -9,6 +9,7 @@ Home* Home::get() {
 
 Home::Home(Project* project) {
     this->project = project;
+    ne = project->ne;
 
     WindowHandler* windowHandler = WindowHandler::instance();
 
@@ -57,14 +58,14 @@ void Home::render() {
     if(pianoRoll) {
         pianoRoll->tick();
     }
-    NodeEditor::get()->tick();
+    ne->tick();
 }
 
 void Home::renderPresent() {
     SDL_RenderPresent(renderer);
     if (pianoRoll && pianoRollDetached) SDL_RenderPresent(pianoRoll->renderer);
     if (song && songRollDetached) SDL_RenderPresent(song->renderer);
-    NodeEditor::get()->renderPresent();
+    ne->renderPresent();
 }
 
 bool Home::sendInput(SDL_Event& e) {
@@ -109,7 +110,6 @@ bool Home::handleInput(SDL_Event& e) {
         }
     }
 
-    auto ne = NodeEditor::get();
     if(id == ne->getWindowID()) {
         ne->handleInput(e);
         return true;

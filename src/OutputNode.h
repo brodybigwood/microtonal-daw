@@ -5,7 +5,7 @@
 class OutputNode : public Node {
     public:
 
-        OutputNode();
+        OutputNode(NodeManager*);
 
         float* output;
 

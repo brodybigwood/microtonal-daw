@@ -38,7 +38,6 @@ void NodeEditor::makeConnection() {
     // srcNodeID & dstNodeID are the connection/io ids, not node identifiers
     if(srcNode != nullptr && dstNode != nullptr
             && srcNodeID != -1 && dstNodeID != -1 ) {
-        NodeManager* nm = NodeManager::get();
         nm->makeNodeConnection(
                 srcNode, srcNodeID,
                 dstNode, dstNodeID );
@@ -48,7 +47,6 @@ void NodeEditor::makeConnection() {
         dstNodeID = -1;
     } else if (srcBus != nullptr && dstNode != nullptr
             && dstNodeID != -1) { // bus does not need connection id (only has one output)
-        NodeManager* nm = NodeManager::get();
         nm->makeBusConnection(srcBus, dstNode, dstNodeID);
         srcBus = nullptr;
         dstNode = nullptr;
@@ -97,11 +95,6 @@ NodeEditor::NodeEditor() :
 NodeEditor::~NodeEditor() {
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
-}
-
-NodeEditor* NodeEditor::get() {
-    static NodeEditor n;
-    return &n;
 }
 
 void NodeEditor::renderInputs() {
@@ -180,16 +173,16 @@ void NodeEditor::move() {
         n->move(n->dstRect.x + x, n->dstRect.y + y);
     };
 
-    for (auto n : NodeManager::get()->getNodes()) moveNode(n);
-    moveNode(&(NodeManager::get()->outNode));
+    for (auto n : nm->getNodes()) moveNode(n);
+    moveNode(nm->outNode);
 
     moveOffX = mouseX;
     moveOffY = mouseY;
 }
 
 void NodeEditor::zoom(float amount) {
-    for (auto n : NodeManager::get()->getNodes()) if (!n->canZoom(amount)) return;
-    if (!NodeManager::get()->outNode.canZoom(amount)) return;
+    for (auto n : nm->getNodes()) if (!n->canZoom(amount)) return;
+    if (!nm->outNode->canZoom(amount)) return;
     
     auto zoomNode = [this, amount] (Node* n) {        
 
@@ -200,8 +193,8 @@ void NodeEditor::zoom(float amount) {
         n->move(mx, my);
     };
 
-    for (auto n : NodeManager::get()->getNodes()) zoomNode(n);
-    zoomNode(&(NodeManager::get()->outNode));
+    for (auto n : nm->getNodes()) zoomNode(n);
+    zoomNode(nm->outNode);
 }
 
 void NodeEditor::handleInput(SDL_Event& e) {
@@ -225,8 +218,8 @@ void NodeEditor::handleInput(SDL_Event& e) {
             break;
     }
     moveMouse();
-    if (NodeManager::get()->outNode.handleInput(e)) return;
-    for (auto n : NodeManager::get()->getNodes()) {
+    if (nm->outNode->handleInput(e)) return;
+    for (auto n : nm->getNodes()) {
         if (n->handleInput(e)) return;
     }
     switch(e.type) {
@@ -350,7 +343,7 @@ std::shared_ptr<TreeEntry> NodeEditor::getClickMenu() {
 }
 
 void NodeEditor::createNode(NodeType t) {
-    auto node = NodeManager::get()->addNode(t);
+    auto node = nm->addNode(t);
     node->move(mouseX, mouseY);
 }
 
@@ -362,11 +355,9 @@ void NodeEditor::render(SDL_Renderer* renderer, SDL_FRect* dstRect) {
     SDL_SetRenderDrawColor(renderer, 220, 220, 220, 255);
     SDL_RenderFillRect(renderer, dstRect);
     
-    auto nm = NodeManager::get();
-
     for( auto node : nm->getNodes() ) {
         node->render(renderer);
     }
 
-    nm->outNode.render(renderer);
+    nm->outNode->render(renderer);
 }

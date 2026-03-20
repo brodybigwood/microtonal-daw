@@ -4,7 +4,7 @@
 
 class DelayNode : public Node {
     public:
-        DelayNode(uint16_t);
+        DelayNode(uint16_t, NodeManager*);
 
         void process() override;
 };

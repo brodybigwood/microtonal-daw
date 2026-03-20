@@ -4,7 +4,7 @@
 
 class SplitterNode : public Node {
     public:
-        SplitterNode(uint16_t);
+        SplitterNode(uint16_t, NodeManager*);
 
         void process() override;
 

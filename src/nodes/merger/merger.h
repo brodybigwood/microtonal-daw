@@ -4,7 +4,7 @@
 
 class MergerNode : public Node {
     public:
-        MergerNode(uint16_t);
+        MergerNode(uint16_t, NodeManager*);
 
         void process() override;
 

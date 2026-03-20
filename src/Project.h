@@ -12,6 +12,8 @@ namespace DAW {
     class Region;
 }
 
+class NodeManager;
+class NodeEditor;
 
 class Project {
     public:
@@ -21,6 +23,8 @@ class Project {
         bool processing = false;
 
         static Project* instance();
+        NodeManager* nm;
+        NodeEditor* ne;
 
         int sampleTime = 0;
 

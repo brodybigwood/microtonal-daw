@@ -12,7 +12,7 @@ class NodeEditor {
         NodeEditor();
         ~NodeEditor();
 
-        static NodeEditor* get();
+        NodeManager* nm;
 
         void tick();
         void handleInput(SDL_Event&);

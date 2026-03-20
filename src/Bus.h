@@ -34,6 +34,8 @@ enum Direction{
     output = 1
 };
 
+class NodeManager;
+
 struct Connection{
     DataType type;
     bool is_connected = false;
@@ -47,6 +49,7 @@ struct Connection{
 
     int output_node = -1;
     int output_connection = -1;
+    NodeManager* nm;
 };
 
 struct Bus {

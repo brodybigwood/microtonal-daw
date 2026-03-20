@@ -10,9 +10,12 @@
 #include "TreeEntry.h"
 #include "Parameter.h"
 #include "Geometry.h"
+#include "Project.h"
 
 #define TEX_W 1920
 #define TEX_H 1080
+
+class NodeEditor;
 
 struct sourceNode{
     ConnectionType type;
@@ -33,13 +36,18 @@ struct connectionSet{
     ~connectionSet();
 
     int nodeID = -1;
+    NodeManager* nm;
 };
 
 class Node {
     public:
         NodeType nodeType = NodeType::Count;
 
-        Node(uint16_t, NodeType);
+        Project* project;
+        NodeManager* nm;
+        NodeEditor* ne;
+
+        Node(uint16_t, NodeManager* nm, NodeType);
         virtual ~Node();
 
         uint16_t id;
@@ -111,5 +119,5 @@ class Node {
         std::shared_ptr<TreeEntry> getNodeMenu();
 
         json serialize();
-        static Node* deSerialize(json);
+        static Node* deSerialize(json, NodeManager*);
 }; 

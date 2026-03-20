@@ -36,7 +36,7 @@ struct Voice {
 
 class OscillatorNode : public Node {
     public:
-        OscillatorNode(uint16_t);
+        OscillatorNode(uint16_t, NodeManager*);
 
 
         Connection* inputN;

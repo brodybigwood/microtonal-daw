@@ -1,10 +1,10 @@
 #include "Node.h"
 #include "NodeManager.h"
 #include "BusManager.h"
-#include "NodeEditor.h"
 #include "SDL_Events.h"
 #include "ContextMenu.h"
 #include <iostream>
+#include "NodeEditor.h"
 
 json Node::serialize() {
     json j;
@@ -19,25 +19,25 @@ json Node::serialize() {
     return j;
 }
 
-Node* Node::deSerialize(json j) {
+Node* Node::deSerialize(json j, NodeManager* nm) {
     Node* n = nullptr;
     int id = j["id"];
 
     switch (j["nodeType"].get<int>()) {
         case NodeType::Oscillator:
-            n = new OscillatorNode(id);
+            n = new OscillatorNode(id, nm);
             break;
         case NodeType::Merger:
-            n = new MergerNode(id);
+            n = new MergerNode(id, nm);
             break;
         case NodeType::Splitter:
-            n = new SplitterNode(id);
+            n = new SplitterNode(id, nm);
             break;
         case NodeType::Delay:
-            n = new DelayNode(id);
+            n = new DelayNode(id, nm);
             break;
         case NodeType::Panner:
-            n = new PannerNode(id);
+            n = new PannerNode(id, nm);
             break;
     }
 
@@ -50,15 +50,20 @@ Node* Node::deSerialize(json j) {
     return n;
 }
 
-Node::Node(uint16_t id, NodeType nt) : 
+Node::Node(uint16_t id, NodeManager* nm, NodeType nt) : 
     id(id),
+    project(nm->project),
+    nm(nm),
+    ne(nm->ne),
     nodeType(nt),
-    mouseX(NodeEditor::get()->mouseX),
-    mouseY(NodeEditor::get()->mouseY),
-    isAltPressed(NodeEditor::get()->isAltPressed),
-    isCtrlPressed(NodeEditor::get()->isCtrlPressed) {
+    mouseX(nm->ne->mouseX),
+    mouseY(nm->ne->mouseY),
+    isAltPressed(nm->ne->isAltPressed),
+    isCtrlPressed(nm->ne->isCtrlPressed) {
     outputs.nodeID = id;
     inputs.nodeID = id;
+    outputs.nm = nm;
+    inputs.nm = nm;
 }
 
 Node::~Node() {
@@ -153,7 +158,6 @@ bool Node::handleInput(SDL_Event& e) {
 
 void Node::clickMouse(SDL_Event& e) {
     if (e.button.button == SDL_BUTTON_LEFT) {
-        auto ne = NodeEditor::get();
         ne->setMovingNode(this);
         if (hoveredConnection != -1) {
             switch (hoveredDirection) {
@@ -166,8 +170,6 @@ void Node::clickMouse(SDL_Event& e) {
             }    
         }
     } else if (e.button.button == SDL_BUTTON_RIGHT) {
-        auto ne = NodeEditor::get();
-
         auto* ctxMenu = ContextMenu::get();
         ctxMenu->active = true;
         ctxMenu->window_id = SDL_GetWindowID(ne->getWindow());
@@ -207,7 +209,7 @@ std::shared_ptr<TreeEntry> Node::getNodeMenu() {
     if (this->id) { // if there is no id then this is the output node which should not be deleted
         auto remove = uTreeEntry();
         remove->label = "Remove Node";
-        remove->click = [this] () { NodeManager::get()->removeNode(this); };
+        remove->click = [this] () { nm->removeNode(this); };
         t->addChild(remove);
     }
 
@@ -220,7 +222,7 @@ std::shared_ptr<TreeEntry> Node::getConnectionMenu(Connection* c) {
 
     auto sever = uTreeEntry();
     sever->label = "Sever Connection";
-    sever->click = [c]() {NodeManager::get()->severConnection(c); };
+    sever->click = [c, this]() {this->nm->severConnection(c); };
 
     t->addChild(sever);
 
@@ -261,7 +263,6 @@ void* Node::getInput(Connection* con) {
         }
         case ConnectionType::node:
         {
-            auto nm = NodeManager::get();
             auto n = nm->getNode(src->source_id);
             auto oc = n->outputs.getConnection(src->output_id);
             return n->getOutput(oc);
@@ -281,7 +282,6 @@ Node* Node::getNodeInput(Connection* con) {
             return nullptr;
         case ConnectionType::node:
         {
-            auto nm = NodeManager::get();
             auto n = nm->getNode(src->source_id);
             return n;
         }
@@ -299,6 +299,7 @@ Connection* connectionSet::getConnection(uint16_t id) {
 }
 
 void connectionSet::addConnection(Connection* c) {
+    c->nm = nm;
     if (c->dir == Direction::input) c->output_node = nodeID;
     c->id = id_pool.newID();
     connections.push_back(c);
@@ -378,7 +379,7 @@ SDL_FRect Connection::srcRect() {
     switch(s->type) {
         case node:
             {
-                Node* n = NodeManager::get()->getNode(s->source_id);
+                Node* n = nm->getNode(s->source_id);
 
                 connectionSet& outputs = n->outputs;
                 auto conn = outputs.getConnection(s->output_id);

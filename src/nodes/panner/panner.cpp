@@ -1,7 +1,7 @@
 #include "panner.h"
 #include <cmath>
 
-PannerNode::PannerNode(uint16_t id) : Node(id, NodeType::Panner) {
+PannerNode::PannerNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::Panner) {
     in = new Connection;
     in->type = DataType::Waveform;
     in->dir = Direction::input;

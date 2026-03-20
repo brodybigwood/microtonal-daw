@@ -1,6 +1,6 @@
 #include "OutputNode.h"
 #include <iostream>
-OutputNode::OutputNode() : Node(0, NodeType::Count) {
+OutputNode::OutputNode(NodeManager* nm) : Node(0, nm, NodeType::Count) {
     for(int i = 0; i < 4; i++) {
         Connection* c = new Connection;
         c->type = DataType::Waveform;

@@ -1,11 +1,15 @@
 #include "NodeManager.h"
 #include "Node.h"
 #include "BusManager.h"
+#include "NodeEditor.h"
 
 #include <iostream>
 #include "nodes/nodetypes.h"
 
-NodeManager::NodeManager() {
+NodeManager::NodeManager(Project* p) : project(p) {
+    ne = new NodeEditor;
+    ne->nm = this;
+    outNode = new OutputNode(this);
     id_pool.reserveID(0); // id of outputnode
 }
 
@@ -16,7 +20,7 @@ json NodeManager::serialize() {
     j["nodes"] = json::array();
     j["connections"] = json::array();
 
-    j["outNode"] = outNode.serialize();
+    j["outNode"] = outNode->serialize();
 
     auto serializeConnections = [&j] (Node* n) {
         for (auto c : n->inputs.connections) {
@@ -36,7 +40,7 @@ json NodeManager::serialize() {
         }
     };
 
-    serializeConnections(&outNode);
+    serializeConnections(outNode);
     for (auto n : nodes) {
         serializeConnections(n);
         j["nodes"].push_back(n->serialize());
@@ -49,20 +53,20 @@ void NodeManager::deSerialize(json j) {
     id_pool.fromJSON(j["idManager"]);
 
     for (auto n : j["nodes"]) {
-        auto node = Node::deSerialize(n);
+        auto node = Node::deSerialize(n, this);
         if (node) {
             nodes.push_back(node); 
             ids[node->id] = nodes.size() - 1;
         }
     }
     
-    outNode.deSerialize(j["outNode"]);
+    outNode->deSerialize(j["outNode"]);
 
     for (auto s : j["connections"]) {
         Node* dstNode;
         int dstNodeID = s["dstNodeID"];
         if (dstNodeID) dstNode = getNode(dstNodeID);
-        else dstNode = &outNode;
+        else dstNode = outNode;
         
         auto dstConID = s["dstConID"];
         switch (s["connectionType"].get<int>()) {
@@ -95,11 +99,6 @@ Node* NodeManager::getNode(uint16_t id) {
     auto it = ids.find(id);
     if (it == ids.end()) return nullptr;
     return nodes[it->second];
-}
-
-NodeManager* NodeManager::get() {
-    static NodeManager nm;
-    return &nm;
 }
 
 NodeManager::~NodeManager() {
@@ -193,7 +192,7 @@ void NodeManager::severConnection(Connection* c) {
             srcCon = c;
             Node* dstNode;
             if (srcCon->output_node) dstNode = getNode(srcCon->output_node);
-            else dstNode = &outNode;
+            else dstNode = outNode;
             dstCon = dstNode->inputs.getConnection(srcCon->output_connection);
             delete static_cast<sourceNode*>(dstCon->data);
             dstCon->data = nullptr;
@@ -215,19 +214,19 @@ Node* NodeManager::addNode(NodeType t) {
 
     switch (t) {
         case NodeType::Oscillator:
-            n = new OscillatorNode(id);
+            n = new OscillatorNode(id, this);
             break;
         case NodeType::Merger:
-            n = new MergerNode(id);
+            n = new MergerNode(id, this);
             break;
         case NodeType::Splitter:
-            n = new SplitterNode(id);
+            n = new SplitterNode(id, this);
             break;
         case NodeType::Delay:
-            n = new DelayNode(id);
+            n = new DelayNode(id, this);
             break;
         case NodeType::Panner:
-            n = new PannerNode(id);
+            n = new PannerNode(id, this);
             break;
         default:
             break;
@@ -279,11 +278,11 @@ void NodeManager::process(float* output, int& bufferSize, int& numChannels, int&
         for(auto node : nodes) {
             node->update(bufferSize, sampleRate);
         }
-        outNode.numChannels = numChannels;
-        outNode.update(bufferSize, sampleRate);
+        outNode->numChannels = numChannels;
+        outNode->update(bufferSize, sampleRate);
     }
    
-    outNode.output = output;
-    outNode.processTree();
-    outNode.resetProcessTree();
+    outNode->output = output;
+    outNode->processTree();
+    outNode->resetProcessTree();
 }

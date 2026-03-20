@@ -1,6 +1,6 @@
 #include "splitter.h"
 
-SplitterNode::SplitterNode(uint16_t id) : Node(id, NodeType::Splitter) {
+SplitterNode::SplitterNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::Splitter) {
 
     for (int i = 0; i < NUM_OUTPUTS; i++) addOutput();
 

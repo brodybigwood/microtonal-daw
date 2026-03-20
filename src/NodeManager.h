@@ -9,10 +9,11 @@
 
 class Bus;
 class Node;
+class NodeEditor;
 
 class NodeManager {
     public:
-        NodeManager();
+        NodeManager(Project*);
         ~NodeManager();
 
         json serialize();
@@ -39,7 +40,9 @@ class NodeManager {
 
         std::vector<Node*>& getNodes();
 
-        OutputNode outNode;
+        Project* project;
+        NodeEditor* ne;
+        OutputNode* outNode;
 
     private:
         std::unordered_map<uint16_t, uint16_t> ids;

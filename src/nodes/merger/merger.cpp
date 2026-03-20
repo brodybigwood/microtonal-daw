@@ -1,6 +1,6 @@
 #include "merger.h"
 #include <iostream>
-MergerNode::MergerNode(uint16_t id) : Node(id, NodeType::Merger) {
+MergerNode::MergerNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::Merger) {
 
     for (int i = 0; i < NUM_INPUTS; i++) addInput();
 

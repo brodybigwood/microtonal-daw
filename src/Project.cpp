@@ -4,11 +4,12 @@
 #include <filesystem>
 #include <fstream>
 #include "AudioManager.h"
-#include "NodeManager.h"
 #include "TrackList.h"
 #include "ElementManager.h"
 #include "ScaleManager.h"
 #include "BusManager.h"
+#include "NodeManager.h"
+#include "NodeEditor.h"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
@@ -28,11 +29,13 @@ void Project::process(float* input, float* output, int& bufferSize, int& numChan
     TrackList* tl = TrackList::get();
     tl->process(input, bufferSize);
 
-    NodeManager* nm = NodeManager::get();
     nm->process(output, bufferSize, numChannelsOut, sampleRate);
 };
 
-Project::Project() {}
+Project::Project() {
+    nm = new NodeManager(this);
+    ne = nm->ne;
+}
 
 Project::~Project() {
 }
@@ -67,7 +70,7 @@ void Project::load(std::string path) {
 
     ScaleManager::instance()->deSerialize(j["scaleManager"]);
     ElementManager::get()->fromJSON(j["elementManager"]);
-    NodeManager::get()->deSerialize(j["nodeManager"]);
+    nm->deSerialize(j["nodeManager"]);
 
     um.deSerialize(j["undoManager"]);
 
@@ -88,7 +91,7 @@ void Project::save() {
 
     j["scaleManager"] = ScaleManager::instance()->serialize();
     j["elementManager"] = ElementManager::get()->toJSON();
-    j["nodeManager"] = NodeManager::get()->serialize();
+    j["nodeManager"] = nm->serialize();
     j["undoManager"] = um.serialize();
 
     std::ofstream outFile(file);

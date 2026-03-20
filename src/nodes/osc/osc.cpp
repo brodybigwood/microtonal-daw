@@ -3,7 +3,7 @@
 #include <iostream>
 #include "AudioManager.h"
 
-OscillatorNode::OscillatorNode(uint16_t id) : Node(id, NodeType::Oscillator) {
+OscillatorNode::OscillatorNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::Oscillator) {
     output0 = new Connection;
     output0->type = DataType::Waveform;
     output0->dir = Direction::output;

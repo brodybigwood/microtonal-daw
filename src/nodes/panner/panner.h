@@ -2,7 +2,7 @@
 
 class PannerNode : public Node {
     public:
-        PannerNode(uint16_t);
+        PannerNode(uint16_t, NodeManager*);
 
         void process() override;
         void setup() override;
