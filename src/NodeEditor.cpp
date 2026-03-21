@@ -158,6 +158,9 @@ void NodeEditor::tick() {
 }
 
 void NodeEditor::renderPresent() {
+    for (auto n : nm->getNodes()) {
+        if (n->detached) SDL_RenderPresent(n->renderer);
+    }
     SDL_RenderPresent(renderer);
 }
 

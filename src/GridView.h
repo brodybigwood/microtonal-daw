@@ -22,6 +22,9 @@ class GridView {
 
         SDL_Texture* gridTexture;
 
+        virtual void clearTextures() {}
+        virtual void generateTextures() {}
+
         void setRenderColor(uint8_t*);
         bool tick();
         virtual bool customTick() {};

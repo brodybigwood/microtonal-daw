@@ -167,7 +167,7 @@ void GridView::moveMouse() {
 
 
 void GridView::RenderGridTexture() {
-
+    auto target = SDL_GetRenderTarget(renderer);
     SDL_SetRenderTarget(renderer, gridTexture);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0); // Transparent
     SDL_RenderClear(renderer);
@@ -183,6 +183,7 @@ void GridView::RenderGridTexture() {
         float val = getY(line);
         SDL_RenderLine(renderer, 0, val, width, val);
     }
+    SDL_SetRenderTarget(renderer, target);
 }
 
 void GridView::setRenderColor(uint8_t code[4]) {

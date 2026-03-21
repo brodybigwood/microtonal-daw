@@ -17,13 +17,13 @@ void ArrangerNode::setup() {
 }
 
 bool ArrangerNode::handleCustomInput(SDL_Event& e) {
-    sl->mouseX = msX;
-    sl->mouseY = msY;
+    sl->mouseX = msX - slRect->x;
+    sl->mouseY = msY - slRect->y;
+
     return sl->handleInput(e);
 }
 
 void ArrangerNode::renderContent(SDL_Renderer* renderer) {
-
     if (!vCount) {
         vCount = 4;
         vx = new float[vCount];
@@ -43,3 +43,10 @@ void ArrangerNode::renderContent(SDL_Renderer* renderer) {
     sl->tick();
     renderParams(renderer);
 }      
+
+void ArrangerNode::clearCustomTextures() {
+    sl->clearTextures();
+    sl->renderer = renderer;
+    sl->window = window;
+    sl->generateTextures();
+}

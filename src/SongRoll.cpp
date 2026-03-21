@@ -11,12 +11,9 @@
 
 SongRoll::SongRoll(SDL_FRect* rect, bool* detached, Window* w, Project* p, ArrangerNode* n) : GridView(detached, rect, 200, w, p), parentNode(n) {
     this->windowHandler = WindowHandler::instance();
-    
-    texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
-    gridTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
-    regionTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
-    playHeadTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
 
+    generateTextures(); 
+   
     divHeight = 50;
     minHeight = 1.0f/20;
 
@@ -27,6 +24,8 @@ SongRoll::SongRoll(SDL_FRect* rect, bool* detached, Window* w, Project* p, Arran
     rightRect = SDL_FRect{dstRect->x + dstRect->w - rightMargin, dstRect->y + topMargin, rightMargin, dstRect->h - topMargin};
 
     tracks = new TrackManager;
+    tracks->mouseX = &mouseX;
+    tracks->mouseY = &mouseY;
 
     em = new ElementManager(project, tracks, parentNode);
     em->dstRect = &rightRect;
@@ -48,9 +47,6 @@ SongRoll::SongRoll(SDL_FRect* rect, bool* detached, Window* w, Project* p, Arran
     tracks->setGeometry(&leftRect, renderer);
     tracks->divHeight = &divHeight;
     tracks->scrollY = &scrollY;
-
-    tracks->mouseX = &mouseX;
-    tracks->mouseY = &mouseY;
 }
 
 bool SongRoll::customTick() {
@@ -110,7 +106,7 @@ void SongRoll::movePosition() {
 }
 
 void SongRoll::handleCustomInput(SDL_Event& e) {
-   
+  
     em->mouseX = mouseX;
     em->mouseY = mouseY;
  
@@ -359,4 +355,23 @@ void SongRoll::dropFile(SDL_DropEvent& d) {
     );
 
     refreshGrid = true;
+}
+
+void SongRoll::clearTextures() {
+    SDL_DestroyTexture(texture);
+    SDL_DestroyTexture(regionTexture);
+    SDL_DestroyTexture(playHeadTexture);
+    SDL_DestroyTexture(gridTexture);
+
+    texture = nullptr;
+    regionTexture = nullptr;
+    playHeadTexture = nullptr;
+    gridTexture = nullptr;
+}
+
+void SongRoll::generateTextures() {
+    texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
+    gridTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
+    regionTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
+    playHeadTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
 }

@@ -11,7 +11,7 @@ class Transport {
         ~Transport();
 
         GridView* view;
-        SDL_Renderer* renderer;
+        SDL_Renderer*& renderer;
         SDL_FRect* dstRect;
 
         int mouseX;

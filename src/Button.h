@@ -10,10 +10,10 @@
 class Button {
 
     public:
-        Button(SDL_Renderer* renderer = nullptr);
+        Button(SDL_Renderer*& renderer);
         ~Button();
         
-        SDL_Renderer* renderer;
+        SDL_Renderer*& renderer;
 
         std::function<bool()> activated;
 

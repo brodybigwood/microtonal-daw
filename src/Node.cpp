@@ -467,7 +467,6 @@ void Node::renderContentHelper(SDL_Renderer* renderer) {
 
     if (detached) {
         SDL_RenderTexture(renderer, texture_detached, &tRect, NULL);
-        SDL_RenderPresent(renderer);
     }
 }
 
@@ -583,6 +582,7 @@ void Node::detach() {
     detached = true;
 
     clearParamTextures();
+    clearCustomTextures();
 }
 
 void Node::attach() {
@@ -597,6 +597,7 @@ void Node::attach() {
     renderer = ne->renderer;
     texture_detached = nullptr;
     clearParamTextures();
+    clearCustomTextures();
 
     detached = false;
 }

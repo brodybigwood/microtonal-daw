@@ -42,6 +42,9 @@ class SongRoll : public GridView{
         SDL_Texture* regionTexture;
         SDL_Texture* playHeadTexture;
 
+        void clearTextures() override;
+        void generateTextures() override;
+
         SDL_FRect regionRect;
         SDL_FRect rightRect;
 

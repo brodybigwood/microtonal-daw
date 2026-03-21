@@ -1,7 +1,7 @@
 #include "Button.h"
 
 
-Button::Button(SDL_Renderer* renderer) :renderer(renderer) {
+Button::Button(SDL_Renderer*& renderer) :renderer(renderer) {
 }
 
 void Button::setColor(SDL_Color& color) {

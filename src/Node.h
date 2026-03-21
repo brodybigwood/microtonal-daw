@@ -13,8 +13,8 @@
 #include "Project.h"
 #include "Window.h"
 
-#define TEX_W 1920
-#define TEX_H 1080
+#define TEX_W 1280
+#define TEX_H 720
 
 class NodeEditor;
 
@@ -128,6 +128,7 @@ class Node : public Window {
         static Node* deSerialize(json, NodeManager*);
 
         void clearParamTextures();
+        virtual void clearCustomTextures() {}
 
         SDL_Texture* texture_detached;
         bool detached = false;

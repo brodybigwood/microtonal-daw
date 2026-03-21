@@ -15,8 +15,8 @@ Transport::Transport(GridView* view) : view(view), renderer(view->renderer), dst
     };
     togglePlay->hover = [this] {
         return (
-            this->mouseX >= togglePlay->dstRect->x && this->mouseX <= togglePlay->dstRect->x + togglePlay->dstRect->w &&
-            this->mouseY >= togglePlay->dstRect->y && this->mouseY <= togglePlay->dstRect->y + togglePlay->dstRect->h
+            this->mouseX + dstRect->x >= togglePlay->dstRect->x && this->mouseX + dstRect->x <= togglePlay->dstRect->x + togglePlay->dstRect->w &&
+            this->mouseY + dstRect->y >= togglePlay->dstRect->y && this->mouseY + dstRect->y <= togglePlay->dstRect->y + togglePlay->dstRect->h
         );
     };
     togglePlay->onClick = [project = view->project] {
@@ -34,8 +34,8 @@ Transport::Transport(GridView* view) : view(view), renderer(view->renderer), dst
     };
     stop->hover = [this] {
         return (
-            this->mouseX >= stop->dstRect->x && this->mouseX <= stop->dstRect->x + stop->dstRect->w &&
-            this->mouseY >= stop->dstRect->y && this->mouseY <= stop->dstRect->y + stop->dstRect->h
+            this->mouseX + dstRect->x >= stop->dstRect->x && this->mouseX + dstRect->x <= stop->dstRect->x + stop->dstRect->w &&
+            this->mouseY + dstRect->y >= stop->dstRect->y && this->mouseY + dstRect->y <= stop->dstRect->y + stop->dstRect->h
         );
     };
     stop->onClick = [project = view->project] {
@@ -71,7 +71,7 @@ Transport::~Transport() {
 void Transport::render() {
     uint8_t color[4] = {50, 50, 50, 255};
     view->setRenderColor(color);
-    SDL_FRect rect{0,0,view->dstRect->w, view->topMargin};
+    SDL_FRect rect{view->dstRect->x,view->dstRect->y,view->dstRect->w, view->topMargin};
     SDL_RenderFillRect(view->renderer, &rect);
 
     togglePlay->render();

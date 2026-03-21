@@ -42,9 +42,6 @@ PianoRoll::PianoRoll(bool* detached, SDL_FRect* rect, Region* region, Window* w)
     tuning_table = region->getTuning();
     updateLines();
 
-    if(!detached) {
-        WindowHandler::instance()->home->pianoRoll = this;
-    }
     SDL_SetCursor(cursors.grabber);
 
     sm = region->sm;
@@ -130,7 +127,7 @@ void PianoRoll::RenderDestinations() {
         return;
     }
 
-
+    auto target = SDL_GetRenderTarget(renderer);
     SDL_Texture* KeyTexture;
     SDL_SetRenderTarget(renderer, PianoTexture);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0); // Transparent
@@ -173,8 +170,8 @@ void PianoRoll::RenderDestinations() {
     }
 
     SDL_DestroyTexture(KeyTexture);
-        
-
+    
+    SDL_SetRenderTarget(renderer, target);
 
 }
 
