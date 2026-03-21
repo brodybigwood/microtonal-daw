@@ -12,7 +12,7 @@ ScaleManager::~ScaleManager() {
 TuningTable* ScaleManager::getLastScale() {
     if(lastScale == nullptr) {
         if(scales.empty()) {
-	    auto s = new TuningTable(false);
+	    auto s = new TuningTable(nullptr, false);
 	    s->id = id_manager.newID();
             scales.push_back(s);
 	    id_to_index[s->id] = scales.size() - 1;
@@ -39,7 +39,7 @@ void ScaleManager::addScale(TuningTable& t) {
         return;
     }
 
-    TuningTable* n = new TuningTable(false);
+    TuningTable* n = new TuningTable(nullptr, false);
     n->filepath = t.filepath;
     n->name = t.name;
     n->notes = t.notes;
@@ -70,7 +70,7 @@ void ScaleManager::deSerialize(json j) {
     id_manager.fromJSON(j["idManager"]);
 
     for(auto s : j["scales"]) {
-        auto scale = new TuningTable(false);
+        auto scale = new TuningTable(nullptr, false);
         scale->deSerialize(s);
         scales.push_back(scale);
         

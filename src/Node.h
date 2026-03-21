@@ -93,6 +93,7 @@ class Node : public Window {
         virtual void renderContent(SDL_Renderer*);
 
         void render();
+        virtual void renderPresent() { if (detached) SDL_RenderPresent(renderer); }
 
         std::vector<Parameter*> params;
         void renderParams(SDL_Renderer*);

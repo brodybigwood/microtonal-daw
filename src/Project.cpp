@@ -25,6 +25,14 @@ void Project::process(float* input, float* output, int& bufferSize, int& numChan
     nm->process(output, bufferSize, numChannelsOut, sampleRate);
 };
 
+void Project::render() {
+    ne->tick();
+}
+
+void Project::renderPresent() {
+    ne->renderPresent();
+}
+
 Project::Project() {
     nm = new NodeManager(this);
     ne = nm->ne;

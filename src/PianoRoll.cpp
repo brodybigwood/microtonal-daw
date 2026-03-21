@@ -15,7 +15,7 @@
 #include "nodes/nodetypes.h"
 
 void PianoRoll::newTuning() {
-    TuningTable t (true);
+    TuningTable t(window, true);
     sm->addScale(t);
     tuning_table = sm->getLastScale();
     region->scale = tuning_table;
@@ -38,7 +38,9 @@ void PianoRoll::updateLines() {
 }
 
 PianoRoll::PianoRoll(bool* detached, SDL_FRect* rect, Region* region, Window* w) : region(region), GridView(detached, rect, 40, w, region->project) {
-    
+   
+    if (*detached) WindowHandler::instance()->addWindow(this);
+ 
     tuning_table = region->getTuning();
     updateLines();
 
@@ -74,6 +76,8 @@ PianoRoll::~PianoRoll() {
     for(int i = 0; i<4; i++) {
         SDL_DestroyTexture(layers[i]);
     }
+    
+    WindowHandler::instance()->removeWindow(this);
 }
 
 
@@ -339,7 +343,7 @@ void PianoRoll::clickMouse(SDL_Event& e) {
     float midiNum = tuning_table->notes[index].midiNum;
     float diff = midiNum - hoveredElement->num;
 
-    TuningTable* newTuning = new TuningTable(false);
+    TuningTable* newTuning = new TuningTable(window, false);
 
     newTuning->notes.clear();
     for(auto& n : tuning_table->notes) {
@@ -649,3 +653,7 @@ void PianoRoll::moveNote(std::shared_ptr<Note> note, int moveX, float y) {
     Scroll();
 }
 
+void PianoRoll::handleWindowInput(SDL_Event& e) {
+    SDL_GetMouseState(&mouseX, &mouseY);
+    handleInput(e);
+}

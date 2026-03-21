@@ -17,6 +17,7 @@ class NodeEditor : public Window {
 
         void tick();
         void handleInput(SDL_Event&);
+        void handleWindowInput(SDL_Event& e) override { handleInput(e); }
 
         uint32_t getWindowID();
         void renderPresent();

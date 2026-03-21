@@ -6,38 +6,17 @@ WindowHandler::WindowHandler() {
     SDL_SetHint(SDL_HINT_APP_NAME, "EDITOR");
     SDL_SetHint(SDL_HINT_APP_ID, "daw.editor");
 
-    mainWindow = SDL_CreateWindow("Piano Roll", windowWidth, windowHeight, SDL_WINDOW_RESIZABLE);
-
-    renderer = SDL_CreateRenderer(mainWindow, NULL);
-    
     lastTime = SDL_GetTicks();
-
-    SDL_FRect txtRect{
-        windowWidth/2.0f - 40,
-        windowHeight/2.0f - 40,
-        windowWidth/2.0f + 40,
-        windowHeight/2.0f + 40
-    };
 
     ctxMenu = ContextMenu::get();
 }
 
-void WindowHandler::createHome() {
-    home = new Home(project);
-}
-
-
 WindowHandler::~WindowHandler() {
-    if (home->pianoRoll) delete home->pianoRoll;
 }
 
 WindowHandler* WindowHandler::instance() {
     static WindowHandler w;
     return &w;
-}
-
-void WindowHandler::createPianoRoll(Region* region) {
-    home->createPianoRoll(region);
 }
 
 bool WindowHandler::tick() { 
@@ -46,12 +25,18 @@ bool WindowHandler::tick() {
     if(timeSinceLastFrame >= frameTime) {
         lastTime = double(SDL_GetTicks())-frameTime;
 
-        if (ctxMenu->active) home->render(); // need to render behind ctxmenu first
+        if (ctxMenu->active) project->render(); // need to render behind ctxmenu first
         bool eventHandled = false;
  
         SDL_Event e;
         while(SDL_PollEvent(&e)) {
             eventHandled = true;
+
+            if(!ctxMenu->active && e.type == SDL_EVENT_KEY_DOWN && e.key.scancode == SDL_SCANCODE_SPACE) {
+                project->togglePlaying();
+                continue;
+            }
+
 
             if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
                 SDL_Window* clickedWindow = SDL_GetWindowFromID(e.button.windowID);
@@ -69,11 +54,8 @@ bool WindowHandler::tick() {
             toggleKey(e, SDL_SCANCODE_LALT, isAltPressed);
 
             if (ctxMenu->active) ctxMenu->tick(e);
-            else if (!home->handleInput(e)) return false;
-
-            for (auto w : windows) {
+            else for (auto w : windows)
                 if (SDL_GetWindowFromID(getEventWindowID(e)) == w->window) w->handleWindowInput(e);
-            }
         }
 
         if (!eventHandled && ctxMenu->active) { // home was already rendered, but ctxMenu hasn't rendered yet. so render on top by triggering with fake event
@@ -81,10 +63,10 @@ bool WindowHandler::tick() {
             e.window.windowID = ctxMenu->window_id;
             ctxMenu->tick(e);
         } else if (!ctxMenu->active) {
-            home->render();
+            project->render();
         }
         
-        home->renderPresent();
+        project->renderPresent();
     }
     return true;
 

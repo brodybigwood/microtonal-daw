@@ -17,6 +17,7 @@
 class WindowHandler;  // forward declaration
 class ElementManager;
 class ArrangerNode;
+class PianoRoll;
 
 class SongRoll : public GridView{
 
@@ -77,6 +78,11 @@ class SongRoll : public GridView{
         void beginDrop(SDL_DropEvent&) override;
         void renderDrop(SDL_Renderer*) override;
         void dropFile(SDL_DropEvent&) override;        
+        
+        SDL_FRect pianoRollRect = {200,200,800,600};
+        bool pianoRollDetached = true;
+        PianoRoll* pianoRoll = nullptr;
+        void createPianoRoll(Region*);
 };
 
 #endif

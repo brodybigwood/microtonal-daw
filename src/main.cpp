@@ -1,6 +1,7 @@
 #include "Project.h"
 #include "WindowHandler.h"
 #include "AudioManager.h"
+#include "styles.h"
 
 #include <thread>
 #include <csignal>
@@ -30,7 +31,6 @@ int main() {
 
     WindowHandler* windowHandler = WindowHandler::instance();
     windowHandler->project = project;
-    windowHandler->createHome();
 
     if (!audioManager->start()) {
         std::cout << "audiomanager failed" << std::endl;

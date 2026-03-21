@@ -94,6 +94,8 @@ class PianoRoll : public GridView {
         float noteHeight = 5;
 
         void moveNote(std::shared_ptr<Note>, int, float);
+
+        void handleWindowInput(SDL_Event&) override;
         
     private:
 

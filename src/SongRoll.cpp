@@ -1,13 +1,13 @@
 #include "SongRoll.h"
 #include "GridElement.h"
 #include "GridView.h"
-#include "Home.h"
 #include <SDL3/SDL_events.h>
 #include "Region.h"
 #include "AudioClip.h"
 #include "Transport.h"
 #include "ElementManager.h"
 #include "SDL_Events.h"
+#include "PianoRoll.h"
 
 SongRoll::SongRoll(SDL_FRect* rect, bool* detached, Window* w, Project* p, ArrangerNode* n) : GridView(detached, rect, 200, w, p), parentNode(n) {
     this->windowHandler = WindowHandler::instance();
@@ -71,7 +71,9 @@ bool SongRoll::customTick() {
     }
 
     renderMargins();
-    
+   
+    if (pianoRoll) pianoRoll->tick();
+ 
     return true;
 }
 
@@ -243,7 +245,7 @@ void SongRoll::doubleClick() {
         auto e = hoveredPosition->element;
         if (e->type == ElementType::region) {
             auto reg = static_cast<Region*>(e);
-            windowHandler->createPianoRoll(reg);
+            createPianoRoll(reg);
         }
     } else {
         auto trackID = getHoveredTrack();
@@ -374,4 +376,9 @@ void SongRoll::generateTextures() {
     gridTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
     regionTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
     playHeadTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
+}
+
+void SongRoll::createPianoRoll(Region* region) {
+    if (pianoRoll) delete pianoRoll;
+    pianoRoll = new PianoRoll(&pianoRollDetached, &pianoRollRect, region, this);
 }

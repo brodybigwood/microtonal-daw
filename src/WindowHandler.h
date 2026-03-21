@@ -3,26 +3,18 @@
 #ifndef WINDOWHANDLER_H
 #define WINDOWHANDLER_H
 #include <vector>
-#include "PianoRoll.h"
-#include "Home.h"
-#include <thread>
-#include <algorithm>
 #include "Project.h"
 #include "ContextMenu.h"
 #include "Window.h"
 
 class WindowHandler {
     public:
-    SDL_Window* focusedWindow;
     std::vector<Window*> windows;
     void addWindow(Window*);
     void removeWindow(Window*);
 
-SDL_Event e;
         WindowHandler();
         ~WindowHandler();
-
-        void createHome();
 
         SDL_Renderer* renderer;
 
@@ -33,12 +25,7 @@ SDL_Event e;
 
         Project* project;
 
-        Home* home;
-        PianoRoll* editor;
-        PianoRoll* findWindow();
         bool tick();
-
-        void createPianoRoll(Region*);
 
         Uint32 lastTime;
 
@@ -46,11 +33,6 @@ SDL_Event e;
     
         double frameTime = 1000/fps;   
     
-        SDL_Window* mainWindow;
-
-        int windowWidth = 800;
-        int windowHeight = 600;
-
         ContextMenu* ctxMenu;
 
         //keyboard

@@ -9,16 +9,13 @@ class Project;
 class Transport;
 class Home;
 
-class GridView {
+class GridView : public Window {
     public:
         GridView(bool*, SDL_FRect*, float leftMargin, Window*, Project*);
 
         virtual ~GridView();
 
         float yMin = 0;
-
-        //rendering
-        SDL_Renderer* renderer;
 
         SDL_Texture* gridTexture;
 
@@ -73,7 +70,6 @@ class GridView {
         float y = 0;
 
         //window
-        SDL_Window* window;
         int windowWidth;
         int windowHeight;
 

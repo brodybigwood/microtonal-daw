@@ -26,7 +26,7 @@ int TuningTable::byID(std::string id) {
     }   
 }
 
-TuningTable::TuningTable(bool dialog) {
+TuningTable::TuningTable(SDL_Window* win, bool dialog) {
 
     id = -1;
 
@@ -78,7 +78,6 @@ TuningTable::TuningTable(bool dialog) {
         std::cerr << "json parse error: " << e.what() << std::endl;
     }
 
-    auto win = WindowHandler::instance()->home->pianoRoll->window;
     SDL_RaiseWindow(win);        // Brings window to front
     SDL_SetWindowKeyboardGrab(win, true); // Grab keyboard input
 }

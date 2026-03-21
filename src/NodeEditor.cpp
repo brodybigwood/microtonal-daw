@@ -62,6 +62,8 @@ NodeEditor::NodeEditor() :
         windowWidth, windowHeight, 0 
     );
 
+    WindowHandler::instance()->addWindow(this);
+
     nodeRect = SDL_FRect{
         leftMargin, topMargin,
         windowWidth-leftMargin, windowHeight-topMargin
@@ -95,6 +97,7 @@ NodeEditor::NodeEditor() :
 NodeEditor::~NodeEditor() {
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
+    WindowHandler::instance()->removeWindow(this);
 }
 
 void NodeEditor::renderInputs() {
@@ -159,7 +162,7 @@ void NodeEditor::tick() {
 
 void NodeEditor::renderPresent() {
     for (auto n : nm->getNodes()) {
-        if (n->detached) SDL_RenderPresent(n->renderer);
+        n->renderPresent();
     }
     SDL_RenderPresent(renderer);
 }

@@ -5,6 +5,7 @@
 #include "BusManager.h"
 #include "styles.h"
 #include <SDL3_gfx/SDL3_gfxPrimitives.h>
+#include "SongRoll.h"
 
 TrackManager::TrackManager() {}
 

@@ -22,6 +22,9 @@ class Project {
     Project();
         ~Project();
 
+        void render();
+        void renderPresent();
+
         bool processing = false;
 
         NodeManager* nm;

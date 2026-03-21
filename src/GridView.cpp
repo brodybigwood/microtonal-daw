@@ -31,9 +31,7 @@ GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin, Window* w,
 
     if(*detached) {
         window = SDL_CreateWindow("Piano Roll", width, height, SDL_WINDOW_RESIZABLE | SDL_WINDOW_UTILITY);
-
         SDL_SetWindowParent(window, w->window);
-
         renderer = SDL_CreateRenderer(window, NULL);
     } else {
         window = w->window;
@@ -119,7 +117,6 @@ bool GridView::handleInput(SDL_Event& e) {
         case SDL_EVENT_KEY_DOWN:
             switch (e.key.scancode) {
                 case SDL_SCANCODE_SPACE:
-                    project->togglePlaying();
                     break;
                 default:
                     break;

@@ -2,6 +2,7 @@
 #include <iostream>
 #include "NodeManager.h"
 #include "NodeEditor.h"
+#include "PianoRoll.h"
 
 ArrangerNode::ArrangerNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::Arranger) {
     slRect = new SDL_FRect{0, 0, TEX_W, TEX_H};
@@ -50,3 +51,9 @@ void ArrangerNode::clearCustomTextures() {
     sl->window = window;
     sl->generateTextures();
 }
+
+void ArrangerNode::renderPresent() {
+    if (detached) SDL_RenderPresent(renderer);
+    if (sl->pianoRoll && sl->pianoRollDetached) SDL_RenderPresent(sl->pianoRoll->renderer);
+}
+
