@@ -435,14 +435,14 @@ void Node::renderContent(SDL_Renderer* renderer) {
         vy = new float[vCount];
 
         vx[0] = 0;
-        vx[1] = 1920;
-        vx[2] = 1620;
+        vx[1] = TEX_W;
+        vx[2] = TEX_W-300;
         vx[3] = 300;
 
         vy[0] = 0;
         vy[1] = 0;
-        vy[2] = 1080;
-        vy[3] = 1080;
+        vy[2] = TEX_H;
+        vy[3] = TEX_H;
     }
 
     filledPolygonRGBA(renderer, vx, vy, vCount, 255, 255, 255, 255);
