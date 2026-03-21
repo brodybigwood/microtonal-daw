@@ -16,13 +16,15 @@
 
 class WindowHandler;  // forward declaration
 class ElementManager;
+class ArrangerNode;
 
 class SongRoll : public GridView{
 
     public:
-    SongRoll(SDL_FRect* rect, bool* detached, Home*);
+    SongRoll(SDL_FRect* rect, bool* detached, Window*, Project*, ArrangerNode*);
         ~SongRoll() override;
 
+        ArrangerNode* parentNode;
         TrackManager* tracks;
         ElementManager* em;
         SDL_FRect leftRect;

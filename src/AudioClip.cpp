@@ -4,7 +4,7 @@
 #include <iostream>
 #include <sndfile.h>
 
-AudioClip::AudioClip(Project* p) : GridElement(p) {
+AudioClip::AudioClip(Project* p, ArrangerNode* n) : GridElement(p, n) {
     type = ElementType::audioClip;
 }
 
@@ -56,6 +56,7 @@ void AudioClip::draw(SDL_Renderer* renderer, float pixelsPerSecond, int h) {
         if (!texture) std::cout << SDL_GetError() << std::endl;       
         std::cout << "created texture with dimensions 16384x" << h << std::endl;
  
+        auto target = SDL_GetRenderTarget(renderer);
         SDL_SetRenderTarget(renderer, texture);
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
         SDL_RenderClear(renderer);
@@ -80,7 +81,7 @@ void AudioClip::draw(SDL_Renderer* renderer, float pixelsPerSecond, int h) {
             aalineRGBA(renderer, x1, y1+1, x2, y2+1, 255, 255, 255 ,255);
         }
 
-        SDL_SetRenderTarget(renderer, NULL);
+        SDL_SetRenderTarget(renderer, target);
     }
 }
 

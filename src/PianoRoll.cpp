@@ -11,6 +11,8 @@
 #include "Transport.h"
 #include "TuningTable.h"
 #include "ContextMenu.h"
+#include "Node.h"
+#include "nodes/nodetypes.h"
 
 void PianoRoll::newTuning() {
     TuningTable t (true);
@@ -35,7 +37,7 @@ void PianoRoll::updateLines() {
     Scroll();
 }
 
-PianoRoll::PianoRoll(SDL_FRect* rect, Region* region, Home* h) : region(region), GridView(&(h->pianoRollDetached), rect, 40, h) {
+PianoRoll::PianoRoll(bool* detached, SDL_FRect* rect, Region* region, Window* w) : region(region), GridView(detached, rect, 40, w, region->project) {
     
     tuning_table = region->getTuning();
     updateLines();
@@ -45,9 +47,7 @@ PianoRoll::PianoRoll(SDL_FRect* rect, Region* region, Home* h) : region(region),
     }
     SDL_SetCursor(cursors.grabber);
 
-    this->project = region->project;
-    
-    sm = project->sm;
+    sm = region->sm;
 
     scrollY = 800;
 
@@ -213,8 +213,6 @@ bool PianoRoll::customTick() {
 
     RenderNotes();
 
-    SDL_SetRenderTarget(renderer, NULL);
-
     SDL_RenderTexture(renderer, backgroundTexture, nullptr, dstRect);
     SDL_RenderTexture(renderer, gridTexture, nullptr, dstRect);
     SDL_RenderTexture(renderer, NotesTexture, nullptr, dstRect);
@@ -272,12 +270,13 @@ void PianoRoll::initWindow() {
     layers[2] = NotesTexture;
     layers[3] = PianoTexture;
 
+    auto target = SDL_GetRenderTarget(renderer);
     SDL_SetRenderTarget(renderer, backgroundTexture);
     setRenderColor(colors.background);
 
     SDL_RenderClear(renderer); // Clear backgroundTexture with the background color
 
-    SDL_SetRenderTarget(renderer, NULL);
+    SDL_SetRenderTarget(renderer, target);
 
     if(height > (128*cellHeight12 - yMax - yMin)) {
         divHeight = 12*height/128;
@@ -485,11 +484,12 @@ void PianoRoll::createElement() {
     float pitch = getHoveredLine();
     std::cout<<pitch<<std::endl;
 
-    project->createNote(start, lastLength, pitch, tuning_table, region->id);
+    project->createNote(region->parentNode->id, start, lastLength, pitch, tuning_table, region->id);
     refreshGrid = true;
 }
 
 void PianoRoll::RenderNotes() {
+    auto target = SDL_GetRenderTarget(renderer);
     SDL_SetRenderTarget(renderer, NotesTexture);
     SDL_SetRenderDrawColor(renderer,0,0,0,0);
     SDL_RenderClear(renderer);
@@ -524,6 +524,8 @@ void PianoRoll::RenderNotes() {
             SDL_RenderRect(renderer, &noteRect);
 
     }
+
+    SDL_SetRenderTarget(renderer, target);
 
 }
 

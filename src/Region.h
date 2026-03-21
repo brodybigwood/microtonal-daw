@@ -17,13 +17,14 @@ using json = nlohmann::json;
 class Instrument;
 class TuningTable;
 class ScaleManager;
+class ArrangerNode;
 
 class Region : public GridElement {
     private:
         
 
     public:
-        Region(Project*);
+        Region(Project*, ScaleManager*, ArrangerNode*);
         ~Region() override;
 
 ScaleManager* sm;

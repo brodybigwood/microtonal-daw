@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ScaleManager.h"
 #include <unordered_map>
 #include "GridElement.h"
 
@@ -7,10 +8,11 @@ class Region;
 class AudioClip;
 class Project;
 class TrackManager;
+class ArrangerNode;
 
 class ElementManager {
     public:
-        ElementManager(Project*);
+        ElementManager(Project*, TrackManager*, ArrangerNode*);
         ~ElementManager();
 
         std::vector<GridElement*> elements;
@@ -45,4 +47,7 @@ class ElementManager {
 
         Project* project;
         TrackManager* tm;
+        ScaleManager* sm;
+
+        ArrangerNode* parentNode;
 };

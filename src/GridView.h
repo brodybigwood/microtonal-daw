@@ -2,6 +2,7 @@
 #include <vector>
 #include <SDL_ttf.h>
 #include "fract.h"
+#include "Window.h"
 
 class Playhead;
 class Project;
@@ -10,8 +11,7 @@ class Home;
 
 class GridView {
     public:
-        Home* home;
-        GridView(bool*, SDL_FRect*, float leftMargin, Home*);
+        GridView(bool*, SDL_FRect*, float leftMargin, Window*, Project*);
 
         virtual ~GridView();
 

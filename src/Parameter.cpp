@@ -24,6 +24,18 @@ float Parameter::operator[](size_t i) {
     return std::clamp(v, 0.0f, 1.0f);
 }
 
+void Parameter::clearTextures() {
+    for (auto t : textures) {
+        SDL_DestroyTexture(*t);
+        *t = nullptr;
+    }
+    textures.clear();
+}
+
+Parameter::~Parameter() {
+    clearTextures();
+}
+
 void Knob::render(SDL_Renderer* renderer) {
     if (!texture) {
         SDL_Surface* surface = IMG_Load(filepath.c_str());
@@ -31,6 +43,7 @@ void Knob::render(SDL_Renderer* renderer) {
             SDL_Log("Failed to load image: %s", SDL_GetError());
         } else {
             texture = SDL_CreateTextureFromSurface(renderer, surface);
+            textures.push_back(&texture);
             SDL_DestroySurface(surface);
         }
     }
@@ -49,10 +62,6 @@ Knob::Knob(float value, float x, float y, float r, std::string filepath, float t
     thetaMin(thetaMin),
     thetaMax(thetaMax) {
 
-}
-
-Knob::~Knob() {
-    if (texture) SDL_DestroyTexture(texture);
 }
 
 void Knob::handleInput(SDL_Event& e) {

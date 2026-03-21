@@ -2,7 +2,7 @@
 #include "fract.h"
 #include "Project.h"
 
-GridElement::GridElement(Project* p) : project(p) {
+GridElement::GridElement(Project* p, ArrangerNode* n) : project(p), parentNode(n) {
 }
 
 void GridElement::createPos(fract startTime, uint16_t trackID) {

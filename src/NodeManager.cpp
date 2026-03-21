@@ -213,6 +213,9 @@ Node* NodeManager::addNode(NodeType t) {
     Node* n = nullptr;
 
     switch (t) {
+        case NodeType::Arranger:
+            n = new ArrangerNode(id, this);
+            break;
         case NodeType::Oscillator:
             n = new OscillatorNode(id, this);
             break;

@@ -4,14 +4,13 @@
 #include "Transport.h"
 #include "WindowHandler.h"
 
-GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin, Home* h) : 
+GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin, Window* w, Project* p) : 
     detached(detached), 
     leftMargin(leftMargin), 
     isShiftPressed(WindowHandler::instance()->isShiftPressed), 
     isAltPressed(WindowHandler::instance()->isAltPressed), 
     isCtrlPressed(WindowHandler::instance()->isCtrlPressed),
-    home(h),
-    project(h->project)
+    project(p)
 {
 
     if(rect != nullptr && !*detached) {
@@ -33,12 +32,12 @@ GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin, Home* h) :
     if(*detached) {
         window = SDL_CreateWindow("Piano Roll", width, height, SDL_WINDOW_RESIZABLE | SDL_WINDOW_UTILITY);
 
-        SDL_SetWindowParent(window, home->window);
+        SDL_SetWindowParent(window, w->window);
 
         renderer = SDL_CreateRenderer(window, NULL);
     } else {
-        window = home->window;
-        renderer = home->renderer;
+        window = w->window;
+        renderer = w->renderer;
     }
 
 
@@ -163,10 +162,6 @@ bool GridView::handleInput(SDL_Event& e) {
 }
 
 void GridView::moveMouse() {
-    SDL_GetMouseState(&mouseX, &mouseY);
-    mouseX -= dstRect->x;
-    mouseY -= dstRect->y;
-
     transport->moveMouse(mouseX, mouseY);
 }
 

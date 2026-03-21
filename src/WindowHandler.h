@@ -9,11 +9,15 @@
 #include <algorithm>
 #include "Project.h"
 #include "ContextMenu.h"
+#include "Window.h"
 
 class WindowHandler {
     public:
     SDL_Window* focusedWindow;
-std::vector<SDL_Window*> windows;
+    std::vector<Window*> windows;
+    void addWindow(Window*);
+    void removeWindow(Window*);
+
 SDL_Event e;
         WindowHandler();
         ~WindowHandler();
@@ -34,7 +38,7 @@ SDL_Event e;
         PianoRoll* findWindow();
         bool tick();
 
-        void createPianoRoll(Region*, SDL_FRect*);
+        void createPianoRoll(Region*);
 
         Uint32 lastTime;
 

@@ -9,10 +9,7 @@
 TrackManager::TrackManager() {}
 
 
-void TrackManager::setGeometry(SDL_FRect* dstRect) {
-
-    auto wm = WindowHandler::instance();
-    auto r = wm->renderer;
+void TrackManager::setGeometry(SDL_FRect* dstRect, SDL_Renderer* r) {
 
     this->dstRect = dstRect;
 

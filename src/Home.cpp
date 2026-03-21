@@ -29,21 +29,9 @@ Home::~Home() {
     if (song) delete song;
 }
 
-void Home::createRoll() {
-    if(song) {
-        return;
-    }
-    song = new SongRoll(
-        &songRect,
-        &songRollDetached,
-        this
-    );
-
-}
-
-void Home::createPianoRoll(Region* region, SDL_FRect* pRect) {
+void Home::createPianoRoll(Region* region) {
     if (pianoRoll) return;
-    pianoRoll = new PianoRoll(pRect, region, this);    
+    pianoRoll = new PianoRoll(&pianoRollDetached, &pianoRollRect, region, this);    
 }
 
 
@@ -55,9 +43,21 @@ void Home::render() {
     SDL_RenderClear(renderer);
 
     if(song) {
+        song->mouseX = mouseX;
+        song->mouseY = mouseY;
+        if (!songRollDetached) {
+            song->mouseX -= songRect.x;
+            song->mouseY -= songRect.y;
+        }
        song->tick();
     }
     if(pianoRoll) {
+        pianoRoll->mouseX = mouseX;
+        pianoRoll->mouseY = mouseY;
+        if (!pianoRollDetached) {
+            pianoRoll->mouseX -= pianoRollRect.x;
+            pianoRoll->mouseY -= pianoRollRect.y;
+        }
         pianoRoll->tick();
     }
     ne->tick();

@@ -1,5 +1,4 @@
 #include "WindowHandler.h"
-#include <X11/Xlib.h>
 #include "SDL_Events.h"
 
 WindowHandler::WindowHandler() {
@@ -25,7 +24,6 @@ WindowHandler::WindowHandler() {
 
 void WindowHandler::createHome() {
     home = new Home(project);
-    home->createRoll();
 }
 
 
@@ -38,8 +36,8 @@ WindowHandler* WindowHandler::instance() {
     return &w;
 }
 
-void WindowHandler::createPianoRoll(Region* region, SDL_FRect* pRect) {
-    home->createPianoRoll(region, pRect);
+void WindowHandler::createPianoRoll(Region* region) {
+    home->createPianoRoll(region);
 }
 
 bool WindowHandler::tick() { 
@@ -72,6 +70,10 @@ bool WindowHandler::tick() {
 
             if (ctxMenu->active) ctxMenu->tick(e);
             else if (!home->handleInput(e)) return false;
+
+            for (auto w : windows) {
+                if (SDL_GetWindowFromID(getEventWindowID(e)) == w->window) w->handleWindowInput(e);
+            }
         }
 
         if (!eventHandled && ctxMenu->active) { // home was already rendered, but ctxMenu hasn't rendered yet. so render on top by triggering with fake event
@@ -101,3 +103,13 @@ void WindowHandler::toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar) 
     }
 }
 
+void WindowHandler::addWindow(Window* w) {
+    windows.push_back(w);
+}
+
+void WindowHandler::removeWindow(Window* w) {
+    auto it = std::find(windows.begin(), windows.end(), w);
+    if (it != windows.end()) {
+        windows.erase(it);
+    }
+}

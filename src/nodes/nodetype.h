@@ -1,4 +1,5 @@
 enum NodeType {
+    Arranger,
     Oscillator,
     Merger,
     Splitter,

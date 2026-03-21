@@ -109,6 +109,7 @@ struct UndoManager {
 };
 
 struct CreateNoteAction : ProjectAction {
+    int nodeID;
     int noteID;
     int regionID;
     fract start;
@@ -116,5 +117,5 @@ struct CreateNoteAction : ProjectAction {
     float pitch;
     int scaleID;
 
-    CreateNoteAction(Project* p, int regionID, fract start, fract length, float pitch, TuningTable* scale);
+    CreateNoteAction(Project* p, int nodeID, int regionID, fract start, fract length, float pitch, TuningTable* scale);
 };

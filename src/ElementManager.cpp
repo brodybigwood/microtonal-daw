@@ -142,10 +142,10 @@ void ElementManager::fromJSON(json j) {
 
         switch (e["type"].get<int>()) {
             case ElementType::region:
-                ge = new Region(project);
+                ge = new Region(project, sm, parentNode);
                 break;
             case ElementType::audioClip:
-                ge = new AudioClip(project);
+                ge = new AudioClip(project, parentNode);
                 break;
             default:
                 return; // unknown type, give up
@@ -163,7 +163,7 @@ uint16_t ElementManager::getIndex(uint16_t id) {
 }
 
 Region* ElementManager::newRegion() {
-    auto r = new Region(project);
+    auto r = new Region(project, sm, parentNode);
     r->id = id_pool.newID();
     elements.push_back(r);
 
@@ -174,7 +174,7 @@ Region* ElementManager::newRegion() {
 
 AudioClip* ElementManager::newAudioClip(std::string filepath) {
 
-    auto a = new AudioClip(project);
+    auto a = new AudioClip(project, parentNode);
 
     a->setFile(filepath);
     if (a->filepath == "") {
@@ -190,7 +190,9 @@ AudioClip* ElementManager::newAudioClip(std::string filepath) {
     return a;
 }
 
-ElementManager::ElementManager(Project* p) : project(p), tm(p->tm) {}
+ElementManager::ElementManager(Project* p, TrackManager* tm, ArrangerNode* n) : project(p), tm(tm), parentNode(n) {
+    sm = new ScaleManager;
+}
 
 void ElementManager::render(SDL_Renderer* renderer) {
 
@@ -306,7 +308,7 @@ bool ElementManager::handleInput(SDL_Event& e) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             if (e.button.button == SDL_BUTTON_LEFT) {
                 if(hoverNew) {
-                    project->createRegion(); 
+                    newRegion();
                     break;
                 }
                 if(hoveredElement != -1) {
@@ -321,8 +323,6 @@ bool ElementManager::handleInput(SDL_Event& e) {
                 scrollY = 0;
             }
             break;
-        case SDL_EVENT_MOUSE_MOTION:
-            SDL_GetMouseState(&mouseX, &mouseY);
     }
     return running;
 }

@@ -13,13 +13,15 @@ enum ElementType{
 };
 
 class Project;
+class ArrangerNode;
 
 class GridElement {
     public:
     
         Project* project;
+        ArrangerNode* parentNode;
 
-        GridElement(Project*);
+        GridElement(Project*, ArrangerNode*);
         virtual ~GridElement();
 
         struct Position {

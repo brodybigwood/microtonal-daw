@@ -11,8 +11,7 @@ TuningTable* Region::getTuning() {
     return scale;
 }
 
-Region::Region(Project* p) : GridElement(p) {
-    this->sm = p->sm;
+Region::Region(Project* p, ScaleManager* sm, ArrangerNode* n) : GridElement(p, n), sm(sm) {
     scale = sm->getLastScale();
     type = ElementType::region;
 }
@@ -26,7 +25,8 @@ void Region::draw(SDL_Renderer* renderer, float pixelsPerSecond, int h) {
     if(!texture) {
         texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, 10000, 100);
     }
-    
+   
+    auto target = SDL_GetRenderTarget(renderer); 
     SDL_SetRenderTarget(renderer, texture);
     SDL_SetRenderDrawColor(renderer,0,0,0,0);
     SDL_RenderClear(renderer);
@@ -39,7 +39,7 @@ void Region::draw(SDL_Renderer* renderer, float pixelsPerSecond, int h) {
         SDL_FRect noteRect = { noteX, noteY - 1, noteEnd - noteX, 2};
         SDL_RenderFillRect(renderer, &noteRect);
     }
-    SDL_SetRenderTarget(renderer, NULL);
+    SDL_SetRenderTarget(renderer, target);
 
 }
 

@@ -3,11 +3,12 @@
 #include <SDL3/SDL.h>
 #include "TreeEntry.h"
 #include "nodes/nodetypes.h"
+#include "Window.h"
 
 class Node;
 class Bus;
 
-class NodeEditor {
+class NodeEditor : public Window {
     public:
         NodeEditor();
         ~NodeEditor();
@@ -36,9 +37,6 @@ class NodeEditor {
         SDL_Renderer* getRenderer() { return renderer; };
 
     private:
-        SDL_Window* window;
-        SDL_Renderer* renderer;
-
         SDL_FRect nodeRect;
 
         void renderInputs();

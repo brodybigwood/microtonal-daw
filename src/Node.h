@@ -11,6 +11,7 @@
 #include "Parameter.h"
 #include "Geometry.h"
 #include "Project.h"
+#include "Window.h"
 
 #define TEX_W 1920
 #define TEX_H 1080
@@ -39,7 +40,7 @@ struct connectionSet{
     NodeManager* nm;
 };
 
-class Node {
+class Node : public Window {
     public:
         NodeType nodeType = NodeType::Count;
 
@@ -91,7 +92,7 @@ class Node {
         void renderContentHelper(SDL_Renderer*);
         virtual void renderContent(SDL_Renderer*);
 
-        void render(SDL_Renderer*);
+        void render();
 
         std::vector<Parameter*> params;
         void renderParams(SDL_Renderer*);
@@ -106,13 +107,18 @@ class Node {
         float& mouseX;
         float& mouseY;
 
+        float msX;
+        float msY;
+
         bool& isAltPressed;
         bool& isCtrlPressed;
 
         int hoveredConnection;
         Direction hoveredDirection;
 
+        uint16_t lastLeftClick;
         bool handleInput(SDL_Event&);
+        virtual bool handleCustomInput(SDL_Event&) { return false; }
         void clickMouse(SDL_Event&);
 
         std::shared_ptr<TreeEntry> getConnectionMenu(Connection*);
@@ -120,4 +126,13 @@ class Node {
 
         json serialize();
         static Node* deSerialize(json, NodeManager*);
+
+        void clearParamTextures();
+
+        SDL_Texture* texture_detached;
+        bool detached = false;
+        void detach();
+        void attach();
+
+        void handleWindowInput(SDL_Event&) override;
 }; 

@@ -2,14 +2,17 @@
 #include "SDL_Events.h"
 #include "styles.h"
 #include "Project.h"
+#include "nodes/nodetypes.h"
+#include "NodeManager.h"
 
 ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
     ProjectAction* pa;
     switch (j["type"].get<int>()) {
         case CreateNote: {
+            auto n = static_cast<ArrangerNode*>(p->nm->getNode(j["nodeID"]));
             auto cn = new CreateNoteAction(
-                p, j["regionID"], fract::fromJSON(j["start"]), fract::fromJSON(j["length"]),
-                j["pitch"], p->sm->byID(j["scaleID"])
+                p, j["regionID"], j["nodeID"], fract::fromJSON(j["start"]), fract::fromJSON(j["length"]),
+                j["pitch"], n->sl->em->sm->byID(j["scaleID"])
             );
             cn->noteID = j["noteID"];
             pa = cn;
@@ -36,6 +39,7 @@ json ProjectAction::serialize(ProjectAction* pa) {
     switch (pa->type) {
         case CreateNote: {
             auto cn = static_cast<CreateNoteAction*>(pa);
+            j["nodeID"] = cn->nodeID;
             j["regionID"] = cn->regionID;
             j["start"] = cn->start.toJSON();
             j["length"] = cn->length.toJSON();
@@ -163,23 +167,26 @@ void UndoManager::goTo(ProjectAction* target) {
 }
 
 
-CreateNoteAction::CreateNoteAction(Project* p, int regionID, fract start, fract length, float pitch, TuningTable* scale) :
+CreateNoteAction::CreateNoteAction(Project* p, int nodeID, int regionID, fract start, fract length, float pitch, TuningTable* scale) :
         ProjectAction(p, CreateNote),
         regionID(regionID),
         start(start),
         length(length),
         pitch(pitch),
-        scaleID(scale->id)
+        scaleID(scale->id),
+        nodeID(nodeID)
         {
 
-        doAction = [this] () {
-            auto region = static_cast<Region*>(this->p->em->getElement(this->regionID));
-            noteID = region->createNote(this->start, this->length, this->pitch, this->p->sm->byID(this->scaleID));
+        auto n = static_cast<ArrangerNode*>(p->nm->getNode(nodeID));
+
+        doAction = [this, n] () {
+            auto region = static_cast<Region*>(n->sl->em->getElement(this->regionID));
+            noteID = region->createNote(this->start, this->length, this->pitch, n->sl->em->sm->byID(this->scaleID));
             name = "Create Note " + std::to_string(noteID) + " " + std::to_string(this->regionID);
         };
 
-        undoAction = [this] () {
-            auto region = static_cast<Region*>(this->p->em->getElement(this->regionID));
+        undoAction = [this, n] () {
+            auto region = static_cast<Region*>(n->sl->em->getElement(this->regionID));
             region->deleteNote(this->noteID);
         };
 }

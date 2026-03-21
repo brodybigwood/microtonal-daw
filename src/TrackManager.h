@@ -31,7 +31,7 @@ class TrackManager {
 
         void process(float* input, int bufferSize);
 
-        void setGeometry(SDL_FRect*);
+        void setGeometry(SDL_FRect*, SDL_Renderer*);
 
         SDL_FRect* dstRect;
 

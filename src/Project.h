@@ -26,9 +26,6 @@ class Project {
 
         NodeManager* nm;
         NodeEditor* ne;
-        TrackManager* tm;
-        ElementManager* em;        
-        ScaleManager* sm;
 
         int sampleTime = 0;
 
@@ -42,8 +39,7 @@ class Project {
 
         void save();
 
-        void createRegion();
-        void createNote(fract, fract, float, TuningTable*, int);
+        void createNote(int, fract, fract, float, TuningTable*, int);
 
         fract startTime;
 

@@ -356,8 +356,8 @@ void NodeEditor::render(SDL_Renderer* renderer, SDL_FRect* dstRect) {
     SDL_RenderFillRect(renderer, dstRect);
     
     for( auto node : nm->getNodes() ) {
-        node->render(renderer);
+        node->render();
     }
 
-    nm->outNode->render(renderer);
+    nm->outNode->render();
 }

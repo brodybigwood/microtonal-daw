@@ -30,7 +30,10 @@ struct Parameter {
     virtual void handleInput(SDL_Event&) {}
 
     Parameter(float, std::pair<std::vector<float>, std::vector<float>>);
-    virtual ~Parameter() {}
+    ~Parameter();
+
+    std::vector<SDL_Texture**> textures;
+    void clearTextures();
 };
 
 struct Knob : Parameter {
@@ -44,5 +47,4 @@ struct Knob : Parameter {
     SDL_Texture* texture = nullptr;
     void render(SDL_Renderer*) override;
     Knob(float, float, float, float, std::string, float, float);
-    ~Knob();
 };

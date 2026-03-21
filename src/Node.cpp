@@ -5,6 +5,7 @@
 #include "ContextMenu.h"
 #include <iostream>
 #include "NodeEditor.h"
+#include "WindowHandler.h"
 
 json Node::serialize() {
     json j;
@@ -24,6 +25,9 @@ Node* Node::deSerialize(json j, NodeManager* nm) {
     int id = j["id"];
 
     switch (j["nodeType"].get<int>()) {
+        case NodeType::Arranger:
+            n = new ArrangerNode(id, nm);
+            break;
         case NodeType::Oscillator:
             n = new OscillatorNode(id, nm);
             break;
@@ -64,6 +68,8 @@ Node::Node(uint16_t id, NodeManager* nm, NodeType nt) :
     inputs.nodeID = id;
     outputs.nm = nm;
     inputs.nm = nm;
+
+    attach();
 }
 
 Node::~Node() {
@@ -100,10 +106,10 @@ void* Node::getOutput(Connection* con) {
 bool Node::handleInput(SDL_Event& e) {
     bool handled = false;
 
-    float x = (mouseX - dstRect.x) / zoomRatio;
-    float y = (mouseY - dstRect.y) / zoomRatio;
+    msX = (mouseX - dstRect.x) / zoomRatio;
+    msY = (mouseY - dstRect.y) / zoomRatio;
 
-    if (inPolygon(vx, vy, vCount, x, y)) {
+    if (inPolygon(vx, vy, vCount, msX, msY)) {
         handled = true;
     } else {
         bool hoverFound = false;
@@ -138,7 +144,6 @@ bool Node::handleInput(SDL_Event& e) {
     }
     
     if (handled) {
-        for (auto p : params) if (inPolygon(p->vx.data(), p->vy.data(), p->vx.size(), x, y)) p->handleInput(e);
         switch (e.type) {
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
                 clickMouse(e);
@@ -151,6 +156,7 @@ bool Node::handleInput(SDL_Event& e) {
             default:
                 break;
         }
+        handleWindowInput(e);
     }
 
     return handled;
@@ -168,6 +174,16 @@ void Node::clickMouse(SDL_Event& e) {
                     ne->setSrcConn(this, hoveredConnection);
                     break;
             }    
+        }
+
+        static uint16_t doubleClickThreshold = 512;
+        auto time = SDL_GetTicks();
+        auto interval = time - lastLeftClick;
+        lastLeftClick = time;
+        if(interval < doubleClickThreshold) {
+            if (detached) attach();
+            else detach();
+            return;
         }
     } else if (e.button.button == SDL_BUTTON_RIGHT) {
         auto* ctxMenu = ContextMenu::get();
@@ -436,28 +452,37 @@ void Node::renderContent(SDL_Renderer* renderer) {
 }
 
 void Node::renderContentHelper(SDL_Renderer* renderer) {
+    SDL_Texture* tex;
+    if (detached) tex = texture_detached;
+    else tex = texture;
+
     auto target = SDL_GetRenderTarget(renderer);
-    SDL_SetRenderTarget(renderer, texture);
+    SDL_SetRenderTarget(renderer, tex);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
     SDL_RenderClear(renderer);
     renderContent(renderer);
     SDL_SetRenderTarget(renderer, target);
     SDL_FRect tRect{0,0,TEX_W,TEX_H};
-    SDL_RenderTexture(renderer, texture, &tRect, &dstRect);
+    SDL_RenderTexture(ne->renderer, texture, &tRect, &dstRect);
+
+    if (detached) {
+        SDL_RenderTexture(renderer, texture_detached, &tRect, NULL);
+        SDL_RenderPresent(renderer);
+    }
 }
 
-void Node::render(SDL_Renderer* renderer) {
+void Node::render() {
 
-    if (!texture) {
+    if (!detached && !texture) {
         texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, TEX_W, TEX_H);
+    } else if (detached && !texture_detached) {
+        texture_detached = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, TEX_W, TEX_H);
     }
 
     renderContentHelper(renderer);
 
-    bool hoverFound = false;
-
-    for(auto conn : inputs.connections) conn->render(renderer, conn->id == hoveredConnection);
-    for(auto conn : outputs.connections) conn->render(renderer, conn->id == hoveredConnection);
+    for(auto conn : inputs.connections) conn->render(ne->renderer, conn->id == hoveredConnection);
+    for(auto conn : outputs.connections) conn->render(ne->renderer, conn->id == hoveredConnection);
 }
 
 void Connection::render(SDL_Renderer* renderer, bool hover) {
@@ -548,3 +573,42 @@ void Node::resetProcessTree() {
     isProcessed = false;
 }
 
+void Node::detach() {
+    if (!detached) {
+        window = SDL_CreateWindow(name.c_str(), TEX_W, TEX_H, SDL_WINDOW_RESIZABLE | SDL_WINDOW_UTILITY);
+        SDL_SetWindowParent(window, ne->window);
+        renderer = SDL_CreateRenderer(window, NULL);
+        WindowHandler::instance()->addWindow(this);
+    }
+    detached = true;
+
+    clearParamTextures();
+}
+
+void Node::attach() {
+    if (detached) {
+        if (window) SDL_DestroyWindow(window);
+        if (renderer) SDL_DestroyRenderer(renderer);
+        WindowHandler::instance()->removeWindow(this);
+    }
+    if (texture_detached) SDL_DestroyTexture(texture_detached);
+
+    window = ne->window;
+    renderer = ne->renderer;
+    texture_detached = nullptr;
+    clearParamTextures();
+
+    detached = false;
+}
+
+void Node::handleWindowInput(SDL_Event& e) {
+    if (detached && SDL_GetWindowFromID(getEventWindowID(e)) == window) {
+        SDL_GetMouseState(&msX, &msY);
+    }
+    for (auto p : params) if (inPolygon(p->vx.data(), p->vy.data(), p->vx.size(), msX, msY)) p->handleInput(e);
+    handleCustomInput(e);
+}
+
+void Node::clearParamTextures() {
+    for (auto p : params) p->clearTextures();
+}

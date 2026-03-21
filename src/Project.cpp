@@ -22,11 +22,6 @@ void Project::process(float* input, float* output, int& bufferSize, int& numChan
 
     BusManager* bm = BusManager::get();
     bm->process(bufferSize);
-
-    em->process(bufferSize);    
-
-    tm->process(input, bufferSize);
-
     nm->process(output, bufferSize, numChannelsOut, sampleRate);
 };
 
@@ -34,17 +29,11 @@ Project::Project() {
     nm = new NodeManager(this);
     ne = nm->ne;
 
-    sm = new ScaleManager;
-
     um = new UndoManager(this);
-
-    tm = new TrackManager;
-    em = new ElementManager(this);
 }
 
 Project::~Project() {
     delete um;
-    delete sm;
     delete nm;
     delete ne;
 }
@@ -72,13 +61,8 @@ void Project::load(std::string path) {
     tempo = j.value("tempo", 120.0f);
 
 
-    sm->deSerialize(j["scaleManager"]);
-    em->fromJSON(j["elementManager"]);
     nm->deSerialize(j["nodeManager"]);
-
     um->deSerialize(j["undoManager"], this);
-
-    tm->fromJSON(j["tracks"]);
 }
 
 void Project::save() {
@@ -91,10 +75,6 @@ void Project::save() {
     json j;
     j["tempo"] = tempo;
 
-    j["tracks"] = tm->toJSON();
-
-    j["scaleManager"] = sm->serialize();
-    j["elementManager"] = em->toJSON();
     j["nodeManager"] = nm->serialize();
     j["undoManager"] = um->serialize();
 
@@ -105,12 +85,8 @@ void Project::save() {
 
 }
 
-void Project::createRegion() {
-    em->newRegion();
-}
-
-void Project::createNote(fract start, fract length, float pitch, TuningTable* t, int regionID) {
-    auto pa = new CreateNoteAction(this, regionID, start, length, pitch, t);
+void Project::createNote(int nodeID, fract start, fract length, float pitch, TuningTable* t, int regionID) {
+    auto pa = new CreateNoteAction(this, nodeID, regionID, start, length, pitch, t);
     um->newAction(pa);
 }
 
@@ -132,7 +108,6 @@ void Project::stop() {
         timeSeconds = playHeadStart;
     }
 }
-
 
 void Project::tick() {
 

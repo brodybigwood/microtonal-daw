@@ -6,6 +6,7 @@
 #include "WindowHandler.h"
 #include "SongRoll.h"
 #include "Project.h"
+#include "Window.h"
 
 #ifndef HOME_H
 #define HOME_H
@@ -13,7 +14,7 @@
 class WindowHandler;  // Forward declaration
 class NodeEditor;
 
-class Home {
+class Home : public Window {
 
     public:
 
@@ -33,8 +34,7 @@ class Home {
     bool pianoRollDetached = true;
     bool songRollDetached = false;
     
-        void createRoll();
-        void createPianoRoll(Region*, SDL_FRect*);
+        void createPianoRoll(Region*);
 
         Home(Project* project);
         ~Home();
@@ -43,8 +43,6 @@ class Home {
         NodeEditor* ne;
 
         WindowHandler* windowHandler;
-        SDL_Window* window;
-        SDL_Renderer* renderer;
 
         void render();
         void renderPresent();

@@ -9,7 +9,7 @@
 #include "ElementManager.h"
 #include "SDL_Events.h"
 
-SongRoll::SongRoll(SDL_FRect* rect, bool* detached, Home* h) : GridView(detached, rect, 200, h) {
+SongRoll::SongRoll(SDL_FRect* rect, bool* detached, Window* w, Project* p, ArrangerNode* n) : GridView(detached, rect, 200, w, p), parentNode(n) {
     this->windowHandler = WindowHandler::instance();
     
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
@@ -26,10 +26,10 @@ SongRoll::SongRoll(SDL_FRect* rect, bool* detached, Home* h) : GridView(detached
 
     rightRect = SDL_FRect{dstRect->x + dstRect->w - rightMargin, dstRect->y + topMargin, rightMargin, dstRect->h - topMargin};
 
-    em = project->em;
+    tracks = new TrackManager;
+
+    em = new ElementManager(project, tracks, parentNode);
     em->dstRect = &rightRect;
-
-
 
     float x = -1000; //for now only this many measures
     times.clear();
@@ -39,14 +39,13 @@ SongRoll::SongRoll(SDL_FRect* rect, bool* detached, Home* h) : GridView(detached
     }
     createGridRect();
 
-    tracks = project->tm;
     tracks->songRoll = this;
 
     leftRect = SDL_FRect{
         dstRect->x, dstRect->y + topMargin, leftMargin, dstRect->h - topMargin
     };
 
-    tracks->setGeometry(&leftRect);
+    tracks->setGeometry(&leftRect, renderer);
     tracks->divHeight = &divHeight;
     tracks->scrollY = &scrollY;
 
@@ -55,6 +54,9 @@ SongRoll::SongRoll(SDL_FRect* rect, bool* detached, Home* h) : GridView(detached
 }
 
 bool SongRoll::customTick() {
+
+    auto target = SDL_GetRenderTarget(renderer);
+
     RenderGridTexture();
     renderElements();
 
@@ -62,7 +64,7 @@ bool SongRoll::customTick() {
     SDL_SetRenderTarget(renderer,texture);
     SDL_SetRenderDrawColor(renderer, colors.background[0], colors.background[1], colors.background[2], colors.background[3]);
     SDL_RenderClear(renderer);
-    SDL_SetRenderTarget(renderer,NULL);
+    SDL_SetRenderTarget(renderer, target);
 
     SDL_RenderTexture(renderer, texture, nullptr, dstRect);
     SDL_RenderTexture(renderer,gridTexture,nullptr, dstRect);
@@ -73,7 +75,7 @@ bool SongRoll::customTick() {
     }
 
     renderMargins();
-
+    
     return true;
 }
 
@@ -108,9 +110,11 @@ void SongRoll::movePosition() {
 }
 
 void SongRoll::handleCustomInput(SDL_Event& e) {
-    
+   
+    em->mouseX = mouseX;
+    em->mouseY = mouseY;
+ 
     switch (e.type) {
-
         case SDL_EVENT_MOUSE_MOTION:
             getHoveredPosition();
             movePosition();
@@ -243,7 +247,7 @@ void SongRoll::doubleClick() {
         auto e = hoveredPosition->element;
         if (e->type == ElementType::region) {
             auto reg = static_cast<Region*>(e);
-            windowHandler->createPianoRoll(reg, &(windowHandler->home->pianoRollRect));
+            windowHandler->createPianoRoll(reg);
         }
     } else {
         auto trackID = getHoveredTrack();
