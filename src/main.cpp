@@ -7,7 +7,7 @@
 #include <csignal>
 
 
-int main() {
+int main(int argc, char* argv[]) {
 
     std::signal(SIGINT, [](int){ exit(130); });
     
@@ -27,7 +27,11 @@ int main() {
     AudioManager* audioManager = AudioManager::instance();
     audioManager->setProject(project);
 
-    project->load("test");
+    
+    if (argc > 1) {
+        project->load(argv[1]);
+    }
+
 
     WindowHandler* windowHandler = WindowHandler::instance();
     windowHandler->project = project;
@@ -48,6 +52,9 @@ int main() {
 
     audioManager->stop();
     project->save();
+
+    delete audioManager;
+    delete project;
 
     return 0;
 }

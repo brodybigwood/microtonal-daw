@@ -299,6 +299,9 @@ void TrackManager::fromJSON(json j) {
 
     for(auto t : j["tracks"] ) {
         Track* tr = new Track;
+        tr->connection = parentNode->outputs.getConnection(t["connectionID"]);
+        tr->buffer = &(tr->connection->buffer);
+        tr->events = &(tr->connection->events);
         tr->fromJSON(t);
         tracks.push_back(tr);
     }
@@ -317,7 +320,9 @@ json TrackManager::toJSON() {
 
     j["tracks"] = json::array();
     for( auto t : tracks ){ 
-        j["tracks"].push_back(t->toJSON());
+        auto jt = t->toJSON();
+        jt["connectionID"] = t->connection->id;
+        j["tracks"].push_back(jt);
     };
 
     j["id_pool"] = id_pool.toJSON();

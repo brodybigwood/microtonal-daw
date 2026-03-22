@@ -45,9 +45,16 @@ bool WindowHandler::tick() {
                 }
             }
 
-            if (isCtrlPressed && e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_Z) 
-                if (isShiftPressed) project->redo();
-                    else project->undo();
+            if (isCtrlPressed) {
+                if (e.type == SDL_EVENT_KEY_DOWN) {
+                    if (e.key.key == SDLK_Z) {
+                        if (isShiftPressed) project->redo();
+                        else project->undo();
+                    } else if (e.key.key == SDLK_S) {
+                        project->save();
+                    }
+                }
+            }
 
             toggleKey(e, SDL_SCANCODE_LSHIFT, isShiftPressed);
             toggleKey(e, SDL_SCANCODE_LCTRL, isCtrlPressed);

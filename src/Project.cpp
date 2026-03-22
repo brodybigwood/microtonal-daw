@@ -45,12 +45,7 @@ Project::~Project() {
 
 void Project::load(std::string path) {
 
-    if (!path.empty()) {
-        filepath = path;
-    }
-
-    std::filesystem::path folder(filepath);
-    std::filesystem::create_directories(folder);
+    std::filesystem::path folder(path);
     std::filesystem::path file = folder / "save.json";
 
     std::ifstream inFile(file);
@@ -59,6 +54,7 @@ void Project::load(std::string path) {
         return;
     }
 
+    filepath = path;
 
     json j;
     inFile >> j;
@@ -71,23 +67,43 @@ void Project::load(std::string path) {
 }
 
 void Project::save() {
-    if (filepath.empty()) return;
 
-    std::filesystem::path folder(filepath);
-    std::filesystem::create_directories(folder);
-    std::filesystem::path file = folder / "save.json";
+    auto save_l = [this] {
+        std::filesystem::path folder(this->filepath);
+        std::filesystem::create_directories(folder);
+        std::filesystem::path file = folder / "save.json";
+    
+        json j;
+        j["tempo"] = this->tempo;
+        
+        j["nodeManager"] = this->nm->serialize();
+        j["undoManager"] = this->um->serialize();
+        
+        std::ofstream outFile(file);
+        if (outFile.is_open()) {
+            outFile << j.dump(2);
+        }
+    };
 
-    json j;
-    j["tempo"] = tempo;
+    if (filepath.empty()) {
+        auto ctxMenu = ContextMenu::get();
 
-    j["nodeManager"] = nm->serialize();
-    j["undoManager"] = um->serialize();
+        ctxMenu->active = true;
+        auto window = ne->window;
+        ctxMenu->window_id = SDL_GetWindowID(window);
+        ctxMenu->renderer = ne->renderer;
+        SDL_StartTextInput(window);
+    
+        ctxMenu->locX = ne->windowWidth / 2;
+        ctxMenu->locY = ne->windowHeight / 2;
 
-    std::ofstream outFile(file);
-    if (outFile.is_open()) {
-        outFile << j.dump(2);
-    }
 
+        ctxMenu->dynamicTick = getTextInputTicker([this, save_l] (std::string text) {
+            this->filepath = text;
+            save_l();
+        });
+    
+    } else save_l();
 }
 
 void Project::createNote(int nodeID, fract start, fract length, float pitch, TuningTable* t, int regionID) {

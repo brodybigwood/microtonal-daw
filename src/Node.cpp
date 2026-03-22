@@ -16,6 +16,7 @@ json Node::serialize() {
     j["nodeType"] = nodeType;
     j["x"] = dstRect.x;
     j["y"] = dstRect.y;
+    j["extra"] = extraSerialize();
 
     return j;
 }
@@ -50,6 +51,8 @@ Node* Node::deSerialize(json j, NodeManager* nm) {
     n->zoom(j["zoomRatio"].get<float>()/n->zoomRatio);
 
     n->move(j["x"], j["y"]);
+
+    n->extraDeSerialize(j["extra"]);
 
     return n;
 }
@@ -447,12 +450,23 @@ void Node::update(int bufferSize, int sampleRate) {
             }
             c->buffer = new float[bufferSize];
             c->bufferSize = bufferSize;
-            std::cout << "updated connection " << c << " with buffersize: " << bufferSize << std::endl;
         }
     }
 
     inputs.bufferSize = bufferSize;
-    for (auto c : inputs.connections) c->bufferSize = bufferSize;
+    for (auto c : inputs.connections) {
+        if (!c->is_connected) continue;
+
+        auto n = nm->getNode(c->input_node);
+        auto ci = n->outputs.getConnection(c->input_connection);
+
+        if (c->type == DataType::Waveform) {
+            c->buffer = ci->buffer;
+            c->bufferSize = bufferSize;
+        } else {
+            c->events = ci->events; 
+        }
+    }
     setup();
 }
 

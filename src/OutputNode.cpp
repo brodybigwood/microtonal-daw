@@ -20,7 +20,7 @@ void OutputNode::process() {
             std::memset(output + i*bufferSize, 0, bufferSize * sizeof(float));
             continue;
         }
-
+        
         float* inputBuffer = c->buffer;
         std::memcpy(output + i*bufferSize, inputBuffer, bufferSize * sizeof(float));
     }

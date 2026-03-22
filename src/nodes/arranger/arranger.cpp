@@ -57,3 +57,45 @@ void ArrangerNode::renderPresent() {
     if (sl->pianoRoll && sl->pianoRollDetached) SDL_RenderPresent(sl->pianoRoll->renderer);
 }
 
+json ArrangerNode::extraSerialize() {
+    json j;
+    j["TrackManager"] = sl->tracks->toJSON();
+    j["ElementManager"] = sl->em->toJSON();
+
+    json o = json::array();
+    for (auto c : outputs.connections) {
+        json jc;
+        jc["id"] = c->id;
+        jc["type"] = c->type;
+        o.push_back(jc);
+    }
+    j["outputs"] = o;
+
+    return j;
+}
+
+void ArrangerNode::extraDeSerialize(json j) {
+
+    json o = j["outputs"];
+    for (auto jc : o) {
+        auto c = new Connection;
+        c->id = jc["id"];
+        c->dir = Direction::output;
+        c->type = jc["type"];
+
+        if (c->type == DataType::Events) {
+            c->events = new std::vector<Event>;
+        } else {
+            c->buffer = new float[bufferSize];
+            c->bufferSize = bufferSize;
+        }
+
+        outputs.connections.push_back(c);
+        outputs.id_pool.reserveID(c->id);
+        outputs.ids[c->id] = outputs.connections.size() - 1;
+
+    }
+
+    sl->tracks->fromJSON(j["TrackManager"]);
+    sl->em->fromJSON(j["ElementManager"]);
+}

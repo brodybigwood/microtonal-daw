@@ -36,14 +36,14 @@ class NodeEditor : public Window {
         SDL_Window* getWindow() { return window; };
         SDL_Renderer* getRenderer() { return renderer; };
 
+        int windowWidth = 1920;
+        int windowHeight = 1080;
+
     private:
         SDL_FRect nodeRect;
 
         void zoom(float);
         void move();
-
-        int windowWidth = 1920;
-        int windowHeight = 1080;
 
         float topMargin = 0.0f;
         float leftMargin = 0.0f;

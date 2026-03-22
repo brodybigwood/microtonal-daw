@@ -17,4 +17,7 @@ class ArrangerNode : public Node {
         SDL_FRect* slRect;
         bool slDetached = false;
         SongRoll* sl;
+
+        json extraSerialize() override;
+        void extraDeSerialize(json) override;
 };

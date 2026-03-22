@@ -120,6 +120,9 @@ class Node : public Window {
         json serialize();
         static Node* deSerialize(json, NodeManager*);
 
+        virtual json extraSerialize() { json j; return j; }
+        virtual void extraDeSerialize(json j) {}
+
         void clearParamTextures();
         virtual void clearCustomTextures() {}
 

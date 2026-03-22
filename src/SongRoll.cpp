@@ -27,6 +27,7 @@ SongRoll::SongRoll(SDL_FRect* rect, bool* detached, Window* w, Project* p, Arran
     tracks = new TrackManager(n);
     tracks->mouseX = &mouseX;
     tracks->mouseY = &mouseY;
+    tracks->parentNode = parentNode;
 
     em = new ElementManager(project, tracks, parentNode);
     em->dstRect = &rightRect;
