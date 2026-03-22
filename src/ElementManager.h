@@ -15,6 +15,7 @@ class ElementManager {
         ElementManager(Project*, TrackManager*, ArrangerNode*);
         ~ElementManager();
 
+        void clearTextures();
         std::vector<GridElement*> elements;
 
         GridElement* getElement(uint16_t);

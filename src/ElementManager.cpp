@@ -15,6 +15,15 @@ ElementManager::~ElementManager() {
     elements.clear();
 }
 
+void ElementManager::clearTextures() {
+    for (auto element : elements) {
+        if (element->texture) {
+            SDL_DestroyTexture(element->texture);
+            element->texture = nullptr;
+        }
+    }
+}
+
 json ElementManager::toJSON() {
     json j;
     j["id_pool"] = id_pool.toJSON();

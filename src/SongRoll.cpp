@@ -370,6 +370,8 @@ void SongRoll::clearTextures() {
     regionTexture = nullptr;
     playHeadTexture = nullptr;
     gridTexture = nullptr;
+
+    em->clearTextures();
 }
 
 void SongRoll::generateTextures() {
