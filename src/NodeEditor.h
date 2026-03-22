@@ -6,7 +6,6 @@
 #include "Window.h"
 
 class Node;
-class Bus;
 
 class NodeEditor : public Window {
     public:
@@ -40,15 +39,13 @@ class NodeEditor : public Window {
     private:
         SDL_FRect nodeRect;
 
-        void renderInputs();
-
         void zoom(float);
         void move();
 
         int windowWidth = 1920;
         int windowHeight = 1080;
 
-        float topMargin = 20.0f;
+        float topMargin = 0.0f;
         float leftMargin = 0.0f;
 
         uint32_t lastLeftClick;
@@ -61,15 +58,12 @@ class NodeEditor : public Window {
         void keydown(SDL_Event&);
 
         Node* hoveredNode = nullptr;
-        Bus* hoveredBus = nullptr;
 
         Node* dstNode = nullptr;
         int dstNodeID = -1;
 
         Node* srcNode = nullptr;
         int srcNodeID = -1;
-
-        Bus* srcBus = nullptr;
 
         void makeConnection();
         void renderConnector(SDL_Renderer*);

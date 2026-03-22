@@ -9,14 +9,16 @@
 using json = nlohmann::json;
 
 class SongRoll;
+class ArrangerNode;
 
 class TrackManager {
     public:
 
-        TrackManager();
+        TrackManager(ArrangerNode*);
         ~TrackManager();
        
         SongRoll* songRoll;
+        ArrangerNode* parentNode;
 
         void addTrack(TrackType);
 
@@ -57,15 +59,6 @@ class TrackManager {
 
         void fromJSON(json);
         json toJSON();
-
-        void assign(Track*, int);
-
-        struct busList {
-            std::vector<int> event;
-            std::vector<int> waveform;
-        };
-        
-        busList assignedBusses;
 
     private:
         std::vector<uint16_t> soloTracks;

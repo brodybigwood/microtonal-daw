@@ -8,6 +8,7 @@
 #include "ElementManager.h"
 #include "SDL_Events.h"
 #include "PianoRoll.h"
+#include "Preferences.h"
 
 SongRoll::SongRoll(SDL_FRect* rect, bool* detached, Window* w, Project* p, ArrangerNode* n) : GridView(detached, rect, 200, w, p), parentNode(n) {
     this->windowHandler = WindowHandler::instance();
@@ -23,7 +24,7 @@ SongRoll::SongRoll(SDL_FRect* rect, bool* detached, Window* w, Project* p, Arran
 
     rightRect = SDL_FRect{dstRect->x + dstRect->w - rightMargin, dstRect->y + topMargin, rightMargin, dstRect->h - topMargin};
 
-    tracks = new TrackManager;
+    tracks = new TrackManager(n);
     tracks->mouseX = &mouseX;
     tracks->mouseY = &mouseY;
 
@@ -270,7 +271,7 @@ void SongRoll::clickMouse(SDL_Event& e) {
                 movingPosition = hoveredPosition;
                 if (movingPosition) lastPosition = *movingPosition;
                
-                if (SDL_GetTicks() - lastLmbTime < doubleClickTime) doubleClick();
+                if (SDL_GetTicks() - lastLmbTime < DCT) doubleClick();
                 else if (!hoveredPosition &&
                     mouseX > gridRect.x && mouseX < gridRect.x + gridRect.w &&
                     mouseY > gridRect.y && mouseY < gridRect.y + gridRect.h) {

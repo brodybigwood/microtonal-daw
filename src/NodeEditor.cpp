@@ -1,10 +1,10 @@
 #include "NodeEditor.h"
-#include "BusManager.h"
 #include "NodeManager.h"
 #include "Node.h"
 #include "ContextMenu.h"
 #include "WindowHandler.h"
 #include <iostream>
+#include "Preferences.h"
 
 void NodeEditor::setMovingNode(Node* node) {
     releaseMovingNode();
@@ -45,12 +45,6 @@ void NodeEditor::makeConnection() {
         srcNodeID = -1;
         dstNode = nullptr;
         dstNodeID = -1;
-    } else if (srcBus != nullptr && dstNode != nullptr
-            && dstNodeID != -1) { // bus does not need connection id (only has one output)
-        nm->makeBusConnection(srcBus, dstNode, dstNodeID);
-        srcBus = nullptr;
-        dstNode = nullptr;
-        dstNodeID = -1;
     }
 }
 
@@ -70,59 +64,12 @@ NodeEditor::NodeEditor() :
     };
 
     renderer = SDL_CreateRenderer(window, NULL);
-
-    BusManager* bm = BusManager::get();
-    
-    for (int i = 0; i < bm->busCount; i++) {
-        auto bus = bm->getBusW(i);
-        auto& rect = bus->dstRect;
-        
-        rect.w = 15.0f;
-        rect.h = topMargin/2.0f;
-        rect.x = leftMargin + i*rect.w;
-        rect.y = 0.0f;    
-    }
-
-    for (int i = 0; i < bm->busCount; i++) {
-        auto bus = bm->getBusE(i);
-        auto& rect = bus->dstRect;
-    
-        rect.w = 15.0f;
-        rect.h = topMargin/2.0f;
-        rect.x = leftMargin + i*rect.w;
-        rect.y = rect.h;
-    }
 }
 
 NodeEditor::~NodeEditor() {
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     WindowHandler::instance()->removeWindow(this);
-}
-
-void NodeEditor::renderInputs() {
-
-    BusManager* bm = BusManager::get();
-
-    for (int i = 0; i < bm->busCount; i++) {
-        auto* bus = bm->getBusW(i);
-        auto& busRect = bus->dstRect;        
- 
-        SDL_SetRenderDrawColor(renderer, 255, 120, 120, 255);
-        SDL_RenderFillRect(renderer, &busRect);
-        SDL_SetRenderDrawColor(renderer, 120, 120, 120, 255);
-        SDL_RenderRect(renderer, &busRect);
-    }
-
-    for (int i = 0; i < bm->busCount; i++) {
-        auto* bus = bm->getBusE(i);
-        auto& busRect = bus->dstRect;
-
-        SDL_SetRenderDrawColor(renderer, 120, 255, 120, 255);
-        SDL_RenderFillRect(renderer, &busRect);
-        SDL_SetRenderDrawColor(renderer, 120, 120, 120, 255);
-        SDL_RenderRect(renderer, &busRect);
-    }
 }
 
 void NodeEditor::renderConnector(SDL_Renderer* renderer) {
@@ -142,10 +89,6 @@ void NodeEditor::renderConnector(SDL_Renderer* renderer) {
             x = rect.x + rect.w/2.0f;
             y = rect.y + rect.h/2.0f;        
         }
-    } else if (srcBus != nullptr) {
-        auto rect = srcBus->dstRect;
-        x = rect.x + 0.5 * rect.w;
-        y = rect.y + 0.5 * rect.h;
     } else {
         return;
     }
@@ -156,7 +99,6 @@ void NodeEditor::renderConnector(SDL_Renderer* renderer) {
 void NodeEditor::tick() {
 
     render(renderer, &nodeRect); // render background and nodes
-    renderInputs(); // busses on top
     renderConnector(renderer); // connector line from mouse
 }
 
@@ -259,48 +201,18 @@ bool NodeEditor::inside(float& mouseX, float& mouseY, SDL_FRect* rect) {
 
 void NodeEditor::hover() {
 
-    bool found_hovered = false;
-
-    for(int i = 0; i < BusManager::get()->busCount; i++) {
-        auto* bus = BusManager::get()->getBusE(i);
-        auto& busRect = bus->dstRect;
-
-        if( inside(mouseX, mouseY, &busRect) ) {
-            hoveredBus = bus;
-            found_hovered = true;
-            break;
-        }
-    }
-
-    if(!found_hovered) {
-
-        for(int i = 0; i < BusManager::get()->busCount; i++) {
-            auto* bus = BusManager::get()->getBusW(i);
-            auto& busRect = bus->dstRect;
-
-            if( inside(mouseX, mouseY, &busRect) ) {
-                hoveredBus = bus;
-                found_hovered = true;
-                break;
-            }
-        }
-    }
-
-    if(!found_hovered) hoveredBus = nullptr;
 }
 
 void NodeEditor::clickMouse(SDL_Event& e) {
     if (e.button.button == SDL_BUTTON_LEFT) {
-        static uint16_t doubleClickThreshold = 512;
         auto time = SDL_GetTicks();
         auto interval = time - lastLeftClick;
         lastLeftClick = time;
-        if(interval < doubleClickThreshold) {
+        if(interval < DCT) {
             doubleClick();
             return;
         }
     
-        srcBus = hoveredBus;
         makeConnection();
         srcNodeID = -1;
         dstNodeID = -1;

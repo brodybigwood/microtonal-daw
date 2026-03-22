@@ -1,11 +1,11 @@
 #include "Node.h"
 #include "NodeManager.h"
-#include "BusManager.h"
 #include "SDL_Events.h"
 #include "ContextMenu.h"
 #include <iostream>
 #include "NodeEditor.h"
 #include "WindowHandler.h"
+#include "Preferences.h"
 
 json Node::serialize() {
     json j;
@@ -73,6 +73,7 @@ Node::Node(uint16_t id, NodeManager* nm, NodeType nt) :
 }
 
 Node::~Node() {
+    attach();
     if (texture) SDL_DestroyTexture(texture);
     if (vx) delete[] vx;
     if (vy) delete[] vy;
@@ -81,26 +82,17 @@ Node::~Node() {
 connectionSet::~connectionSet() {
     for (auto c : connections) {
         if(c->dir == Direction::output) {
-            if (c->data) {
-                switch (c->type) {
-                    case DataType::Events:
-                        // havent implemented anything yet
-                        break;
-                    case DataType::Waveform:
-                        auto b = Node::getWaveform(c->data);
-                        if (b->buffer) delete[] b->buffer;
-                        delete b;
-                        break;
-                }
+            switch (c->type) {
+                case DataType::Events:
+                    if (c->events) delete c->events;
+                    break;
+                case DataType::Waveform:
+                    if (c->buffer) delete[] c->buffer;
+                    break;
             }
-        } else if (c->is_connected) if (c->data) delete static_cast<sourceNode*>(c->data);
+        } // don't delete input connection's data
         delete c;
     }
-}
-
-
-void* Node::getOutput(Connection* con) {
-    return con->data;
 }
 
 bool Node::handleInput(SDL_Event& e) {
@@ -176,13 +168,13 @@ void Node::clickMouse(SDL_Event& e) {
             }    
         }
 
-        static uint16_t doubleClickThreshold = 512;
         auto time = SDL_GetTicks();
         auto interval = time - lastLeftClick;
         lastLeftClick = time;
-        if(interval < doubleClickThreshold) {
+        if(interval < DCT) {
             if (detached) attach();
             else detach();
+            ne->releaseMovingNode();
             return;
         }
     } else if (e.button.button == SDL_BUTTON_RIGHT) {
@@ -254,54 +246,10 @@ bool inside(float& mouseX, float& mouseY, SDL_FRect* rect) {
     );
 }
 
-void* Node::getInput(Connection* con) {
-    void* data = con->data;
-    sourceNode* src = static_cast<sourceNode*>(data);
-
-    switch(src->type) {
-        case ConnectionType::bus:
-        {
-            auto bm = BusManager::get();
-            Bus* b;
-            switch(con->type) {
-                case DataType::Events:
-                {                            
-                    b = bm->getBusE(src->source_id);
-                    break;
-                }
-                case DataType::Waveform:
-                {
-                    b = bm->getBusW(src->source_id);
-                    break;
-                }
-            }
-            return b;
-        }
-        case ConnectionType::node:
-        {
-            auto n = nm->getNode(src->source_id);
-            auto oc = n->outputs.getConnection(src->output_id);
-            return n->getOutput(oc);
-        }
-    }
-}
-
 Node* Node::getNodeInput(Connection* con) {
-
     if (!con->is_connected) return nullptr;
-
-    void* data = con->data;
-    sourceNode* src = static_cast<sourceNode*>(data);
-
-    switch(src->type) {
-        case ConnectionType::bus:
-            return nullptr;
-        case ConnectionType::node:
-        {
-            auto n = nm->getNode(src->source_id);
-            return n;
-        }
-    }
+    auto n = nm->getNode(con->input_node);
+    return n;
 }
 
 uint16_t connectionSet::getIndex(uint16_t id) {
@@ -316,19 +264,23 @@ Connection* connectionSet::getConnection(uint16_t id) {
 
 void connectionSet::addConnection(Connection* c) {
     c->nm = nm;
-    if (c->dir == Direction::input) c->output_node = nodeID;
     c->id = id_pool.newID();
     connections.push_back(c);
     ids[c->id] = connections.size() -1;
-    if(c->dir == Direction::input) return;
-    switch(c->type) {
-        case DataType::Waveform:
-            c->data = new WaveformBus;
-            break;
-        default:
-            break;
+
+    if (c->dir == Direction::input) {
+        c->output_connection = c->id;
+        c->output_node = nodeID;
+        c->events = nullptr;
+        c->buffer = nullptr;
+    } else {
+        if (c->type == DataType::Events) {
+            c->events = new std::vector<Event>;
+        } else {
+            c->buffer = new float[bufferSize]; 
+            c->bufferSize = bufferSize;
+        }
     }
-            
 }
 
 void Node::resize(float rx, float ry) {
@@ -389,43 +341,10 @@ void Node::move(float x, float y) {
 }
 
 SDL_FRect Connection::srcRect() {
-
-    auto s = static_cast<sourceNode*>(data);
-    
-    switch(s->type) {
-        case node:
-            {
-                Node* n = nm->getNode(s->source_id);
-
-                connectionSet& outputs = n->outputs;
-                auto conn = outputs.getConnection(s->output_id);
-
-                return conn->rect;
-            }
-        case bus: {
-                auto bm = BusManager::get();
-                uint16_t& index = s->source_id; // id = index for busses
-
-                Bus* srcBus;
-                switch(type) {
-                    case DataType::Events: {
-                        srcBus = bm->getBusE(index);
-                        break;
-                    }
-                    case DataType::Waveform: {
-                        srcBus = bm->getBusW(index);
-                        break;
-                    }
-                }
-
-                return srcBus->dstRect;
-            }
-            break;
-        default:
-            break;
-    }
-
-    return rect;
+    Node* n = nm->getNode(input_node);
+    connectionSet& outputs = n->outputs;
+    auto conn = outputs.getConnection(input_connection);
+    return conn->rect;
 }
 
 void Node::renderContent(SDL_Renderer* renderer) {
@@ -519,25 +438,22 @@ void Node::setup() {}
 void Node::update(int bufferSize, int sampleRate) {
     this->bufferSize = bufferSize;
     this->sampleRate = sampleRate;
+
+    outputs.bufferSize = bufferSize;
     for(auto c : outputs.connections) {
         if (c->type == DataType::Waveform) {
-            auto b = getWaveform(c->data);
-            if(b->buffer != nullptr) {
-                delete[] b->buffer;
+            if(c->buffer != nullptr) {
+                delete[] c->buffer;
             }
-            b->buffer = new float[bufferSize];
-            b->bufferSize = bufferSize;
+            c->buffer = new float[bufferSize];
+            c->bufferSize = bufferSize;
+            std::cout << "updated connection " << c << " with buffersize: " << bufferSize << std::endl;
         }
     }
+
+    inputs.bufferSize = bufferSize;
+    for (auto c : inputs.connections) c->bufferSize = bufferSize;
     setup();
-}
-
-EventBus* Node::getEvents(void* data){
-    return static_cast<EventBus*>(data);
-}
-
-WaveformBus* Node::getWaveform(void* data){
-    return static_cast<WaveformBus*>(data);
 }
 
 bool Node::depends(Node* d) {
@@ -603,11 +519,13 @@ void Node::attach() {
 }
 
 void Node::handleWindowInput(SDL_Event& e) {
+    for (auto p : params) if (inPolygon(p->vx.data(), p->vy.data(), p->vx.size(), msX, msY)) p->handleInput(e);
+    
     if (detached && SDL_GetWindowFromID(getEventWindowID(e)) == window) {
         SDL_GetMouseState(&msX, &msY);
+        handleCustomInput(e);
     }
-    for (auto p : params) if (inPolygon(p->vx.data(), p->vy.data(), p->vx.size(), msX, msY)) p->handleInput(e);
-    handleCustomInput(e);
+
 }
 
 void Node::clearParamTextures() {

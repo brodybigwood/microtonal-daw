@@ -13,22 +13,16 @@ SplitterNode::SplitterNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType
 void SplitterNode::process() {
     if (!in->is_connected) {
         for (Connection* c : outputs.connections) {
-            void* data = getOutput(c);
-            auto outBus = getWaveform(data);
-            float* outBuffer = outBus->buffer;
+            float* outBuffer = c->buffer;
             std::memset(outBuffer, 0, bufferSize * sizeof(float));
         }
         return;
     }
-    void* data = getInput(in);
-    auto inBus = getWaveform(data);
-    float* inBuffer = inBus->buffer;
+    float* inBuffer = in->buffer;
 
     for (Connection* c : outputs.connections) {
         if (c->is_connected) {
-            void* data = getOutput(c);
-            auto outBus = getWaveform(data);
-            float* outBuffer = outBus->buffer;
+            float* outBuffer = c->buffer;
             for (size_t i = 0; i < bufferSize; ++i) {
                 outBuffer[i] = inBuffer[i];
             }

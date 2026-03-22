@@ -18,12 +18,6 @@
 
 class NodeEditor;
 
-struct sourceNode{
-    ConnectionType type;
-    uint16_t source_id;
-    uint16_t output_id;
-};
-
 struct connectionSet{
     std::vector<Connection*> connections;
     idManager id_pool;
@@ -38,6 +32,7 @@ struct connectionSet{
 
     int nodeID = -1;
     NodeManager* nm;
+    int bufferSize = 0;
 };
 
 class Node : public Window {
@@ -61,9 +56,6 @@ class Node : public Window {
         void* getOutput(Connection*);
         void* getInput(Connection*);
         Node* getNodeInput(Connection*);
-
-        static EventBus* getEvents(void*);
-        static WaveformBus* getWaveform(void*);
 
         bool depends(Node*); // check if this node has another node as an input somewhere down the tree
         void processTree();

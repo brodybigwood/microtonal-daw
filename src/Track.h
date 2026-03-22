@@ -11,32 +11,29 @@ enum TrackType{
     Notes = 2
 };
 
+struct Connection;
+
 class Track {
     public:
         
         std::vector<std::shared_ptr<Note>> dispatched;
 
-        int busID = -1;
-        Bus* dstBus = nullptr;
+        Connection* connection;
 
         TrackType type = TrackType::Notes;
         TrackType& getType();
 
         void setType();
 
-        void setBus(uint8_t);
         uint16_t id;
 
         void process(float* input, int bufferSize);
 
-        float* buffer = nullptr;
+        float** buffer = nullptr;
         int bufferSize;
 
-        Event* events = nullptr;
+        std::vector<Event>** events;
         void addEvent(Event);
-        int eventNum = 0;
-
-        uint8_t inputChannel;
 
         void fromJSON(json);
         json toJSON();

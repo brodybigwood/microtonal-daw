@@ -24,11 +24,6 @@ enum DataType{
     Waveform = 1
 };
 
-enum ConnectionType{
-    bus = 0,
-    node = 1
-};
-
 enum Direction{
     input = 0,
     output = 1
@@ -45,37 +40,15 @@ struct Connection{
     void render(SDL_Renderer*, bool);
     SDL_FRect srcRect();
     SDL_FRect rect;
-    void* data = nullptr;
+
+    std::vector<Event>* events;
+    float* buffer;
+    int bufferSize = 0;
 
     int output_node = -1;
     int output_connection = -1;
+
+    int input_node = -1;
+    int input_connection = -1;
     NodeManager* nm;
 };
-
-struct Bus {
-    DataType type;
-    Connection output = { 
-        .dir = Direction::output
-    };
-    uint16_t id;
-    SDL_FRect dstRect;
-};
-
-struct EventBus : public Bus {
-    EventBus() { 
-        type = DataType::Events; 
-        output.type = DataType::Events;
-    };
-    int numEvents = 0;
-    Event events[MAX_EVENTS];
-};
-
-struct WaveformBus : public Bus {
-    WaveformBus() { 
-        type = DataType::Waveform;
-        output.type = DataType::Waveform;
-    };
-    float* buffer = nullptr;
-    int bufferSize;
-};
-

@@ -10,8 +10,8 @@ ArrangerNode::ArrangerNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType
 }
 
 void ArrangerNode::process() {
-    sl->em->process(bufferSize);
     sl->tracks->process(nullptr, bufferSize);
+    sl->em->process(bufferSize);
 }
 
 void ArrangerNode::setup() {

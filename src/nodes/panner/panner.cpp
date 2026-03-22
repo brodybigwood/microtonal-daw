@@ -23,21 +23,15 @@ PannerNode::PannerNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::Pa
 void PannerNode::process() {
     if (!in->is_connected) {
         for (Connection* c : outputs.connections) {
-            void* data = getOutput(c);
-            auto outBus = getWaveform(data);
-            float* outBuffer = outBus->buffer;
+            float* outBuffer = c->buffer;
             std::memset(outBuffer, 0, bufferSize * sizeof(float));
         }
         return;
     }
-    void* data = getInput(in);
-    auto inBus = getWaveform(data);
-    float* inBuffer = inBus->buffer;
+    float* inBuffer = in->buffer;
 
     auto getBufferOut = [this] (Connection* c) {
-        void* data = getOutput(c);
-        auto outBus = getWaveform(data);
-        return outBus->buffer;
+        return c->buffer;
     };
 
     auto outBufferL = getBufferOut(l);

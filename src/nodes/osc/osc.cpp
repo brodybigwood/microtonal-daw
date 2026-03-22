@@ -27,25 +27,16 @@ void OscillatorNode::process() {
 
     if (!inputN->is_connected) { // just do zeroes
         if (output0->is_connected) {
-            auto bus = getWaveform(output0->data);
-            std::memset(bus->buffer, 0, bufferSize * sizeof(float));
+            std::memset(output0->buffer, 0, bufferSize * sizeof(float));
         }
     
         if (output1->is_connected) {
-            auto bus = getWaveform(output1->data);
-            std::memset(bus->buffer, 0, bufferSize * sizeof(float));
+            std::memset(output1->buffer, 0, bufferSize * sizeof(float));
         }
         return;
     }
 
-    auto input = getInput(inputN);
-    EventBus* eBus = getEvents(input);
-    Event* events = eBus->events;
-
-    int& numEvents = eBus->numEvents; 
-
-    for (size_t i = 0; i < numEvents; ++i) {
-        auto& event = events[i];
+    for (auto& event : *(inputN->events)) {
         switch (event.type) {
             case noteEventType::noteOn: {
                     //assign to a voice
@@ -88,18 +79,14 @@ void OscillatorNode::process() {
 
 // now do output
 
-    float* b0 = nullptr;
-    float* b1 = nullptr;
+    float* b0 = output0->buffer;
+    float* b1 = output1->buffer;
 
     if (output0->is_connected) {
-        auto bus = getWaveform(output0->data);
-        b0 = bus->buffer;
         std::memset(b0, 0, bufferSize * sizeof(float));
     }
 
     if (output1->is_connected) {
-        auto bus = getWaveform(output1->data);
-        b1 = bus->buffer;
         std::memset(b1, 0, bufferSize * sizeof(float));
     }
 

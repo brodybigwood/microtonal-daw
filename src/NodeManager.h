@@ -7,7 +7,6 @@
 #include "OutputNode.h"
 #include "nodes/nodetypes.h"
 
-class Bus;
 class Node;
 class NodeEditor;
 
@@ -34,7 +33,6 @@ class NodeManager {
                 Node*, uint16_t, 
                 Node*, uint16_t
                 ); 
-        void makeBusConnection(Bus*, Node*, uint16_t);
 
         void severConnection(Connection*);
 

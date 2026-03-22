@@ -1,6 +1,5 @@
 #include "NodeManager.h"
 #include "Node.h"
-#include "BusManager.h"
 #include "NodeEditor.h"
 
 #include <iostream>
@@ -26,15 +25,13 @@ json NodeManager::serialize() {
         for (auto c : n->inputs.connections) {
             if (!c->is_connected) continue;
             json s;
-            auto src = static_cast<sourceNode*>(c->data);
 
             s["dataType"] = c->type;
-            s["connectionType"] = src->type;
 
-            s["srcNodeID"] = src->source_id;
-            s["srcConID"] = src->output_id;
-            s["dstNodeID"] = n->id;
-            s["dstConID"] = c->id;
+            s["srcNodeID"] = c->input_node;
+            s["srcConID"] = c->input_connection;
+            s["dstNodeID"] = c->output_node;
+            s["dstConID"] = c->output_connection;
 
             j["connections"].push_back(s);
         }
@@ -69,29 +66,9 @@ void NodeManager::deSerialize(json j) {
         else dstNode = outNode;
         
         auto dstConID = s["dstConID"];
-        switch (s["connectionType"].get<int>()) {
-            case ConnectionType::bus: {
-                    Bus* srcBus;
-                    int busID = s["srcNodeID"];
-                    auto bm = BusManager::get();
-                    switch (s["dataType"].get<int>()) {
-                        case DataType::Events:
-                            srcBus = bm->getBusE(busID);
-                            break;
-                        case DataType::Waveform:
-                            srcBus = bm->getBusW(busID);
-                            break;
-                    }
-                    makeBusConnection(srcBus, dstNode, dstConID);
-                }
-                break;
-            case ConnectionType::node: {
-                    auto srcNode = getNode(s["srcNodeID"]);
-                    auto srcConID = s["srcConID"];
-                    makeNodeConnection(srcNode, srcConID, dstNode, dstConID);
-                }
-                break;
-        }
+        auto srcNode = getNode(s["srcNodeID"]);
+        auto srcConID = s["srcConID"];
+        makeNodeConnection(srcNode, srcConID, dstNode, dstConID);
     }
 }
 
@@ -121,40 +98,18 @@ void NodeManager::makeNodeConnection(
     
     if(srcCon->type != dstCon->type || srcCon->is_connected || dstCon->is_connected) return;
 
-    sourceNode* s = new sourceNode;
-    s->type = node;
-    s->source_id = srcNode->id;
-    s->output_id = srcConID;
+    dstCon->buffer = srcCon->buffer;
+    dstCon->events = srcCon->events;
 
-    dstCon->data = s;
+    
+    dstCon->input_node = srcNode->id;
+    dstCon->input_connection = srcConID;
 
     srcCon->output_node = dstNode->id;
     srcCon->output_connection = dstConID;
 
     srcCon->is_connected = true;
     dstCon->is_connected = true;
-}
-
-void NodeManager::makeBusConnection(Bus* source, Node* dst, uint16_t inputID) {
-    Connection* dstCon = dst->inputs.getConnection(inputID);
-    Connection* srcCon = &(source->output);
-
-    if (srcCon->type != dstCon->type || srcCon->is_connected || dstCon->is_connected) return;
-
-    sourceNode* s = new sourceNode;
-    s->type = bus;
-    s->source_id = source->id;
-    s->output_id = srcCon->id;
-    
-    dstCon->data = s;
-    
-    srcCon->output_node = dst->id;
-    srcCon->output_connection = dstCon->id;
-
-    srcCon->is_connected = true;
-    dstCon->is_connected = true;
-
-    std::cout << "connected bus " << source->id << " to node." << std::endl;
 }
 
 void NodeManager::severConnection(Connection* c) {
@@ -166,26 +121,7 @@ void NodeManager::severConnection(Connection* c) {
     switch (c->dir) {
         case Direction::input: {
             dstCon = c;
-            auto s = static_cast<sourceNode*>(c->data);
-            switch (s->type) {
-                case ConnectionType::bus: {
-                    auto bm = BusManager::get();
-                    switch (c->type) {
-                        case DataType::Events:
-                            srcCon = &(bm->getBusE(s->source_id)->output);
-                            break;
-                        case DataType::Waveform:
-                            srcCon = &(bm->getBusW(s->source_id)->output);
-                            break;
-                    }
-                    break;
-                }
-                case ConnectionType::node:
-                    srcCon = getNode(s->source_id)->outputs.getConnection(s->output_id);
-                    break;
-            }
-            delete s;
-            c->data = nullptr;
+            srcCon = getNode(dstCon->input_node)->outputs.getConnection(dstCon->input_connection);
             break;
         }
         case Direction::output: {
@@ -194,17 +130,21 @@ void NodeManager::severConnection(Connection* c) {
             if (srcCon->output_node) dstNode = getNode(srcCon->output_node);
             else dstNode = outNode;
             dstCon = dstNode->inputs.getConnection(srcCon->output_connection);
-            delete static_cast<sourceNode*>(dstCon->data);
-            dstCon->data = nullptr;
             break;
         }
     }
     
+
+    dstCon->input_node = -1;
+    dstCon->input_connection = -1;
     srcCon->output_node = -1;
     srcCon->output_connection = -1;
 
     srcCon->is_connected = false;
     dstCon->is_connected = false;
+
+    dstCon->buffer = nullptr;
+    dstCon->events = nullptr;
 }
 
 Node* NodeManager::addNode(NodeType t) {

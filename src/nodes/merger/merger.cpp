@@ -12,14 +12,11 @@ MergerNode::MergerNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::Me
 
 void MergerNode::process() {
     if (!out->is_connected) return;
-    auto bus = getWaveform(out->data);
-    float* outBuffer = bus->buffer;
+    float* outBuffer = out->buffer;
     std::memset(outBuffer, 0, bufferSize * sizeof(float));
     for (Connection*  c : inputs.connections) {
         if (!c->is_connected) continue;
-        void* data = getInput(c);
-        auto inBus = getWaveform(data);
-        float* inBuffer = inBus->buffer;
+        float* inBuffer = c->buffer;
         for (size_t i = 0; i < bufferSize; ++i) {
             outBuffer[i] += inBuffer[i];
         }

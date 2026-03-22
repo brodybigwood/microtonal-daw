@@ -21,13 +21,7 @@ void OutputNode::process() {
             continue;
         }
 
-        void* data = getInput(c);
-
-        auto bus = getWaveform(data);
-
-        float* inputBuffer = bus->buffer;
-        int& bufferSize = bus->bufferSize;
-        
+        float* inputBuffer = c->buffer;
         std::memcpy(output + i*bufferSize, inputBuffer, bufferSize * sizeof(float));
     }
 }

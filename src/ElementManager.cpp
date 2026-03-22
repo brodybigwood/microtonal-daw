@@ -106,13 +106,13 @@ void ElementManager::process(int bufferSize) {
 // audio range is pos.start to pos.end
 // time must be anywhere between    
                         if (!project->isPlaying) break;
-                        if (!track->buffer) break;
+                        if (!(*track->buffer)) break;
 
                         int readIdx = project->beatsToSamples(time - pos.start);
                         if (readIdx < 0) break;
                         AudioClip* ac = static_cast<AudioClip*>(element);
                         float* rbuffer = ac->buffer;
-                        float* wbuffer = track->buffer;
+                        float* wbuffer = *(track->buffer);
                         for (size_t i = 0; i < bufferSize; ++i) {
                             if (readIdx >= ac->num_samples) {
                                 wbuffer[i] += 0;

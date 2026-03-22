@@ -7,7 +7,6 @@
 #include "TrackManager.h"
 #include "ElementManager.h"
 #include "ScaleManager.h"
-#include "BusManager.h"
 #include "NodeManager.h"
 #include "NodeEditor.h"
 #include <nlohmann/json.hpp>
@@ -20,8 +19,6 @@ int Project::beatsToSamples(float beats) {
 
 void Project::process(float* input, float* output, int& bufferSize, int& numChannelsIn, int& numChannelsOut, int& sampleRate) {
 
-    BusManager* bm = BusManager::get();
-    bm->process(bufferSize);
     nm->process(output, bufferSize, numChannelsOut, sampleRate);
 };
 

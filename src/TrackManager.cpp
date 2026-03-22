@@ -2,12 +2,12 @@
 #include <algorithm>
 #include "WindowHandler.h"
 #include <ranges>
-#include "BusManager.h"
 #include "styles.h"
 #include <SDL3_gfx/SDL3_gfxPrimitives.h>
 #include "SongRoll.h"
+#include "nodes/nodetypes.h"
 
-TrackManager::TrackManager() {}
+TrackManager::TrackManager(ArrangerNode* n) : parentNode(n) {}
 
 
 void TrackManager::setGeometry(SDL_FRect* dstRect, SDL_Renderer*& r) {
@@ -59,6 +59,23 @@ void TrackManager::addTrack(TrackType tp) {
     t->id = id;
     ids[id] = tracks.size() - 1;
     t->type = tp;
+
+    auto c = new Connection;
+    
+    c->dir = Direction::output;
+    switch (tp) {
+        case TrackType::Notes:
+            c->type = DataType::Events;
+            t->events = &(c->events);
+            break;
+        default:
+            c->type = DataType::Waveform;
+            t->buffer = &(c->buffer);
+            break;
+    }
+
+    t->connection = c;
+    parentNode->outputs.addConnection(c);
 }
 
 Track* TrackManager::getTrack(uint16_t id) {
@@ -143,32 +160,6 @@ void TrackManager::handleTrackInput(Track* track, int y, SDL_Event& e) {
 
     switch (e.type) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
-            if (e.button.button == SDL_BUTTON_RIGHT) {
-                auto* ctxMenu = ContextMenu::get();
-                ctxMenu->active = true;
-
-                auto window = songRoll->window;
-                ctxMenu->window_id = SDL_GetWindowID(window);
-                ctxMenu->renderer = songRoll->renderer;
-                SDL_StartTextInput(window);
-
-                ctxMenu->locX = *mouseX;
-                ctxMenu->locY = *mouseY;
-    
-                ctxMenu->dynamicTick = getTextInputTicker([this,track](std::string text)
-{
-    try {
-        int index = std::stoi(text);
-        
-        auto bm = BusManager::get();
-        if (index >= bm->busCount) throw std::out_of_range("bus index out of range");
-        assign(track, index);
-    } catch(...) {
-    std::cerr << "invalid input: " << text << std::endl;
-    }
-}
-                );
-            }
             break;
         default:
             break;
@@ -177,6 +168,8 @@ void TrackManager::handleTrackInput(Track* track, int y, SDL_Event& e) {
 
 void TrackManager::moveTrack() {
     if (!movingTrack) return;
+
+    auto connection = movingTrack->connection;
 
     auto it = std::find(tracks.begin(), tracks.end(), movingTrack);
     size_t idx = std::distance(tracks.begin(), it);
@@ -192,6 +185,19 @@ void TrackManager::moveTrack() {
     for (size_t i = 0; i < tracks.size(); ++i) ids[tracks[i]->id] = i;       
 
     movingTrack = nullptr;
+
+    auto& connections = parentNode->outputs.connections;
+    auto it1 = std::find(connections.begin(), connections.end(), connection);
+    idx = std::distance(connections.begin(), it1);
+    connections.erase(it1);
+
+    raw_new_idx = static_cast<int>(idx) + moveAmount;
+    new_idx = std::max(0, std::min(raw_new_idx, static_cast<int>(connections.size())));
+    connections.insert(connections.begin() + new_idx, connection);
+
+    // that messed up the id map so rebuild it
+    parentNode->outputs.ids.clear();
+    for (size_t i = 0; i < connections.size(); ++i) parentNode->outputs.ids[connections[i]->id] = i;
 }
 
 void TrackManager::handleInput(SDL_Event& e) {
@@ -264,7 +270,7 @@ void TrackManager::renderTrack(SDL_Renderer* renderer, Track* track, SDL_FRect* 
 
     // bus text - needs optimization
 
-    std::string text = std::to_string(track->busID);
+    std::string text = std::to_string(track->id);
     SDL_Color color{0, 0, 0, 255};    
 
     SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, text.c_str(), 0, color);
@@ -302,9 +308,6 @@ void TrackManager::fromJSON(json j) {
     for( auto [id, index] : j["ids"].items()) {
         ids[static_cast<uint16_t>(std::stoi(id))] = index.get<uint16_t>();
     }
-
-    assignedBusses.event = j["assignedBusses"]["event"].get<std::vector<int>>();
-    assignedBusses.waveform = j["assignedBusses"]["waveform"].get<std::vector<int>>();
 }
 
 json TrackManager::toJSON() {
@@ -324,33 +327,5 @@ json TrackManager::toJSON() {
         j["ids"][std::to_string(id)] = index;
     }
 
-    json ab;
-    ab["event"] = assignedBusses.event;
-    ab["waveform"] = assignedBusses.waveform;
-
-    j["assignedBusses"] = ab;
     return j;
-}
-
-void TrackManager::assign(Track* track, int busID) {
-    BusManager* bm = BusManager::get();
-
-    switch(track->type) {
-        case TrackType::Notes:
-            if (std::ranges::find(assignedBusses.event, busID) == assignedBusses.event.end())
-            {
-                std::erase(assignedBusses.event, track->busID);
-                assignedBusses.event.push_back(busID);
-            } else return;
-            break;
-        default:
-            if (std::ranges::find(assignedBusses.waveform, busID) == assignedBusses.waveform.end())
-            {
-                std::erase(assignedBusses.waveform, track->busID);            
-                assignedBusses.waveform.push_back(busID);
-            } else return;
-            break;
-    }
-
-    track->setBus(busID);
 }

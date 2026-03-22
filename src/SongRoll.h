@@ -52,7 +52,6 @@ class SongRoll : public GridView{
         void toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar);
         void handleCustomInput(SDL_Event& e) override;
 
-        Uint32 doubleClickTime = 500; // 500ms
         Uint32 lastLmbTime;
         void doubleClick();
 
