@@ -5,6 +5,8 @@
 #include "nodes/nodetypes.h"
 #include "Window.h"
 
+#define SINE_SIZE 2000
+
 class Node;
 
 class NodeEditor : public Window {
@@ -38,6 +40,8 @@ class NodeEditor : public Window {
 
         int windowWidth = 1920;
         int windowHeight = 1080;
+
+        void renderSine(float x1, float y1, float x2, float y2, SDL_FColor);
 
     private:
         SDL_FRect nodeRect;

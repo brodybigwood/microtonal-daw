@@ -76,24 +76,93 @@ void NodeEditor::renderConnector(SDL_Renderer* renderer) {
 
     int x;
     int y;
+    Connection* conn;
 
     if (dstNode != nullptr) {
         if (dstNodeID != -1) {
-            auto rect = dstNode->inputs.getConnection(dstNodeID)->rect;
+            conn = dstNode->inputs.getConnection(dstNodeID);
+            auto rect = conn->rect;
             x = rect.x + rect.w/2.0f;
             y = rect.y + rect.h/2.0f; 
-        }
+        } else return;
     } else if (srcNode != nullptr) {
         if (srcNodeID != -1) {
-            auto rect = srcNode->outputs.getConnection(srcNodeID)->rect;
+            conn = srcNode->outputs.getConnection(srcNodeID);
+            auto rect = conn->rect;
             x = rect.x + rect.w/2.0f;
             y = rect.y + rect.h/2.0f;        
-        }
-    } else {
-        return;
+        } else return;
+    } else return;
+
+    SDL_FColor color;
+    if (conn->type == DataType::Events) color = {0.5f, 1.0f, 0.5f, 1.0f}; 
+    else color = {1.0f, 0.5f, 0.5f, 1.0f};
+    renderSine(mouseX, mouseY, x, y, color);
+}
+
+void NodeEditor::renderSine(float x1, float y1, float x2, float y2, SDL_FColor color) {
+
+    const int segments = 32;
+    const float thickness = 4.0f;
+
+    SDL_Vertex verts[segments * 2];
+
+    float x_prev = x1;
+    float y_prev = y1;
+
+    for (int i = 0; i < segments; i++) {
+        float t = (float)i / (segments - 1);
+
+        float y = y1 + (y2 - y1) * t;
+
+        float s = (1 - cosf(t * M_PI)) / 2;
+        float x_center = x1 + s * (x2 - x1);
+
+        float nx, ny;
+        if (i == 0) {
+            nx = 0;
+            ny = 1;
+        } else {
+            float dx = x_center - x_prev;
+            float dy = y - y_prev;
+            float len = sqrtf(dx*dx + dy*dy);
+            if (len == 0.0f) len = 1.0f;
+            nx = -dy / len;
+            ny = dx / len;
+}
+        float offset = thickness / 2.0f;
+
+        verts[i*2 + 0].position = { x_center + nx*offset, y + ny*offset };
+        verts[i*2 + 0].color = color;
+
+        verts[i*2 + 1].position = { x_center - nx*offset, y - ny*offset };
+        verts[i*2 + 1].color = color;
+
+        x_prev = x_center;
+        y_prev = y;
     }
 
-    SDL_RenderLine(renderer, mouseX, mouseY, x, y);
+
+    int indices[(segments - 1) * 6];
+    for (int i = 0; i < segments - 1; i++) {
+        int idx = i * 6;
+        int v0 = i*2;
+        int v1 = i*2 + 1;
+        int v2 = (i+1)*2;
+        int v3 = (i+1)*2 + 1;
+    
+        indices[idx + 0] = v0;
+        indices[idx + 1] = v1;
+        indices[idx + 2] = v2;
+        indices[idx + 3] = v2;
+        indices[idx + 4] = v1;
+        indices[idx + 5] = v3;
+    }
+
+    SDL_RenderGeometry(renderer, NULL,
+                       verts, segments*2,
+                       indices, (segments-1)*6);
+
 }
 
 void NodeEditor::tick() {

@@ -433,7 +433,12 @@ void Connection::render(SDL_Renderer* renderer, bool hover) {
     if (!is_connected || dir == Direction::output) return;
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     auto src = srcRect();
-    SDL_RenderLine(renderer, rect.x+rect.w/2.0f, rect.y+rect.h/2.0f, src.x+src.w/2.0f, src.y+src.h/2.0f);
+
+    SDL_FColor color;
+    if (type == DataType::Events) color = {0.5f, 1.0f, 0.5f, 1.0f};
+    else color = {1.0f, 0.5f, 0.5f, 1.0f};    
+
+    nm->ne->renderSine(rect.x+rect.w/2.0f, rect.y+rect.h/2.0f, src.x+src.w/2.0f, src.y+src.h/2.0f, color);
 }
 
 void Node::renderParams(SDL_Renderer* renderer) {
