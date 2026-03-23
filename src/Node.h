@@ -110,7 +110,7 @@ class Node : public Window {
         int hoveredConnection;
         Direction hoveredDirection;
 
-        uint16_t lastLeftClick;
+        uint32_t lastLeftClick;
         bool handleInput(SDL_Event&);
         virtual bool handleCustomInput(SDL_Event&) { return false; }
         void clickMouse(SDL_Event&);
