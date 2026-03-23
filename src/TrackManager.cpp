@@ -76,6 +76,7 @@ void TrackManager::addTrack(TrackType tp) {
 
     t->connection = c;
     parentNode->outputs.addConnection(c);
+    parentNode->makeConnectionRects();
 }
 
 Track* TrackManager::getTrack(uint16_t id) {
@@ -198,6 +199,8 @@ void TrackManager::moveTrack() {
     // that messed up the id map so rebuild it
     parentNode->outputs.ids.clear();
     for (size_t i = 0; i < connections.size(); ++i) parentNode->outputs.ids[connections[i]->id] = i;
+
+    parentNode->makeConnectionRects();
 }
 
 void TrackManager::handleInput(SDL_Event& e) {

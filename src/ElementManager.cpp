@@ -35,6 +35,8 @@ json ElementManager::toJSON() {
         j["elements"].push_back(je);
     }
 
+    j["scaleManager"] = sm->serialize();
+
     return j;
 }
 
@@ -145,6 +147,8 @@ GridElement* ElementManager::getElement(uint16_t id) {
 
 void ElementManager::fromJSON(json j) {
     id_pool.fromJSON(j["id_pool"]);
+
+    sm->deSerialize(j["scaleManager"]);
 
     for(json e : j["elements"]) {
         GridElement* ge;

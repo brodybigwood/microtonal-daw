@@ -313,17 +313,21 @@ void Node::zoom(float amount) {
 
     dstRect.w = TEX_W * zoomRatio;
     dstRect.h = TEX_H * zoomRatio;
+    
+    makeConnectionRects();
+}
 
+void Node::makeConnectionRects() {
     float dy = 2;
-    float w = 10; 
-    float h = 10; 
+    float w = 10;
+    float h = 10;
 
     SDL_FRect connRect{
         dstRect.x + dstRect.w / 2 - inputs.connections.size() * w/2, dstRect.y - h - dy,
         w, h
     };
 
-    for (auto conn: inputs.connections) {
+    for (auto conn : inputs.connections) {
         conn->rect = connRect;
         connRect.x += w;
     }

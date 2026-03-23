@@ -71,6 +71,7 @@ class Node : public Window {
         void resize(float, float);
         bool canZoom(float);
         void zoom(float);
+        void makeConnectionRects();
 
         // bounding polygon (for gui)
         float* vx = nullptr; 
