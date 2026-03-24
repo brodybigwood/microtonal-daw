@@ -72,8 +72,8 @@ void ElementManager::process(int bufferSize) {
                         }
                         auto* region = static_cast<Region*>(element);
                         for (auto& note : region->notes) {
-                            float start = note->start + regTime;
-                            float end = note->end + regTime;
+                            float start = (float)note->start + regTime;
+                            float end = (float)note->end + regTime;
 
                             if (std::find(dispatched.begin(), dispatched.end(), note) == dispatched.end() && start < time+window+epsilon && start+epsilon >= time) {
                                

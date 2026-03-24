@@ -24,7 +24,7 @@ class GridView : public Window {
 
         void setRenderColor(uint8_t*);
         bool tick();
-        virtual bool customTick() {};
+        virtual bool customTick() { return true; };
 
         Transport* transport;
         SDL_FRect* tRect;

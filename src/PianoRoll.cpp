@@ -220,7 +220,7 @@ bool PianoRoll::customTick() {
 
     if(project->processing) {
        for(auto pos : region->positions) {
-           playHead->render(renderer, dW, scrollX + pos->start * dW);
+           playHead->render(renderer, dW, scrollX + (float)pos->start * dW);
         }
     }
 

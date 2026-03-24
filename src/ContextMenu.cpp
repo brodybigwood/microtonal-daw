@@ -81,7 +81,7 @@ return [enter](SDL_Event& e) {
         SDL_RenderRect(renderer, &rect);
 
         if (surf && tex) {
-            SDL_FRect dst{ x + 10, y + 10, surf->w, surf->h };
+            SDL_FRect dst{ x + 10, y + 10, (float)surf->w, (float)surf->h };
             SDL_RenderTexture(renderer, tex, nullptr, &dst);
         }
     }
@@ -99,7 +99,7 @@ std::function<bool(SDL_Event& e)> getTreeMenuTicker(std::shared_ptr<TreeEntry> t
     *listTick = [listTick] (SDL_Event& e, std::shared_ptr<TreeEntry> t, int x, int y, SDL_Renderer* renderer) {
 
         float padding = 5.0f;
-        SDL_FRect rect{x, y, padding * 2, 10.0f};
+        SDL_FRect rect{(float)x, (float)y, padding * 2, 10.0f};
 
         for (auto c : t->children) {
             if (!c->labelTexture) {
@@ -146,7 +146,7 @@ std::function<bool(SDL_Event& e)> getTreeMenuTicker(std::shared_ptr<TreeEntry> t
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
             SDL_RenderRect(renderer, &rect);
 
-            SDL_FRect textRect{rect.x + padding, rect.y, c->textWidth, c->textHeight};
+            SDL_FRect textRect{rect.x + padding, rect.y, (float)c->textWidth, (float)c->textHeight};
             SDL_RenderTexture(renderer, c->labelTexture, nullptr, &textRect);
 
             if (c->isOpen && !clickedNow) if (!(*listTick)(e, c, rect.x + rect.w, rect.y, renderer)) return false;

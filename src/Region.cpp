@@ -32,9 +32,9 @@ void Region::draw(SDL_Renderer* renderer, float pixelsPerSecond, int h) {
     SDL_RenderClear(renderer);
 
     for(std::shared_ptr<Note> note : notes) {
-        float noteX = note->start * 100;
+        float noteX = (float)note->start * 100;
         float noteY = (128-note->num)/128.0f * 100;
-        float noteEnd = note->end * 100;
+        float noteEnd = (float)note->end * 100;
         SDL_SetRenderDrawColor(renderer, colors.note[0],colors.note[1],colors.note[2],colors.note[3]);
         SDL_FRect noteRect = { noteX, noteY - 1, noteEnd - noteX, 2};
         SDL_RenderFillRect(renderer, &noteRect);

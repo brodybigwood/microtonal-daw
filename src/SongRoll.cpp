@@ -169,12 +169,12 @@ void SongRoll::renderElement(GridElement* element) {
         float topLeftCornerX = getX(pos.start);
         uint16_t index = tracks->getIndex(pos.trackID);
         float topLeftCornerY = getY(index);
-        SDL_FRect dstRectE = {topLeftCornerX, topLeftCornerY, pos.length*dW, divHeight};
+        SDL_FRect dstRectE = {topLeftCornerX, topLeftCornerY, (float)pos.length*dW, divHeight};
 
         SDL_FRect srcRect;
         switch (element->type) {
             case ElementType::region:
-                srcRect = {pos.startOffset * 100, 0, pos.length * 100, 100};
+                srcRect = {(float)pos.startOffset * 100, 0, (float)pos.length * 100, 100};
                 break;
             case ElementType::audioClip:
                 srcRect = {0, 0, dstRectE.w, dstRectE.h};
