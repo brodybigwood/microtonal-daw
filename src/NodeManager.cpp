@@ -150,30 +150,7 @@ void NodeManager::severConnection(Connection* c) {
 Node* NodeManager::addNode(NodeType t) {
 
     uint16_t id = id_pool.newID();
-    Node* n = nullptr;
-
-    switch (t) {
-        case NodeType::Arranger:
-            n = new ArrangerNode(id, this);
-            break;
-        case NodeType::Oscillator:
-            n = new OscillatorNode(id, this);
-            break;
-        case NodeType::Merger:
-            n = new MergerNode(id, this);
-            break;
-        case NodeType::Splitter:
-            n = new SplitterNode(id, this);
-            break;
-        case NodeType::Delay:
-            n = new DelayNode(id, this);
-            break;
-        case NodeType::Panner:
-            n = new PannerNode(id, this);
-            break;
-        default:
-            break;
-    }
+    Node* n = byType(t, id, this);
     
     nodes.push_back(n);
     ids[id] = nodes.size() - 1;

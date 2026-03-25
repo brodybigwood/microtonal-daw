@@ -22,29 +22,9 @@ json Node::serialize() {
 }
 
 Node* Node::deSerialize(json j, NodeManager* nm) {
-    Node* n = nullptr;
     int id = j["id"];
 
-    switch (j["nodeType"].get<int>()) {
-        case NodeType::Arranger:
-            n = new ArrangerNode(id, nm);
-            break;
-        case NodeType::Oscillator:
-            n = new OscillatorNode(id, nm);
-            break;
-        case NodeType::Merger:
-            n = new MergerNode(id, nm);
-            break;
-        case NodeType::Splitter:
-            n = new SplitterNode(id, nm);
-            break;
-        case NodeType::Delay:
-            n = new DelayNode(id, nm);
-            break;
-        case NodeType::Panner:
-            n = new PannerNode(id, nm);
-            break;
-    }
+    Node* n = byType(j["nodeType"].get<NodeType>(), id, nm);
 
     n->name = j["name"];
 
