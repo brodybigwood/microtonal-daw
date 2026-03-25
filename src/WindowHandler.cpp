@@ -62,7 +62,10 @@ bool WindowHandler::tick() {
 
             if (ctxMenu->active) ctxMenu->tick(e);
             else for (auto w : windows)
-                if (SDL_GetWindowFromID(getEventWindowID(e)) == w->window) w->handleWindowInput(e);
+                if (SDL_GetWindowFromID(getEventWindowID(e)) == w->window) {
+                    w->handleWindowInput(e);
+                    break;
+                }
         }
 
         if (!eventHandled && ctxMenu->active) { // home was already rendered, but ctxMenu hasn't rendered yet. so render on top by triggering with fake event
