@@ -6,6 +6,17 @@
 #include <iostream>
 #include "Preferences.h"
 
+void NodeEditor::retach() {
+    for (auto n : nm->getNodes()) {
+        if (n->detached) n->detach();
+        else n->attach();
+        n->clearTextures();
+    }
+    if (nm->outNode->detached) nm->outNode->detach();
+    else nm->outNode->attach();
+    nm->outNode->clearTextures();
+}
+
 void NodeEditor::setMovingNode(Node* node) {
     releaseMovingNode();
     movingNode = node;
@@ -51,19 +62,6 @@ void NodeEditor::makeConnection() {
 NodeEditor::NodeEditor() :
     isAltPressed(WindowHandler::instance()->isAltPressed),
     isCtrlPressed(WindowHandler::instance()->isCtrlPressed) {
-
-    window = SDL_CreateWindow("Node Editor",
-        windowWidth, windowHeight, 0 
-    );
-
-    WindowHandler::instance()->addWindow(this);
-
-    nodeRect = SDL_FRect{
-        leftMargin, topMargin,
-        windowWidth-leftMargin, windowHeight-topMargin
-    };
-
-    renderer = SDL_CreateRenderer(window, NULL);
 }
 
 NodeEditor::~NodeEditor() {
@@ -166,7 +164,6 @@ void NodeEditor::renderSine(float x1, float y1, float x2, float y2, SDL_FColor c
 }
 
 void NodeEditor::tick() {
-
     render(renderer, &nodeRect); // render background and nodes
     renderConnector(renderer); // connector line from mouse
 }

@@ -98,8 +98,8 @@ class Node : public Window {
 
         void update(int, int);
 
-        float& mouseX;
-        float& mouseY;
+        float* mouseX;
+        float* mouseY;
 
         float msX;
         float msY;
@@ -124,6 +124,7 @@ class Node : public Window {
         virtual json extraSerialize() { json j; return j; }
         virtual void extraDeSerialize(json j) {}
 
+        void clearTextures();
         void clearParamTextures();
         virtual void clearCustomTextures() {}
 
@@ -132,5 +133,14 @@ class Node : public Window {
         void detach();
         void attach();
 
+        virtual void attachFinal() {}
+        virtual void detachFinal() {}
+
         void handleWindowInput(SDL_Event&) override;
+
+        void setNE(NodeEditor*);
+        void resetNE();
+
+        virtual void setNEFinal() {}
+        virtual void resetNEFinal() {}
 }; 

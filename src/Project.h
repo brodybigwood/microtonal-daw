@@ -3,6 +3,7 @@
 #include "fract.h"
 #include <iostream>
 #include "UndoManager.h"
+#include "Window.h"
 
 #ifndef PROJECT_H
 #define PROJECT_H
@@ -17,7 +18,7 @@ class NodeEditor;
 class TrackManager;
 class ElementManager;
 
-class Project {
+class Project : public Window {
     public:
     Project();
         ~Project();
@@ -26,6 +27,8 @@ class Project {
         void renderPresent();
 
         bool processing = false;
+
+        void handleWindowInput(SDL_Event&) override;
 
         NodeManager* nm;
         NodeEditor* ne;

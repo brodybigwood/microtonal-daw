@@ -39,7 +39,10 @@ class NodeManager {
         std::vector<Node*>& getNodes();
 
         Project* project;
-        NodeEditor* ne;
+        
+        void setNE(NodeEditor*);
+        void resetNE();
+        NodeEditor* ne = nullptr;
         OutputNode* outNode;
 
     private:

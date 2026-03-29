@@ -5,5 +5,6 @@ enum NodeType {
     Splitter,
     Delay,
     Panner,
+    Patcher,
     Count // for iteration
 };

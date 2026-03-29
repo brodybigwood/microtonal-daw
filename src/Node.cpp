@@ -41,18 +41,13 @@ Node::Node(uint16_t id, NodeManager* nm, NodeType nt) :
     id(id),
     project(nm->project),
     nm(nm),
-    ne(nm->ne),
     nodeType(nt),
-    mouseX(nm->ne->mouseX),
-    mouseY(nm->ne->mouseY),
-    isAltPressed(nm->ne->isAltPressed),
-    isCtrlPressed(nm->ne->isCtrlPressed) {
+    isAltPressed(WindowHandler::instance()->isAltPressed),
+    isCtrlPressed(WindowHandler::instance()->isCtrlPressed) {
     outputs.nodeID = id;
     inputs.nodeID = id;
     outputs.nm = nm;
     inputs.nm = nm;
-
-    attach();
 }
 
 Node::~Node() {
@@ -81,8 +76,8 @@ connectionSet::~connectionSet() {
 bool Node::handleInput(SDL_Event& e) {
     bool handled = false;
 
-    msX = (mouseX - dstRect.x) / zoomRatio;
-    msY = (mouseY - dstRect.y) / zoomRatio;
+    msX = (*mouseX - dstRect.x) / zoomRatio;
+    msY = (*mouseY - dstRect.y) / zoomRatio;
 
     if (inPolygon(vx, vy, vCount, msX, msY)) {
         handled = true;
@@ -167,8 +162,8 @@ void Node::clickMouse(SDL_Event& e) {
         ctxMenu->renderer = ne->getRenderer();
 
         if (hoveredConnection != -1) {
-            ctxMenu->locX = mouseX;
-            ctxMenu->locY = mouseY;
+            ctxMenu->locX = *mouseX;
+            ctxMenu->locY = *mouseY;
     
             Connection* c;
             switch (hoveredDirection) {
@@ -184,8 +179,8 @@ void Node::clickMouse(SDL_Event& e) {
     
             ctxMenu->dynamicTick = getTreeMenuTicker(t);
         } else {
-            ctxMenu->locX = mouseX;
-            ctxMenu->locY = mouseY;
+            ctxMenu->locX = *mouseX;
+            ctxMenu->locY = *mouseY;
         
             auto t = getNodeMenu();
             ctxMenu->dynamicTick = getTreeMenuTicker(t);
@@ -502,6 +497,17 @@ void Node::detach() {
 
     clearParamTextures();
     clearCustomTextures();
+
+    detachFinal();
+}
+
+void Node::clearTextures() {
+    if (texture_detached) SDL_DestroyTexture(texture_detached);
+    if (texture) SDL_DestroyTexture(texture);
+    texture_detached = nullptr;
+    texture = nullptr;
+    clearParamTextures();
+    clearCustomTextures();
 }
 
 void Node::attach() {
@@ -519,6 +525,11 @@ void Node::attach() {
     clearCustomTextures();
 
     detached = false;
+
+    mouseX = &(ne->mouseX);
+    mouseY = &(ne->mouseY);
+
+    attachFinal();
 }
 
 void Node::handleWindowInput(SDL_Event& e) {
@@ -534,3 +545,30 @@ void Node::handleWindowInput(SDL_Event& e) {
 void Node::clearParamTextures() {
     for (auto p : params) p->clearTextures();
 }
+
+void Node::setNE(NodeEditor* ne) {
+    this->ne = ne;
+    mouseX = &(ne->mouseX);
+    mouseY = &(ne->mouseY);
+
+    attach();
+
+    setNEFinal();
+}
+
+void Node::resetNE() {
+    if (detached) {
+        if (window) SDL_DestroyWindow(window);
+        if (renderer) SDL_DestroyRenderer(renderer);
+        WindowHandler::instance()->removeWindow(this);
+    }
+    if (texture_detached) SDL_DestroyTexture(texture_detached);
+    clearParamTextures();
+    clearCustomTextures();
+    if (texture) SDL_DestroyTexture(texture);
+
+    ne = nullptr;
+
+    resetNEFinal();
+}
+

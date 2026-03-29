@@ -6,10 +6,22 @@
 #include "nodes/nodetypes.h"
 
 NodeManager::NodeManager(Project* p) : project(p) {
-    ne = new NodeEditor;
-    ne->nm = this;
     outNode = new OutputNode(this);
     id_pool.reserveID(0); // id of outputnode
+}
+
+void NodeManager::setNE(NodeEditor* ne) {
+    this->ne = ne;
+    ne->nm = this;
+    outNode->setNE(ne);
+    for (auto n : nodes) n->setNE(ne);
+}
+
+void NodeManager::resetNE() {
+    if (ne) ne->nm = nullptr;
+    ne = nullptr;
+    outNode->resetNE();
+    for (auto n : nodes) n->resetNE();
 }
 
 json NodeManager::serialize() {
@@ -156,6 +168,8 @@ Node* NodeManager::addNode(NodeType t) {
     ids[id] = nodes.size() - 1;
 
     n->update(bufferSize, sampleRate);
+
+    if (ne) n->setNE(ne);
     return n;
 }
 

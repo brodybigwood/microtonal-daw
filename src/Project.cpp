@@ -31,10 +31,23 @@ void Project::renderPresent() {
 }
 
 Project::Project() {
+    window = SDL_CreateWindow("Project", 1920, 1080, SDL_WINDOW_RESIZABLE | SDL_WINDOW_UTILITY);
+    renderer = SDL_CreateRenderer(window, NULL);
+
+    WindowHandler::instance()->addWindow(this);
+
+    ne = new NodeEditor;
+    ne->window = window;
+    ne->renderer = renderer;
+
     nm = new NodeManager(this);
-    ne = nm->ne;
+    nm->setNE(ne);
 
     um = new UndoManager(this);
+}
+
+void Project::handleWindowInput(SDL_Event& e) {
+    if (ne) ne->handleWindowInput(e);
 }
 
 Project::~Project() {
