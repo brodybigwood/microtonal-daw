@@ -30,7 +30,8 @@ class NodeEditor : public Window {
         void setDstConn(Node*, int);
         void setSrcConn(Node*, int);
         void setMovingNode(Node*);
-        void releaseMovingNode();
+        void releaseMovingNode(bool commitAction = true);
+        void cancelMovingNode();
 
         bool& isAltPressed;
         bool& isCtrlPressed;

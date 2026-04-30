@@ -28,17 +28,23 @@ void NodeEditor::setMovingNode(Node* node) {
     moveOffY = mouseY - node->dstRect.y;
 }
 
-void NodeEditor::releaseMovingNode() {
+void NodeEditor::releaseMovingNode(bool commitAction) {
     if (!movingNode) return;
     float endX = movingNode->dstRect.x;
     float endY = movingNode->dstRect.y;
     int movingID = movingNode->id;
     movingNode->moving = false;
     movingNode = nullptr;
-    if (endX != movingNodeStartX || endY != movingNodeStartY) {
+    if (commitAction && (endX != movingNodeStartX || endY != movingNodeStartY)) {
         auto pa = new MoveNodeAction(nm->project, movingID, movingNodeStartX, movingNodeStartY, endX, endY);
         nm->project->um->newAction(pa);
     }
+}
+
+void NodeEditor::cancelMovingNode() {
+    if (!movingNode) return;
+    movingNode->move(movingNodeStartX, movingNodeStartY);
+    releaseMovingNode(false);
 }
 
 void NodeEditor::setDstConn(Node* node, int id) {

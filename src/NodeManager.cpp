@@ -316,7 +316,12 @@ void NodeManager::severConnectionNow(uint16_t srcNodeID, uint16_t srcConID, uint
 
 void NodeManager::moveNodeNow(uint16_t nodeID, float x, float y) {
     std::lock_guard<std::recursive_mutex> lock(graphMutex);
-    auto node = getNode(nodeID);
+    Node* node = nullptr;
+    if (nodeID == 0) {
+        node = outNode;
+    } else {
+        node = getNode(nodeID);
+    }
     if (!node) return;
     node->move(x, y);
 }

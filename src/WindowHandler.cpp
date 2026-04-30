@@ -1,5 +1,6 @@
 #include "WindowHandler.h"
 #include "SDL_Events.h"
+#include "NodeEditor.h"
 
 WindowHandler::WindowHandler() {
 
@@ -48,8 +49,16 @@ bool WindowHandler::tick() {
             if (isCtrlPressed) {
                 if (e.type == SDL_EVENT_KEY_DOWN) {
                     if (e.key.key == SDLK_Z) {
-                        if (isShiftPressed) project->redo();
-                        else project->undo();
+                        if (project && project->ne) {
+                            project->ne->cancelMovingNode();
+                            project->ne->leftClick = false;
+                        }
+                        if (isShiftPressed) {
+                            project->redo();
+                        } else {
+                            if (project->um->current == project->um->head) continue;
+                            project->undo();
+                        }
                     } else if (e.key.key == SDLK_S) {
                         project->save();
                     }
