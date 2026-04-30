@@ -13,7 +13,7 @@ class NodeEditor;
 
 class NodeManager {
     public:
-        NodeManager(Project*);
+        NodeManager(Project*, std::vector<int> managerPath = {});
         ~NodeManager();
 
         json serialize();
@@ -52,6 +52,7 @@ class NodeManager {
         void resetNE();
         NodeEditor* ne = nullptr;
         OutputNode* outNode;
+        std::vector<int> managerPath;
 
     private:
         std::unordered_map<uint16_t, uint16_t> ids;

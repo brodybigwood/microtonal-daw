@@ -12,6 +12,7 @@ public:
 
     NodeEditor* mainEditor = nullptr;
     NodeManager* mainManager;
+    void ensureOutputChannels(size_t count);
 
     void renderContent(SDL_Renderer*) override;
     void renderPresent() override;
@@ -21,8 +22,12 @@ public:
     SDL_Texture* neTex = nullptr;
 
     SDL_FRect neRect{0, 0, TEX_W, TEX_H};
+    std::vector<float> patchBuffer;
 
     void clearCustomTextures() override;
+
+    json extraSerialize() override;
+    void extraDeSerialize(json) override;
 
     void attachFinal() override;
     void detachFinal() override;

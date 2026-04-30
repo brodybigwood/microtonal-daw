@@ -149,55 +149,61 @@ struct CreateNoteAction : ProjectAction {
 };
 
 struct AddArrangerTrackAction : ProjectAction {
+    std::vector<int> managerPath;
     int nodeID;
     int trackType;
     int trackID = -1;
     int connectionID = -1;
 
-    AddArrangerTrackAction(Project* p, int nodeID, int trackType);
+    AddArrangerTrackAction(Project* p, std::vector<int> managerPath, int nodeID, int trackType);
 };
 
 struct MoveNodeAction : ProjectAction {
+    std::vector<int> managerPath;
     int nodeID;
     float fromX;
     float fromY;
     float toX;
     float toY;
 
-    MoveNodeAction(Project* p, int nodeID, float fromX, float fromY, float toX, float toY);
+    MoveNodeAction(Project* p, std::vector<int> managerPath, int nodeID, float fromX, float fromY, float toX, float toY);
 };
 
 struct AddNodeAction : ProjectAction {
+    std::vector<int> managerPath;
     int nodeType;
     float x;
     float y;
     int nodeID = -1;
 
-    AddNodeAction(Project* p, int type, float x, float y);
+    AddNodeAction(Project* p, std::vector<int> managerPath, int type, float x, float y);
 };
 
 struct RemoveNodeAction : ProjectAction {
+    std::vector<int> managerPath;
     int nodeID;
     json nodeData;
     json connectionsData;
 
-    RemoveNodeAction(Project* p, int nodeID);
+    RemoveNodeAction(Project* p, std::vector<int> managerPath, int nodeID);
 };
 
 struct MakeNodeConnectionAction : ProjectAction {
+    std::vector<int> managerPath;
     int srcNodeID;
     int srcConID;
     int dstNodeID;
     int dstConID;
 
-    MakeNodeConnectionAction(Project* p, int srcNodeID, int srcConID, int dstNodeID, int dstConID);
+    MakeNodeConnectionAction(Project* p, std::vector<int> managerPath, int srcNodeID, int srcConID, int dstNodeID, int dstConID);
 };
 
 struct SeverNodeConnectionAction : ProjectAction {
+    std::vector<int> managerPath;
     int srcNodeID;
     int srcConID;
     int dstNodeID;
     int dstConID;
 
-    SeverNodeConnectionAction(Project* p, int srcNodeID, int srcConID, int dstNodeID, int dstConID);
+    SeverNodeConnectionAction(Project* p, std::vector<int> managerPath, int srcNodeID, int srcConID, int dstNodeID, int dstConID);
 };

@@ -7,6 +7,7 @@
 #include "SongRoll.h"
 #include "nodes/nodetypes.h"
 #include "UndoManager.h"
+#include "NodeManager.h"
 
 TrackManager::TrackManager(ArrangerNode* n) : parentNode(n) {}
 
@@ -54,7 +55,7 @@ TrackManager::~TrackManager() {
 }
 
 void TrackManager::addTrack(TrackType tp) {
-    auto pa = new AddArrangerTrackAction(parentNode->project, parentNode->id, static_cast<int>(tp));
+    auto pa = new AddArrangerTrackAction(parentNode->project, parentNode->nm->managerPath, parentNode->id, static_cast<int>(tp));
     parentNode->project->um->newAction(pa);
 }
 

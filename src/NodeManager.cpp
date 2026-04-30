@@ -7,7 +7,7 @@
 #include <iostream>
 #include "nodes/nodetypes.h"
 
-NodeManager::NodeManager(Project* p) : project(p) {
+NodeManager::NodeManager(Project* p, std::vector<int> managerPath) : project(p), managerPath(std::move(managerPath)) {
     outNode = new OutputNode(this);
     id_pool.reserveID(0); // id of outputnode
 }
@@ -115,7 +115,7 @@ void NodeManager::makeNodeConnection(
         Node* srcNode, uint16_t srcConID,
         Node* dstNode, uint16_t dstConID
 ) {
-    auto pa = new MakeNodeConnectionAction(project, srcNode->id, srcConID, dstNode->id, dstConID);
+    auto pa = new MakeNodeConnectionAction(project, managerPath, srcNode->id, srcConID, dstNode->id, dstConID);
     project->um->newAction(pa);
 }
 
@@ -144,17 +144,17 @@ void NodeManager::severConnection(Connection* c) {
         dstNodeID = c->output_node;
         dstConID = c->output_connection;
     }
-    auto pa = new SeverNodeConnectionAction(project, srcNodeID, srcConID, dstNodeID, dstConID);
+    auto pa = new SeverNodeConnectionAction(project, managerPath, srcNodeID, srcConID, dstNodeID, dstConID);
     project->um->newAction(pa);
 }
 
 void NodeManager::addNode(NodeType t, float x, float y) {
-    auto pa = new AddNodeAction(project, t, x, y);
+    auto pa = new AddNodeAction(project, managerPath, t, x, y);
     project->um->newAction(pa);
 }
 
 void NodeManager::removeNode(Node* n) {
-    auto pa = new RemoveNodeAction(project, n->id);
+    auto pa = new RemoveNodeAction(project, managerPath, n->id);
     project->um->newAction(pa);
 }
 

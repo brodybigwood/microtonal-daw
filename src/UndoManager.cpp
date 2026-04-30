@@ -5,6 +5,16 @@
 #include "nodes/nodetypes.h"
 #include "NodeManager.h"
 
+static NodeManager* resolveManager(Project* p, const std::vector<int>& path) {
+    NodeManager* nm = p->nm;
+    for (int patcherNodeID : path) {
+        auto patcher = dynamic_cast<PatcherNode*>(nm->getNode(static_cast<uint16_t>(patcherNodeID)));
+        if (!patcher || !patcher->mainManager) return nullptr;
+        nm = patcher->mainManager;
+    }
+    return nm;
+}
+
 ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
     ProjectAction* pa;
     switch (j["type"].get<int>()) {
@@ -19,35 +29,35 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
             break;
         }
         case AddArrangerTrack: {
-            auto at = new AddArrangerTrackAction(p, j["nodeID"], j["trackType"]);
+            auto at = new AddArrangerTrackAction(p, j.value("managerPath", std::vector<int>{}), j["nodeID"], j["trackType"]);
             at->trackID = j["trackID"];
             at->connectionID = j["connectionID"];
             pa = at;
             break;
         }
         case MoveNode: {
-            pa = new MoveNodeAction(p, j["nodeID"], j["fromX"], j["fromY"], j["toX"], j["toY"]);
+            pa = new MoveNodeAction(p, j.value("managerPath", std::vector<int>{}), j["nodeID"], j["fromX"], j["fromY"], j["toX"], j["toY"]);
             break;
         }
         case AddNode: {
-            auto an = new AddNodeAction(p, j["nodeType"], j["x"], j["y"]);
+            auto an = new AddNodeAction(p, j.value("managerPath", std::vector<int>{}), j["nodeType"], j["x"], j["y"]);
             an->nodeID = j["nodeID"];
             pa = an;
             break;
         }
         case RemoveNode: {
-            auto rn = new RemoveNodeAction(p, j["nodeID"]);
+            auto rn = new RemoveNodeAction(p, j.value("managerPath", std::vector<int>{}), j["nodeID"]);
             rn->nodeData = j["nodeData"];
             rn->connectionsData = j["connectionsData"];
             pa = rn;
             break;
         }
         case MakeNodeConnection: {
-            pa = new MakeNodeConnectionAction(p, j["srcNodeID"], j["srcConID"], j["dstNodeID"], j["dstConID"]);
+            pa = new MakeNodeConnectionAction(p, j.value("managerPath", std::vector<int>{}), j["srcNodeID"], j["srcConID"], j["dstNodeID"], j["dstConID"]);
             break;
         }
         case SeverNodeConnection: {
-            pa = new SeverNodeConnectionAction(p, j["srcNodeID"], j["srcConID"], j["dstNodeID"], j["dstConID"]);
+            pa = new SeverNodeConnectionAction(p, j.value("managerPath", std::vector<int>{}), j["srcNodeID"], j["srcConID"], j["dstNodeID"], j["dstConID"]);
             break;
         }
         default:
@@ -82,6 +92,7 @@ json ProjectAction::serialize(ProjectAction* pa) {
         }
         case AddArrangerTrack: {
             auto at = static_cast<AddArrangerTrackAction*>(pa);
+            j["managerPath"] = at->managerPath;
             j["nodeID"] = at->nodeID;
             j["trackType"] = at->trackType;
             j["trackID"] = at->trackID;
@@ -90,6 +101,7 @@ json ProjectAction::serialize(ProjectAction* pa) {
         }
         case MoveNode: {
             auto mn = static_cast<MoveNodeAction*>(pa);
+            j["managerPath"] = mn->managerPath;
             j["nodeID"] = mn->nodeID;
             j["fromX"] = mn->fromX;
             j["fromY"] = mn->fromY;
@@ -99,6 +111,7 @@ json ProjectAction::serialize(ProjectAction* pa) {
         }
         case AddNode: {
             auto an = static_cast<AddNodeAction*>(pa);
+            j["managerPath"] = an->managerPath;
             j["nodeType"] = an->nodeType;
             j["x"] = an->x;
             j["y"] = an->y;
@@ -107,6 +120,7 @@ json ProjectAction::serialize(ProjectAction* pa) {
         }
         case RemoveNode: {
             auto rn = static_cast<RemoveNodeAction*>(pa);
+            j["managerPath"] = rn->managerPath;
             j["nodeID"] = rn->nodeID;
             j["nodeData"] = rn->nodeData;
             j["connectionsData"] = rn->connectionsData;
@@ -114,6 +128,7 @@ json ProjectAction::serialize(ProjectAction* pa) {
         }
         case MakeNodeConnection: {
             auto mc = static_cast<MakeNodeConnectionAction*>(pa);
+            j["managerPath"] = mc->managerPath;
             j["srcNodeID"] = mc->srcNodeID;
             j["srcConID"] = mc->srcConID;
             j["dstNodeID"] = mc->dstNodeID;
@@ -122,6 +137,7 @@ json ProjectAction::serialize(ProjectAction* pa) {
         }
         case SeverNodeConnection: {
             auto sc = static_cast<SeverNodeConnectionAction*>(pa);
+            j["managerPath"] = sc->managerPath;
             j["srcNodeID"] = sc->srcNodeID;
             j["srcConID"] = sc->srcConID;
             j["dstNodeID"] = sc->dstNodeID;
@@ -271,13 +287,16 @@ CreateNoteAction::CreateNoteAction(Project* p, int nodeID, int regionID, fract s
         };
 }
 
-AddArrangerTrackAction::AddArrangerTrackAction(Project* p, int nodeID, int trackType) :
+AddArrangerTrackAction::AddArrangerTrackAction(Project* p, std::vector<int> managerPath, int nodeID, int trackType) :
         ProjectAction(p, AddArrangerTrack),
+        managerPath(std::move(managerPath)),
         nodeID(nodeID),
         trackType(trackType) {
     name = "Add Arranger Track";
     doAction = [this] () {
-        auto node = static_cast<ArrangerNode*>(this->p->nm->getNode(this->nodeID));
+        auto nm = resolveManager(this->p, this->managerPath);
+        if (!nm) return;
+        auto node = static_cast<ArrangerNode*>(nm->getNode(this->nodeID));
         if (!node) return;
         auto track = node->sl->tracks->addTrackNow(static_cast<TrackType>(this->trackType), this->trackID, this->connectionID);
         if (track) {
@@ -286,14 +305,17 @@ AddArrangerTrackAction::AddArrangerTrackAction(Project* p, int nodeID, int track
         }
     };
     undoAction = [this] () {
-        auto node = static_cast<ArrangerNode*>(this->p->nm->getNode(this->nodeID));
+        auto nm = resolveManager(this->p, this->managerPath);
+        if (!nm) return;
+        auto node = static_cast<ArrangerNode*>(nm->getNode(this->nodeID));
         if (!node || this->trackID < 0) return;
         node->sl->tracks->removeTrackNow(static_cast<uint16_t>(this->trackID));
     };
 }
 
-MoveNodeAction::MoveNodeAction(Project* p, int nodeID, float fromX, float fromY, float toX, float toY) :
+MoveNodeAction::MoveNodeAction(Project* p, std::vector<int> managerPath, int nodeID, float fromX, float fromY, float toX, float toY) :
         ProjectAction(p, MoveNode),
+        managerPath(std::move(managerPath)),
         nodeID(nodeID),
         fromX(fromX),
         fromY(fromY),
@@ -301,49 +323,65 @@ MoveNodeAction::MoveNodeAction(Project* p, int nodeID, float fromX, float fromY,
         toY(toY) {
     name = "Move Node";
     doAction = [this] () {
-        this->p->nm->moveNodeNow(this->nodeID, this->toX, this->toY);
+        auto nm = resolveManager(this->p, this->managerPath);
+        if (!nm) return;
+        nm->moveNodeNow(this->nodeID, this->toX, this->toY);
     };
     undoAction = [this] () {
-        this->p->nm->moveNodeNow(this->nodeID, this->fromX, this->fromY);
+        auto nm = resolveManager(this->p, this->managerPath);
+        if (!nm) return;
+        nm->moveNodeNow(this->nodeID, this->fromX, this->fromY);
     };
 }
 
-AddNodeAction::AddNodeAction(Project* p, int type, float x, float y) :
+AddNodeAction::AddNodeAction(Project* p, std::vector<int> managerPath, int type, float x, float y) :
         ProjectAction(p, AddNode),
+        managerPath(std::move(managerPath)),
         nodeType(type),
         x(x),
         y(y) {
     audioThreadAction = true;
     name = "Add Node";
     doAction = [this] () {
-        auto node = this->p->nm->addNodeNow(static_cast<NodeType>(nodeType), this->x, this->y, nodeID);
+        auto nm = resolveManager(this->p, this->managerPath);
+        if (!nm) return;
+        auto node = nm->addNodeNow(static_cast<NodeType>(nodeType), this->x, this->y, nodeID);
         if (node) nodeID = node->id;
     };
     undoAction = [this] () {
-        if (nodeID >= 0) this->p->nm->removeNodeNow(nodeID);
+        auto nm = resolveManager(this->p, this->managerPath);
+        if (!nm) return;
+        if (nodeID >= 0) nm->removeNodeNow(nodeID);
     };
 }
 
-RemoveNodeAction::RemoveNodeAction(Project* p, int nodeID) :
+RemoveNodeAction::RemoveNodeAction(Project* p, std::vector<int> managerPath, int nodeID) :
         ProjectAction(p, RemoveNode),
+        managerPath(std::move(managerPath)),
         nodeID(nodeID) {
     audioThreadAction = true;
     name = "Remove Node";
-    p->nm->snapshotNode(nodeID, nodeData, connectionsData);
+    auto nm = resolveManager(p, this->managerPath);
+    if (nm) nm->snapshotNode(nodeID, nodeData, connectionsData);
     doAction = [this] () {
-        this->p->nm->removeNodeNow(this->nodeID);
+        auto nm2 = resolveManager(this->p, this->managerPath);
+        if (!nm2) return;
+        nm2->removeNodeNow(this->nodeID);
     };
     undoAction = [this] () {
-        auto restored = this->p->nm->addNodeNow(nodeData);
+        auto nm2 = resolveManager(this->p, this->managerPath);
+        if (!nm2) return;
+        auto restored = nm2->addNodeNow(nodeData);
         if (!restored) return;
         for (auto c : connectionsData) {
-            this->p->nm->makeNodeConnectionNow(c["srcNodeID"], c["srcConID"], c["dstNodeID"], c["dstConID"]);
+            nm2->makeNodeConnectionNow(c["srcNodeID"], c["srcConID"], c["dstNodeID"], c["dstConID"]);
         }
     };
 }
 
-MakeNodeConnectionAction::MakeNodeConnectionAction(Project* p, int srcNodeID, int srcConID, int dstNodeID, int dstConID) :
+MakeNodeConnectionAction::MakeNodeConnectionAction(Project* p, std::vector<int> managerPath, int srcNodeID, int srcConID, int dstNodeID, int dstConID) :
         ProjectAction(p, MakeNodeConnection),
+        managerPath(std::move(managerPath)),
         srcNodeID(srcNodeID),
         srcConID(srcConID),
         dstNodeID(dstNodeID),
@@ -351,15 +389,20 @@ MakeNodeConnectionAction::MakeNodeConnectionAction(Project* p, int srcNodeID, in
     audioThreadAction = true;
     name = "Connect Nodes";
     doAction = [this] () {
-        this->p->nm->makeNodeConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
+        auto nm = resolveManager(this->p, this->managerPath);
+        if (!nm) return;
+        nm->makeNodeConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
     };
     undoAction = [this] () {
-        this->p->nm->severConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
+        auto nm = resolveManager(this->p, this->managerPath);
+        if (!nm) return;
+        nm->severConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
     };
 }
 
-SeverNodeConnectionAction::SeverNodeConnectionAction(Project* p, int srcNodeID, int srcConID, int dstNodeID, int dstConID) :
+SeverNodeConnectionAction::SeverNodeConnectionAction(Project* p, std::vector<int> managerPath, int srcNodeID, int srcConID, int dstNodeID, int dstConID) :
         ProjectAction(p, SeverNodeConnection),
+        managerPath(std::move(managerPath)),
         srcNodeID(srcNodeID),
         srcConID(srcConID),
         dstNodeID(dstNodeID),
@@ -367,9 +410,13 @@ SeverNodeConnectionAction::SeverNodeConnectionAction(Project* p, int srcNodeID, 
     audioThreadAction = true;
     name = "Sever Connection";
     doAction = [this] () {
-        this->p->nm->severConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
+        auto nm = resolveManager(this->p, this->managerPath);
+        if (!nm) return;
+        nm->severConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
     };
     undoAction = [this] () {
-        this->p->nm->makeNodeConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
+        auto nm = resolveManager(this->p, this->managerPath);
+        if (!nm) return;
+        nm->makeNodeConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
     };
 }

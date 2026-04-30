@@ -36,7 +36,7 @@ void NodeEditor::releaseMovingNode(bool commitAction) {
     movingNode->moving = false;
     movingNode = nullptr;
     if (commitAction && (endX != movingNodeStartX || endY != movingNodeStartY)) {
-        auto pa = new MoveNodeAction(nm->project, movingID, movingNodeStartX, movingNodeStartY, endX, endY);
+        auto pa = new MoveNodeAction(nm->project, nm->managerPath, movingID, movingNodeStartX, movingNodeStartY, endX, endY);
         nm->project->um->newAction(pa);
     }
 }
