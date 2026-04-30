@@ -3,6 +3,9 @@
 #ifndef WINDOWHANDLER_H
 #define WINDOWHANDLER_H
 #include <vector>
+#include <queue>
+#include <mutex>
+#include <string>
 #include "Project.h"
 #include "ContextMenu.h"
 #include "Window.h"
@@ -28,6 +31,7 @@ class WindowHandler {
         bool tick();
 
         Uint32 lastTime;
+        bool running = true;
 
         double fps = 60;
     
@@ -41,6 +45,13 @@ class WindowHandler {
         bool isAltPressed = false;
 
         void toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar);
+
+        void enqueueCommand(const std::string& cmd);
+        void processCommands();
+
+    private:
+        std::mutex commandMutex;
+        std::queue<std::string> pendingCommands;
 };
 
 #endif

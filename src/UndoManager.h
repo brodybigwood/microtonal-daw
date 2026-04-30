@@ -4,6 +4,7 @@
 #include "ElementManager.h"
 #include "ScaleManager.h"
 #include <mutex>
+#include <unordered_map>
 
 enum ActionType {
     CreateNote,
@@ -134,6 +135,10 @@ struct UndoManager {
     SDL_FRect* baseRect;   
     bool render(SDL_Renderer*);
     bool renderAction(SDL_Renderer*, SDL_FRect*, ProjectAction*);
+
+    static const std::unordered_map<std::string, ActionType>& actionRegistry();
+    static std::string actionSchema(const std::string& actionName);
+    bool runRegisteredAction(const std::string& actionName, const json& params, std::string& error);
 };
 
 struct CreateNoteAction : ProjectAction {

@@ -104,4 +104,10 @@ target_link_libraries(DAW PRIVATE
     ${SNDFILE_LIBRARIES}
 )
 
+find_library(READLINE_LIBRARY readline)
+if(READLINE_LIBRARY)
+    target_link_libraries(DAW PRIVATE ${READLINE_LIBRARY})
+    target_compile_definitions(DAW PRIVATE DAW_HAS_READLINE_LIB=1)
+endif()
+
 

@@ -4,6 +4,7 @@
 #include "Project.h"
 #include "nodes/nodetypes.h"
 #include "NodeManager.h"
+#include <unordered_map>
 
 static NodeManager* resolveManager(Project* p, const std::vector<int>& path) {
     NodeManager* nm = p->nm;
@@ -13,6 +14,149 @@ static NodeManager* resolveManager(Project* p, const std::vector<int>& path) {
         nm = patcher->mainManager;
     }
     return nm;
+}
+
+const std::unordered_map<std::string, ActionType>& UndoManager::actionRegistry() {
+    static const std::unordered_map<std::string, ActionType> reg = {
+        {"create_note", CreateNote},
+        {"add_arranger_track", AddArrangerTrack},
+        {"move_node", MoveNode},
+        {"add_node", AddNode},
+        {"remove_node", RemoveNode},
+        {"make_node_connection", MakeNodeConnection},
+        {"sever_node_connection", SeverNodeConnection}
+    };
+    return reg;
+}
+
+std::string UndoManager::actionSchema(const std::string& actionName) {
+    if (actionName == "add_node") {
+        return R"({"managerPath":[int,...]?,"nodeType":int,"x":float,"y":float})";
+    }
+    if (actionName == "remove_node") {
+        return R"({"managerPath":[int,...]?,"nodeID":int})";
+    }
+    if (actionName == "make_node_connection" || actionName == "sever_node_connection") {
+        return R"({"managerPath":[int,...]?,"srcNodeID":int,"srcConID":int,"dstNodeID":int,"dstConID":int})";
+    }
+    if (actionName == "move_node") {
+        return R"({"managerPath":[int,...]?,"nodeID":int,"toX":float,"toY":float})";
+    }
+    if (actionName == "add_arranger_track") {
+        return R"({"managerPath":[int,...]?,"nodeID":int,"trackType":int})";
+    }
+    if (actionName == "create_note") {
+        return R"({"managerPath":[int,...]?,"nodeID":int,"regionID":int,"start":fract_json,"length":fract_json,"pitch":float,"scaleID":int})";
+    }
+    return "{}";
+}
+
+bool UndoManager::runRegisteredAction(const std::string& actionName, const json& params, std::string& error) {
+    if (!head || !head->p) {
+        error = "undo manager not initialized";
+        return false;
+    }
+    if (!params.is_object()) {
+        error = "params must be a json object";
+        return false;
+    }
+    auto it = actionRegistry().find(actionName);
+    if (it == actionRegistry().end()) {
+        error = "unknown action";
+        return false;
+    }
+    ProjectAction* pa = nullptr;
+    try {
+        switch (it->second) {
+            case AddNode:
+                if (!params.contains("nodeType") || !params.contains("x") || !params.contains("y")) {
+                    error = "missing required keys for add_node";
+                    return false;
+                }
+                pa = new AddNodeAction(head->p, params.value("managerPath", std::vector<int>{}), params["nodeType"], params["x"], params["y"]);
+                break;
+            case RemoveNode:
+                if (!params.contains("nodeID")) {
+                    error = "missing required key nodeID";
+                    return false;
+                }
+                pa = new RemoveNodeAction(head->p, params.value("managerPath", std::vector<int>{}), params["nodeID"]);
+                break;
+            case MakeNodeConnection:
+                if (!params.contains("srcNodeID") || !params.contains("srcConID") || !params.contains("dstNodeID") || !params.contains("dstConID")) {
+                    error = "missing required keys for make_node_connection";
+                    return false;
+                }
+                pa = new MakeNodeConnectionAction(head->p, params.value("managerPath", std::vector<int>{}), params["srcNodeID"], params["srcConID"], params["dstNodeID"], params["dstConID"]);
+                break;
+            case SeverNodeConnection:
+                if (!params.contains("srcNodeID") || !params.contains("srcConID") || !params.contains("dstNodeID") || !params.contains("dstConID")) {
+                    error = "missing required keys for sever_node_connection";
+                    return false;
+                }
+                pa = new SeverNodeConnectionAction(head->p, params.value("managerPath", std::vector<int>{}), params["srcNodeID"], params["srcConID"], params["dstNodeID"], params["dstConID"]);
+                break;
+            case MoveNode:
+                if (!params.contains("nodeID") || !params.contains("toX") || !params.contains("toY")) {
+                    error = "missing required keys for move_node";
+                    return false;
+                }
+                {
+                    auto managerPath = params.value("managerPath", std::vector<int>{});
+                    auto nm = resolveManager(head->p, managerPath);
+                    if (!nm) {
+                        error = "manager path not found";
+                        return false;
+                    }
+                    auto nodeID = params["nodeID"].get<int>();
+                    Node* node = (nodeID == 0) ? nm->outNode : nm->getNode(static_cast<uint16_t>(nodeID));
+                    if (!node) {
+                        error = "node not found";
+                        return false;
+                    }
+                    float fromX = node->dstRect.x;
+                    float fromY = node->dstRect.y;
+                    pa = new MoveNodeAction(head->p, managerPath, nodeID, fromX, fromY, params["toX"], params["toY"]);
+                }
+                break;
+            case AddArrangerTrack:
+                if (!params.contains("nodeID") || !params.contains("trackType")) {
+                    error = "missing required keys for add_arranger_track";
+                    return false;
+                }
+                pa = new AddArrangerTrackAction(head->p, params.value("managerPath", std::vector<int>{}), params["nodeID"], params["trackType"]);
+                break;
+            case CreateNote: {
+                if (!params.contains("nodeID") || !params.contains("regionID") || !params.contains("start") || !params.contains("length") || !params.contains("pitch") || !params.contains("scaleID")) {
+                    error = "missing required keys for create_note";
+                    return false;
+                }
+                auto managerPath = params.value("managerPath", std::vector<int>{});
+                auto nm = resolveManager(head->p, managerPath);
+                auto n = nm ? static_cast<ArrangerNode*>(nm->getNode(params["nodeID"])) : nullptr;
+                if (!n || !n->sl) {
+                    error = "arranger/songroll not ready for create_note";
+                    return false;
+                }
+                pa = new CreateNoteAction(head->p, managerPath, params["nodeID"], params["regionID"],
+                    fract::fromJSON(params["start"]), fract::fromJSON(params["length"]), params["pitch"],
+                    n->sl->em->sm->byID(params["scaleID"]));
+                break;
+            }
+            default:
+                error = "unsupported action";
+                return false;
+        }
+    } catch (const std::exception& e) {
+        error = e.what();
+        return false;
+    }
+    if (!pa) {
+        error = "failed to build action";
+        return false;
+    }
+    newAction(pa);
+    return true;
 }
 
 ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
