@@ -97,13 +97,56 @@ void PatcherNode::clearCustomTextures() {
 json PatcherNode::extraSerialize() {
     json j;
     j["mainManager"] = mainManager->serialize();
+    j["outputs"] = json::array();
+    for (auto* c : outputs.connections) {
+        json jc;
+        jc["id"] = c->id;
+        jc["type"] = c->type;
+        j["outputs"].push_back(jc);
+    }
+    std::cout << "[DBG_DESER] PatcherNode::extraSerialize node=" << id
+              << " outputs=" << outputs.connections.size() << std::endl;
     return j;
 }
 
 void PatcherNode::extraDeSerialize(json j) {
     if (!j.contains("mainManager")) return;
+    std::cout << "[DBG_DESER] PatcherNode::extraDeSerialize node=" << id << " begin" << std::endl;
     mainManager->deSerialize(j["mainManager"]);
-    ensureOutputChannels(mainManager->outNode->inputs.connections.size());
+
+    if (j.contains("outputs")) {
+        for (auto* c : outputs.connections) {
+            delete c;
+        }
+        outputs.connections.clear();
+        outputs.ids.clear();
+        outputs.id_pool = idManager();
+
+        for (auto jc : j["outputs"]) {
+            auto* c = new Connection;
+            c->nm = outputs.nm;
+            c->id = jc["id"];
+            c->type = jc["type"];
+            c->dir = Direction::output;
+            c->is_connected = false;
+            c->input_node = id;
+            c->input_connection = c->id;
+            c->output_node = -1;
+            c->output_connection = -1;
+            c->events = nullptr;
+            c->buffer = nullptr;
+            c->bufferSize = 0;
+            outputs.connections.push_back(c);
+            outputs.ids[c->id] = outputs.connections.size() - 1;
+            outputs.id_pool.reserveID(c->id);
+        }
+        makeConnectionRects();
+        std::cout << "[DBG_DESER]  patcher outputs restored count=" << outputs.connections.size() << std::endl;
+    } else {
+        ensureOutputChannels(mainManager->outNode->inputs.connections.size());
+        std::cout << "[DBG_DESER]  patcher outputs inferred count=" << outputs.connections.size() << std::endl;
+    }
+    std::cout << "[DBG_DESER] PatcherNode::extraDeSerialize node=" << id << " end" << std::endl;
 }
 
 void PatcherNode::ensureOutputChannels(size_t count) {

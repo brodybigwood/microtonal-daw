@@ -3,9 +3,13 @@
 #include "Node.h"
 #include "SongRoll.h"
 
+class TrackManager;
+class ElementManager;
+
 class ArrangerNode : public Node {
     public:
         ArrangerNode(uint16_t, NodeManager*);
+        ~ArrangerNode() override;
         void process() override;
         void setup() override;
         bool handleCustomInput(SDL_Event&) override;
@@ -16,8 +20,17 @@ class ArrangerNode : public Node {
 
         SDL_FRect* slRect;
         bool slDetached = false;
-        SongRoll* sl;
+        SongRoll* sl = nullptr;
 
         json extraSerialize() override;
         void extraDeSerialize(json) override;
+
+    private:
+        void rebuildRuntimeState(json);
+        void ensureSongRoll();
+        void syncSongRollContext();
+        json pendingExtraState;
+        bool hasPendingExtraState = false;
+        TrackManager* runtimeTracks = nullptr;
+        ElementManager* runtimeElements = nullptr;
 };

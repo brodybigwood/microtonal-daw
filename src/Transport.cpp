@@ -8,7 +8,7 @@ Transport::Transport(GridView* view) : view(view), renderer(view->renderer), dst
 
     togglePlay = new Button(renderer);
     togglePlay->activated = [project = view->project] {
-        return project->isPlaying;
+        return project->isPlaying.load();
     };
     togglePlay->dstRect = new SDL_FRect {
     view->dstRect->x + 50,view->dstRect->y + 15,25,25

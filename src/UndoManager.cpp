@@ -19,9 +19,15 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
     ProjectAction* pa;
     switch (j["type"].get<int>()) {
         case CreateNote: {
-            auto n = static_cast<ArrangerNode*>(p->nm->getNode(j["nodeID"]));
+            auto managerPath = j.value("managerPath", std::vector<int>{});
+            auto nm = resolveManager(p, managerPath);
+            auto n = nm ? static_cast<ArrangerNode*>(nm->getNode(j["nodeID"])) : nullptr;
+            if (!n) {
+                pa = new ProjectAction(p, NullAction);
+                break;
+            }
             auto cn = new CreateNoteAction(
-                p, j["nodeID"], j["regionID"], fract::fromJSON(j["start"]), fract::fromJSON(j["length"]),
+                p, managerPath, j["nodeID"], j["regionID"], fract::fromJSON(j["start"]), fract::fromJSON(j["length"]),
                 j["pitch"], n->sl->em->sm->byID(j["scaleID"])
             );
             cn->noteID = j["noteID"];
@@ -81,6 +87,7 @@ json ProjectAction::serialize(ProjectAction* pa) {
     switch (pa->type) {
         case CreateNote: {
             auto cn = static_cast<CreateNoteAction*>(pa);
+            j["managerPath"] = cn->managerPath;
             j["nodeID"] = cn->nodeID;
             j["regionID"] = cn->regionID;
             j["start"] = cn->start.toJSON();
@@ -263,8 +270,9 @@ void UndoManager::goTo(ProjectAction* target) {
 }
 
 
-CreateNoteAction::CreateNoteAction(Project* p, int nodeID, int regionID, fract start, fract length, float pitch, TuningTable* scale) :
+CreateNoteAction::CreateNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, fract start, fract length, float pitch, TuningTable* scale) :
         ProjectAction(p, CreateNote),
+        managerPath(std::move(managerPath)),
         regionID(regionID),
         start(start),
         length(length),
@@ -273,7 +281,13 @@ CreateNoteAction::CreateNoteAction(Project* p, int nodeID, int regionID, fract s
         nodeID(nodeID)
         {
 
-        auto n = static_cast<ArrangerNode*>(p->nm->getNode(nodeID));
+        auto nm = resolveManager(p, this->managerPath);
+        auto n = nm ? static_cast<ArrangerNode*>(nm->getNode(nodeID)) : nullptr;
+        if (!n) {
+            doAction = [](){};
+            undoAction = [](){};
+            return;
+        }
 
         doAction = [this, n] () {
             auto region = static_cast<Region*>(n->sl->em->getElement(this->regionID));
@@ -373,7 +387,15 @@ RemoveNodeAction::RemoveNodeAction(Project* p, std::vector<int> managerPath, int
         if (!nm2) return;
         auto restored = nm2->addNodeNow(nodeData);
         if (!restored) return;
+        std::cout << "[DBG_DESER] RemoveNodeAction::undo restored node id=" << restored->id << " managerPath=";
+        for (size_t i = 0; i < this->managerPath.size(); ++i) {
+            std::cout << this->managerPath[i] << (i + 1 < this->managerPath.size() ? "/" : "");
+        }
+        if (this->managerPath.empty()) std::cout << "root";
+        std::cout << " replayConnections=" << connectionsData.size() << std::endl;
         for (auto c : connectionsData) {
+            std::cout << "[DBG_DESER]  undo replay srcNode=" << c["srcNodeID"] << " srcCon=" << c["srcConID"]
+                      << " dstNode=" << c["dstNodeID"] << " dstCon=" << c["dstConID"] << std::endl;
             nm2->makeNodeConnectionNow(c["srcNodeID"], c["srcConID"], c["dstNodeID"], c["dstConID"]);
         }
     };

@@ -12,6 +12,7 @@
 #include "TuningTable.h"
 #include "ContextMenu.h"
 #include "Node.h"
+#include "NodeManager.h"
 #include "nodes/nodetypes.h"
 
 void PianoRoll::newTuning() {
@@ -485,7 +486,15 @@ void PianoRoll::createElement() {
     float pitch = getHoveredLine();
     std::cout<<pitch<<std::endl;
 
-    project->createNote(region->parentNode->id, start, lastLength, pitch, tuning_table, region->id);
+    project->createNote(
+        region->parentNode->id,
+        start,
+        lastLength,
+        pitch,
+        tuning_table,
+        region->id,
+        region->parentNode->nm->managerPath
+    );
     refreshGrid = true;
 }
 
@@ -654,6 +663,11 @@ void PianoRoll::moveNote(std::shared_ptr<Note> note, int moveX, float y) {
 }
 
 void PianoRoll::handleWindowInput(SDL_Event& e) {
-    SDL_GetMouseState(&mouseX, &mouseY);
+    float gx, gy;
+    SDL_GetGlobalMouseState(&gx, &gy);
+    int wx, wy;
+    SDL_GetWindowPosition(window, &wx, &wy);
+    mouseX = gx - wx;
+    mouseY = gy - wy;
     handleInput(e);
 }

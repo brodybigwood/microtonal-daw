@@ -87,14 +87,53 @@ json OutputNode::serialize() {
     j["y"] = dstRect.y;
     j["zoomRatio"] = zoomRatio;
     j["channels"] = inputs.connections.size();
+    j["inputConnectionIDs"] = json::array();
+    for (auto* c : inputs.connections) {
+        j["inputConnectionIDs"].push_back(c->id);
+    }
 
     return j;
 }
 
 void OutputNode::deSerialize(json j) {
     int targetChannels = j.value("channels", 2);
-    while (inputs.connections.size() < targetChannels) addChannel();
-    while (inputs.connections.size() > targetChannels) removeChannel();
+    std::vector<uint16_t> targetIDs;
+    if (j.contains("inputConnectionIDs")) {
+        for (auto id : j["inputConnectionIDs"]) {
+            targetIDs.push_back(id.get<uint16_t>());
+        }
+    }
+    if (targetIDs.size() != static_cast<size_t>(targetChannels)) {
+        targetIDs.clear();
+        for (int i = 0; i < targetChannels; ++i) targetIDs.push_back(static_cast<uint16_t>(i));
+    }
+
+    for (auto* c : inputs.connections) {
+        delete c;
+    }
+    inputs.connections.clear();
+    inputs.ids.clear();
+    inputs.id_pool = idManager();
+
+    for (auto id : targetIDs) {
+        auto* c = new Connection;
+        c->nm = inputs.nm;
+        c->id = id;
+        c->type = DataType::Waveform;
+        c->dir = Direction::input;
+        c->is_connected = false;
+        c->output_connection = c->id;
+        c->output_node = inputs.nodeID;
+        c->input_connection = -1;
+        c->input_node = -1;
+        c->events = nullptr;
+        c->buffer = nullptr;
+        inputs.connections.push_back(c);
+        inputs.ids[c->id] = inputs.connections.size() - 1;
+        inputs.id_pool.reserveID(c->id);
+    }
+    makeConnectionRects();
+
     zoom(j["zoomRatio"].get<float>()/zoomRatio);
     move(j["x"], j["y"]);
 }

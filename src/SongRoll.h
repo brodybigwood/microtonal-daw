@@ -38,6 +38,7 @@ class SongRoll : public GridView{
         float getY(float) override;
 
         bool customTick() override;
+        void syncLayout();
 
         SDL_Texture* texture;
         SDL_Texture* regionTexture;

@@ -52,6 +52,7 @@ SongRoll::SongRoll(SDL_FRect* rect, bool* detached, Window* w, Project* p, Arran
 }
 
 bool SongRoll::customTick() {
+    syncLayout();
 
     auto target = SDL_GetRenderTarget(renderer);
 
@@ -77,6 +78,22 @@ bool SongRoll::customTick() {
     if (pianoRoll) pianoRoll->tick();
  
     return true;
+}
+
+void SongRoll::syncLayout() {
+    rightRect = SDL_FRect{
+        dstRect->x + dstRect->w - rightMargin,
+        dstRect->y + topMargin,
+        rightMargin,
+        dstRect->h - topMargin
+    };
+
+    leftRect = SDL_FRect{
+        dstRect->x,
+        dstRect->y + topMargin,
+        leftMargin,
+        dstRect->h - topMargin
+    };
 }
 
 void SongRoll::renderMargins() {

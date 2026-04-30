@@ -63,6 +63,7 @@ class NodeManager {
         int bufferSize = 0;
         int sampleRate = 0;
         int numChannels = 0;
+        bool topologyDirty = false;
 
         std::mutex deferredDeleteMutex;
         std::vector<Node*> deferredDeleteNodes;

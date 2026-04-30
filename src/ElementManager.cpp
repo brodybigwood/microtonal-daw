@@ -44,7 +44,7 @@ void ElementManager::process(int bufferSize) {
     float epsilon = 1e-6;
 
     float window = (project->tempo * (float)AudioManager::instance()->bufferSize / AudioManager::instance()->sampleRate) / 60.0f;
-    float time = project->tempo * project->timeSeconds/60.0f;
+    float time = project->tempo * project->timeSeconds.load()/60.0f;
 
     for (auto* element : elements)
         for (auto position : element->positions) {
@@ -56,7 +56,7 @@ void ElementManager::process(int bufferSize) {
             switch (element->type) {
                 case ElementType::region:
                     {
-                        if (!project->isPlaying) {
+                        if (!project->isPlaying.load()) {
                             for (auto& note : dispatched) {
                                 Event event {
                                     noteEventType::noteOff,
@@ -116,7 +116,7 @@ void ElementManager::process(int bufferSize) {
 // time is current processing time in beats
 // audio range is pos.start to pos.end
 // time must be anywhere between    
-                        if (!project->isPlaying) break;
+                        if (!project->isPlaying.load()) break;
                         if (!(*track->buffer)) break;
 
                         int readIdx = project->beatsToSamples(time - pos.start);
@@ -146,6 +146,13 @@ GridElement* ElementManager::getElement(uint16_t id) {
 }
 
 void ElementManager::fromJSON(json j) {
+    for (auto* e : elements) {
+        delete e;
+    }
+    elements.clear();
+    ids.clear();
+    id_pool = idManager();
+
     id_pool.fromJSON(j["id_pool"]);
 
     sm->deSerialize(j["scaleManager"]);

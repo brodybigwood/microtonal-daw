@@ -19,9 +19,7 @@ void AudioManager::setProject(Project* project) {
 
 int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int bufferSize, double streamTimeSeconds, RtAudioStreamStatus status, void* userData) {
 
-    if (status != 0) {
-        std::cerr << "[Warning] Buffer underrun/overrun occurred!" << std::endl;
-    }
+    (void)status;
 
     AudioManager *audioManager = static_cast<AudioManager *>(userData);
 
@@ -29,8 +27,9 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
 
     project->sampleTime += bufferSize;
 
-    if(project->isPlaying) {
-        project->timeSeconds += static_cast<double>(bufferSize) / audioManager->sampleRate;
+    if(project->isPlaying.load()) {
+        const double dt = static_cast<double>(bufferSize) / audioManager->sampleRate;
+        project->timeSeconds.store(project->timeSeconds.load() + dt);
     }
 
     AudioManager::instance()->streamTimeSeconds += static_cast<double>(bufferSize) / audioManager->sampleRate;
@@ -49,10 +48,12 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
 
     project->process(inBuffer, outBuffer, bs, ic, oc, sr);
 
-    if(project->isPlaying) {
-        project->effectiveTime = project->timeSeconds -  static_cast<double>(audioManager->latency) / audioManager->sampleRate;
+    if(project->isPlaying.load()) {
+        project->effectiveTime.store(
+            project->timeSeconds.load() - static_cast<double>(audioManager->latency) / audioManager->sampleRate
+        );
     } else {
-        project->effectiveTime = project->timeSeconds;
+        project->effectiveTime.store(project->timeSeconds.load());
     }
 
     return 0;

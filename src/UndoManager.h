@@ -137,6 +137,7 @@ struct UndoManager {
 };
 
 struct CreateNoteAction : ProjectAction {
+    std::vector<int> managerPath;
     int nodeID;
     int noteID;
     int regionID;
@@ -145,7 +146,7 @@ struct CreateNoteAction : ProjectAction {
     float pitch;
     int scaleID;
 
-    CreateNoteAction(Project* p, int nodeID, int regionID, fract start, fract length, float pitch, TuningTable* scale);
+    CreateNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, fract start, fract length, float pitch, TuningTable* scale);
 };
 
 struct AddArrangerTrackAction : ProjectAction {

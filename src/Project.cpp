@@ -119,27 +119,27 @@ void Project::save() {
     } else save_l();
 }
 
-void Project::createNote(int nodeID, fract start, fract length, float pitch, TuningTable* t, int regionID) {
-    auto pa = new CreateNoteAction(this, nodeID, regionID, start, length, pitch, t);
+void Project::createNote(int nodeID, fract start, fract length, float pitch, TuningTable* t, int regionID, std::vector<int> managerPath) {
+    auto pa = new CreateNoteAction(this, std::move(managerPath), nodeID, regionID, start, length, pitch, t);
     um->newAction(pa);
 }
 
 void Project::togglePlaying() {
-    if (!isPlaying) {
+    if (!isPlaying.load()) {
         const double epsilon = static_cast<double>(AudioManager::instance()->latency) / AudioManager::instance()->sampleRate;
-        timeSeconds = playHeadStart - epsilon;
-        isPlaying = true;
+        timeSeconds.store(playHeadStart - epsilon);
+        isPlaying.store(true);
     } else {
-        isPlaying = false;
-        timeSeconds = playHeadStart;
+        isPlaying.store(false);
+        timeSeconds.store(playHeadStart);
     }
 }
 
 
 void Project::stop() {
-    if(isPlaying) {
-        isPlaying = false;
-        timeSeconds = playHeadStart;
+    if(isPlaying.load()) {
+        isPlaying.store(false);
+        timeSeconds.store(playHeadStart);
     }
 }
 

@@ -81,9 +81,8 @@ NodeEditor::NodeEditor() :
 }
 
 NodeEditor::~NodeEditor() {
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    WindowHandler::instance()->removeWindow(this);
+    renderer = nullptr;
+    window = nullptr;
 }
 
 void NodeEditor::renderConnector(SDL_Renderer* renderer) {

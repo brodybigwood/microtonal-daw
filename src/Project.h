@@ -2,6 +2,7 @@
 #include <vector>
 #include "fract.h"
 #include <iostream>
+#include <atomic>
 #include "UndoManager.h"
 #include "Window.h"
 
@@ -45,7 +46,7 @@ class Project : public Window {
 
         void save();
 
-        void createNote(int, fract, fract, float, TuningTable*, int);
+        void createNote(int, fract, fract, float, TuningTable*, int, std::vector<int> managerPath = {});
 
         fract startTime;
 
@@ -65,11 +66,11 @@ class Project : public Window {
         fract playHeadStart;
         fract playHeadPos = fract(0,1);
 
-        bool isPlaying = false;
+        std::atomic<bool> isPlaying{false};
 
-        double timeSeconds = 0;
+        std::atomic<double> timeSeconds{0.0};
 
-        double effectiveTime = 0;
+        std::atomic<double> effectiveTime{0.0};
 
         void process(float* input, float* output, int& bufferSize, int& numChannelsIn, int& numChannelsOut, int& sampleRate);
 

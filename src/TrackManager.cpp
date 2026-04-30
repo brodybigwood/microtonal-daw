@@ -9,7 +9,7 @@
 #include "UndoManager.h"
 #include "NodeManager.h"
 
-TrackManager::TrackManager(ArrangerNode* n) : parentNode(n) {}
+TrackManager::TrackManager(ArrangerNode* n) : parentNode(n), newTrackE(nullptr), newTrackW(nullptr) {}
 
 
 void TrackManager::setGeometry(SDL_FRect* dstRect, SDL_Renderer*& r) {
@@ -45,8 +45,14 @@ void TrackManager::setGeometry(SDL_FRect* dstRect, SDL_Renderer*& r) {
 
 TrackManager::~TrackManager() {
 
-    delete newTrackE;
-    delete newTrackW;
+    if (newTrackE) {
+        delete newTrackE;
+        newTrackE = nullptr;
+    }
+    if (newTrackW) {
+        delete newTrackW;
+        newTrackW = nullptr;
+    }
 
     for (auto t : tracks) {
         delete t;
@@ -80,6 +86,8 @@ Track* TrackManager::addTrackNow(TrackType tp, int forcedTrackID, int forcedConn
     c->is_connected = false;
     c->output_node = -1;
     c->output_connection = -1;
+    c->input_node = parentNode->id;
+    c->input_connection = -1;
     switch (tp) {
         case TrackType::Notes:
             c->type = DataType::Events;
@@ -364,12 +372,25 @@ void TrackManager::process(float* input, int bufferSize) {
 }
 
 void TrackManager::fromJSON(json j) {
+    for (auto* t : tracks) {
+        delete t;
+    }
+    tracks.clear();
+    ids.clear();
+    id_pool = idManager();
+    soloTracks.clear();
+    muteTracks.clear();
+
     soloTracks = j["soloTracks"].get<std::vector<uint16_t>>();
     muteTracks = j["muteTracks"].get<std::vector<uint16_t>>();
 
     for(auto t : j["tracks"] ) {
         Track* tr = new Track;
         tr->connection = parentNode->outputs.getConnection(t["connectionID"]);
+        if (!tr->connection) {
+            delete tr;
+            continue;
+        }
         tr->buffer = &(tr->connection->buffer);
         tr->events = &(tr->connection->events);
         tr->fromJSON(t);

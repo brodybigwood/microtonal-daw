@@ -3,21 +3,50 @@
 #include "NodeManager.h"
 #include "NodeEditor.h"
 #include "PianoRoll.h"
+#include "TrackManager.h"
+#include "ElementManager.h"
+#include <cstring>
 
 ArrangerNode::ArrangerNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::Arranger) {
     slRect = new SDL_FRect{0, 0, TEX_W, TEX_H};
-    sl = new SongRoll(slRect, &slDetached, nm->ne, nm->project, this);
+    runtimeTracks = new TrackManager(this);
+    runtimeElements = new ElementManager(project, runtimeTracks, this);
+}
+
+ArrangerNode::~ArrangerNode() {
+    if (sl) {
+        delete sl;
+        sl = nullptr;
+    }
+    if (slRect) {
+        delete slRect;
+        slRect = nullptr;
+    }
+    if (runtimeElements) {
+        delete runtimeElements;
+        runtimeElements = nullptr;
+    }
+    if (runtimeTracks) {
+        delete runtimeTracks;
+        runtimeTracks = nullptr;
+    }
 }
 
 void ArrangerNode::process() {
-    sl->tracks->process(nullptr, bufferSize);
-    sl->em->process(bufferSize);
+    TrackManager* tracks = sl ? sl->tracks : runtimeTracks;
+    ElementManager* elements = sl ? sl->em : runtimeElements;
+    if (!tracks || !elements) return;
+    tracks->process(nullptr, bufferSize);
+    elements->process(bufferSize);
 }
 
 void ArrangerNode::setup() {
 }
 
 bool ArrangerNode::handleCustomInput(SDL_Event& e) {
+    ensureSongRoll();
+    if (!sl) return false;
+    syncSongRollContext();
     sl->mouseX = msX - slRect->x;
     sl->mouseY = msY - slRect->y;
 
@@ -25,6 +54,9 @@ bool ArrangerNode::handleCustomInput(SDL_Event& e) {
 }
 
 void ArrangerNode::renderContent(SDL_Renderer* renderer) {
+    ensureSongRoll();
+    if (!sl) return;
+    syncSongRollContext();
     if (!vCount) {
         vCount = 4;
         vx = new float[vCount];
@@ -46,6 +78,7 @@ void ArrangerNode::renderContent(SDL_Renderer* renderer) {
 }      
 
 void ArrangerNode::clearCustomTextures() {
+    if (!sl) return;
     sl->clearTextures();
     sl->renderer = renderer;
     sl->window = window;
@@ -53,14 +86,22 @@ void ArrangerNode::clearCustomTextures() {
 }
 
 void ArrangerNode::renderPresent() {
+    if (!sl) return;
     if (detached) SDL_RenderPresent(renderer);
     if (sl->pianoRoll && sl->pianoRollDetached) SDL_RenderPresent(sl->pianoRoll->renderer);
 }
 
 json ArrangerNode::extraSerialize() {
     json j;
-    j["TrackManager"] = sl->tracks->toJSON();
-    j["ElementManager"] = sl->em->toJSON();
+    if (sl) {
+        j["TrackManager"] = sl->tracks->toJSON();
+        j["ElementManager"] = sl->em->toJSON();
+    } else if (hasPendingExtraState) {
+        j = pendingExtraState;
+    } else {
+        j["TrackManager"] = json::object();
+        j["ElementManager"] = json::object();
+    }
 
     json o = json::array();
     for (auto c : outputs.connections) {
@@ -75,27 +116,96 @@ json ArrangerNode::extraSerialize() {
 }
 
 void ArrangerNode::extraDeSerialize(json j) {
+    std::cout << "[DBG_DESER] ArrangerNode::extraDeSerialize node=" << id << " begin" << std::endl;
+    for (auto* c : outputs.connections) {
+        delete c;
+    }
+    outputs.connections.clear();
+    outputs.ids.clear();
+    outputs.id_pool = idManager();
 
-    json o = j["outputs"];
-    for (auto jc : o) {
-        auto c = new Connection;
-        c->id = jc["id"];
-        c->dir = Direction::output;
-        c->type = jc["type"];
+    if (j.contains("outputs")) {
+        for (auto jc : j["outputs"]) {
+            auto c = new Connection;
+            c->nm = outputs.nm;
+            c->id = jc["id"];
+            c->dir = Direction::output;
+            c->type = jc["type"];
+            c->is_connected = false;
+            c->output_node = -1;
+            c->output_connection = -1;
+            c->input_node = id;
+            c->input_connection = c->id;
 
-        if (c->type == DataType::Events) {
-            c->events = new std::vector<Event>;
-        } else {
-            c->buffer = new float[bufferSize];
-            c->bufferSize = bufferSize;
+            if (c->type == DataType::Events) {
+                c->events = new std::vector<Event>;
+                c->buffer = nullptr;
+            } else {
+                c->buffer = nullptr;
+                c->bufferSize = 0;
+                c->events = nullptr;
+            }
+
+            outputs.connections.push_back(c);
+            outputs.id_pool.reserveID(c->id);
+            outputs.ids[c->id] = outputs.connections.size() - 1;
+            std::cout << "[DBG_DESER]  arranger out restored id=" << c->id << " type=" << static_cast<int>(c->type) << std::endl;
         }
+    }
+    makeConnectionRects();
+    std::cout << "[DBG_DESER]  arranger outputs count=" << outputs.connections.size() << std::endl;
 
-        outputs.connections.push_back(c);
-        outputs.id_pool.reserveID(c->id);
-        outputs.ids[c->id] = outputs.connections.size() - 1;
+    rebuildRuntimeState(j);
 
+    if (!sl) {
+        pendingExtraState = json::object();
+        if (j.contains("TrackManager")) pendingExtraState["TrackManager"] = j["TrackManager"];
+        if (j.contains("ElementManager")) pendingExtraState["ElementManager"] = j["ElementManager"];
+        hasPendingExtraState = true;
+        std::cout << "[DBG_DESER]  arranger deferred track/element payload" << std::endl;
+        return;
     }
 
-    sl->tracks->fromJSON(j["TrackManager"]);
-    sl->em->fromJSON(j["ElementManager"]);
+    if (j.contains("TrackManager")) sl->tracks->fromJSON(j["TrackManager"]);
+    if (j.contains("ElementManager")) sl->em->fromJSON(j["ElementManager"]);
+    std::cout << "[DBG_DESER] ArrangerNode::extraDeSerialize node=" << id << " applied track/element now" << std::endl;
+}
+
+void ArrangerNode::ensureSongRoll() {
+    if (sl || !ne || !ne->window || !ne->renderer) return;
+    sl = new SongRoll(slRect, &slDetached, ne, project, this);
+    std::cout << "[DBG_DESER] ArrangerNode::ensureSongRoll node=" << id << " created" << std::endl;
+    if (hasPendingExtraState) {
+        auto j = pendingExtraState;
+        hasPendingExtraState = false;
+        pendingExtraState = json{};
+        if (j.contains("TrackManager")) sl->tracks->fromJSON(j["TrackManager"]);
+        if (j.contains("ElementManager")) sl->em->fromJSON(j["ElementManager"]);
+        rebuildRuntimeState(j);
+        std::cout << "[DBG_DESER] ArrangerNode::ensureSongRoll node=" << id << " applied deferred track/element" << std::endl;
+    }
+}
+
+void ArrangerNode::rebuildRuntimeState(json j) {
+    if (runtimeElements) {
+        delete runtimeElements;
+        runtimeElements = nullptr;
+    }
+    if (runtimeTracks) {
+        delete runtimeTracks;
+        runtimeTracks = nullptr;
+    }
+    runtimeTracks = new TrackManager(this);
+    runtimeElements = new ElementManager(project, runtimeTracks, this);
+    if (j.contains("TrackManager")) runtimeTracks->fromJSON(j["TrackManager"]);
+    if (j.contains("ElementManager")) runtimeElements->fromJSON(j["ElementManager"]);
+}
+
+void ArrangerNode::syncSongRollContext() {
+    if (!sl) return;
+    if (sl->renderer == renderer && sl->window == window) return;
+    sl->clearTextures();
+    sl->renderer = renderer;
+    sl->window = window;
+    sl->generateTextures();
 }

@@ -24,11 +24,20 @@ void PannerNode::process() {
     if (!in->is_connected) {
         for (Connection* c : outputs.connections) {
             float* outBuffer = c->buffer;
+            if (!outBuffer) continue;
             std::memset(outBuffer, 0, bufferSize * sizeof(float));
         }
         return;
     }
     float* inBuffer = in->buffer;
+    if (!inBuffer) {
+        for (Connection* c : outputs.connections) {
+            float* outBuffer = c->buffer;
+            if (!outBuffer) continue;
+            std::memset(outBuffer, 0, bufferSize * sizeof(float));
+        }
+        return;
+    }
 
     auto getBufferOut = [this] (Connection* c) {
         return c->buffer;
@@ -36,6 +45,7 @@ void PannerNode::process() {
 
     auto outBufferL = getBufferOut(l);
     auto outBufferR = getBufferOut(r);
+    if (!outBufferL || !outBufferR) return;
 
     for (size_t i = 0; i < bufferSize; ++i) {
         auto angle = pan[i] * M_PI_2;

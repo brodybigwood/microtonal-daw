@@ -6,6 +6,8 @@
 #include "NodeEditor.h"
 #include "WindowHandler.h"
 #include "Preferences.h"
+#include <cstring>
+#include <limits>
 
 json Node::serialize() {
     json j;
@@ -52,7 +54,22 @@ Node::Node(uint16_t id, NodeManager* nm, NodeType nt) :
 }
 
 Node::~Node() {
-    attach();
+    if (detached) {
+        if (window) {
+            SDL_DestroyWindow(window);
+            window = nullptr;
+        }
+        if (renderer) {
+            SDL_DestroyRenderer(renderer);
+            renderer = nullptr;
+        }
+        WindowHandler::instance()->removeWindow(this);
+        detached = false;
+    }
+    if (texture_detached) {
+        SDL_DestroyTexture(texture_detached);
+        texture_detached = nullptr;
+    }
     if (texture) SDL_DestroyTexture(texture);
     if (vx) delete[] vx;
     if (vy) delete[] vy;
@@ -232,11 +249,15 @@ Node* Node::getNodeInput(Connection* con) {
 }
 
 uint16_t connectionSet::getIndex(uint16_t id) {
-    return ids[id];
+    auto it = ids.find(id);
+    if (it == ids.end()) return std::numeric_limits<uint16_t>::max();
+    return it->second;
 }
 
 Connection* connectionSet::getConnection(uint16_t id) {
     auto index = getIndex(id);
+    if (index == std::numeric_limits<uint16_t>::max()) return nullptr;
+    if (index >= connections.size()) return nullptr;
     auto con = connections[index];
     return con;
 }
@@ -258,6 +279,9 @@ void connectionSet::addConnection(Connection* c) {
         } else {
             c->buffer = new float[bufferSize]; 
             c->bufferSize = bufferSize;
+            if (bufferSize > 0) {
+                std::memset(c->buffer, 0, static_cast<size_t>(bufferSize) * sizeof(float));
+            }
         }
     }
 }
@@ -324,9 +348,12 @@ void Node::move(float x, float y) {
 }
 
 SDL_FRect Connection::srcRect() {
+    if (!nm) return SDL_FRect{0, 0, 0, 0};
     Node* n = nm->getNode(input_node);
+    if (!n) return SDL_FRect{0, 0, 0, 0};
     connectionSet& outputs = n->outputs;
     auto conn = outputs.getConnection(input_connection);
+    if (!conn) return SDL_FRect{0, 0, 0, 0};
     return conn->rect;
 }
 
@@ -410,6 +437,7 @@ void Connection::render(SDL_Renderer* renderer, bool hover) {
     if (!is_connected || dir == Direction::output) return;
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     auto src = srcRect();
+    if (src.w == 0.0f && src.h == 0.0f) return;
 
     SDL_FColor color;
     if (type == DataType::Events) color = {0.5f, 1.0f, 0.5f, 1.0f};
@@ -436,6 +464,9 @@ void Node::update(int bufferSize, int sampleRate) {
             }
             c->buffer = new float[bufferSize];
             c->bufferSize = bufferSize;
+            if (bufferSize > 0) {
+                std::memset(c->buffer, 0, static_cast<size_t>(bufferSize) * sizeof(float));
+            }
         }
     }
 
@@ -538,7 +569,12 @@ void Node::handleWindowInput(SDL_Event& e) {
     for (auto p : params) if (inPolygon(p->vx.data(), p->vy.data(), p->vx.size(), msX, msY)) p->handleInput(e);
     
     if (detached && SDL_GetWindowFromID(getEventWindowID(e)) == window) {
-        SDL_GetMouseState(&msX, &msY);
+        float gx, gy;
+        SDL_GetGlobalMouseState(&gx, &gy);
+        int wx, wy;
+        SDL_GetWindowPosition(window, &wx, &wy);
+        msX = gx - wx;
+        msY = gy - wy;
         handleCustomInput(e);
     }
 
@@ -560,14 +596,26 @@ void Node::setNE(NodeEditor* ne) {
 
 void Node::resetNE() {
     if (detached) {
-        if (window) SDL_DestroyWindow(window);
-        if (renderer) SDL_DestroyRenderer(renderer);
+        if (window) {
+            SDL_DestroyWindow(window);
+            window = nullptr;
+        }
+        if (renderer) {
+            SDL_DestroyRenderer(renderer);
+            renderer = nullptr;
+        }
         WindowHandler::instance()->removeWindow(this);
     }
-    if (texture_detached) SDL_DestroyTexture(texture_detached);
+    if (texture_detached) {
+        SDL_DestroyTexture(texture_detached);
+        texture_detached = nullptr;
+    }
     clearParamTextures();
     clearCustomTextures();
-    if (texture) SDL_DestroyTexture(texture);
+    if (texture) {
+        SDL_DestroyTexture(texture);
+        texture = nullptr;
+    }
 
     ne = nullptr;
 
