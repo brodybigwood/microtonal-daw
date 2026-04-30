@@ -3,9 +3,16 @@
 #include "Region.h"
 #include "ElementManager.h"
 #include "ScaleManager.h"
+#include <mutex>
 
 enum ActionType {
     CreateNote,
+    AddArrangerTrack,
+    MoveNode,
+    AddNode,
+    RemoveNode,
+    MakeNodeConnection,
+    SeverNodeConnection,
     NullAction
 };
 
@@ -15,6 +22,7 @@ struct ProjectAction {
 
     std::function<void()> doAction;
     std::function<void()> undoAction;
+    bool audioThreadAction = false;
 
     std::vector<ProjectAction*> children;
     
@@ -56,6 +64,23 @@ struct UndoManager {
     ProjectAction* head;
     ProjectAction* current;
 
+    std::mutex audioActionMutex;
+    std::vector<std::function<void()>> pendingAudioActions;
+
+    void enqueueAudioAction(std::function<void()> fn) {
+        std::lock_guard<std::mutex> lock(audioActionMutex);
+        pendingAudioActions.push_back(std::move(fn));
+    }
+
+    void flushAudioActions() {
+        std::vector<std::function<void()>> actions;
+        {
+            std::lock_guard<std::mutex> lock(audioActionMutex);
+            actions.swap(pendingAudioActions);
+        }
+        for (auto& fn : actions) fn();
+    }
+
     UndoManager(Project* p) {
         head = new ProjectAction(p, NullAction);
         current = head;
@@ -65,7 +90,8 @@ struct UndoManager {
         current->newAction(pa);
         current->last_index = pa->index;
         current = pa;
-        pa->doAction();
+        if (pa->audioThreadAction) enqueueAudioAction(pa->doAction);
+        else pa->doAction();
     }
 
     json serialize() {
@@ -87,7 +113,8 @@ struct UndoManager {
 
     void undo() {
         if (current == head) return;
-        current->undoAction();
+        if (current->audioThreadAction) enqueueAudioAction(current->undoAction);
+        else current->undoAction();
         current->parent->last_index = current->index;
         current = current->parent;
     }
@@ -96,7 +123,8 @@ struct UndoManager {
         if (idx == -1) idx = current->last_index;
         if (current->children.size()) {
             current = current->children[idx];
-            current->doAction();
+            if (current->audioThreadAction) enqueueAudioAction(current->doAction);
+            else current->doAction();
         }
     }
 
@@ -118,4 +146,58 @@ struct CreateNoteAction : ProjectAction {
     int scaleID;
 
     CreateNoteAction(Project* p, int nodeID, int regionID, fract start, fract length, float pitch, TuningTable* scale);
+};
+
+struct AddArrangerTrackAction : ProjectAction {
+    int nodeID;
+    int trackType;
+    int trackID = -1;
+    int connectionID = -1;
+
+    AddArrangerTrackAction(Project* p, int nodeID, int trackType);
+};
+
+struct MoveNodeAction : ProjectAction {
+    int nodeID;
+    float fromX;
+    float fromY;
+    float toX;
+    float toY;
+
+    MoveNodeAction(Project* p, int nodeID, float fromX, float fromY, float toX, float toY);
+};
+
+struct AddNodeAction : ProjectAction {
+    int nodeType;
+    float x;
+    float y;
+    int nodeID = -1;
+
+    AddNodeAction(Project* p, int type, float x, float y);
+};
+
+struct RemoveNodeAction : ProjectAction {
+    int nodeID;
+    json nodeData;
+    json connectionsData;
+
+    RemoveNodeAction(Project* p, int nodeID);
+};
+
+struct MakeNodeConnectionAction : ProjectAction {
+    int srcNodeID;
+    int srcConID;
+    int dstNodeID;
+    int dstConID;
+
+    MakeNodeConnectionAction(Project* p, int srcNodeID, int srcConID, int dstNodeID, int dstConID);
+};
+
+struct SeverNodeConnectionAction : ProjectAction {
+    int srcNodeID;
+    int srcConID;
+    int dstNodeID;
+    int dstConID;
+
+    SeverNodeConnectionAction(Project* p, int srcNodeID, int srcConID, int dstNodeID, int dstConID);
 };

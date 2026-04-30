@@ -83,6 +83,8 @@ class NodeEditor : public Window {
         std::shared_ptr<TreeEntry> getClickMenu();
 
         Node* movingNode = nullptr;
+        float movingNodeStartX = 0.0f;
+        float movingNodeStartY = 0.0f;
         float moveOffX;
         float moveOffY;
 };

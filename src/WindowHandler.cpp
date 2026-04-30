@@ -75,7 +75,6 @@ bool WindowHandler::tick() {
         } else if (!ctxMenu->active) {
             project->render();
         }
-        std::cout << "h" << std::endl;
         project->renderPresent();
     }
     return true;

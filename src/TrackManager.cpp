@@ -6,6 +6,7 @@
 #include <SDL3_gfx/SDL3_gfxPrimitives.h>
 #include "SongRoll.h"
 #include "nodes/nodetypes.h"
+#include "UndoManager.h"
 
 TrackManager::TrackManager(ArrangerNode* n) : parentNode(n) {}
 
@@ -53,7 +54,19 @@ TrackManager::~TrackManager() {
 }
 
 void TrackManager::addTrack(TrackType tp) {
-    uint16_t id = id_pool.newID();
+    auto pa = new AddArrangerTrackAction(parentNode->project, parentNode->id, static_cast<int>(tp));
+    parentNode->project->um->newAction(pa);
+}
+
+Track* TrackManager::addTrackNow(TrackType tp, int forcedTrackID, int forcedConnectionID) {
+    uint16_t id;
+    if (forcedTrackID >= 0) {
+        id = static_cast<uint16_t>(forcedTrackID);
+        id_pool.reserveID(id);
+    } else {
+        id = id_pool.newID();
+    }
+
     Track* t = new Track;
     tracks.push_back(t);
     t->id = id;
@@ -61,21 +74,74 @@ void TrackManager::addTrack(TrackType tp) {
     t->type = tp;
 
     auto c = new Connection;
-    
+    c->nm = parentNode->nm;
     c->dir = Direction::output;
+    c->is_connected = false;
+    c->output_node = -1;
+    c->output_connection = -1;
     switch (tp) {
         case TrackType::Notes:
             c->type = DataType::Events;
+            c->events = new std::vector<Event>;
+            c->buffer = nullptr;
             t->events = &(c->events);
             break;
         default:
             c->type = DataType::Waveform;
+            c->buffer = new float[parentNode->outputs.bufferSize];
+            c->bufferSize = parentNode->outputs.bufferSize;
+            c->events = nullptr;
             t->buffer = &(c->buffer);
             break;
     }
 
     t->connection = c;
-    parentNode->outputs.addConnection(c);
+    if (forcedConnectionID >= 0) {
+        c->id = static_cast<uint16_t>(forcedConnectionID);
+        c->nm = parentNode->nm;
+        parentNode->outputs.connections.push_back(c);
+        parentNode->outputs.id_pool.reserveID(c->id);
+        parentNode->outputs.ids[c->id] = parentNode->outputs.connections.size() - 1;
+    } else {
+        parentNode->outputs.addConnection(c);
+    }
+    parentNode->makeConnectionRects();
+    return t;
+}
+
+void TrackManager::removeTrackNow(uint16_t trackID) {
+    auto it = ids.find(trackID);
+    if (it == ids.end()) return;
+    size_t index = it->second;
+
+    Track* track = tracks[index];
+    Connection* connection = track->connection;
+    auto& out = parentNode->outputs;
+
+    if (connection) {
+        auto cit = std::find(out.connections.begin(), out.connections.end(), connection);
+        if (cit != out.connections.end()) {
+            size_t cidx = std::distance(out.connections.begin(), cit);
+            if (cidx != out.connections.size() - 1) {
+                std::swap(out.connections[cidx], out.connections.back());
+                out.ids[out.connections[cidx]->id] = cidx;
+            }
+            out.ids.erase(connection->id);
+            out.id_pool.releaseID(connection->id);
+            out.connections.pop_back();
+        }
+        delete connection;
+    }
+
+    id_pool.releaseID(track->id);
+    if (index != tracks.size() - 1) {
+        std::swap(tracks[index], tracks.back());
+        ids[tracks[index]->id] = index;
+    }
+    ids.erase(track->id);
+    delete tracks.back();
+    tracks.pop_back();
+
     parentNode->makeConnectionRects();
 }
 

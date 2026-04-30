@@ -21,6 +21,8 @@ class TrackManager {
         ArrangerNode* parentNode;
 
         void addTrack(TrackType);
+        Track* addTrackNow(TrackType, int forcedTrackID = -1, int forcedConnectionID = -1);
+        void removeTrackNow(uint16_t);
 
         void solo(uint16_t);
         void mute(uint16_t);

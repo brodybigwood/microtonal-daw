@@ -61,6 +61,10 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
 bool AudioManager::start() {
 
     std::vector<unsigned int> deviceIds = rtaudio.getDeviceIds();
+    if (deviceIds.empty()) {
+        std::cerr << "No audio output devices found." << std::endl;
+        return false;
+    }
 
     for (unsigned int i = 0; i < deviceIds.size(); ++i) {
        // RtAudio::DeviceInfo info = rtaudio.getDeviceInfo(deviceIds[i]);
@@ -70,12 +74,11 @@ bool AudioManager::start() {
     }
 
     auto defaultDevice = rtaudio.getDefaultOutputDevice();
-
-    RtAudio::DeviceInfo info = rtaudio.getDeviceInfo(deviceIds[0]);
+    RtAudio::DeviceInfo info = rtaudio.getDeviceInfo(defaultDevice);
     sampleRate = info.preferredSampleRate;
     outputChannels = info.outputChannels > 0 ? info.outputChannels : 2;
 
-    outputParams.deviceId = deviceIds[0];
+    outputParams.deviceId = defaultDevice;
     outputParams.nChannels = outputChannels;
     outputParams.firstChannel = 0; 
 

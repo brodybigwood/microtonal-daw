@@ -33,6 +33,7 @@ Node* Node::deSerialize(json j, NodeManager* nm) {
     n->move(j["x"], j["y"]);
 
     n->extraDeSerialize(j["extra"]);
+    n->makeConnectionRects();
 
     return n;
 }
@@ -356,6 +357,7 @@ void Node::renderContentHelper(SDL_Renderer* renderer) {
     SDL_Texture* tex;
     if (detached) tex = texture_detached;
     else tex = texture;
+    if (!tex || !ne || !ne->renderer) return;
 
     auto target = SDL_GetRenderTarget(renderer);
     SDL_SetRenderTarget(renderer, tex);
@@ -364,10 +366,10 @@ void Node::renderContentHelper(SDL_Renderer* renderer) {
     renderContent(renderer);
     SDL_SetRenderTarget(renderer, target);
     SDL_FRect tRect{0,0,TEX_W,TEX_H};
-    SDL_RenderTexture(ne->renderer, texture, &tRect, &dstRect);
+    SDL_RenderTexture(ne->renderer, tex, &tRect, &dstRect);
 
     if (detached) {
-        SDL_RenderTexture(renderer, texture_detached, &tRect, NULL);
+        SDL_RenderTexture(renderer, tex, &tRect, NULL);
     }
 }
 

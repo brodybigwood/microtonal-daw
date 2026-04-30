@@ -45,13 +45,8 @@ void OscillatorNode::process() {
                         if (!voice.active) {
                             voice.noteId = event.id;
                             voice.frequency = 440 * pow(2.0f,(event.num - 69) / 12.0f);
-
-                            std::cout << "noteOn: " << event.num << std::endl;
                             voice.wait_on = event.sampleOffset;
-                            std::cout << "offset: " << voice.wait_on << std::endl;
-
                             voice.active = true;
-                            std::cout << "activated voice " << i << std::endl;
                             break;
                         }
                     }
@@ -62,11 +57,7 @@ void OscillatorNode::process() {
                     for (int i = 0; i < NUM_VOICES; ++i) {
                         auto& voice = voices[i];
                         if (event.id == voice.noteId && voice.active) {
-                            
-                            std::cout << "noteOff: " << event.num << std::endl;
                             voice.wait_off = event.sampleOffset;
-                            std::cout << "deactivated voice " << i << std::endl;
-                            std::cout << "offset: " << voice.wait_off << std::endl;
                             break;
                         }   
                     }

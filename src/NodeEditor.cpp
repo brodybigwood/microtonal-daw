@@ -3,6 +3,7 @@
 #include "Node.h"
 #include "ContextMenu.h"
 #include "WindowHandler.h"
+#include "UndoManager.h"
 #include <iostream>
 #include "Preferences.h"
 
@@ -21,14 +22,23 @@ void NodeEditor::setMovingNode(Node* node) {
     releaseMovingNode();
     movingNode = node;
     node->moving = true;
+    movingNodeStartX = node->dstRect.x;
+    movingNodeStartY = node->dstRect.y;
     moveOffX = mouseX - node->dstRect.x;
     moveOffY = mouseY - node->dstRect.y;
 }
 
 void NodeEditor::releaseMovingNode() {
     if (!movingNode) return;
+    float endX = movingNode->dstRect.x;
+    float endY = movingNode->dstRect.y;
+    int movingID = movingNode->id;
     movingNode->moving = false;
     movingNode = nullptr;
+    if (endX != movingNodeStartX || endY != movingNodeStartY) {
+        auto pa = new MoveNodeAction(nm->project, movingID, movingNodeStartX, movingNodeStartY, endX, endY);
+        nm->project->um->newAction(pa);
+    }
 }
 
 void NodeEditor::setDstConn(Node* node, int id) {
@@ -164,6 +174,7 @@ void NodeEditor::renderSine(float x1, float y1, float x2, float y2, SDL_FColor c
 }
 
 void NodeEditor::tick() {
+    nm->flushUiDeferred();
     render(renderer, &nodeRect); // render background and nodes
     renderConnector(renderer); // connector line from mouse
 }
@@ -327,8 +338,7 @@ std::shared_ptr<TreeEntry> NodeEditor::getClickMenu() {
 }
 
 void NodeEditor::createNode(NodeType t) {
-    auto node = nm->addNode(t);
-    node->move(mouseX, mouseY);
+    nm->addNode(t, mouseX, mouseY);
 }
 
 void NodeEditor::keydown(SDL_Event& e) {
