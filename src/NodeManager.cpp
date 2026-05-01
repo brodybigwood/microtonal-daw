@@ -20,6 +20,7 @@ void NodeManager::setNE(NodeEditor* ne) {
     std::lock_guard<std::recursive_mutex> lock(graphMutex);
     this->ne = ne;
     ne->nm = this;
+    ne->portDisplayMode = portDisplayMode;
     outNode->setNE(ne);
     inNode->setNE(ne);
     int ww = ne->windowWidth;
@@ -32,6 +33,7 @@ void NodeManager::setNE(NodeEditor* ne) {
 
 void NodeManager::resetNE() {
     std::lock_guard<std::recursive_mutex> lock(graphMutex);
+    if (ne) portDisplayMode = ne->portDisplayMode;
     if (ne) ne->nm = nullptr;
     ne = nullptr;
     outNode->resetNE();
@@ -41,8 +43,10 @@ void NodeManager::resetNE() {
 
 json NodeManager::serialize() {
     std::lock_guard<std::recursive_mutex> lock(graphMutex);
+    if (ne) portDisplayMode = ne->portDisplayMode;
     json j;
     j["idManager"] = id_pool.toJSON();
+    j["portDisplayMode"] = static_cast<int>(portDisplayMode);
 
     j["nodes"] = json::array();
     j["connections"] = json::array();
@@ -85,6 +89,11 @@ void NodeManager::deSerialize(json j) {
     if (managerPath.empty()) std::cout << "root";
     std::cout << std::endl;
     id_pool.fromJSON(j["idManager"]);
+    const int mode = j.value("portDisplayMode", static_cast<int>(PortDisplayMode::RectLabels));
+    portDisplayMode = (mode == static_cast<int>(PortDisplayMode::SquareIDs))
+        ? PortDisplayMode::SquareIDs
+        : PortDisplayMode::RectLabels;
+    if (ne) ne->portDisplayMode = portDisplayMode;
 
     for (auto n : j["nodes"]) {
         auto node = Node::deSerialize(n, this);
@@ -121,6 +130,9 @@ void NodeManager::deSerialize(json j) {
         if (!srcNode) continue;
         makeNodeConnectionNow(srcNode->id, srcConID, dstNode->id, dstConID);
     }
+    outNode->makeConnectionRects();
+    inNode->makeConnectionRects();
+    for (auto n : nodes) n->makeConnectionRects();
     std::cout << "[DBG_DESER] NodeManager::deSerialize end path=";
     for (size_t i = 0; i < managerPath.size(); ++i) {
         std::cout << managerPath[i] << (i + 1 < managerPath.size() ? "/" : "");
@@ -159,6 +171,11 @@ std::vector<Node*> NodeManager::getNodes() {
 void NodeManager::markTopologyDirty() {
     std::lock_guard<std::recursive_mutex> lock(graphMutex);
     topologyDirty = true;
+}
+
+void NodeManager::runWithGraphLock(const std::function<void()>& fn) {
+    std::lock_guard<std::recursive_mutex> lock(graphMutex);
+    if (fn) fn();
 }
 void NodeManager::makeNodeConnection(
         Node* srcNode, uint16_t srcConID,
@@ -244,6 +261,13 @@ void NodeManager::process(float* output, int& bufferSize, int& numChannels, int&
         }
         outNode->numChannels = numChannels;
         outNode->update(bufferSize, sampleRate);
+
+        // Second pass: relink all input pointers after every node has refreshed outputs.
+        inNode->relinkInputs();
+        for (auto node : nodes) {
+            node->relinkInputs();
+        }
+        outNode->relinkInputs();
         topologyDirty = false;
     }
    

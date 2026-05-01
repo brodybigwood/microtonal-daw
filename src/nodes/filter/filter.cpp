@@ -5,16 +5,28 @@
 #include <cmath>
 #include <string>
 
-float FilterNode::Biquad::process(float x) {
-    float y = x * b0 + z1;
-    z1 = x * b1 + z2 - a1 * y;
-    z2 = x * b2 - a2 * y;
-    return y;
+float FilterNode::SvfStage::process(float x, FilterMode mode) {
+    // TPT SVF core (modulation-safe): low/band/high outputs from one state update.
+    const float v1 = (g * (x - ic2eq) + ic1eq) / (1.0f + g * (g + k));
+    const float v2 = ic2eq + g * v1;
+    const float hp = x - k * v1 - v2;
+    const float bp = v1;
+    const float lp = v2;
+
+    ic1eq = 2.0f * v1 - ic1eq;
+    ic2eq = 2.0f * v2 - ic2eq;
+
+    switch (mode) {
+        case FilterMode::LowPass: return lp;
+        case FilterMode::HighPass: return hp;
+        case FilterMode::BandPass: return bp;
+    }
+    return lp;
 }
 
-void FilterNode::Biquad::reset() {
-    z1 = 0.0f;
-    z2 = 0.0f;
+void FilterNode::SvfStage::reset() {
+    ic1eq = 0.0f;
+    ic2eq = 0.0f;
 }
 
 FilterNode::FilterNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::Filter) {
@@ -53,7 +65,7 @@ float FilterNode::mapCutoff(float v) {
 }
 
 float FilterNode::mapQ(float v) {
-    // 0.2..20
+    // Legacy helper kept for compatibility; SVF path uses k directly.
     return 0.2f + std::clamp(v, 0.0f, 1.0f) * 19.8f;
 }
 
@@ -74,52 +86,24 @@ void FilterNode::updateCoefficientsNormalized(float cutoffNorm, float resonanceN
     if (sampleRate <= 0) return;
 
     const float fc = std::clamp(mapCutoff(cutoffNorm), 20.0f, sampleRate * 0.45f);
-    const float qRaw = mapQ(resonanceNorm);
-    // Resonance compensation for cascaded slopes to avoid runaway peaks.
     const float slopeFactor = std::max(1.0f, static_cast<float>(slopeDb()) / 12.0f);
-    const float q = std::clamp(qRaw / std::sqrt(slopeFactor), 0.2f, 12.0f);
-    const float w0 = 2.0f * std::numbers::pi_v<float> * fc / static_cast<float>(sampleRate);
-    const float c = std::cos(w0);
-    const float s = std::sin(w0);
-    const float alpha = s / (2.0f * q);
+    const float g = std::tan(std::numbers::pi_v<float> * fc / static_cast<float>(sampleRate));
 
-    float b0 = 1.0f, b1 = 0.0f, b2 = 0.0f, a0 = 1.0f, a1 = 0.0f, a2 = 0.0f;
+    // Serum-like resonance feel: gentle early range, stronger late ramp.
+    float res = std::pow(std::clamp(resonanceNorm, 0.0f, 1.0f), 0.62f);
+    // High slopes need extra damping to avoid over-emphasized peaks.
+    res = std::clamp(res / std::sqrt(slopeFactor), 0.0f, 0.995f);
+    // TPT SVF damping term.
+    const float k = std::clamp(2.0f - 1.98f * res, 0.02f, 2.0f);
 
-    switch (mode) {
-        case FilterMode::LowPass:
-            b0 = (1.0f - c) * 0.5f;
-            b1 = 1.0f - c;
-            b2 = (1.0f - c) * 0.5f;
-            a0 = 1.0f + alpha;
-            a1 = -2.0f * c;
-            a2 = 1.0f - alpha;
-            break;
-        case FilterMode::HighPass:
-            b0 = (1.0f + c) * 0.5f;
-            b1 = -(1.0f + c);
-            b2 = (1.0f + c) * 0.5f;
-            a0 = 1.0f + alpha;
-            a1 = -2.0f * c;
-            a2 = 1.0f - alpha;
-            break;
-        case FilterMode::BandPass:
-            b0 = alpha;
-            b1 = 0.0f;
-            b2 = -alpha;
-            a0 = 1.0f + alpha;
-            a1 = -2.0f * c;
-            a2 = 1.0f - alpha;
-            break;
-    }
+    // Mild output compensation so resonance+slope behaves more like synth filters.
+    outputTrim = 1.0f / (1.0f + 0.22f * res * (slopeFactor - 1.0f));
 
     const auto plan = slopePlan();
     const int neededStages = std::min(4, plan.fullStages + (plan.halfExtraStage ? 1 : 0));
     for (int i = 0; i < neededStages; ++i) {
-        stages[i].b0 = b0 / a0;
-        stages[i].b1 = b1 / a0;
-        stages[i].b2 = b2 / a0;
-        stages[i].a1 = a1 / a0;
-        stages[i].a2 = a2 / a0;
+        stages[i].g = g;
+        stages[i].k = k;
     }
     coeffDirty = false;
 }
@@ -151,13 +135,13 @@ void FilterNode::process() {
 
         float y = in->buffer[i];
         for (int s = 0; s < plan.fullStages; ++s) {
-            y = stages[s].process(y);
+            y = stages[s].process(y, mode);
         }
         if (plan.halfExtraStage) {
-            const float extra = stages[plan.fullStages].process(y);
+            const float extra = stages[plan.fullStages].process(y, mode);
             y = 0.5f * (y + extra);
         }
-        out->buffer[i] = y;
+        out->buffer[i] = y * outputTrim;
     }
 }
 

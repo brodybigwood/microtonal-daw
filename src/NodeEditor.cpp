@@ -6,6 +6,7 @@
 #include "UndoManager.h"
 #include <iostream>
 #include "Preferences.h"
+#include "styles.h"
 
 void NodeEditor::retach() {
     for (auto n : nm->getNodes()) {
@@ -187,6 +188,17 @@ void NodeEditor::tick() {
     renderConnector(renderer); // connector line from mouse
 }
 
+void NodeEditor::togglePortDisplayMode() {
+    portDisplayMode = (portDisplayMode == PortDisplayMode::RectLabels)
+        ? PortDisplayMode::SquareIDs
+        : PortDisplayMode::RectLabels;
+    if (nm) nm->portDisplayMode = portDisplayMode;
+
+    for (auto* n : nm->getNodes()) n->makeConnectionRects();
+    nm->inNode->makeConnectionRects();
+    nm->outNode->makeConnectionRects();
+}
+
 void NodeEditor::renderPresent() {
     for (auto n : nm->getNodes()) {
         n->renderPresent();
@@ -295,6 +307,11 @@ void NodeEditor::hover() {
 
 void NodeEditor::clickMouse(SDL_Event& e) {
     if (e.button.button == SDL_BUTTON_LEFT) {
+        if (inside(mouseX, mouseY, &portModeButtonRect)) {
+            togglePortDisplayMode();
+            return;
+        }
+
         auto time = SDL_GetTicks();
         auto interval = time - lastLeftClick;
         lastLeftClick = time;
@@ -361,6 +378,34 @@ void NodeEditor::keydown(SDL_Event& e) {
 void NodeEditor::render(SDL_Renderer* renderer, SDL_FRect* dstRect) {
     SDL_SetRenderDrawColor(renderer, 220, 220, 220, 255);
     SDL_RenderFillRect(renderer, dstRect);
+
+    SDL_SetRenderDrawColor(renderer, 235, 235, 235, 255);
+    SDL_RenderFillRect(renderer, &portModeButtonRect);
+    SDL_SetRenderDrawColor(renderer, 40, 40, 40, 255);
+    SDL_RenderRect(renderer, &portModeButtonRect);
+
+    if (fonts.mainFont) {
+        const char* modeText = (portDisplayMode == PortDisplayMode::RectLabels)
+            ? "Ports: Rect Labels"
+            : "Ports: Square IDs";
+        SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, modeText, 0, SDL_Color{0, 0, 0, 255});
+        if (surf) {
+            SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
+            if (tex) {
+                const float scale = std::min(1.0f, (portModeButtonRect.w - 12.0f) / static_cast<float>(surf->w));
+                const float tw = static_cast<float>(surf->w) * scale;
+                const float th = static_cast<float>(surf->h) * scale;
+                SDL_FRect tr{
+                    portModeButtonRect.x + (portModeButtonRect.w - tw) * 0.5f,
+                    portModeButtonRect.y + (portModeButtonRect.h - th) * 0.5f,
+                    tw, th
+                };
+                SDL_RenderTexture(renderer, tex, nullptr, &tr);
+                SDL_DestroyTexture(tex);
+            }
+            SDL_DestroySurface(surf);
+        }
+    }
     
     for( auto node : nm->getNodes() ) {
         node->render();

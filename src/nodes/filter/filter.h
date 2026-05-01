@@ -23,15 +23,12 @@ public:
     void extraDeSerialize(json) override;
 
 private:
-    struct Biquad {
-        float b0 = 1.0f;
-        float b1 = 0.0f;
-        float b2 = 0.0f;
-        float a1 = 0.0f;
-        float a2 = 0.0f;
-        float z1 = 0.0f;
-        float z2 = 0.0f;
-        float process(float x);
+    struct SvfStage {
+        float g = 0.0f;
+        float k = 1.0f;
+        float ic1eq = 0.0f;
+        float ic2eq = 0.0f;
+        float process(float x, FilterMode mode);
         void reset();
     };
 
@@ -52,10 +49,11 @@ private:
     std::vector<int> slopeOptionsDb{6, 12, 18, 24, 36, 48};
     size_t slopeIndex = 0;
 
-    std::array<Biquad, 4> stages{};
+    std::array<SvfStage, 4> stages{};
     bool coeffDirty = true;
     float lastCutoffValue = -1.0f;
     float lastResonanceValue = -1.0f;
+    float outputTrim = 1.0f;
 
     void updateCoefficients();
     void updateCoefficientsNormalized(float cutoffNorm, float resonanceNorm);

@@ -9,6 +9,8 @@ public:
 
     void process() override;
     void setup() override;
+    json extraSerialize() override;
+    void extraDeSerialize(json) override;
 
 private:
     enum class Stage {

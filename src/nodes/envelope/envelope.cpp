@@ -132,3 +132,19 @@ void EnvelopeNode::process() {
         envelopeOut->buffer[i] = std::clamp(envLevel, 0.0f, 1.0f);
     }
 }
+
+json EnvelopeNode::extraSerialize() {
+    json j;
+    j["attack"] = attack.value;
+    j["decay"] = decay.value;
+    j["sustain"] = sustain.value;
+    j["release"] = release.value;
+    return j;
+}
+
+void EnvelopeNode::extraDeSerialize(json j) {
+    attack.value = j.value("attack", attack.value);
+    decay.value = j.value("decay", decay.value);
+    sustain.value = j.value("sustain", sustain.value);
+    release.value = j.value("release", release.value);
+}

@@ -145,6 +145,10 @@ bool WindowHandler::tick() {
                                 n->attach();
                                 handledClose = true;
                             }
+                        } else if (project && project->window && closingWindow != project->window) {
+                            // Non-host utility windows should close themselves, not quit the app.
+                            SDL_HideWindow(closingWindow);
+                            handledClose = true;
                         }
                         break;
                     }
@@ -152,11 +156,6 @@ bool WindowHandler::tick() {
                 if (handledClose) continue;
                 running = false;
                 break;
-            }
-
-            if(!ctxMenu->active && e.type == SDL_EVENT_KEY_DOWN && e.key.scancode == SDL_SCANCODE_SPACE) {
-                project->togglePlaying();
-                continue;
             }
 
 
@@ -168,6 +167,11 @@ bool WindowHandler::tick() {
             }
 
             if (e.type == SDL_EVENT_KEY_DOWN) {
+                if (e.key.scancode == SDL_SCANCODE_SPACE) {
+                    project->togglePlaying();
+                    continue;
+                }
+
                 const SDL_Keymod mods = SDL_GetModState();
                 const bool ctrlDown = (mods & SDL_KMOD_CTRL) != 0;
                 const bool shiftDown = (mods & SDL_KMOD_SHIFT) != 0;
@@ -179,6 +183,7 @@ bool WindowHandler::tick() {
                             if (project->um->current == project->um->head) continue;
                             project->undo();
                         }
+                        continue;
                     } else if (e.key.key == SDLK_S) {
                         SDL_Renderer* eventRenderer = nullptr;
                         for (auto* w : windows) {
@@ -188,6 +193,7 @@ bool WindowHandler::tick() {
                             }
                         }
                         project->save(e.key.windowID, eventRenderer);
+                        continue;
                     }
                 }
             }

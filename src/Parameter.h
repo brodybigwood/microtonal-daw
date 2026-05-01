@@ -4,19 +4,22 @@
 #include <SDL3/SDL.h>
 #include <string>
 #include "Geometry.h"
+#include "Bus.h"
 
 struct Modulator {
     bool centered;
     float depth;
     float*& source; // can either be a node's connection input, or some internal buffer
+    Connection* sourceConnection = nullptr;
 
     float operator[](size_t);
 
-    Modulator(float*&, bool, float depth = 0.5);
+    Modulator(float*&, bool, float depth = 0.5, Connection* sourceConnection = nullptr);
 };
 
 struct Parameter {
     float value = 0; // the knob itself
+    float defaultValue = 0;
     std::vector<Modulator*> modulators;
     
     float operator[](size_t);

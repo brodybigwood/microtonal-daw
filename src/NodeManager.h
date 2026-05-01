@@ -3,6 +3,7 @@
 #include <vector>
 #include <unordered_map>
 #include <mutex>
+#include <functional>
 #include "idManager.h"
 #include <SDL3/SDL.h>
 #include "OutputNode.h"
@@ -48,6 +49,7 @@ class NodeManager {
         std::vector<Node*> getNodes();
 
         void markTopologyDirty();
+        void runWithGraphLock(const std::function<void()>& fn);
 
         Project* project;
         
@@ -57,6 +59,7 @@ class NodeManager {
         OutputNode* outNode;
         InputNode* inNode;
         std::vector<int> managerPath;
+        PortDisplayMode portDisplayMode = PortDisplayMode::RectLabels;
 
     private:
         std::unordered_map<uint16_t, uint16_t> ids;

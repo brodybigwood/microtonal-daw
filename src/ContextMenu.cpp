@@ -132,6 +132,11 @@ std::function<bool(SDL_Event& e)> getTreeMenuTicker(std::shared_ptr<TreeEntry> t
                                 for (auto k : t->children) if (c != k) k->isOpen = false;
                             } else {
                                 c->click();
+                                auto* ctx = ContextMenu::get();
+                                if (ctx->keepOpenOnNextTreeLeafClick) {
+                                    ctx->keepOpenOnNextTreeLeafClick = false;
+                                    return true;
+                                }
                                 return false;
                             }
                         }

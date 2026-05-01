@@ -19,11 +19,6 @@ OscillatorNode::OscillatorNode(uint16_t id, NodeManager* nm) : Node(id, nm, Node
     inputN->dir = Direction::input;
     inputs.addConnection(inputN);
 
-    inputAmp = new Connection;
-    inputAmp->type = DataType::Waveform;
-    inputAmp->dir = Direction::input;
-    inputs.addConnection(inputAmp);
-
     params.push_back(&volume);
 }
 
@@ -86,22 +81,17 @@ void OscillatorNode::process() {
         std::memset(b1, 0, bufferSize * sizeof(float));
     }
 
-    const float* ampBuffer = nullptr;
-    if (inputAmp && inputAmp->is_connected && inputAmp->buffer) {
-        ampBuffer = inputAmp->buffer;
-    }
-
     for (int i = 0; i < NUM_VOICES; i++) {
         auto& voice = voices[i];
         if (!voice.active) continue;
-        voice.process(b0, b1, bufferSize, sampleRate, volume, ampBuffer);
+        voice.process(b0, b1, bufferSize, sampleRate, volume);
     }
 }
 
 void OscillatorNode::setup() {
 }
 
-void Voice::process(float* out0, float* out1, int& bufferSize, int& sampleRate, Parameter& volume, const float* ampIn) {
+void Voice::process(float* out0, float* out1, int& bufferSize, int& sampleRate, Parameter& volume) {
     for (int i = 0; i < bufferSize; i++) {
         if (wait_on > 0) {
             wait_on -=1;
@@ -117,8 +107,7 @@ void Voice::process(float* out0, float* out1, int& bufferSize, int& sampleRate, 
             return;
         }
 
-        const float extAmp = ampIn ? std::clamp(ampIn[i], 0.0f, 1.0f) : 1.0f;
-        float smp = sin(phase) * volume[i] * extAmp;
+        float smp = sin(phase) * volume[i];
 
         if (out0) out0[i] += smp;
         if (out1) out1[i] += smp;

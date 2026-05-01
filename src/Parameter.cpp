@@ -6,17 +6,20 @@
 #include <cmath>
 #include "styles.h"
 
-Modulator::Modulator(float*& source, bool centered, float depth) : 
+Modulator::Modulator(float*& source, bool centered, float depth, Connection* sourceConnection) : 
     source(source),
     centered(centered),
-    depth(depth) {}
+    depth(depth),
+    sourceConnection(sourceConnection) {}
 
 float Modulator::operator[](size_t i) {
+    if (!source) return 0.0f;
     return depth * (source[i] - 0.5 * centered);
 }
 
 Parameter::Parameter(float value, std::pair<std::vector<float>, std::vector<float>> bound) :
     value(value),
+    defaultValue(value),
     vx(std::move(bound.first)),
     vy(std::move(bound.second)) {}
 
@@ -24,6 +27,11 @@ float Parameter::operator[](size_t i) {
     float v = value;
     for (auto& m : modulators) v += (*m)[i];
     return std::clamp(v, 0.0f, 1.0f);
+}
+
+void Parameter::addModulator(Modulator* m) {
+    if (!m) return;
+    modulators.push_back(m);
 }
 
 void Parameter::clearTextures() {
@@ -35,6 +43,10 @@ void Parameter::clearTextures() {
 }
 
 Parameter::~Parameter() {
+    for (auto* m : modulators) {
+        delete m;
+    }
+    modulators.clear();
     clearTextures();
 }
 

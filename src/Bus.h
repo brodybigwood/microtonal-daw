@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <string>
 #include <SDL3/SDL.h>
 
 #define MAX_EVENTS 256
@@ -29,9 +30,17 @@ enum Direction{
     output = 1
 };
 
+enum class PortDisplayMode {
+    RectLabels = 0,
+    SquareIDs = 1
+};
+
 class NodeManager;
 
 struct Connection{
+    std::string label;
+    int displayIndex = 0;
+    float labelScale = 3.0f;
     DataType type;
     bool is_connected = false;
     uint16_t id;

@@ -95,6 +95,7 @@ class Node : public Window {
         int sampleRate;
 
         virtual void setup();
+        void relinkInputs();
 
         void update(int, int);
 
@@ -117,7 +118,12 @@ class Node : public Window {
         void clickMouse(SDL_Event&);
 
         std::shared_ptr<TreeEntry> getConnectionMenu(Connection*);
+        std::shared_ptr<TreeEntry> getParameterMenu(Parameter*);
         std::shared_ptr<TreeEntry> getNodeMenu();
+        void addModSource(Parameter*);
+        void removeModSource(Parameter*, size_t);
+        bool addModSourceNow(size_t paramIndex);
+        bool removeModSourceNow(size_t paramIndex, size_t modIndex);
 
         json serialize();
         static Node* deSerialize(json, NodeManager*);

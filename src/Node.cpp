@@ -6,8 +6,240 @@
 #include "NodeEditor.h"
 #include "WindowHandler.h"
 #include "Preferences.h"
+#include "UndoManager.h"
 #include <cstring>
 #include <limits>
+#include <sstream>
+#include <iomanip>
+#include "styles.h"
+
+namespace {
+std::function<bool(SDL_Event&)> getModulationMatrixTicker(Node* node, Parameter* p) {
+    struct State {
+        int draggingIndex = -1;
+    };
+    auto state = std::make_shared<State>();
+
+    auto snapValue = [](float v, float minV, float maxV) {
+        const float step = std::max(1e-6f, (maxV - minV) * 0.01f);
+        const float snapped = std::round(v / step) * step;
+        return std::clamp(snapped, minV, maxV);
+    };
+
+    return [node, p, state, snapValue](SDL_Event& e) {
+        auto* ctxMenu = ContextMenu::get();
+        SDL_Renderer* renderer = ctxMenu->renderer;
+        if (!renderer || !p) return false;
+
+        const float panelX = ctxMenu->locX;
+        const float panelY = ctxMenu->locY;
+        const float panelW = 520.0f;
+        const float headerH = 30.0f;
+        const float rowH = 34.0f;
+        const float footerH = 36.0f;
+        const float panelH = headerH + rowH * static_cast<float>(std::max<size_t>(1, p->modulators.size())) + footerH + 12.0f;
+        SDL_FRect panel{panelX, panelY, panelW, panelH};
+
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT && !MouseOn(&panel)) {
+            return false;
+        }
+
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+            state->draggingIndex = -1;
+        }
+
+        SDL_SetRenderDrawColor(renderer, 220, 220, 220, 255);
+        SDL_RenderFillRect(renderer, &panel);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderRect(renderer, &panel);
+
+        if (fonts.mainFont) {
+            SDL_Surface* titleSurf = TTF_RenderText_Blended(fonts.mainFont, "Modulation Matrix", 0, SDL_Color{0, 0, 0, 255});
+            if (titleSurf) {
+                SDL_Texture* titleTex = SDL_CreateTextureFromSurface(renderer, titleSurf);
+                if (titleTex) {
+                    SDL_FRect tr{panel.x + 8.0f, panel.y + 6.0f, static_cast<float>(titleSurf->w), static_cast<float>(titleSurf->h)};
+                    SDL_RenderTexture(renderer, titleTex, nullptr, &tr);
+                    SDL_DestroyTexture(titleTex);
+                }
+                SDL_DestroySurface(titleSurf);
+            }
+        }
+
+        for (size_t i = 0; i < p->modulators.size(); ++i) {
+            auto* m = p->modulators[i];
+            if (!m) continue;
+
+            SDL_FRect row{panel.x + 6.0f, panel.y + headerH + static_cast<float>(i) * rowH, panel.w - 12.0f, rowH - 2.0f};
+            SDL_SetRenderDrawColor(renderer, 235, 235, 235, 255);
+            SDL_RenderFillRect(renderer, &row);
+            SDL_SetRenderDrawColor(renderer, 140, 140, 140, 255);
+            SDL_RenderRect(renderer, &row);
+
+            SDL_FRect centerBtn{row.x + 6.0f, row.y + 5.0f, 120.0f, row.h - 10.0f};
+            SDL_SetRenderDrawColor(renderer, m->centered ? 160 : 205, m->centered ? 235 : 205, 160, 255);
+            SDL_RenderFillRect(renderer, &centerBtn);
+            SDL_SetRenderDrawColor(renderer, 90, 90, 90, 255);
+            SDL_RenderRect(renderer, &centerBtn);
+
+            SDL_FRect removeBtn{row.x + row.w - 84.0f, row.y + 5.0f, 78.0f, row.h - 10.0f};
+            SDL_SetRenderDrawColor(renderer, 235, 170, 170, 255);
+            SDL_RenderFillRect(renderer, &removeBtn);
+            SDL_SetRenderDrawColor(renderer, 90, 90, 90, 255);
+            SDL_RenderRect(renderer, &removeBtn);
+
+            SDL_FRect depthValueRect{removeBtn.x - 70.0f, row.y + 5.0f, 62.0f, row.h - 10.0f};
+            SDL_SetRenderDrawColor(renderer, 245, 245, 245, 255);
+            SDL_RenderFillRect(renderer, &depthValueRect);
+            SDL_SetRenderDrawColor(renderer, 120, 120, 120, 255);
+            SDL_RenderRect(renderer, &depthValueRect);
+
+            SDL_FRect slider{
+                centerBtn.x + centerBtn.w + 10.0f,
+                row.y + row.h * 0.5f - 5.0f,
+                depthValueRect.x - (centerBtn.x + centerBtn.w + 10.0f) - 10.0f,
+                10.0f
+            };
+            SDL_SetRenderDrawColor(renderer, 190, 190, 190, 255);
+            SDL_RenderFillRect(renderer, &slider);
+            SDL_SetRenderDrawColor(renderer, 80, 80, 80, 255);
+            SDL_RenderRect(renderer, &slider);
+
+            const float centerX = slider.x + slider.w * 0.5f;
+            const float minDepth = m->centered ? -0.5f : 0.0f;
+            const float maxDepth = m->centered ? 0.5f : 1.0f;
+            const float range = std::max(1e-6f, maxDepth - minDepth);
+            const float markerX = m->centered ? centerX : slider.x;
+            SDL_SetRenderDrawColor(renderer, 80, 80, 80, 255);
+            SDL_RenderLine(renderer, markerX, slider.y - 5.0f, markerX, slider.y + slider.h + 5.0f);
+
+            m->depth = std::clamp(m->depth, minDepth, maxDepth);
+            const float t = (m->depth - minDepth) / range;
+            const float knobX = slider.x + t * slider.w;
+            SDL_FRect knob{knobX - 4.0f, slider.y - 4.0f, 8.0f, slider.h + 8.0f};
+            SDL_SetRenderDrawColor(renderer, 80, 120, 230, 255);
+            SDL_RenderFillRect(renderer, &knob);
+
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+                if (MouseOn(&centerBtn)) {
+                    m->centered = !m->centered;
+                    if (m->centered) {
+                        m->depth = std::clamp(m->depth, -0.5f, 0.5f);
+                    } else {
+                        m->depth = std::clamp(m->depth, 0.0f, 1.0f);
+                    }
+                } else if (MouseOn(&removeBtn)) {
+                    node->removeModSource(p, i);
+                    return true;
+                } else if (MouseOn(&slider)) {
+                    state->draggingIndex = static_cast<int>(i);
+                }
+            }
+
+            if (state->draggingIndex == static_cast<int>(i) && (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_MOTION)) {
+                float mx = 0.0f, my = 0.0f;
+                SDL_GetMouseState(&mx, &my);
+                const float norm = std::clamp((mx - slider.x) / slider.w, 0.0f, 1.0f);
+                const float dMin = m->centered ? -0.5f : 0.0f;
+                const float dMax = m->centered ? 0.5f : 1.0f;
+                m->depth = snapValue(dMin + norm * (dMax - dMin), dMin, dMax);
+            }
+
+            if (fonts.mainFont) {
+                const std::string cText = std::string("Center ") + (m->centered ? "ON" : "OFF");
+                SDL_Surface* cSurf = TTF_RenderText_Blended(fonts.mainFont, cText.c_str(), 0, SDL_Color{0, 0, 0, 255});
+                if (cSurf) {
+                    SDL_Texture* cTex = SDL_CreateTextureFromSurface(renderer, cSurf);
+                    if (cTex) {
+                        const float cScale = std::min(1.0f, (centerBtn.w - 8.0f) / static_cast<float>(cSurf->w));
+                        SDL_FRect tr{
+                            centerBtn.x + (centerBtn.w - cSurf->w * cScale) * 0.5f,
+                            centerBtn.y + (centerBtn.h - cSurf->h * cScale) * 0.5f,
+                            cSurf->w * cScale,
+                            cSurf->h * cScale
+                        };
+                        SDL_RenderTexture(renderer, cTex, nullptr, &tr);
+                        SDL_DestroyTexture(cTex);
+                    }
+                    SDL_DestroySurface(cSurf);
+                }
+
+                SDL_Surface* rmSurf = TTF_RenderText_Blended(fonts.mainFont, "Remove", 0, SDL_Color{0, 0, 0, 255});
+                if (rmSurf) {
+                    SDL_Texture* rmTex = SDL_CreateTextureFromSurface(renderer, rmSurf);
+                    if (rmTex) {
+                        const float rScale = std::min(1.0f, (removeBtn.w - 8.0f) / static_cast<float>(rmSurf->w));
+                        SDL_FRect tr{
+                            removeBtn.x + (removeBtn.w - rmSurf->w * rScale) * 0.5f,
+                            removeBtn.y + (removeBtn.h - rmSurf->h * rScale) * 0.5f,
+                            rmSurf->w * rScale,
+                            rmSurf->h * rScale
+                        };
+                        SDL_RenderTexture(renderer, rmTex, nullptr, &tr);
+                        SDL_DestroyTexture(rmTex);
+                    }
+                    SDL_DestroySurface(rmSurf);
+                }
+
+                std::ostringstream ds;
+                ds << std::fixed << std::setprecision(2) << m->depth;
+                const std::string dText = ds.str();
+                SDL_Surface* dSurf = TTF_RenderText_Blended(fonts.mainFont, dText.c_str(), 0, SDL_Color{0, 0, 0, 255});
+                if (dSurf) {
+                    SDL_Texture* dTex = SDL_CreateTextureFromSurface(renderer, dSurf);
+                    if (dTex) {
+                        const float dScale = std::min(1.0f, (depthValueRect.w - 6.0f) / static_cast<float>(dSurf->w));
+                        SDL_FRect tr{
+                            depthValueRect.x + (depthValueRect.w - dSurf->w * dScale) * 0.5f,
+                            depthValueRect.y + (depthValueRect.h - dSurf->h * dScale) * 0.5f,
+                            dSurf->w * dScale,
+                            dSurf->h * dScale
+                        };
+                        SDL_RenderTexture(renderer, dTex, nullptr, &tr);
+                        SDL_DestroyTexture(dTex);
+                    }
+                    SDL_DestroySurface(dSurf);
+                }
+            }
+        }
+
+        SDL_FRect addBtn{
+            panel.x + 8.0f,
+            panel.y + panel.h - footerH + 6.0f,
+            170.0f,
+            footerH - 12.0f
+        };
+        SDL_SetRenderDrawColor(renderer, 180, 215, 255, 255);
+        SDL_RenderFillRect(renderer, &addBtn);
+        SDL_SetRenderDrawColor(renderer, 90, 90, 90, 255);
+        SDL_RenderRect(renderer, &addBtn);
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT && MouseOn(&addBtn)) {
+            node->addModSource(p);
+            return true;
+        }
+        if (fonts.mainFont) {
+            SDL_Surface* addSurf = TTF_RenderText_Blended(fonts.mainFont, "Add Modulator", 0, SDL_Color{0, 0, 0, 255});
+            if (addSurf) {
+                SDL_Texture* addTex = SDL_CreateTextureFromSurface(renderer, addSurf);
+                if (addTex) {
+                    const float aScale = std::min(1.0f, (addBtn.w - 10.0f) / static_cast<float>(addSurf->w));
+                    SDL_FRect tr{
+                        addBtn.x + (addBtn.w - addSurf->w * aScale) * 0.5f,
+                        addBtn.y + (addBtn.h - addSurf->h * aScale) * 0.5f,
+                        addSurf->w * aScale,
+                        addSurf->h * aScale
+                    };
+                    SDL_RenderTexture(renderer, addTex, nullptr, &tr);
+                    SDL_DestroyTexture(addTex);
+                }
+                SDL_DestroySurface(addSurf);
+            }
+        }
+
+        return true;
+    };
+}
+}
 
 json Node::serialize() {
     json j;
@@ -92,6 +324,58 @@ connectionSet::~connectionSet() {
 }
 
 bool Node::handleInput(SDL_Event& e) {
+    // Ctrl+wheel is editor-level; nodes must not consume it.
+    if (e.type == SDL_EVENT_MOUSE_WHEEL && isCtrlPressed) {
+        return false;
+    }
+
+    // Detached embedded preview: editor-side interactions only.
+    if (detached) {
+        msX = (*mouseX - dstRect.x) / zoomRatio;
+        msY = (*mouseY - dstRect.y) / zoomRatio;
+        const bool insideNode = inPolygon(vx, vy, vCount, msX, msY);
+        bool hoverFound = false;
+        for (auto conn : inputs.connections) {
+            if (MouseOn(&conn->rect)) {
+                hoverFound = true;
+                hoveredConnection = conn->id;
+                hoveredDirection = Direction::input;
+                break;
+            }
+        }
+        if (!hoverFound) {
+            for (auto conn : outputs.connections) {
+                if (MouseOn(&conn->rect)) {
+                    hoverFound = true;
+                    hoveredConnection = conn->id;
+                    hoveredDirection = Direction::output;
+                    break;
+                }
+            }
+        }
+        if (!hoverFound) hoveredConnection = -1;
+
+        if (!insideNode && !hoverFound) return false;
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+            clickMouse(e);
+            return true;
+        }
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_RIGHT && insideNode) {
+            clickMouse(e);
+            return true;
+        }
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_RIGHT && hoverFound) {
+            clickMouse(e);
+            return true;
+        }
+        if (e.type == SDL_EVENT_MOUSE_WHEEL && isAltPressed) {
+            zoom(std::pow(1.1, e.wheel.y));
+            return true;
+        }
+        // Do not swallow wheel/other events over embedded preview; editor shortcuts must win.
+        return false;
+    }
+
     bool handled = false;
 
     msX = (*mouseX - dstRect.x) / zoomRatio;
@@ -99,6 +383,7 @@ bool Node::handleInput(SDL_Event& e) {
 
     if (inPolygon(vx, vy, vCount, msX, msY)) {
         handled = true;
+        hoveredConnection = -1;
     } else {
         bool hoverFound = false;
 
@@ -139,6 +424,7 @@ bool Node::handleInput(SDL_Event& e) {
             case SDL_EVENT_MOUSE_WHEEL:
                 if (isAltPressed) {
                     zoom(std::pow(1.1, e.wheel.y));
+                    return true;
                 }
                 break;
             default:
@@ -151,15 +437,18 @@ bool Node::handleInput(SDL_Event& e) {
 }
 
 void Node::clickMouse(SDL_Event& e) {
+    SDL_Window* eventWindow = SDL_GetWindowFromID(getEventWindowID(e));
+    const bool clickFromDetachedWindow = detached && eventWindow == window;
+
     if (e.button.button == SDL_BUTTON_LEFT) {
-        ne->setMovingNode(this);
+        if (ne && (!detached || !clickFromDetachedWindow)) ne->setMovingNode(this);
         if (hoveredConnection != -1) {
             switch (hoveredDirection) {
                 case Direction::input:
-                    ne->setDstConn(this, hoveredConnection);
+                    if (ne) ne->setDstConn(this, hoveredConnection);
                     break;
                 case Direction::output:
-                    ne->setSrcConn(this, hoveredConnection);
+                    if (ne) ne->setSrcConn(this, hoveredConnection);
                     break;
             }    
         }
@@ -174,21 +463,41 @@ void Node::clickMouse(SDL_Event& e) {
                 break;
             }
         }
-        if(interval < DCT && !overParam && !blocksDoubleClick(msX, msY)) {
+        if(interval < DCT && !overParam && !blocksDoubleClick(msX, msY) && !clickFromDetachedWindow) {
             if (detached) attach();
             else detach();
-            ne->releaseMovingNode();
+            if (ne) ne->releaseMovingNode();
             return;
         }
     } else if (e.button.button == SDL_BUTTON_RIGHT) {
+        SDL_Window* eventWindow = SDL_GetWindowFromID(getEventWindowID(e));
+        const bool clickFromDetachedWindow = detached && eventWindow == window;
         auto* ctxMenu = ContextMenu::get();
         ctxMenu->active = true;
-        ctxMenu->window_id = SDL_GetWindowID(ne->getWindow());
-        ctxMenu->renderer = ne->getRenderer();
+        if (clickFromDetachedWindow) {
+            ctxMenu->window_id = SDL_GetWindowID(window);
+            ctxMenu->renderer = renderer;
+        } else {
+            ctxMenu->window_id = SDL_GetWindowID(ne->getWindow());
+            ctxMenu->renderer = ne->getRenderer();
+        }
 
-        if (hoveredConnection != -1) {
-            ctxMenu->locX = *mouseX;
-            ctxMenu->locY = *mouseY;
+        Parameter* hoveredParam = nullptr;
+        for (auto* p : params) {
+            if (inPolygon(p->vx.data(), p->vy.data(), p->vx.size(), msX, msY)) {
+                hoveredParam = p;
+                break;
+            }
+        }
+
+        if (hoveredParam) {
+            ctxMenu->locX = clickFromDetachedWindow ? msX : *mouseX;
+            ctxMenu->locY = clickFromDetachedWindow ? msY : *mouseY;
+            auto t = getParameterMenu(hoveredParam);
+            ctxMenu->dynamicTick = getTreeMenuTicker(t);
+        } else if (hoveredConnection != -1) {
+            ctxMenu->locX = clickFromDetachedWindow ? msX : *mouseX;
+            ctxMenu->locY = clickFromDetachedWindow ? msY : *mouseY;
     
             Connection* c;
             switch (hoveredDirection) {
@@ -204,6 +513,10 @@ void Node::clickMouse(SDL_Event& e) {
     
             ctxMenu->dynamicTick = getTreeMenuTicker(t);
         } else {
+            if (clickFromDetachedWindow) {
+                ctxMenu->active = false;
+                return;
+            }
             ctxMenu->locX = *mouseX;
             ctxMenu->locY = *mouseY;
         
@@ -230,6 +543,7 @@ std::shared_ptr<TreeEntry> Node::getNodeMenu() {
 std::shared_ptr<TreeEntry> Node::getConnectionMenu(Connection* c) {
     auto t = uTreeEntry();
     t->label = "Connection Menu";
+    if (!c) return t;
 
     auto sever = uTreeEntry();
     sever->label = "Sever Connection";
@@ -238,6 +552,198 @@ std::shared_ptr<TreeEntry> Node::getConnectionMenu(Connection* c) {
     t->addChild(sever);
 
     return t;
+}
+
+void Node::addModSource(Parameter* p) {
+    if (!p) return;
+    if (!nm || !project || !project->um) return;
+
+    size_t paramIndex = std::numeric_limits<size_t>::max();
+    for (size_t i = 0; i < params.size(); ++i) {
+        if (params[i] == p) {
+            paramIndex = i;
+            break;
+        }
+    }
+    if (paramIndex == std::numeric_limits<size_t>::max()) return;
+    NodeManager* ownerNm = nm;
+    const uint16_t nodeId = id;
+
+    auto* pa = new ProjectAction(project, NullAction);
+    pa->audioThreadAction = true;
+    pa->name = "Add Mod Source";
+    pa->doAction = [ownerNm, nodeId, paramIndex]() {
+        if (!ownerNm) return;
+        Node* target = (nodeId == 0) ? static_cast<Node*>(ownerNm->outNode)
+                     : (nodeId == 1) ? static_cast<Node*>(ownerNm->inNode)
+                     : ownerNm->getNode(nodeId);
+        if (!target) return;
+        target->addModSourceNow(paramIndex);
+    };
+    pa->undoAction = [ownerNm, nodeId, paramIndex]() {
+        if (!ownerNm) return;
+        Node* target = (nodeId == 0) ? static_cast<Node*>(ownerNm->outNode)
+                     : (nodeId == 1) ? static_cast<Node*>(ownerNm->inNode)
+                     : ownerNm->getNode(nodeId);
+        if (!target || paramIndex >= target->params.size()) return;
+        auto* param = target->params[paramIndex];
+        if (!param || param->modulators.empty()) return;
+        target->removeModSourceNow(paramIndex, param->modulators.size() - 1);
+    };
+    project->um->newAction(pa);
+}
+
+bool Node::addModSourceNow(size_t paramIndex) {
+    if (!nm) return false;
+    if (paramIndex >= params.size()) return false;
+    Parameter* p = params[paramIndex];
+    if (!p) return false;
+
+    bool changed = false;
+    nm->runWithGraphLock([&]() {
+        auto* c = new Connection;
+        c->type = DataType::Waveform;
+        c->dir = Direction::input;
+        inputs.addConnection(c);
+        std::string paramName = "Param";
+        if (auto* k = dynamic_cast<Knob*>(p)) {
+            if (!k->label.empty()) paramName = k->label;
+        }
+        c->label = paramName + " " + std::to_string(c->id);
+        p->addModulator(new Modulator(c->buffer, true, 0.5f, c));
+        makeConnectionRects();
+        nm->markTopologyDirty();
+        changed = true;
+    });
+    return changed;
+}
+
+void Node::removeModSource(Parameter* p, size_t modIndex) {
+    if (!p || modIndex >= p->modulators.size()) return;
+    if (!nm || !project || !project->um) return;
+
+    size_t paramIndex = std::numeric_limits<size_t>::max();
+    for (size_t i = 0; i < params.size(); ++i) {
+        if (params[i] == p) {
+            paramIndex = i;
+            break;
+        }
+    }
+    if (paramIndex == std::numeric_limits<size_t>::max()) return;
+    NodeManager* ownerNm = nm;
+    const uint16_t nodeId = id;
+
+    auto* pa = new ProjectAction(project, NullAction);
+    pa->audioThreadAction = true;
+    pa->name = "Remove Mod Source";
+    pa->doAction = [ownerNm, nodeId, paramIndex, modIndex]() {
+        if (!ownerNm) return;
+        Node* target = (nodeId == 0) ? static_cast<Node*>(ownerNm->outNode)
+                     : (nodeId == 1) ? static_cast<Node*>(ownerNm->inNode)
+                     : ownerNm->getNode(nodeId);
+        if (!target) return;
+        target->removeModSourceNow(paramIndex, modIndex);
+    };
+    // Re-add on undo as the last source for this parameter.
+    pa->undoAction = [ownerNm, nodeId, paramIndex]() {
+        if (!ownerNm) return;
+        Node* target = (nodeId == 0) ? static_cast<Node*>(ownerNm->outNode)
+                     : (nodeId == 1) ? static_cast<Node*>(ownerNm->inNode)
+                     : ownerNm->getNode(nodeId);
+        if (!target) return;
+        target->addModSourceNow(paramIndex);
+    };
+    project->um->newAction(pa);
+}
+
+bool Node::removeModSourceNow(size_t paramIndex, size_t modIndex) {
+    if (!nm) return false;
+    if (paramIndex >= params.size()) return false;
+    Parameter* p = params[paramIndex];
+    if (!p || modIndex >= p->modulators.size()) return false;
+
+    bool changed = false;
+    nm->runWithGraphLock([&]() {
+        if (modIndex >= p->modulators.size()) return;
+        Modulator* m = p->modulators[modIndex];
+        if (!m) return;
+
+        Connection* target = m->sourceConnection;
+        if (target) {
+            if (target->is_connected) return;
+
+            auto it = std::find(inputs.connections.begin(), inputs.connections.end(), target);
+            if (it != inputs.connections.end()) {
+                inputs.id_pool.releaseID(target->id);
+                inputs.ids.erase(target->id);
+                delete target;
+                inputs.connections.erase(it);
+                inputs.ids.clear();
+                for (size_t i = 0; i < inputs.connections.size(); ++i) {
+                    inputs.ids[inputs.connections[i]->id] = static_cast<uint16_t>(i);
+                }
+                makeConnectionRects();
+                nm->markTopologyDirty();
+            }
+        }
+
+        delete m;
+        p->modulators.erase(p->modulators.begin() + static_cast<ptrdiff_t>(modIndex));
+        changed = true;
+    });
+    return changed;
+}
+
+std::shared_ptr<TreeEntry> Node::getParameterMenu(Parameter* p) {
+    auto root = uTreeEntry();
+    root->label = "Parameter Menu";
+
+    auto setValue = uTreeEntry();
+    setValue->label = "Set Value";
+    setValue->click = [this, p]() {
+        auto* ctxMenu = ContextMenu::get();
+        ctxMenu->active = true;
+        ctxMenu->window_id = SDL_GetWindowID(detached ? window : ne->getWindow());
+        ctxMenu->renderer = detached ? renderer : ne->getRenderer();
+        ctxMenu->dynamicTick = getTextInputTicker([p](std::string text) {
+            try {
+                const float v = std::stof(text);
+                p->value = std::clamp(v, 0.0f, 1.0f);
+            } catch (...) {
+            }
+        });
+    };
+    root->addChild(setValue);
+
+    auto resetValue = uTreeEntry();
+    resetValue->label = "Reset Value";
+    resetValue->click = [p]() {
+        p->value = p->defaultValue;
+    };
+    root->addChild(resetValue);
+
+    auto copyValue = uTreeEntry();
+    copyValue->label = "Copy Value";
+    copyValue->click = [p]() {
+        std::ostringstream ss;
+        ss << p->value;
+        SDL_SetClipboardText(ss.str().c_str());
+    };
+    root->addChild(copyValue);
+
+    auto modMatrix = uTreeEntry();
+    modMatrix->label = "Edit Modulation Matrix";
+    modMatrix->click = [this, p]() {
+        auto* ctxMenu = ContextMenu::get();
+        ctxMenu->keepOpenOnNextTreeLeafClick = true;
+        ctxMenu->active = true;
+        ctxMenu->window_id = SDL_GetWindowID(detached ? window : ne->getWindow());
+        ctxMenu->renderer = detached ? renderer : ne->getRenderer();
+        ctxMenu->dynamicTick = getModulationMatrixTicker(this, p);
+    };
+    root->addChild(modMatrix);
+
+    return root;
 }
 
 bool inside(float& mouseX, float& mouseY, SDL_FRect* rect) {
@@ -325,25 +831,30 @@ void Node::zoom(float amount) {
 }
 
 void Node::makeConnectionRects() {
+    const PortDisplayMode mode = nm ? nm->portDisplayMode : PortDisplayMode::RectLabels;
     float dy = 2;
-    float w = 10;
-    float h = 10;
+    float w = (mode == PortDisplayMode::RectLabels) ? 18.0f : 12.0f;
+    float h = (mode == PortDisplayMode::RectLabels) ? 64.0f : 12.0f;
 
     SDL_FRect connRect{
         dstRect.x + dstRect.w / 2 - inputs.connections.size() * w/2, dstRect.y - h - dy,
         w, h
     };
 
+    int inIndex = 0;
     for (auto conn : inputs.connections) {
         conn->rect = connRect;
+        conn->displayIndex = inIndex++;
         connRect.x += w;
     }
 
     connRect.x = dstRect.x + dstRect.w / 2 - outputs.connections.size() * w/2,
     connRect.y = dstRect.y + dstRect.h + dy;
 
+    int outIndex = 0;
     for (auto conn : outputs.connections) {
         conn->rect = connRect;
+        conn->displayIndex = outIndex++;
         connRect.x += w;
     }
 }
@@ -438,6 +949,7 @@ void Node::render() {
 }
 
 void Connection::render(SDL_Renderer* renderer, bool hover) {
+    const PortDisplayMode mode = nm ? nm->portDisplayMode : PortDisplayMode::RectLabels;
     SDL_Color c;
 
     switch (type) {
@@ -456,6 +968,48 @@ void Connection::render(SDL_Renderer* renderer, bool hover) {
     SDL_RenderFillRect(renderer, &rect);
     SDL_SetRenderDrawColor(renderer, 120,120,120,255);
     SDL_RenderRect(renderer, &rect);
+
+    if (fonts.mainFont) {
+        const std::string fallback = (mode == PortDisplayMode::SquareIDs)
+            ? std::to_string(id)
+            : (std::string(dir == Direction::input ? "Input " : "Output ") + std::to_string(id));
+        std::string text = label.empty() ? fallback : label;
+        if (text.size() > 8) {
+            text = text.substr(0, 8);
+        }
+        if (!text.empty()) {
+            SDL_Color textColor{10, 10, 10, 255};
+            SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, text.c_str(), 0, textColor);
+            if (surf) {
+                SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
+                if (tex) {
+                    const float maxW = rect.w * 0.86f;
+                    const float maxH = rect.h * 0.86f;
+                    const float baseScale = std::min(
+                        1.0f,
+                        std::min(maxW / static_cast<float>(surf->w),
+                                 maxH / static_cast<float>(surf->h))
+                    );
+                    const float scale = (mode == PortDisplayMode::SquareIDs)
+                        ? std::max(0.1f, baseScale)
+                        : std::max(0.1f, baseScale * labelScale);
+                    const float drawW = static_cast<float>(surf->w) * scale;
+                    const float drawH = static_cast<float>(surf->h) * scale;
+                    const float cx = rect.x + rect.w * 0.5f;
+                    const float cy = rect.y + rect.h * 0.5f;
+                    SDL_FRect textRect{cx - drawW * 0.5f, cy - drawH * 0.5f, drawW, drawH};
+                    if (mode == PortDisplayMode::RectLabels) {
+                        SDL_FPoint center{drawW * 0.5f, drawH * 0.5f};
+                        SDL_RenderTextureRotated(renderer, tex, nullptr, &textRect, -90.0, &center, SDL_FLIP_NONE);
+                    } else {
+                        SDL_RenderTexture(renderer, tex, nullptr, &textRect);
+                    }
+                    SDL_DestroyTexture(tex);
+                }
+                SDL_DestroySurface(surf);
+            }
+        }
+    }
 
     if (!is_connected || dir == Direction::output) return;
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
@@ -494,20 +1048,53 @@ void Node::update(int bufferSize, int sampleRate) {
     }
 
     inputs.bufferSize = bufferSize;
+    setup();
+}
+
+void Node::relinkInputs() {
+    inputs.bufferSize = bufferSize;
     for (auto c : inputs.connections) {
-        if (!c->is_connected) continue;
+        if (!c->is_connected) {
+            if (c->type == DataType::Waveform) {
+                c->buffer = nullptr;
+                c->bufferSize = bufferSize;
+            } else {
+                c->events = nullptr;
+            }
+            continue;
+        }
 
         auto n = nm->getNode(c->input_node);
+        if (!n) {
+            c->is_connected = false;
+            if (c->type == DataType::Waveform) {
+                c->buffer = nullptr;
+                c->bufferSize = bufferSize;
+            } else {
+                c->events = nullptr;
+            }
+            continue;
+        }
+
         auto ci = n->outputs.getConnection(c->input_connection);
+        if (!ci) {
+            c->is_connected = false;
+            if (c->type == DataType::Waveform) {
+                c->buffer = nullptr;
+                c->bufferSize = bufferSize;
+            } else {
+                c->events = nullptr;
+            }
+            continue;
+        }
 
         if (c->type == DataType::Waveform) {
             c->buffer = ci->buffer;
             c->bufferSize = bufferSize;
         } else {
-            c->events = ci->events; 
+            c->events = ci->events;
         }
     }
-    setup();
 }
 
 bool Node::depends(Node* d) {
@@ -594,12 +1181,16 @@ void Node::attach() {
 }
 
 void Node::handleWindowInput(SDL_Event& e) {
-    for (auto p : params) if (inPolygon(p->vx.data(), p->vy.data(), p->vx.size(), msX, msY)) p->handleInput(e);
-
     if (!detached) {
+        for (auto p : params) {
+            if (inPolygon(p->vx.data(), p->vy.data(), p->vx.size(), msX, msY)) {
+                p->handleInput(e);
+            }
+        }
         handleCustomInput(e);
+        return;
     }
-    
+
     if (detached && SDL_GetWindowFromID(getEventWindowID(e)) == window) {
         float gx, gy;
         SDL_GetGlobalMouseState(&gx, &gy);
@@ -607,6 +1198,44 @@ void Node::handleWindowInput(SDL_Event& e) {
         SDL_GetWindowPosition(window, &wx, &wy);
         msX = gx - wx;
         msY = gy - wy;
+
+        bool handled = inPolygon(vx, vy, vCount, msX, msY);
+        bool hoverFound = false;
+        for (auto conn : inputs.connections) {
+            if (MouseOn(&conn->rect)) {
+                hoverFound = true;
+                hoveredConnection = conn->id;
+                hoveredDirection = Direction::input;
+                break;
+            }
+        }
+        if (!hoverFound) {
+            for (auto conn : outputs.connections) {
+                if (MouseOn(&conn->rect)) {
+                    hoverFound = true;
+                    hoveredConnection = conn->id;
+                    hoveredDirection = Direction::output;
+                    break;
+                }
+            }
+        }
+        if (hoverFound) {
+            handled = true;
+        } else if (!handled) {
+            hoveredConnection = -1;
+        }
+
+        for (auto p : params) {
+            if (inPolygon(p->vx.data(), p->vy.data(), p->vx.size(), msX, msY)) {
+                p->handleInput(e);
+                handled = true;
+            }
+        }
+
+        if (handled && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+            clickMouse(e);
+        }
+
         handleCustomInput(e);
     }
 
