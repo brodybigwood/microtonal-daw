@@ -55,13 +55,13 @@ Node::Node(uint16_t id, NodeManager* nm, NodeType nt) :
 
 Node::~Node() {
     if (detached) {
-        if (window) {
-            SDL_DestroyWindow(window);
-            window = nullptr;
-        }
         if (renderer) {
             SDL_DestroyRenderer(renderer);
             renderer = nullptr;
+        }
+        if (window) {
+            SDL_DestroyWindow(window);
+            window = nullptr;
         }
         WindowHandler::instance()->removeWindow(this);
         detached = false;
@@ -573,8 +573,8 @@ void Node::clearTextures() {
 
 void Node::attach() {
     if (detached) {
-        if (window) SDL_DestroyWindow(window);
         if (renderer) SDL_DestroyRenderer(renderer);
+        if (window) SDL_DestroyWindow(window);
         WindowHandler::instance()->removeWindow(this);
     }
     if (texture_detached) SDL_DestroyTexture(texture_detached);
@@ -628,13 +628,13 @@ void Node::setNE(NodeEditor* ne) {
 
 void Node::resetNE() {
     if (detached) {
-        if (window) {
-            SDL_DestroyWindow(window);
-            window = nullptr;
-        }
         if (renderer) {
             SDL_DestroyRenderer(renderer);
             renderer = nullptr;
+        }
+        if (window) {
+            SDL_DestroyWindow(window);
+            window = nullptr;
         }
         WindowHandler::instance()->removeWindow(this);
     }

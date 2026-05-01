@@ -42,7 +42,7 @@ class Project : public Window {
 
         void load(std::string path = "");
 
-        void save();
+        void save(uint32_t triggerWindowID = 0, SDL_Renderer* triggerRenderer = nullptr);
 
         void createNote(int, fract, fract, float, TuningTable*, int, std::vector<int> managerPath = {});
 

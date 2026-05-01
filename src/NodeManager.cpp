@@ -91,6 +91,7 @@ void NodeManager::deSerialize(json j) {
         if (node) {
             nodes.push_back(node); 
             ids[node->id] = nodes.size() - 1;
+            if (ne) node->setNE(ne);
             std::cout << "[DBG_DESER]  node restored id=" << node->id << " type=" << static_cast<int>(node->nodeType) << std::endl;
         }
     }

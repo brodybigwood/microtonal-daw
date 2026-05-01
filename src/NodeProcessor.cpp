@@ -50,17 +50,34 @@ json NodeProcessor::serialize() const {
 }
 
 void NodeProcessor::deSerialize(const json& j) {
-    if (!manager) return;
+    if (!editor) return;
+
+    if (manager) {
+        manager->resetNE();
+        delete manager;
+        manager = nullptr;
+    }
+
+    manager = new NodeManager(project);
+    manager->setNE(editor);
     manager->deSerialize(j);
+
+    node = nullptr;
     for (auto* n : manager->getNodes()) {
         auto* p = dynamic_cast<PatcherNode*>(n);
         if (p) {
             setNode(p);
-            return;
+            break;
         }
     }
-    auto* root = dynamic_cast<PatcherNode*>(manager->addNodeNow(NodeType::Patcher, 140.0f, 140.0f));
-    setNode(root);
+    if (!node) {
+        auto* root = dynamic_cast<PatcherNode*>(manager->addNodeNow(NodeType::Patcher, 140.0f, 140.0f));
+        setNode(root);
+    }
+    auto* rootPatcher = dynamic_cast<PatcherNode*>(node);
+    if (rootPatcher && rootPatcher->ne && rootPatcher->renderer && !rootPatcher->detached) {
+        rootPatcher->detach();
+    }
 }
 
 void NodeProcessor::render() {

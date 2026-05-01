@@ -1,6 +1,7 @@
 #include "WindowHandler.h"
 #include "SDL_Events.h"
 #include "NodeEditor.h"
+#include "Node.h"
 #include <sstream>
 #include <iostream>
 #include <nlohmann/json.hpp>
@@ -129,7 +130,26 @@ bool WindowHandler::tick() {
         while(SDL_PollEvent(&e)) {
             eventHandled = true;
 
-            if (e.type == SDL_EVENT_QUIT || e.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
+            if (e.type == SDL_EVENT_QUIT) {
+                running = false;
+                break;
+            }
+            if (e.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
+                bool handledClose = false;
+                SDL_Window* closingWindow = SDL_GetWindowFromID(e.window.windowID);
+                if (closingWindow) {
+                    for (auto* w : windows) {
+                        if (!w || w->window != closingWindow) continue;
+                        if (auto* n = dynamic_cast<Node*>(w)) {
+                            if (n->detached) {
+                                n->attach();
+                                handledClose = true;
+                            }
+                        }
+                        break;
+                    }
+                }
+                if (handledClose) continue;
                 running = false;
                 break;
             }
@@ -147,17 +167,27 @@ bool WindowHandler::tick() {
                 }
             }
 
-            if (isCtrlPressed) {
-                if (e.type == SDL_EVENT_KEY_DOWN) {
+            if (e.type == SDL_EVENT_KEY_DOWN) {
+                const SDL_Keymod mods = SDL_GetModState();
+                const bool ctrlDown = (mods & SDL_KMOD_CTRL) != 0;
+                const bool shiftDown = (mods & SDL_KMOD_SHIFT) != 0;
+                if (ctrlDown) {
                     if (e.key.key == SDLK_Z) {
-                        if (isShiftPressed) {
+                        if (shiftDown) {
                             project->redo();
                         } else {
                             if (project->um->current == project->um->head) continue;
                             project->undo();
                         }
                     } else if (e.key.key == SDLK_S) {
-                        project->save();
+                        SDL_Renderer* eventRenderer = nullptr;
+                        for (auto* w : windows) {
+                            if (w && SDL_GetWindowFromID(e.key.windowID) == w->window) {
+                                eventRenderer = w->renderer;
+                                break;
+                            }
+                        }
+                        project->save(e.key.windowID, eventRenderer);
                     }
                 }
             }

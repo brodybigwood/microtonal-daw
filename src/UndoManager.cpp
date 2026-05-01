@@ -168,14 +168,19 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
         case CreateNote: {
             auto managerPath = j.value("managerPath", std::vector<int>{});
             auto nm = resolveManager(p, managerPath);
-            auto n = nm ? static_cast<ArrangerNode*>(nm->getNode(j["nodeID"])) : nullptr;
-            if (!n) {
+            auto n = nm ? dynamic_cast<ArrangerNode*>(nm->getNode(j["nodeID"])) : nullptr;
+            if (!n || !n->sl || !n->sl->em || !n->sl->em->sm) {
+                pa = new ProjectAction(p, NullAction);
+                break;
+            }
+            auto* scale = n->sl->em->sm->byID(j["scaleID"]);
+            if (!scale) {
                 pa = new ProjectAction(p, NullAction);
                 break;
             }
             auto cn = new CreateNoteAction(
                 p, managerPath, j["nodeID"], j["regionID"], fract::fromJSON(j["start"]), fract::fromJSON(j["length"]),
-                j["pitch"], n->sl->em->sm->byID(j["scaleID"])
+                j["pitch"], scale
             );
             cn->noteID = j["noteID"];
             pa = cn;
@@ -424,13 +429,13 @@ CreateNoteAction::CreateNoteAction(Project* p, std::vector<int> managerPath, int
         start(start),
         length(length),
         pitch(pitch),
-        scaleID(scale->id),
+        scaleID(scale ? scale->id : -1),
         nodeID(nodeID)
         {
 
         auto nm = resolveManager(p, this->managerPath);
-        auto n = nm ? static_cast<ArrangerNode*>(nm->getNode(nodeID)) : nullptr;
-        if (!n) {
+        auto n = nm ? dynamic_cast<ArrangerNode*>(nm->getNode(nodeID)) : nullptr;
+        if (!n || !n->sl || !n->sl->em || !n->sl->em->sm || this->scaleID < 0) {
             doAction = [](){};
             undoAction = [](){};
             return;

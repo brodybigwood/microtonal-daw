@@ -70,7 +70,7 @@ void Project::load(std::string path) {
     um->deSerialize(j["undoManager"], this);
 }
 
-void Project::save() {
+void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {
 
     auto save_l = [this] {
         std::filesystem::path folder(this->filepath);
@@ -90,16 +90,28 @@ void Project::save() {
         }
     };
 
+    const bool uiSaveRequested = (triggerWindowID != 0) || (triggerRenderer != nullptr);
+    if (filepath.empty() && !uiSaveRequested) {
+        std::cout << "[save] filepath is empty; use Ctrl+S in a node window to choose a save path." << std::endl;
+        return;
+    }
+
     if (filepath.empty()) {
         auto ctxMenu = ContextMenu::get();
 
         ctxMenu->active = true;
-        auto window = this->window;
-        ctxMenu->window_id = SDL_GetWindowID(window);
-        ctxMenu->renderer = this->renderer;
-        SDL_StartTextInput(window);
+        SDL_Window* dialogWindow = this->window;
+        if (triggerWindowID != 0) {
+            if (SDL_Window* eventWindow = SDL_GetWindowFromID(triggerWindowID)) {
+                dialogWindow = eventWindow;
+            }
+        }
+        SDL_Renderer* dialogRenderer = triggerRenderer ? triggerRenderer : this->renderer;
+        ctxMenu->window_id = dialogWindow ? SDL_GetWindowID(dialogWindow) : 0;
+        ctxMenu->renderer = dialogRenderer;
+        if (dialogWindow) SDL_StartTextInput(dialogWindow);
         int w = 0, h = 0;
-        SDL_GetWindowSize(window, &w, &h);
+        if (dialogWindow) SDL_GetWindowSize(dialogWindow, &w, &h);
         ctxMenu->locX = w * 0.5f;
         ctxMenu->locY = h * 0.5f;
 
