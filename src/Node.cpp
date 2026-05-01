@@ -234,6 +234,45 @@ std::function<bool(SDL_Event&)> getModulationMatrixTicker(Node* node, Parameter*
                 }
                 SDL_DestroySurface(addSurf);
             }
+
+            // Theoretical normalized parameter range across all possible modulator source values.
+            float minV = p->value;
+            float maxV = p->value;
+            for (auto* m : p->modulators) {
+                if (!m) continue;
+                float a = 0.0f;
+                float b = 0.0f;
+                if (m->centered) {
+                    a = -m->depth;
+                    b = m->depth;
+                } else {
+                    a = 0.0f;
+                    b = m->depth;
+                }
+                minV += std::min(a, b);
+                maxV += std::max(a, b);
+            }
+            minV = std::clamp(minV, 0.0f, 1.0f);
+            maxV = std::clamp(maxV, 0.0f, 1.0f);
+
+            std::ostringstream rs;
+            rs << std::fixed << std::setprecision(2) << minV << " .. " << maxV;
+            const std::string rangeText = "Range " + rs.str();
+            SDL_Surface* rangeSurf = TTF_RenderText_Blended(fonts.mainFont, rangeText.c_str(), 0, SDL_Color{0, 0, 0, 255});
+            if (rangeSurf) {
+                SDL_Texture* rangeTex = SDL_CreateTextureFromSurface(renderer, rangeSurf);
+                if (rangeTex) {
+                    SDL_FRect rangeRect{
+                        addBtn.x + addBtn.w + 12.0f,
+                        addBtn.y + (addBtn.h - rangeSurf->h) * 0.5f,
+                        static_cast<float>(rangeSurf->w),
+                        static_cast<float>(rangeSurf->h)
+                    };
+                    SDL_RenderTexture(renderer, rangeTex, nullptr, &rangeRect);
+                    SDL_DestroyTexture(rangeTex);
+                }
+                SDL_DestroySurface(rangeSurf);
+            }
         }
 
         return true;
@@ -251,6 +290,27 @@ json Node::serialize() {
     j["x"] = dstRect.x;
     j["y"] = dstRect.y;
     j["extra"] = extraSerialize();
+    j["params"] = json::array();
+    for (auto* p : params) {
+        j["params"].push_back(p ? p->value : 0.0f);
+    }
+    j["modulators"] = json::array();
+    for (size_t pi = 0; pi < params.size(); ++pi) {
+        auto* p = params[pi];
+        if (!p) continue;
+        for (auto* m : p->modulators) {
+            if (!m) continue;
+            json jm;
+            jm["paramIndex"] = pi;
+            jm["centered"] = m->centered;
+            jm["depth"] = m->depth;
+            jm["sourceConnectionID"] = m->sourceConnection ? m->sourceConnection->id : -1;
+            jm["sourceLabel"] = (m->sourceConnection && !m->sourceConnection->label.empty())
+                ? m->sourceConnection->label
+                : "";
+            j["modulators"].push_back(jm);
+        }
+    }
 
     return j;
 }
@@ -267,6 +327,48 @@ Node* Node::deSerialize(json j, NodeManager* nm) {
     n->move(j["x"], j["y"]);
 
     n->extraDeSerialize(j["extra"]);
+
+    if (j.contains("params")) {
+        const auto& jp = j["params"];
+        for (size_t i = 0; i < n->params.size() && i < jp.size(); ++i) {
+            n->params[i]->value = jp[i].get<float>();
+        }
+    }
+
+    if (j.contains("modulators")) {
+        for (const auto& jm : j["modulators"]) {
+            const size_t paramIndex = jm.value("paramIndex", static_cast<size_t>(std::numeric_limits<size_t>::max()));
+            if (paramIndex >= n->params.size()) continue;
+            auto* p = n->params[paramIndex];
+            if (!p) continue;
+
+            int sourceID = jm.value("sourceConnectionID", -1);
+            if (sourceID < 0) continue;
+
+            auto* c = new Connection;
+            c->nm = n->inputs.nm;
+            c->id = static_cast<uint16_t>(sourceID);
+            c->type = DataType::Waveform;
+            c->dir = Direction::input;
+            c->is_connected = false;
+            c->output_connection = c->id;
+            c->output_node = n->inputs.nodeID;
+            c->input_connection = -1;
+            c->input_node = -1;
+            c->events = nullptr;
+            c->buffer = nullptr;
+            c->bufferSize = 0;
+            c->label = jm.value("sourceLabel", std::string{});
+
+            n->inputs.connections.push_back(c);
+            n->inputs.id_pool.reserveID(c->id);
+            n->inputs.ids[c->id] = static_cast<uint16_t>(n->inputs.connections.size() - 1);
+
+            const bool centered = jm.value("centered", true);
+            const float depth = jm.value("depth", 0.5f);
+            p->addModulator(new Modulator(c->buffer, centered, depth, c));
+        }
+    }
     n->makeConnectionRects();
 
     return n;
@@ -970,12 +1072,15 @@ void Connection::render(SDL_Renderer* renderer, bool hover) {
     SDL_RenderRect(renderer, &rect);
 
     if (fonts.mainFont) {
-        const std::string fallback = (mode == PortDisplayMode::SquareIDs)
-            ? std::to_string(id)
-            : (std::string(dir == Direction::input ? "Input " : "Output ") + std::to_string(id));
-        std::string text = label.empty() ? fallback : label;
-        if (text.size() > 8) {
-            text = text.substr(0, 8);
+        std::string text;
+        if (mode == PortDisplayMode::SquareIDs) {
+            text = std::to_string(id);
+        } else {
+            const std::string fallback = std::string(dir == Direction::input ? "Input " : "Output ") + std::to_string(id);
+            text = label.empty() ? fallback : label;
+            if (text.size() > 8) {
+                text = text.substr(0, 8);
+            }
         }
         if (!text.empty()) {
             SDL_Color textColor{10, 10, 10, 255};

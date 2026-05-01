@@ -14,7 +14,11 @@ Modulator::Modulator(float*& source, bool centered, float depth, Connection* sou
 
 float Modulator::operator[](size_t i) {
     if (!source) return 0.0f;
-    return depth * (source[i] - 0.5 * centered);
+    if (centered) {
+        // Centered modulation maps source 0..1 to -1..1, scaled by depth.
+        return depth * (2.0f * source[i] - 1.0f);
+    }
+    return depth * source[i];
 }
 
 Parameter::Parameter(float value, std::pair<std::vector<float>, std::vector<float>> bound) :
