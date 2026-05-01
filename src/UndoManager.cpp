@@ -2,12 +2,15 @@
 #include "SDL_Events.h"
 #include "styles.h"
 #include "Project.h"
+#include "NodeProcessor.h"
 #include "nodes/nodetypes.h"
 #include "NodeManager.h"
 #include <unordered_map>
 
 static NodeManager* resolveManager(Project* p, const std::vector<int>& path) {
-    NodeManager* nm = p->nm;
+    if (!p || !p->processor) return nullptr;
+    NodeManager* nm = p->processor->getManager();
+    if (!nm) return nullptr;
     for (int patcherNodeID : path) {
         auto patcher = dynamic_cast<PatcherNode*>(nm->getNode(static_cast<uint16_t>(patcherNodeID)));
         if (!patcher || !patcher->mainManager) return nullptr;

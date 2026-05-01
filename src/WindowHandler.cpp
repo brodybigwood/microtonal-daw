@@ -150,10 +150,6 @@ bool WindowHandler::tick() {
             if (isCtrlPressed) {
                 if (e.type == SDL_EVENT_KEY_DOWN) {
                     if (e.key.key == SDLK_Z) {
-                        if (project && project->ne) {
-                            project->ne->cancelMovingNode();
-                            project->ne->leftClick = false;
-                        }
                         if (isShiftPressed) {
                             project->redo();
                         } else {

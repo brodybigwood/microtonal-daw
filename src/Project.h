@@ -14,10 +14,9 @@ namespace DAW {
     class Region;
 }
 
-class NodeManager;
-class NodeEditor;
 class TrackManager;
 class ElementManager;
+class NodeProcessor;
 
 class Project : public Window {
     public:
@@ -31,8 +30,7 @@ class Project : public Window {
 
         void handleWindowInput(SDL_Event&) override;
 
-        NodeManager* nm;
-        NodeEditor* ne;
+        NodeProcessor* processor;
 
         int sampleTime = 0;
 

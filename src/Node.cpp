@@ -522,7 +522,12 @@ void Node::resetProcessTree() {
 void Node::detach() {
     if (!detached) {
         window = SDL_CreateWindow(name.c_str(), TEX_W, TEX_H, SDL_WINDOW_RESIZABLE | SDL_WINDOW_UTILITY);
-        SDL_SetWindowParent(window, ne->window);
+        if (ne && ne->window) {
+            const SDL_WindowFlags hostFlags = SDL_GetWindowFlags(ne->window);
+            if ((hostFlags & SDL_WINDOW_HIDDEN) == 0) {
+                SDL_SetWindowParent(window, ne->window);
+            }
+        }
         renderer = SDL_CreateRenderer(window, NULL);
         WindowHandler::instance()->addWindow(this);
     }

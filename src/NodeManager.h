@@ -46,6 +46,8 @@ class NodeManager {
 
         std::vector<Node*> getNodes();
 
+        void markTopologyDirty();
+
         Project* project;
         
         void setNE(NodeEditor*);

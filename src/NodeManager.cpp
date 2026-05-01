@@ -131,7 +131,12 @@ NodeManager::~NodeManager() {
 std::vector<Node*> NodeManager::getNodes() {
     std::lock_guard<std::recursive_mutex> lock(graphMutex);
     return nodes;
-};
+}
+
+void NodeManager::markTopologyDirty() {
+    std::lock_guard<std::recursive_mutex> lock(graphMutex);
+    topologyDirty = true;
+}
 void NodeManager::makeNodeConnection(
         Node* srcNode, uint16_t srcConID,
         Node* dstNode, uint16_t dstConID
@@ -205,6 +210,8 @@ void NodeManager::process(float* output, int& bufferSize, int& numChannels, int&
     }
    
     outNode->output = output;
+    // Waveform device buffer follows outNode->inputs waveform connections in index order (see OutputNode::process).
+    // Event buses (if any): outNode->outputs event connections in array order — host / future bridges can read in order.
     outNode->processTree();
     outNode->resetProcessTree();
 

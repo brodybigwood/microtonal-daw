@@ -7,8 +7,9 @@
 #include "TrackManager.h"
 #include "ElementManager.h"
 #include "ScaleManager.h"
-#include "NodeManager.h"
-#include "NodeEditor.h"
+#include "NodeProcessor.h"
+#include "WindowHandler.h"
+#include "ContextMenu.h"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
@@ -18,42 +19,32 @@ int Project::beatsToSamples(float beats) {
 }
 
 void Project::process(float* input, float* output, int& bufferSize, int& numChannelsIn, int& numChannelsOut, int& sampleRate) {
-
-    nm->process(output, bufferSize, numChannelsOut, sampleRate);
+    if (processor) processor->process(input, output, numChannelsIn, numChannelsOut, bufferSize, sampleRate);
 };
 
 void Project::render() {
-    ne->tick();
+    if (processor) processor->render();
 }
 
 void Project::renderPresent() {
-    ne->renderPresent();
+    if (processor) processor->renderPresent();
 }
 
 Project::Project() {
-    window = SDL_CreateWindow("Project", 1920, 1080, SDL_WINDOW_RESIZABLE | SDL_WINDOW_UTILITY);
-    renderer = SDL_CreateRenderer(window, NULL);
-
-    WindowHandler::instance()->addWindow(this);
-
-    ne = new NodeEditor;
-    ne->window = window;
-    ne->renderer = renderer;
-
-    nm = new NodeManager(this);
-    nm->setNE(ne);
+    processor = new NodeProcessor(this);
+    window = processor ? processor->getHostWindow() : nullptr;
+    renderer = processor ? processor->getHostRenderer() : nullptr;
 
     um = new UndoManager(this);
 }
 
 void Project::handleWindowInput(SDL_Event& e) {
-    if (ne) ne->handleWindowInput(e);
+    if (processor) processor->handleWindowInput(e);
 }
 
 Project::~Project() {
     delete um;
-    delete nm;
-    delete ne;
+    delete processor;
 }
 
 void Project::load(std::string path) {
@@ -75,7 +66,7 @@ void Project::load(std::string path) {
     tempo = j.value("tempo", 120.0f);
 
 
-    nm->deSerialize(j["nodeManager"]);
+    if (processor && j.contains("nodeManager")) processor->deSerialize(j["nodeManager"]);
     um->deSerialize(j["undoManager"], this);
 }
 
@@ -89,7 +80,8 @@ void Project::save() {
         json j;
         j["tempo"] = this->tempo;
         
-        j["nodeManager"] = this->nm->serialize();
+        if (this->processor) j["nodeManager"] = this->processor->serialize();
+        else j["nodeManager"] = json::object();
         j["undoManager"] = this->um->serialize();
         
         std::ofstream outFile(file);
@@ -102,13 +94,14 @@ void Project::save() {
         auto ctxMenu = ContextMenu::get();
 
         ctxMenu->active = true;
-        auto window = ne->window;
+        auto window = this->window;
         ctxMenu->window_id = SDL_GetWindowID(window);
-        ctxMenu->renderer = ne->renderer;
+        ctxMenu->renderer = this->renderer;
         SDL_StartTextInput(window);
-    
-        ctxMenu->locX = ne->windowWidth / 2;
-        ctxMenu->locY = ne->windowHeight / 2;
+        int w = 0, h = 0;
+        SDL_GetWindowSize(window, &w, &h);
+        ctxMenu->locX = w * 0.5f;
+        ctxMenu->locY = h * 0.5f;
 
 
         ctxMenu->dynamicTick = getTextInputTicker([this, save_l] (std::string text) {

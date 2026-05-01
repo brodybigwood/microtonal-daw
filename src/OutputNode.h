@@ -2,6 +2,8 @@
 
 #include "Node.h"
 
+class PatcherNode;
+
 class OutputNode : public Node {
     public:
 
@@ -20,9 +22,20 @@ class OutputNode : public Node {
         void deSerialize(json);
         json serialize();
 
+        void setCoupledPatcher(PatcherNode*);
+
+        size_t countWaveformInputs() const;
+
     private:
         SDL_FRect addRect{20, 20, 48, 32};
         SDL_FRect removeRect{76, 20, 48, 32};
+        SDL_FRect evAddRect{20, 56, 48, 32};
+        SDL_FRect evRemoveRect{76, 56, 48, 32};
         void addChannel();
         void removeChannel();
+        void addEventOutputChannel();
+        void removeLastEventOutputChannel();
+        size_t countLocalEventInputs() const;
+
+        PatcherNode* coupledPatcher = nullptr;
 };

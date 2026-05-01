@@ -12,7 +12,12 @@ public:
 
     NodeEditor* mainEditor = nullptr;
     NodeManager* mainManager;
-    void ensureOutputChannels(size_t count);
+
+    /// Leading waveform outputs [0..count) mirror inner OutputNode inputs (same channel index).
+    void setLinkedWaveformChannelCount(size_t count);
+
+    /// Trailing event outputs (after waveform block) mirror inner OutputNode event outputs.
+    void setLinkedEventOutputCount(size_t count);
 
     void renderContent(SDL_Renderer*) override;
     void renderPresent() override;
@@ -31,4 +36,15 @@ public:
 
     void attachFinal() override;
     void detachFinal() override;
+
+private:
+    size_t leadingWaveformOutputCount() const;
+    void insertLinkedWaveformAtEndOfBlock();
+    void removeLastLinkedWaveformFromBlock();
+    void insertWaveformOutputAt(int index);
+    void removeWaveformOutputAt(int index);
+
+    size_t trailingEventOutputCount() const;
+    void appendEventOutput();
+    void removeLastTrailingEventOutput();
 };

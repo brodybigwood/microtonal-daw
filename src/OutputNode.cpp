@@ -5,8 +5,66 @@
 #include "styles.h"
 #include <iostream>
 #include <string>
+
+void OutputNode::setCoupledPatcher(PatcherNode* p) {
+    coupledPatcher = p;
+}
+
+size_t OutputNode::countWaveformInputs() const {
+    size_t n = 0;
+    for (auto* c : inputs.connections) {
+        if (c && c->type == DataType::Waveform) ++n;
+    }
+    return n;
+}
+
+size_t OutputNode::countLocalEventInputs() const {
+    size_t n = 0;
+    for (auto* c : inputs.connections) {
+        if (c && c->type == DataType::Events) ++n;
+    }
+    return n;
+}
+
+void OutputNode::addEventOutputChannel() {
+    auto* c = new Connection;
+    c->type = DataType::Events;
+    c->dir = Direction::input;
+    inputs.addConnection(c);
+    makeConnectionRects();
+    if (coupledPatcher) {
+        coupledPatcher->setLinkedEventOutputCount(countLocalEventInputs());
+        coupledPatcher->nm->markTopologyDirty();
+    }
+    nm->markTopologyDirty();
+}
+
+void OutputNode::removeLastEventOutputChannel() {
+    for (int i = static_cast<int>(inputs.connections.size()) - 1; i >= 0; --i) {
+        Connection* c = inputs.connections[static_cast<size_t>(i)];
+        if (c->type != DataType::Events) continue;
+        if (c->is_connected) return;
+        inputs.id_pool.releaseID(c->id);
+        inputs.ids.erase(c->id);
+        inputs.connections.erase(inputs.connections.begin() + i);
+        delete c;
+        inputs.ids.clear();
+        for (size_t j = 0; j < inputs.connections.size(); ++j) {
+            inputs.ids[inputs.connections[j]->id] = static_cast<uint16_t>(j);
+        }
+        makeConnectionRects();
+        if (coupledPatcher) {
+            coupledPatcher->setLinkedEventOutputCount(countLocalEventInputs());
+            coupledPatcher->nm->markTopologyDirty();
+        }
+        nm->markTopologyDirty();
+        return;
+    }
+}
+
 OutputNode::OutputNode(NodeManager* nm) : Node(0, nm, NodeType::Count) {
-    for(int i = 0; i < 2; i++) {
+    const int initialChannels = nm->managerPath.empty() ? 2 : 0;
+    for (int i = 0; i < initialChannels; i++) {
         Connection* c = new Connection;
         c->type = DataType::Waveform;
         c->dir = Direction::input;
@@ -17,17 +75,18 @@ OutputNode::OutputNode(NodeManager* nm) : Node(0, nm, NodeType::Count) {
 }
 
 void OutputNode::process() {
-    for(int i = 0; i < numChannels; i++) {
-        if(i > inputs.connections.size() - 1) return;
-        Connection* c = inputs.connections[i];
-        
-        if(!c->is_connected) {
-            std::memset(output + i*bufferSize, 0, bufferSize * sizeof(float));
-            continue;
+    int wi = 0;
+    for (auto* c : inputs.connections) {
+        if (!c || c->type != DataType::Waveform) continue;
+        if (wi >= numChannels) return;
+
+        if (!c->is_connected) {
+            std::memset(output + wi * bufferSize, 0, bufferSize * sizeof(float));
+        } else {
+            float* inputBuffer = c->buffer;
+            std::memcpy(output + wi * bufferSize, inputBuffer, bufferSize * sizeof(float));
         }
-        
-        float* inputBuffer = c->buffer;
-        std::memcpy(output + i*bufferSize, inputBuffer, bufferSize * sizeof(float));
+        ++wi;
     }
 }
 
@@ -51,7 +110,7 @@ void OutputNode::renderContent(SDL_Renderer* renderer) {
     drawButton(removeRect, false);
 
     SDL_Color textColor{0, 0, 0, 255};
-    std::string label = "ch: " + std::to_string(inputs.connections.size());
+    std::string label = "ch: " + std::to_string(countWaveformInputs());
     SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, label.c_str(), 0, textColor);
     if (surf) {
         SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
@@ -59,6 +118,18 @@ void OutputNode::renderContent(SDL_Renderer* renderer) {
         SDL_RenderTexture(renderer, tex, nullptr, &rect);
         SDL_DestroyTexture(tex);
         SDL_DestroySurface(surf);
+    }
+
+    drawButton(evAddRect, true);
+    drawButton(evRemoveRect, false);
+    std::string evLabel = "ev: " + std::to_string(countLocalEventInputs());
+    SDL_Surface* evSurf = TTF_RenderText_Blended(fonts.mainFont, evLabel.c_str(), 0, textColor);
+    if (evSurf) {
+        SDL_Texture* evTex = SDL_CreateTextureFromSurface(renderer, evSurf);
+        SDL_FRect evTextRect{130, 60, static_cast<float>(evSurf->w), static_cast<float>(evSurf->h)};
+        SDL_RenderTexture(renderer, evTex, nullptr, &evTextRect);
+        SDL_DestroyTexture(evTex);
+        SDL_DestroySurface(evSurf);
     }
 }
 
@@ -74,6 +145,10 @@ void OutputNode::handleWindowInput(SDL_Event& e) {
         addChannel();
     } else if (inside(removeRect)) {
         removeChannel();
+    } else if (inside(evAddRect)) {
+        addEventOutputChannel();
+    } else if (inside(evRemoveRect)) {
+        removeLastEventOutputChannel();
     }
 }
 
@@ -86,17 +161,27 @@ json OutputNode::serialize() {
     j["x"] = dstRect.x;
     j["y"] = dstRect.y;
     j["zoomRatio"] = zoomRatio;
-    j["channels"] = inputs.connections.size();
+    j["channels"] = countWaveformInputs();
     j["inputConnectionIDs"] = json::array();
     for (auto* c : inputs.connections) {
-        j["inputConnectionIDs"].push_back(c->id);
+        if (c->type == DataType::Waveform) {
+            j["inputConnectionIDs"].push_back(c->id);
+        }
+    }
+
+    j["eventInputConnectionIDs"] = json::array();
+    for (auto* c : inputs.connections) {
+        if (c->type == DataType::Events) {
+            j["eventInputConnectionIDs"].push_back(c->id);
+        }
     }
 
     return j;
 }
 
 void OutputNode::deSerialize(json j) {
-    int targetChannels = j.value("channels", 2);
+    const int defaultCh = nm->managerPath.empty() ? 2 : 0;
+    int targetChannels = j.value("channels", defaultCh);
     std::vector<uint16_t> targetIDs;
     if (j.contains("inputConnectionIDs")) {
         for (auto id : j["inputConnectionIDs"]) {
@@ -132,6 +217,30 @@ void OutputNode::deSerialize(json j) {
         inputs.ids[c->id] = inputs.connections.size() - 1;
         inputs.id_pool.reserveID(c->id);
     }
+
+    std::vector<uint16_t> eventTargetIDs;
+    if (j.contains("eventInputConnectionIDs")) {
+        for (auto id : j["eventInputConnectionIDs"]) {
+            eventTargetIDs.push_back(id.get<uint16_t>());
+        }
+    }
+    for (auto id : eventTargetIDs) {
+        auto* c = new Connection;
+        c->nm = inputs.nm;
+        c->id = id;
+        c->type = DataType::Events;
+        c->dir = Direction::input;
+        c->is_connected = false;
+        c->output_connection = c->id;
+        c->output_node = inputs.nodeID;
+        c->input_connection = -1;
+        c->input_node = -1;
+        c->events = nullptr;
+        c->buffer = nullptr;
+        inputs.connections.push_back(c);
+        inputs.ids[c->id] = inputs.connections.size() - 1;
+        inputs.id_pool.reserveID(c->id);
+    }
     makeConnectionRects();
 
     zoom(j["zoomRatio"].get<float>()/zoomRatio);
@@ -139,38 +248,56 @@ void OutputNode::deSerialize(json j) {
 }
 
 void OutputNode::addChannel() {
-    auto c = new Connection;
+    const size_t pos = countWaveformInputs();
+    auto* c = new Connection;
+    c->nm = inputs.nm;
+    c->id = inputs.id_pool.newID();
     c->type = DataType::Waveform;
     c->dir = Direction::input;
-    inputs.addConnection(c);
-    makeConnectionRects();
-
-    for (auto n : project->nm->getNodes()) {
-        auto p = dynamic_cast<PatcherNode*>(n);
-        if (p && p->mainManager == nm) {
-            p->ensureOutputChannels(inputs.connections.size());
-            break;
-        }
+    c->is_connected = false;
+    c->output_connection = c->id;
+    c->output_node = inputs.nodeID;
+    c->input_connection = -1;
+    c->input_node = -1;
+    c->events = nullptr;
+    c->buffer = nullptr;
+    inputs.connections.insert(inputs.connections.begin() + static_cast<ptrdiff_t>(pos), c);
+    inputs.ids.clear();
+    for (size_t j = 0; j < inputs.connections.size(); ++j) {
+        inputs.ids[inputs.connections[j]->id] = static_cast<uint16_t>(j);
     }
+    makeConnectionRects();
+    if (coupledPatcher) {
+        coupledPatcher->setLinkedWaveformChannelCount(countWaveformInputs());
+        coupledPatcher->nm->markTopologyDirty();
+    }
+    nm->markTopologyDirty();
 }
 
 void OutputNode::removeChannel() {
-    if (inputs.connections.size() <= 1) return;
-    auto* c = inputs.connections.back();
-    if (c->is_connected) return;
+    const size_t minWf = nm->managerPath.empty() ? 1 : 0;
+    if (countWaveformInputs() <= minWf) return;
 
-    inputs.id_pool.releaseID(c->id);
-    inputs.ids.erase(c->id);
-    inputs.connections.pop_back();
-    delete c;
-    makeConnectionRects();
+    for (int i = static_cast<int>(inputs.connections.size()) - 1; i >= 0; --i) {
+        Connection* c = inputs.connections[static_cast<size_t>(i)];
+        if (c->type != DataType::Waveform) continue;
+        if (c->is_connected) return;
 
-    for (auto n : project->nm->getNodes()) {
-        auto p = dynamic_cast<PatcherNode*>(n);
-        if (p && p->mainManager == nm) {
-            p->ensureOutputChannels(inputs.connections.size());
-            break;
+        inputs.id_pool.releaseID(c->id);
+        inputs.ids.erase(c->id);
+        inputs.connections.erase(inputs.connections.begin() + i);
+        delete c;
+        inputs.ids.clear();
+        for (size_t j = 0; j < inputs.connections.size(); ++j) {
+            inputs.ids[inputs.connections[j]->id] = static_cast<uint16_t>(j);
         }
+        makeConnectionRects();
+        if (coupledPatcher) {
+            coupledPatcher->setLinkedWaveformChannelCount(countWaveformInputs());
+            coupledPatcher->nm->markTopologyDirty();
+        }
+        nm->markTopologyDirty();
+        return;
     }
 }
 
