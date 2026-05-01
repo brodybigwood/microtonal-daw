@@ -361,6 +361,33 @@ void PatcherNode::renderContent(SDL_Renderer*) {
         filledPolygonRGBA(renderer, vx, vy, vCount, 50, 50, 50, 255);
         aapolygonRGBA(renderer, vx, vy, vCount, 0, 0, 0, 255);
 
+        // Embedded icon: stylized patch-bay drawn directly on the dark node background.
+        SDL_FRect iconRect{TEX_W * 0.20f, TEX_H * 0.16f, TEX_W * 0.60f, TEX_H * 0.52f};
+        auto drawJack = [&](float x, float y, SDL_Color c) {
+            const float r = 26.0f;
+            filledCircleRGBA(renderer, x, y, r, c.r, c.g, c.b, c.a);
+            circleRGBA(renderer, x, y, r, 255, 255, 255, 255);
+            filledCircleRGBA(renderer, x, y, 9.0f, 245, 245, 245, 255);
+        };
+
+        const float lx = iconRect.x + iconRect.w * 0.16f;
+        const float rx = iconRect.x + iconRect.w * 0.84f;
+        const float y0 = iconRect.y + iconRect.h * 0.33f;
+        const float y1 = iconRect.y + iconRect.h * 0.67f;
+
+        drawJack(lx, y0, SDL_Color{120, 255, 120, 255});
+        drawJack(lx, y1, SDL_Color{120, 255, 120, 255});
+        drawJack(rx, y0, SDL_Color{255, 120, 120, 255});
+        drawJack(rx, y1, SDL_Color{255, 120, 120, 255});
+
+        SDL_SetRenderDrawColor(renderer, 245, 245, 245, 255);
+        const int cableT = 3;
+        for (int i = -cableT; i <= cableT; ++i) {
+            SDL_RenderLine(renderer, lx + 26.0f, y0 + i, rx - 26.0f, y1 + i);
+            SDL_RenderLine(renderer, lx + 26.0f, y1 + i, rx - 26.0f, y0 + i);
+            SDL_RenderLine(renderer, lx + 26.0f, y0 + i, rx - 26.0f, y0 + i);
+        }
+
         renderParams(renderer);
     }
 }

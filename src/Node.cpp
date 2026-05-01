@@ -388,22 +388,38 @@ void Node::renderContent(SDL_Renderer* renderer) {
 }
 
 void Node::renderContentHelper(SDL_Renderer* renderer) {
-    SDL_Texture* tex;
-    if (detached) tex = texture_detached;
-    else tex = texture;
-    if (!tex || !ne || !ne->renderer) return;
-
-    auto target = SDL_GetRenderTarget(renderer);
-    SDL_SetRenderTarget(renderer, tex);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-    SDL_RenderClear(renderer);
-    renderContent(renderer);
-    SDL_SetRenderTarget(renderer, target);
+    if (!ne || !ne->renderer) return;
     SDL_FRect tRect{0,0,TEX_W,TEX_H};
-    SDL_RenderTexture(ne->renderer, tex, &tRect, &dstRect);
 
-    if (detached) {
-        SDL_RenderTexture(renderer, tex, &tRect, NULL);
+    if (!detached) {
+        if (!texture) return;
+        auto target = SDL_GetRenderTarget(renderer);
+        SDL_SetRenderTarget(renderer, texture);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+        SDL_RenderClear(renderer);
+        renderContent(renderer);
+        SDL_SetRenderTarget(renderer, target);
+        SDL_RenderTexture(ne->renderer, texture, &tRect, &dstRect);
+        return;
+    }
+
+    // Detached mode: render live content to detached texture/window.
+    if (texture_detached) {
+        auto target = SDL_GetRenderTarget(renderer);
+        SDL_SetRenderTarget(renderer, texture_detached);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+        SDL_RenderClear(renderer);
+        renderContent(renderer);
+        SDL_SetRenderTarget(renderer, target);
+        SDL_RenderTexture(renderer, texture_detached, &tRect, NULL);
+    }
+
+    // Embedded view: keep drawing frozen snapshot from the last attached frame.
+    if (texture) {
+        SDL_RenderTexture(ne->renderer, texture, &tRect, &dstRect);
+    } else {
+        SDL_SetRenderDrawColor(ne->renderer, 80, 80, 80, 255);
+        SDL_RenderFillRect(ne->renderer, &dstRect);
     }
 }
 
