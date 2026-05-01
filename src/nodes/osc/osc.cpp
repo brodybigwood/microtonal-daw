@@ -1,7 +1,7 @@
 #include "osc.h"
 #include <cmath>
 #include <iostream>
-#include "AudioManager.h"
+#include <algorithm>
 
 OscillatorNode::OscillatorNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::Oscillator) {
     output0 = new Connection;
@@ -18,6 +18,11 @@ OscillatorNode::OscillatorNode(uint16_t id, NodeManager* nm) : Node(id, nm, Node
     inputN->type = DataType::Events;
     inputN->dir = Direction::input;
     inputs.addConnection(inputN);
+
+    inputAmp = new Connection;
+    inputAmp->type = DataType::Waveform;
+    inputAmp->dir = Direction::input;
+    inputs.addConnection(inputAmp);
 
     params.push_back(&volume);
 }
@@ -81,34 +86,23 @@ void OscillatorNode::process() {
         std::memset(b1, 0, bufferSize * sizeof(float));
     }
 
+    const float* ampBuffer = nullptr;
+    if (inputAmp && inputAmp->is_connected && inputAmp->buffer) {
+        ampBuffer = inputAmp->buffer;
+    }
+
     for (int i = 0; i < NUM_VOICES; i++) {
         auto& voice = voices[i];
         if (!voice.active) continue;
-        voice.process(b0, b1, bufferSize, sampleRate, volume);
+        voice.process(b0, b1, bufferSize, sampleRate, volume, ampBuffer);
     }
 }
 
 void OscillatorNode::setup() {
-    for (int i = 0; i < NUM_VOICES; ++i) {
-        auto& voice = voices[i];
-        voice.update();
-    }
 }
 
-void Voice::process(float* out0, float* out1, int& bufferSize, int& sampleRate, Parameter& volume) {
-
-    const int limit = MAX_ADSR * sampleRate;
-    const int attackSamples = attack * sampleRate;
-    const int decaySamples = decay * sampleRate;
-    const int releaseSamples = release * sampleRate;
-    const int decayEnd = attackSamples + decaySamples;
-
-    float rtr = 1.0f / releaseSamples;
-
+void Voice::process(float* out0, float* out1, int& bufferSize, int& sampleRate, Parameter& volume, const float* ampIn) {
     for (int i = 0; i < bufferSize; i++) {
-
-        if (releaseSamples >= limit) return;
-
         if (wait_on > 0) {
             wait_on -=1;
             continue;
@@ -118,24 +112,13 @@ void Voice::process(float* out0, float* out1, int& bufferSize, int& sampleRate, 
             wait_off -=1;
         }
 
-        if (!wait_off && releaseTime == -1) { // only noteoff triggers release
-            releaseTime = samplesPassed;
-            releaseLevel = adsr[samplesPassed];
+        if (wait_off == 0) {
+            reset();
+            return;
         }
 
-        float adsrLevel;
-        if (releaseTime != -1) {
-            if (samplesPassed >= releaseTime + releaseSamples) {
-                reset();
-                return;
-            }
-            // release gain, minus ( time since release, divided by release length, times release gain
-            adsrLevel = releaseLevel - ((samplesPassed - releaseTime) * rtr * releaseLevel);
-        } else adsrLevel = adsr[samplesPassed];
-
-        if (!(wait_off == -1 && releaseTime == decaySamples && releaseTime == -1)) samplesPassed++;
-
-        float smp = sin(phase) * adsrLevel * volume[i];    
+        const float extAmp = ampIn ? std::clamp(ampIn[i], 0.0f, 1.0f) : 1.0f;
+        float smp = sin(phase) * volume[i] * extAmp;
 
         if (out0) out0[i] += smp;
         if (out1) out1[i] += smp;
@@ -152,42 +135,7 @@ void Voice::reset() {
     noteId = -1;   
     wait_on = 0;
     wait_off = -1;
-    samplesPassed = 0;
-    releaseTime = -1;
 }
 
 Voice::Voice() {
-    update();
-}
-
-Voice::~Voice() {
-    if (adsr) delete[] adsr;
-}
-
-void Voice::updateADSR() {
-    const int& sampleRate = AudioManager::instance()->sampleRate;
-    const int limit = MAX_ADSR * sampleRate;
-    const int attackSamples = attack * sampleRate;
-    const int decaySamples = decay * sampleRate;
-    const int releaseSamples = release * sampleRate;
-
-    const int decayEnd = attackSamples + decaySamples;
-    const int releaseEnd = decayEnd + releaseSamples;
-    for (int i = 0; i < limit; i++) {
-        if (i < attackSamples) {
-            adsr[i] = (float)i / attackSamples;
-        } else if (i < decayEnd) {
-            adsr[i] = 1.0f - (1.0f - sustain) * (float)(i - attackSamples) / decaySamples;
-        } else if (i < releaseEnd) {
-            adsr[i] = sustain - sustain * (float)(i - decayEnd) / releaseSamples;
-        } else {
-            adsr[i] = 0.0f;
-        }
-    }
-}
-
-void Voice::update() {
-    if (adsr) delete[] adsr;
-    adsr = new float[MAX_ADSR * AudioManager::instance()->sampleRate];
-    updateADSR();
 }

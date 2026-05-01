@@ -6,6 +6,8 @@ enum NodeType {
     Delay,
     Panner,
     Filter,
+    Envelope,
+    Visualizer,
     Patcher,
     Count // for iteration
 };

@@ -2,12 +2,9 @@
 
 #include "Node.h"
 #define NUM_VOICES 32
-#define MAX_ADSR 30 // 30 seconds
 
 struct Voice {
     Voice();
-   ~Voice();
-    void update();
 
     bool active = false;
     float frequency;
@@ -16,21 +13,7 @@ struct Voice {
     float phase = 0;
     int wait_on = 0;
     int wait_off = -1;
-    void process (float* out0, float* out1, int& bufferSize, int& sampleRate, Parameter& vol); //stereo out
-
-    int samplesPassed = 0; // how many samples have passed since activation
-
-    // adsr in seconds
-    float attack = 0.1;
-    float decay = 2;
-    float sustain = 0.5; // sustain level out of 1.0
-    float release = 0.3;
-
-    int releaseTime = -1;
-    float releaseLevel;
-
-    float* adsr = nullptr;
-    void updateADSR();
+    void process(float* out0, float* out1, int& bufferSize, int& sampleRate, Parameter& vol, const float* ampIn); // stereo out
 };
 
 
@@ -40,6 +23,7 @@ class OscillatorNode : public Node {
 
 
         Connection* inputN;
+        Connection* inputAmp;
         Connection* output0;
         Connection* output1;
         

@@ -6,6 +6,8 @@
 #include "nodes/splitter/splitter.h"
 #include "nodes/panner/panner.h"
 #include "nodes/filter/filter.h"
+#include "nodes/envelope/envelope.h"
+#include "nodes/visualizer/visualizer.h"
 #include "nodes/arranger/arranger.h"
 #include "nodes/patcher/patcher.h"
 
@@ -17,6 +19,8 @@ inline std::string NodeTypeStr[] = {
     "Delay",
     "Panner",
     "Filter",
+    "Envelope",
+    "Visualizer",
     "Patcher"
 };
 
@@ -36,6 +40,10 @@ inline Node* byType(NodeType t, int id, NodeManager* nm) {
             return new PannerNode(id, nm);
         case NodeType::Filter:
             return new FilterNode(id, nm);
+        case NodeType::Envelope:
+            return new EnvelopeNode(id, nm);
+        case NodeType::Visualizer:
+            return new VisualizerNode(id, nm);
         case NodeType::Patcher:
             return new PatcherNode(id, nm);
         default:
