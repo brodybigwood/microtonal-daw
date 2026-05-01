@@ -167,7 +167,14 @@ void Node::clickMouse(SDL_Event& e) {
         auto time = SDL_GetTicks();
         auto interval = time - lastLeftClick;
         lastLeftClick = time;
-        if(interval < DCT) {
+        bool overParam = false;
+        for (auto* p : params) {
+            if (inPolygon(p->vx.data(), p->vy.data(), p->vx.size(), msX, msY)) {
+                overParam = true;
+                break;
+            }
+        }
+        if(interval < DCT && !overParam && !blocksDoubleClick(msX, msY)) {
             if (detached) attach();
             else detach();
             ne->releaseMovingNode();

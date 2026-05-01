@@ -5,11 +5,14 @@
 #include "Project.h"
 
 #include <iostream>
+#include <limits>
 #include "nodes/nodetypes.h"
 
 NodeManager::NodeManager(Project* p, std::vector<int> managerPath) : project(p), managerPath(std::move(managerPath)) {
     outNode = new OutputNode(this);
+    inNode = new InputNode(this);
     id_pool.reserveID(0); // id of outputnode
+    id_pool.reserveID(1); // id of inputnode
     topologyDirty = true;
 }
 
@@ -18,6 +21,12 @@ void NodeManager::setNE(NodeEditor* ne) {
     this->ne = ne;
     ne->nm = this;
     outNode->setNE(ne);
+    inNode->setNE(ne);
+    int ww = ne->windowWidth;
+    int wh = ne->windowHeight;
+    if (ne->window) SDL_GetWindowSize(ne->window, &ww, &wh);
+    outNode->placeDefaultByWindowSize(static_cast<float>(ww), static_cast<float>(wh));
+    inNode->placeDefaultByWindowSize(static_cast<float>(ww), static_cast<float>(wh));
     for (auto n : nodes) n->setNE(ne);
 }
 
@@ -26,6 +35,7 @@ void NodeManager::resetNE() {
     if (ne) ne->nm = nullptr;
     ne = nullptr;
     outNode->resetNE();
+    inNode->resetNE();
     for (auto n : nodes) n->resetNE();
 }
 
@@ -38,6 +48,7 @@ json NodeManager::serialize() {
     j["connections"] = json::array();
 
     j["outNode"] = outNode->serialize();
+    j["inNode"] = inNode->serialize();
 
     auto serializeConnections = [&j] (Node* n) {
         for (auto c : n->inputs.connections) {
@@ -56,6 +67,7 @@ json NodeManager::serialize() {
     };
 
     serializeConnections(outNode);
+    serializeConnections(inNode);
     for (auto n : nodes) {
         serializeConnections(n);
         j["nodes"].push_back(n->serialize());
@@ -84,16 +96,22 @@ void NodeManager::deSerialize(json j) {
     }
     
     outNode->deSerialize(j["outNode"]);
+    if (j.contains("inNode")) inNode->deSerialize(j["inNode"]);
     std::cout << "[DBG_DESER]  outNode inputs=" << outNode->inputs.connections.size() << std::endl;
 
     for (auto s : j["connections"]) {
         Node* dstNode;
         int dstNodeID = s["dstNodeID"];
-        if (dstNodeID) dstNode = getNode(dstNodeID);
-        else dstNode = outNode;
+        if (dstNodeID == 0) dstNode = outNode;
+        else if (dstNodeID == 1) dstNode = inNode;
+        else dstNode = getNode(dstNodeID);
         
         auto dstConID = s["dstConID"];
-        auto srcNode = getNode(s["srcNodeID"]);
+        int srcNodeID = s["srcNodeID"];
+        Node* srcNode = nullptr;
+        if (srcNodeID == 0) srcNode = outNode;
+        else if (srcNodeID == 1) srcNode = inNode;
+        else srcNode = getNode(srcNodeID);
         auto srcConID = s["srcConID"];
         std::cout << "[DBG_DESER]  replay conn srcNode=" << s["srcNodeID"] << " srcCon=" << srcConID
                   << " -> dstNode=" << dstNodeID << " dstCon=" << dstConID
@@ -113,6 +131,8 @@ void NodeManager::deSerialize(json j) {
 
 Node* NodeManager::getNode(uint16_t id) {
     std::lock_guard<std::recursive_mutex> lock(graphMutex);
+    if (id == 0) return outNode;
+    if (id == 1) return inNode;
     auto it = ids.find(id);
     if (it == ids.end()) return nullptr;
     return nodes[it->second];
@@ -124,6 +144,8 @@ NodeManager::~NodeManager() {
     for(auto n : nodes) {
         delete n;
     }
+    delete outNode;
+    delete inNode;
 
     nodes.clear();
 }
@@ -155,8 +177,22 @@ void NodeManager::severConnection(Connection* c) {
         srcNodeID = c->input_node;
         srcConID = c->input_connection;
     } else {
-        srcNodeID = 0;
+        srcNodeID = std::numeric_limits<uint16_t>::max();
         srcConID = c->id;
+        for (auto oc : outNode->outputs.connections) {
+            if (oc == c) {
+                srcNodeID = 0;
+                break;
+            }
+        }
+        if (srcNodeID == std::numeric_limits<uint16_t>::max()) {
+            for (auto oc : inNode->outputs.connections) {
+                if (oc == c) {
+                    srcNodeID = 1;
+                    break;
+                }
+            }
+        }
         for (auto n : nodes) {
             for (auto oc : n->outputs.connections) {
                 if (oc == c) {
@@ -164,9 +200,9 @@ void NodeManager::severConnection(Connection* c) {
                     break;
                 }
             }
-            if (srcNodeID) break;
+            if (srcNodeID != std::numeric_limits<uint16_t>::max()) break;
         }
-        if (!srcNodeID) return;
+        if (srcNodeID == std::numeric_limits<uint16_t>::max()) return;
         dstNodeID = c->output_node;
         dstConID = c->output_connection;
     }
@@ -201,6 +237,7 @@ void NodeManager::process(float* output, int& bufferSize, int& numChannels, int&
     }
 
     if(update || topologyDirty) {
+        inNode->update(bufferSize, sampleRate);
         for(auto node : nodes) {
             node->update(bufferSize, sampleRate);
         }
@@ -304,8 +341,12 @@ void NodeManager::removeNodeNow(uint16_t id) {
 
 void NodeManager::makeNodeConnectionNow(uint16_t srcNodeID, uint16_t srcConID, uint16_t dstNodeID, uint16_t dstConID) {
     std::lock_guard<std::recursive_mutex> lock(graphMutex);
-    auto srcNode = getNode(srcNodeID);
-    Node* dstNode = dstNodeID ? getNode(dstNodeID) : outNode;
+    Node* srcNode = (srcNodeID == 0) ? static_cast<Node*>(outNode)
+                    : (srcNodeID == 1) ? static_cast<Node*>(inNode)
+                    : getNode(srcNodeID);
+    Node* dstNode = (dstNodeID == 0) ? static_cast<Node*>(outNode)
+                    : (dstNodeID == 1) ? static_cast<Node*>(inNode)
+                    : getNode(dstNodeID);
     if (!srcNode || !dstNode) {
         std::cout << "[DBG_DESER] makeNodeConnectionNow skip missing node src=" << srcNodeID << " dst=" << dstNodeID << std::endl;
         return;
@@ -346,8 +387,12 @@ void NodeManager::makeNodeConnectionNow(uint16_t srcNodeID, uint16_t srcConID, u
 
 void NodeManager::severConnectionNow(uint16_t srcNodeID, uint16_t srcConID, uint16_t dstNodeID, uint16_t dstConID) {
     std::lock_guard<std::recursive_mutex> lock(graphMutex);
-    auto srcNode = getNode(srcNodeID);
-    Node* dstNode = dstNodeID ? getNode(dstNodeID) : outNode;
+    Node* srcNode = (srcNodeID == 0) ? static_cast<Node*>(outNode)
+                    : (srcNodeID == 1) ? static_cast<Node*>(inNode)
+                    : getNode(srcNodeID);
+    Node* dstNode = (dstNodeID == 0) ? static_cast<Node*>(outNode)
+                    : (dstNodeID == 1) ? static_cast<Node*>(inNode)
+                    : getNode(dstNodeID);
     if (!srcNode || !dstNode) return;
 
     auto srcCon = srcNode->outputs.getConnection(srcConID);
@@ -370,6 +415,8 @@ void NodeManager::moveNodeNow(uint16_t nodeID, float x, float y) {
     Node* node = nullptr;
     if (nodeID == 0) {
         node = outNode;
+    } else if (nodeID == 1) {
+        node = inNode;
     } else {
         node = getNode(nodeID);
     }

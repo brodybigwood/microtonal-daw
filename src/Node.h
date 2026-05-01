@@ -113,6 +113,7 @@ class Node : public Window {
         uint32_t lastLeftClick;
         bool handleInput(SDL_Event&);
         virtual bool handleCustomInput(SDL_Event&) { return false; }
+        virtual bool blocksDoubleClick(float, float) const { return false; }
         void clickMouse(SDL_Event&);
 
         std::shared_ptr<TreeEntry> getConnectionMenu(Connection*);

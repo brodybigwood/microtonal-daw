@@ -13,6 +13,9 @@ void NodeEditor::retach() {
         else n->attach();
         n->clearTextures();
     }
+    if (nm->inNode->detached) nm->inNode->detach();
+    else nm->inNode->attach();
+    nm->inNode->clearTextures();
     if (nm->outNode->detached) nm->outNode->detach();
     else nm->outNode->attach();
     nm->outNode->clearTextures();
@@ -188,6 +191,7 @@ void NodeEditor::renderPresent() {
     for (auto n : nm->getNodes()) {
         n->renderPresent();
     }
+    nm->inNode->renderPresent();
     SDL_RenderPresent(renderer);
 }
 
@@ -204,6 +208,7 @@ void NodeEditor::move() {
     };
 
     for (auto n : nm->getNodes()) moveNode(n);
+    moveNode(nm->inNode);
     moveNode(nm->outNode);
 
     moveOffX = mouseX;
@@ -212,6 +217,7 @@ void NodeEditor::move() {
 
 void NodeEditor::zoom(float amount) {
     for (auto n : nm->getNodes()) if (!n->canZoom(amount)) return;
+    if (!nm->inNode->canZoom(amount)) return;
     if (!nm->outNode->canZoom(amount)) return;
     
     auto zoomNode = [this, amount] (Node* n) {        
@@ -224,6 +230,7 @@ void NodeEditor::zoom(float amount) {
     };
 
     for (auto n : nm->getNodes()) zoomNode(n);
+    zoomNode(nm->inNode);
     zoomNode(nm->outNode);
 }
 
@@ -248,6 +255,7 @@ void NodeEditor::handleInput(SDL_Event& e) {
             break;
     }
     moveMouse();
+    if (nm->inNode->handleInput(e)) return;
     if (nm->outNode->handleInput(e)) return;
     for (auto n : nm->getNodes()) {
         if (n->handleInput(e)) return;
@@ -358,5 +366,6 @@ void NodeEditor::render(SDL_Renderer* renderer, SDL_FRect* dstRect) {
         node->render();
     }
 
+    nm->inNode->render();
     nm->outNode->render();
 }

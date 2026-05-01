@@ -19,6 +19,12 @@ public:
     /// Trailing event outputs (after waveform block) mirror inner OutputNode event outputs.
     void setLinkedEventOutputCount(size_t count);
 
+    /// Leading waveform inputs [0..count) mirror inner InputNode outputs (same channel index).
+    void setLinkedWaveformInputCount(size_t count);
+
+    /// Trailing event inputs (after waveform block) mirror inner InputNode event outputs.
+    void setLinkedEventInputCount(size_t count);
+
     void renderContent(SDL_Renderer*) override;
     void renderPresent() override;
 
@@ -27,6 +33,7 @@ public:
     SDL_Texture* neTex = nullptr;
 
     SDL_FRect neRect{0, 0, TEX_W, TEX_H};
+    std::vector<float> inputPatchBuffer;
     std::vector<float> patchBuffer;
 
     void clearCustomTextures() override;
@@ -47,4 +54,11 @@ private:
     size_t trailingEventOutputCount() const;
     void appendEventOutput();
     void removeLastTrailingEventOutput();
+
+    size_t leadingWaveformInputCount() const;
+    void insertWaveformInputAt(int index);
+    void removeWaveformInputAt(int index);
+    size_t trailingEventInputCount() const;
+    void appendEventInput();
+    void removeLastTrailingEventInput();
 };

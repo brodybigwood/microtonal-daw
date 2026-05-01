@@ -6,6 +6,7 @@
 #include "idManager.h"
 #include <SDL3/SDL.h>
 #include "OutputNode.h"
+#include "InputNode.h"
 #include "nodes/nodetypes.h"
 
 class Node;
@@ -54,6 +55,7 @@ class NodeManager {
         void resetNE();
         NodeEditor* ne = nullptr;
         OutputNode* outNode;
+        InputNode* inNode;
         std::vector<int> managerPath;
 
     private:

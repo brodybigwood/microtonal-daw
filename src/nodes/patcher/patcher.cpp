@@ -2,6 +2,7 @@
 #include "NodeManager.h"
 #include "NodeEditor.h"
 #include "OutputNode.h"
+#include "InputNode.h"
 #include <cstring>
 #include <iostream>
 #include <vector>
@@ -10,12 +11,14 @@ PatcherNode::PatcherNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::
     auto path = nm->managerPath;
     path.push_back(id);
     mainManager = new NodeManager(project, path);
+    mainManager->inNode->setCoupledPatcher(this);
     mainManager->outNode->setCoupledPatcher(this);
 }
 
 PatcherNode::~PatcherNode() {
     attachFinal();
     if (mainManager) {
+        mainManager->inNode->setCoupledPatcher(nullptr);
         mainManager->outNode->setCoupledPatcher(nullptr);
         delete mainManager;
         mainManager = nullptr;
@@ -146,13 +149,150 @@ void PatcherNode::setLinkedEventOutputCount(size_t count) {
     }
 }
 
+size_t PatcherNode::leadingWaveformInputCount() const {
+    size_t i = 0;
+    while (i < inputs.connections.size() && inputs.connections[i]->type == DataType::Waveform) {
+        ++i;
+    }
+    return i;
+}
+
+void PatcherNode::insertWaveformInputAt(int index) {
+    if (index < 0 || static_cast<size_t>(index) > inputs.connections.size()) return;
+    auto* c = new Connection;
+    c->nm = inputs.nm;
+    c->id = inputs.id_pool.newID();
+    c->type = DataType::Waveform;
+    c->dir = Direction::input;
+    c->is_connected = false;
+    c->output_connection = c->id;
+    c->output_node = inputs.nodeID;
+    c->input_connection = -1;
+    c->input_node = -1;
+    c->events = nullptr;
+    c->buffer = nullptr;
+    c->bufferSize = 0;
+    inputs.connections.insert(inputs.connections.begin() + index, c);
+    inputs.ids.clear();
+    for (size_t j = 0; j < inputs.connections.size(); ++j) {
+        inputs.ids[inputs.connections[j]->id] = static_cast<uint16_t>(j);
+    }
+    makeConnectionRects();
+}
+
+void PatcherNode::removeWaveformInputAt(int index) {
+    if (index < 0 || static_cast<size_t>(index) >= inputs.connections.size()) return;
+    Connection* c = inputs.connections[static_cast<size_t>(index)];
+    if (c->type != DataType::Waveform) return;
+    if (c->is_connected) return;
+    inputs.id_pool.releaseID(c->id);
+    inputs.connections.erase(inputs.connections.begin() + index);
+    delete c;
+    inputs.ids.clear();
+    for (size_t j = 0; j < inputs.connections.size(); ++j) {
+        inputs.ids[inputs.connections[j]->id] = static_cast<uint16_t>(j);
+    }
+    makeConnectionRects();
+}
+
+size_t PatcherNode::trailingEventInputCount() const {
+    const size_t wf = leadingWaveformInputCount();
+    if (inputs.connections.size() <= wf) return 0;
+    return inputs.connections.size() - wf;
+}
+
+void PatcherNode::appendEventInput() {
+    auto* c = new Connection;
+    c->type = DataType::Events;
+    c->dir = Direction::input;
+    inputs.addConnection(c);
+    makeConnectionRects();
+    nm->markTopologyDirty();
+}
+
+void PatcherNode::removeLastTrailingEventInput() {
+    for (int i = static_cast<int>(inputs.connections.size()) - 1; i >= 0; --i) {
+        Connection* c = inputs.connections[static_cast<size_t>(i)];
+        if (c->type != DataType::Events) continue;
+        if (c->is_connected) return;
+        inputs.id_pool.releaseID(c->id);
+        inputs.connections.erase(inputs.connections.begin() + i);
+        delete c;
+        inputs.ids.clear();
+        for (size_t j = 0; j < inputs.connections.size(); ++j) {
+            inputs.ids[inputs.connections[j]->id] = static_cast<uint16_t>(j);
+        }
+        makeConnectionRects();
+        nm->markTopologyDirty();
+        return;
+    }
+}
+
+void PatcherNode::setLinkedWaveformInputCount(size_t count) {
+    while (leadingWaveformInputCount() > count) {
+        removeWaveformInputAt(static_cast<int>(leadingWaveformInputCount() - 1));
+    }
+    while (leadingWaveformInputCount() < count) {
+        insertWaveformInputAt(static_cast<int>(leadingWaveformInputCount()));
+    }
+}
+
+void PatcherNode::setLinkedEventInputCount(size_t count) {
+    while (trailingEventInputCount() > count) {
+        removeLastTrailingEventInput();
+    }
+    while (trailingEventInputCount() < count) {
+        appendEventInput();
+    }
+}
+
 void PatcherNode::process() {
     int bs = bufferSize;
     int sr = sampleRate;
     if (bs <= 0) return;
 
+    int innerInWfCh = static_cast<int>(mainManager->inNode->countWaveformOutputs());
     int innerWfCh = static_cast<int>(mainManager->outNode->countWaveformInputs());
+    if (innerInWfCh < 0) innerInWfCh = 0;
     if (innerWfCh < 1) innerWfCh = 1;
+
+    inputPatchBuffer.assign(static_cast<size_t>(innerInWfCh) * static_cast<size_t>(bs), 0.0f);
+    int inIndex = 0;
+    for (auto* c : inputs.connections) {
+        if (!c || c->type != DataType::Waveform) continue;
+        if (inIndex >= innerInWfCh) break;
+        float* dst = inputPatchBuffer.data() + static_cast<size_t>(inIndex) * static_cast<size_t>(bs);
+        if (c->is_connected && c->buffer) {
+            std::memcpy(dst, c->buffer, static_cast<size_t>(bs) * sizeof(float));
+        } else {
+            std::memset(dst, 0, static_cast<size_t>(bs) * sizeof(float));
+        }
+        ++inIndex;
+    }
+    mainManager->inNode->input = innerInWfCh > 0 ? inputPatchBuffer.data() : nullptr;
+    mainManager->inNode->numChannels = innerInWfCh;
+
+    // Event inputs: copy parent patcher event inputs into inner InputNode event outputs.
+    std::vector<Connection*> patcherEventInputs;
+    for (auto* c : inputs.connections) {
+        if (c && c->type == DataType::Events) patcherEventInputs.push_back(c);
+    }
+    std::vector<Connection*> innerEventOutputs;
+    for (auto* c : mainManager->inNode->outputs.connections) {
+        if (c && c->type == DataType::Events) innerEventOutputs.push_back(c);
+    }
+    const size_t ecount = std::min(patcherEventInputs.size(), innerEventOutputs.size());
+    for (auto* c : innerEventOutputs) {
+        if (c && c->events) c->events->clear();
+    }
+    for (size_t i = 0; i < ecount; ++i) {
+        auto* src = patcherEventInputs[i];
+        auto* dst = innerEventOutputs[i];
+        if (!dst || !dst->events) continue;
+        if (src && src->is_connected && src->events) {
+            *dst->events = *src->events;
+        }
+    }
 
     patchBuffer.resize(static_cast<size_t>(innerWfCh) * static_cast<size_t>(bs), 0.0f);
     mainManager->process(patchBuffer.data(), bs, innerWfCh, sr);
@@ -312,6 +452,14 @@ void PatcherNode::extraDeSerialize(json j) {
             if (c && c->type == DataType::Events) ++evSockets;
         }
         setLinkedEventOutputCount(evSockets);
+    }
+    setLinkedWaveformInputCount(mainManager->inNode->countWaveformOutputs());
+    {
+        size_t evSockets = 0;
+        for (auto* c : mainManager->inNode->outputs.connections) {
+            if (c && c->type == DataType::Events) ++evSockets;
+        }
+        setLinkedEventInputCount(evSockets);
     }
     nm->markTopologyDirty();
     std::cout << "[DBG_DESER] PatcherNode::extraDeSerialize node=" << id << " end" << std::endl;

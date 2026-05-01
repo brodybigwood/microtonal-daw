@@ -2,15 +2,14 @@
 
 #include "Node.h"
 #include <array>
-
 class PatcherNode;
 
-class OutputNode : public Node {
+class InputNode : public Node {
     public:
 
-        OutputNode(NodeManager*);
+        InputNode(NodeManager*);
 
-        float* output;
+        float* input;
 
         int numChannels;
 
@@ -27,7 +26,7 @@ class OutputNode : public Node {
         void setCoupledPatcher(PatcherNode*);
         void placeDefaultByWindowSize(float windowW, float windowH);
 
-        size_t countWaveformInputs() const;
+        size_t countWaveformOutputs() const;
 
     private:
         SDL_FRect addRect{20, 20, 48, 32};
@@ -43,7 +42,7 @@ class OutputNode : public Node {
         void removeChannel();
         void addEventOutputChannel();
         void removeLastEventOutputChannel();
-        size_t countLocalEventInputs() const;
+        size_t countLocalEventOutputs() const;
 
         PatcherNode* coupledPatcher = nullptr;
         bool shouldAutoPlaceFromWindow = true;
