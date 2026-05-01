@@ -40,11 +40,13 @@ struct Knob : Parameter {
 
     float thetaMin;
     float thetaMax;
+    std::string label;
 
     void handleInput(SDL_Event&) override;
     std::string filepath;        
     SDL_FRect knobRect;
     SDL_Texture* texture = nullptr;
+    float wheelVelocity = 0.0f;
     void render(SDL_Renderer*) override;
-    Knob(float, float, float, float, std::string, float, float);
+    Knob(float, float, float, float, std::string, float, float, std::string label = "");
 };

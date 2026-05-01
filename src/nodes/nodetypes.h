@@ -5,6 +5,7 @@
 #include "nodes/merger/merger.h"
 #include "nodes/splitter/splitter.h"
 #include "nodes/panner/panner.h"
+#include "nodes/filter/filter.h"
 #include "nodes/arranger/arranger.h"
 #include "nodes/patcher/patcher.h"
 
@@ -15,6 +16,7 @@ inline std::string NodeTypeStr[] = {
     "Splitter",
     "Delay",
     "Panner",
+    "Filter",
     "Patcher"
 };
 
@@ -32,6 +34,8 @@ inline Node* byType(NodeType t, int id, NodeManager* nm) {
             return new DelayNode(id, nm);
         case NodeType::Panner:
             return new PannerNode(id, nm);
+        case NodeType::Filter:
+            return new FilterNode(id, nm);
         case NodeType::Patcher:
             return new PatcherNode(id, nm);
         default:

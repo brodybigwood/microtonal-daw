@@ -595,6 +595,10 @@ void Node::attach() {
 
 void Node::handleWindowInput(SDL_Event& e) {
     for (auto p : params) if (inPolygon(p->vx.data(), p->vy.data(), p->vx.size(), msX, msY)) p->handleInput(e);
+
+    if (!detached) {
+        handleCustomInput(e);
+    }
     
     if (detached && SDL_GetWindowFromID(getEventWindowID(e)) == window) {
         float gx, gy;
