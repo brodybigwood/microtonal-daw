@@ -49,7 +49,7 @@ std::string UndoManager::actionSchema(const std::string& actionName) {
         return R"({"managerPath":[int,...]?,"nodeID":int,"trackType":int})";
     }
     if (actionName == "create_note") {
-        return R"({"managerPath":[int,...]?,"nodeID":int,"regionID":int,"start":fract_json,"length":fract_json,"pitch":float,"scaleID":int})";
+        return R"({"managerPath":[int,...]?,"nodeID":int,"regionID":int,"start":fract_json,"length":fract_json,"pitch":float})";
     }
     return "{}";
 }
@@ -130,7 +130,7 @@ bool UndoManager::runRegisteredAction(const std::string& actionName, const json&
                 pa = new AddArrangerTrackAction(head->p, params.value("managerPath", std::vector<int>{}), params["nodeID"], params["trackType"]);
                 break;
             case CreateNote: {
-                if (!params.contains("nodeID") || !params.contains("regionID") || !params.contains("start") || !params.contains("length") || !params.contains("pitch") || !params.contains("scaleID")) {
+                if (!params.contains("nodeID") || !params.contains("regionID") || !params.contains("start") || !params.contains("length") || !params.contains("pitch")) {
                     error = "missing required keys for create_note";
                     return false;
                 }
@@ -142,8 +142,7 @@ bool UndoManager::runRegisteredAction(const std::string& actionName, const json&
                     return false;
                 }
                 pa = new CreateNoteAction(head->p, managerPath, params["nodeID"], params["regionID"],
-                    fract::fromJSON(params["start"]), fract::fromJSON(params["length"]), params["pitch"],
-                    n->sl->em->sm->byID(params["scaleID"]));
+                    fract::fromJSON(params["start"]), fract::fromJSON(params["length"]), params["pitch"]);
                 break;
             }
             default:
@@ -169,19 +168,13 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
             auto managerPath = j.value("managerPath", std::vector<int>{});
             auto nm = resolveManager(p, managerPath);
             auto n = nm ? dynamic_cast<ArrangerNode*>(nm->getNode(j["nodeID"])) : nullptr;
-            if (!n || !n->sl || !n->sl->em || !n->sl->em->sm) {
-                pa = new ProjectAction(p, NullAction);
-                break;
-            }
-            auto* scale = n->sl->em->sm->byID(j["scaleID"]);
-            if (!scale) {
+            if (!n || !n->sl || !n->sl->em) {
                 pa = new ProjectAction(p, NullAction);
                 break;
             }
             auto cn = new CreateNoteAction(
                 p, managerPath, j["nodeID"], j["regionID"], fract::fromJSON(j["start"]), fract::fromJSON(j["length"]),
-                j["pitch"], scale
-            );
+                j["pitch"]);
             cn->noteID = j["noteID"];
             pa = cn;
             break;
@@ -245,7 +238,6 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["start"] = cn->start.toJSON();
             j["length"] = cn->length.toJSON();
             j["pitch"] = cn->pitch;
-            j["scaleID"] = cn->scaleID;
             j["noteID"] = cn->noteID;
             break;
         }
@@ -422,20 +414,19 @@ void UndoManager::goTo(ProjectAction* target) {
 }
 
 
-CreateNoteAction::CreateNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, fract start, fract length, float pitch, TuningTable* scale) :
+CreateNoteAction::CreateNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, fract start, fract length, float pitch) :
         ProjectAction(p, CreateNote),
         managerPath(std::move(managerPath)),
         regionID(regionID),
         start(start),
         length(length),
         pitch(pitch),
-        scaleID(scale ? scale->id : -1),
         nodeID(nodeID)
         {
 
         auto nm = resolveManager(p, this->managerPath);
         auto n = nm ? dynamic_cast<ArrangerNode*>(nm->getNode(nodeID)) : nullptr;
-        if (!n || !n->sl || !n->sl->em || !n->sl->em->sm || this->scaleID < 0) {
+        if (!n || !n->sl || !n->sl->em) {
             doAction = [](){};
             undoAction = [](){};
             return;
@@ -443,7 +434,7 @@ CreateNoteAction::CreateNoteAction(Project* p, std::vector<int> managerPath, int
 
         doAction = [this, n] () {
             auto region = static_cast<Region*>(n->sl->em->getElement(this->regionID));
-            noteID = region->createNote(this->start, this->length, this->pitch, n->sl->em->sm->byID(this->scaleID));
+            noteID = region->createNote(this->start, this->length, this->pitch);
             name = "Create Note " + std::to_string(noteID) + " " + std::to_string(this->regionID);
         };
 

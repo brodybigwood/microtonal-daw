@@ -1,5 +1,6 @@
 #include <iostream>
 #include <vector>
+#include <climits>
 #include "Note.h"
 #include "fract.h"
 #include <SDL3/SDL.h>
@@ -15,8 +16,6 @@ using json = nlohmann::json;
 #define REGION_H
 
 class Instrument;
-class TuningTable;
-class ScaleManager;
 class ArrangerNode;
 
 class Region : public GridElement {
@@ -24,21 +23,36 @@ class Region : public GridElement {
         
 
     public:
-        Region(Project*, ScaleManager*, ArrangerNode*);
+        Region(Project*, ArrangerNode*);
         ~Region() override;
 
-ScaleManager* sm;
         std::string name = "MIDI Region FX Rack";
-TuningTable* scale;
-TuningTable* getTuning();
- std::vector<std::shared_ptr<Note>> notes;
+        std::vector<std::shared_ptr<Note>> notes;
 
-    int createNote(fract, fract, float, TuningTable*);
+    int createNote(fract, fract, float);
     void deleteNote(int);
 
  void sort();
 
 int releaseMS = 1000;
+
+// Procedural tuning state for PianoRoll (avoids scale object churn).
+int tuningMode = 0; // 0=harmonic, 1=edo
+float tuningAnchorMidi = 69.0f;
+int tuningAnchorHarmonic = 1;
+float tuningEdoAnchorMidi = 69.0f;
+float tuningEdoStep = 1.0f;
+// When >0, subdividing [tuningEdoSpanLoMidi, tuningEdoSpanHiMidi] into this many parts (grid / UI).
+int tuningEdoSpanDivisions = 0;
+float tuningEdoSpanLoMidi = 0.0f;
+float tuningEdoSpanHiMidi = 0.0f;
+
+int tuningSpanLoHarm = 0;
+int tuningSpanHiHarm = 0;
+int tuningSpanLoEdoK = INT_MAX;
+int tuningSpanHiEdoK = INT_MAX;
+int tuningEdoStepSemiNum = 1;
+int tuningEdoStepSemiDen = 1;
 
 void draw(SDL_Renderer*, float, int) override;
 

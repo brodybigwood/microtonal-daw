@@ -6,7 +6,6 @@
 #include "AudioManager.h"
 #include "TrackManager.h"
 #include "ElementManager.h"
-#include "ScaleManager.h"
 #include "NodeProcessor.h"
 #include "WindowHandler.h"
 #include "ContextMenu.h"
@@ -124,8 +123,8 @@ void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {
     } else save_l();
 }
 
-void Project::createNote(int nodeID, fract start, fract length, float pitch, TuningTable* t, int regionID, std::vector<int> managerPath) {
-    auto pa = new CreateNoteAction(this, std::move(managerPath), nodeID, regionID, start, length, pitch, t);
+void Project::createNote(int nodeID, fract start, fract length, float pitch, int regionID, std::vector<int> managerPath) {
+    auto pa = new CreateNoteAction(this, std::move(managerPath), nodeID, regionID, start, length, pitch);
     um->newAction(pa);
 }
 

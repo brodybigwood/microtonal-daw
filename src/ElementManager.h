@@ -1,6 +1,5 @@
 #pragma once
 
-#include "ScaleManager.h"
 #include <unordered_map>
 #include "GridElement.h"
 
@@ -48,7 +47,6 @@ class ElementManager {
 
         Project* project;
         TrackManager* tm;
-        ScaleManager* sm;
 
         ArrangerNode* parentNode;
 };

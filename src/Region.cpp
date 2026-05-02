@@ -1,18 +1,13 @@
 #include "Region.h"
+#include <climits>
 #include <set>
 #include <functional>
 #include "Project.h"
 #include "fract.h"
 #include "styles.h"
-#include "ScaleManager.h"
 #include "ElementManager.h"
 
-TuningTable* Region::getTuning() {
-    return scale;
-}
-
-Region::Region(Project* p, ScaleManager* sm, ArrangerNode* n) : GridElement(p, n), sm(sm) {
-    scale = sm->getLastScale();
+Region::Region(Project* p, ArrangerNode* n) : GridElement(p, n) {
     type = ElementType::region;
 }
 
@@ -55,6 +50,20 @@ json Region::toJSON() {
     }
     j["positions"] = GridElement::toJSON();
     j["idManager"] = id_pool.toJSON();
+    j["tuningMode"] = tuningMode;
+    j["tuningAnchorMidi"] = tuningAnchorMidi;
+    j["tuningAnchorHarmonic"] = tuningAnchorHarmonic;
+    j["tuningEdoAnchorMidi"] = tuningEdoAnchorMidi;
+    j["tuningEdoStep"] = tuningEdoStep;
+    j["tuningEdoSpanDivisions"] = tuningEdoSpanDivisions;
+    j["tuningEdoSpanLoMidi"] = tuningEdoSpanLoMidi;
+    j["tuningEdoSpanHiMidi"] = tuningEdoSpanHiMidi;
+    j["tuningSpanLoHarm"] = tuningSpanLoHarm;
+    j["tuningSpanHiHarm"] = tuningSpanHiHarm;
+    j["tuningSpanLoEdoK"] = tuningSpanLoEdoK;
+    j["tuningSpanHiEdoK"] = tuningSpanHiEdoK;
+    j["tuningEdoStepSemiNum"] = tuningEdoStepSemiNum;
+    j["tuningEdoStepSemiDen"] = tuningEdoStepSemiDen;
 
     return j;
 }
@@ -66,15 +75,28 @@ void Region::fromJSON(json j) {
     id = j["id"];
     type = j["type"];
     for (auto e : j["notes"]) {
-        notes.push_back(Note::fromJSON(e, sm));
+        notes.push_back(Note::fromJSON(e));
         id_to_index[e["id"]] = notes.size() - 1;
     }
     id_pool.fromJSON(j["idManager"]);
+    tuningMode = j.value("tuningMode", 0);
+    tuningAnchorMidi = j.value("tuningAnchorMidi", 69.0f);
+    tuningAnchorHarmonic = j.value("tuningAnchorHarmonic", 1);
+    tuningEdoAnchorMidi = j.value("tuningEdoAnchorMidi", 69.0f);
+    tuningEdoStep = j.value("tuningEdoStep", 1.0f);
+    tuningEdoSpanDivisions = j.value("tuningEdoSpanDivisions", 0);
+    tuningEdoSpanLoMidi = j.value("tuningEdoSpanLoMidi", 0.0f);
+    tuningEdoSpanHiMidi = j.value("tuningEdoSpanHiMidi", 0.0f);
+    tuningSpanLoHarm = j.value("tuningSpanLoHarm", 0);
+    tuningSpanHiHarm = j.value("tuningSpanHiHarm", 0);
+    tuningSpanLoEdoK = j.value("tuningSpanLoEdoK", INT_MAX);
+    tuningSpanHiEdoK = j.value("tuningSpanHiEdoK", INT_MAX);
+    tuningEdoStepSemiNum = j.value("tuningEdoStepSemiNum", 1);
+    tuningEdoStepSemiDen = j.value("tuningEdoStepSemiDen", 1);
 }
 
-int Region::createNote(fract start, fract length, float pitch, TuningTable* t) {
-    auto n = std::make_shared<Note>(start, start + length, pitch, sm);
-    n->scale = t;
+int Region::createNote(fract start, fract length, float pitch) {
+    auto n = std::make_shared<Note>(start, start + length, pitch);
     notes.push_back(n);
     n->id = id_pool.newID();
     id_to_index[n->id] = notes.size() - 1;
@@ -82,11 +104,16 @@ int Region::createNote(fract start, fract length, float pitch, TuningTable* t) {
 }
 
 void Region::deleteNote(int id) {
-
-    auto idx = id_to_index[id];
+    auto it = id_to_index.find(id);
+    if (it == id_to_index.end()) return;
+    const int idx = it->second;
+    if (idx < 0 || static_cast<size_t>(idx) >= notes.size()) {
+        id_to_index.erase(it);
+        return;
+    }
     
     notes.erase(notes.begin() + idx);
-    id_to_index.erase(id);
+    id_to_index.erase(it);
 
     for (auto& [k, v] : id_to_index) {
         if (v > idx)

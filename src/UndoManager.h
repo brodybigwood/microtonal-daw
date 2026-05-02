@@ -2,7 +2,6 @@
 
 #include "Region.h"
 #include "ElementManager.h"
-#include "ScaleManager.h"
 #include <mutex>
 #include <unordered_map>
 
@@ -149,9 +148,8 @@ struct CreateNoteAction : ProjectAction {
     fract start;
     fract length;
     float pitch;
-    int scaleID;
 
-    CreateNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, fract start, fract length, float pitch, TuningTable* scale);
+    CreateNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, fract start, fract length, float pitch);
 };
 
 struct AddArrangerTrackAction : ProjectAction {

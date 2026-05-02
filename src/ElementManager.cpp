@@ -35,8 +35,6 @@ json ElementManager::toJSON() {
         j["elements"].push_back(je);
     }
 
-    j["scaleManager"] = sm->serialize();
-
     return j;
 }
 
@@ -155,14 +153,12 @@ void ElementManager::fromJSON(json j) {
 
     id_pool.fromJSON(j["id_pool"]);
 
-    sm->deSerialize(j["scaleManager"]);
-
     for(json e : j["elements"]) {
         GridElement* ge;
 
         switch (e["type"].get<int>()) {
             case ElementType::region:
-                ge = new Region(project, sm, parentNode);
+                ge = new Region(project, parentNode);
                 break;
             case ElementType::audioClip:
                 ge = new AudioClip(project, parentNode);
@@ -183,7 +179,7 @@ uint16_t ElementManager::getIndex(uint16_t id) {
 }
 
 Region* ElementManager::newRegion() {
-    auto r = new Region(project, sm, parentNode);
+    auto r = new Region(project, parentNode);
     r->id = id_pool.newID();
     elements.push_back(r);
 
@@ -211,7 +207,6 @@ AudioClip* ElementManager::newAudioClip(std::string filepath) {
 }
 
 ElementManager::ElementManager(Project* p, TrackManager* tm, ArrangerNode* n) : project(p), tm(tm), parentNode(n) {
-    sm = new ScaleManager;
 }
 
 void ElementManager::render(SDL_Renderer* renderer) {

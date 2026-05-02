@@ -76,16 +76,16 @@ static bool buildActionParamsPositional(const std::string& actionName, std::stri
             return true;
         }
         if (actionName == "create_note") {
-            std::string path; int nodeID, regionID, sNum, sDen, lNum, lDen, scaleID; float pitch;
-            if (!(ss >> path >> nodeID >> regionID >> sNum >> sDen >> lNum >> lDen >> pitch >> scaleID)) {
-                error = "usage: action create_note <path|-|root> <nodeID> <regionID> <startNum> <startDen> <lenNum> <lenDen> <pitch> <scaleID>";
+            std::string path; int nodeID, regionID, sNum, sDen, lNum, lDen; float pitch;
+            if (!(ss >> path >> nodeID >> regionID >> sNum >> sDen >> lNum >> lDen >> pitch)) {
+                error = "usage: action create_note <path|-|root> <nodeID> <regionID> <startNum> <startDen> <lenNum> <lenDen> <pitch>";
                 return false;
             }
             params["managerPath"] = parseManagerPath(path);
             params["nodeID"] = nodeID; params["regionID"] = regionID;
             params["start"] = fract(sNum, sDen).toJSON();
             params["length"] = fract(lNum, lDen).toJSON();
-            params["pitch"] = pitch; params["scaleID"] = scaleID;
+            params["pitch"] = pitch;
             return true;
         }
         error = "unknown action";

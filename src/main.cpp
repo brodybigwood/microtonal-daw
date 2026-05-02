@@ -28,7 +28,7 @@ static std::string commandHint(const std::string& line) {
         if (arg == "sever_node_connection") return "hint: <path> <srcNode> <srcCon> <dstNode> <dstCon>";
         if (arg == "move_node") return "hint: <path> <nodeID> <toX> <toY>";
         if (arg == "add_arranger_track") return "hint: <path> <nodeID> <trackType>";
-        if (arg == "create_note") return "hint: <path> <nodeID> <regionID> <sNum> <sDen> <lNum> <lDen> <pitch> <scaleID>";
+        if (arg == "create_note") return "hint: <path> <nodeID> <regionID> <sNum> <sDen> <lNum> <lDen> <pitch>";
     } else if (op == "node_types") {
         return "hint: lists node type IDs";
     } else if (op == "action_schema") {
