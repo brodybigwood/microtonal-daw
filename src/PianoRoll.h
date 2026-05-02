@@ -9,6 +9,7 @@
 #include "fract.h" 
 #include "styles.h"
 #include "Project.h"
+#include <optional>
 #include <string>
 
 #ifndef PIANOROLL_H
@@ -63,6 +64,11 @@ class PianoRoll : public GridView {
         json movingNoteUndoBefore;
         bool movingNoteHasUndoSnapshot = false;
         bool movingNoteDragDirty = false;
+        /** Snapped pitch line MIDI for draw only; model pitch commits on mouse up. */
+        std::optional<float> movingNotePitchPreviewLineMidi;
+        json stretchingNoteUndoBefore;
+        bool stretchingNoteHasUndoSnapshot = false;
+        bool stretchingNoteDragDirty = false;
 
         bool customTick() override;
 
@@ -105,8 +111,6 @@ class PianoRoll : public GridView {
         float getNotePosX(std::shared_ptr<Note>);
         float getNoteEnd(std::shared_ptr<Note>);
         float noteHeight = 5;
-
-        void moveNote(std::shared_ptr<Note>, int, float);
 
         /** Sync open piano roll UI after region tuning undo/redo; pass noteIdToStamp >= 0 to run stampNoteTuning. */
         static void notifyTuningUndoApplied(Project* p, const std::vector<int>& managerPath, int arrangerNodeId, int regionId,
@@ -161,6 +165,9 @@ class PianoRoll : public GridView {
 
         bool getStretchingNote();
         void stretchElement(int amount);
+        void moveNoteTime(std::shared_ptr<Note> note, int moveX);
+        void commitNotePitchSnap(std::shared_ptr<Note> note, float targetLineMidi);
+        float noteMidiForRender(const std::shared_ptr<Note>& note) const;
 
         std::shared_ptr<Note> hoveredElement;
 

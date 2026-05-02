@@ -250,7 +250,7 @@ struct MoveNoteAction : ProjectAction {
     json after;
 
     MoveNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, int noteID, json before,
-                   json after);
+                   json after, std::string actionName = "Move Note");
 };
 
 struct DeleteNoteAction : ProjectAction {

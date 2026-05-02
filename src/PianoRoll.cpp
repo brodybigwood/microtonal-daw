@@ -1057,8 +1057,19 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     }
                     return;
                 }
-                if(mouseX > leftMargin && stretchingNote == nullptr) {
-                    if(hoveredElement == nullptr) {
+                if (mouseX > leftMargin) {
+                    getExistingNote();
+                    getStretchingNote();
+                    if (stretchingNote != nullptr) {
+                        stretchingNoteUndoBefore = stretchingNote->toJSON();
+                        stretchingNoteHasUndoSnapshot = true;
+                        stretchingNoteDragDirty = false;
+                        last_lmb_x = mouseX;
+                        handleMouse();
+                        refreshGrid = true;
+                        return;
+                    }
+                    if (hoveredElement == nullptr) {
                         createElement();
                     } else {
                         auto n = std::dynamic_pointer_cast<Note>(hoveredElement);
@@ -1089,6 +1100,8 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                         movingNoteUndoBefore = n->toJSON();
                         movingNoteHasUndoSnapshot = true;
                         movingNoteDragDirty = false;
+                        movingNotePitchPreviewLineMidi.reset();
+                        last_lmb_x = mouseX;
                     }
                 }
             }
@@ -1148,7 +1161,21 @@ void PianoRoll::clickMouse(SDL_Event& e) {
         case SDL_EVENT_MOUSE_BUTTON_UP:
             if (e.button.button == SDL_BUTTON_LEFT) {
                 lmb = false;
+                if (stretchingNoteHasUndoSnapshot && stretchingNote) {
+                    json afterStretch = stretchingNote->toJSON();
+                    if (stretchingNoteDragDirty || afterStretch != stretchingNoteUndoBefore) {
+                        project->um->newAction(new MoveNoteAction(project, region->parentNode->nm->managerPath,
+                            region->parentNode->id, region->id, stretchingNote->id, std::move(stretchingNoteUndoBefore),
+                            std::move(afterStretch), "Resize Note"));
+                    }
+                    stretchingNoteHasUndoSnapshot = false;
+                    stretchingNoteDragDirty = false;
+                }
                 if (movingNoteHasUndoSnapshot && movingNote) {
+                    if (movingNotePitchPreviewLineMidi) {
+                        commitNotePitchSnap(movingNote, *movingNotePitchPreviewLineMidi);
+                        movingNotePitchPreviewLineMidi.reset();
+                    }
                     json after = movingNote->toJSON();
                     if (movingNoteDragDirty || after != movingNoteUndoBefore) {
                         project->um->newAction(new MoveNoteAction(project, region->parentNode->nm->managerPath,
@@ -1442,15 +1469,16 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                 int steps = dX / step;
 
                 if(steps) {
-                    moveNote(movingNote, steps, 0);
+                    moveNoteTime(movingNote, steps);
                     last_lmb_x += steps * step;
-                } 
+                }
 
                 constexpr float pitchDragEpsilon = 1e-3f;
-                if (std::fabs(getHoveredLine() - movingNote->num) > pitchDragEpsilon) {
-                    moveNote(movingNote, 0, getHoveredLine() - movingNote->num);
-                    lastHoveredLine = getHoveredLine();
-                }
+                const float snappedLine = getHoveredLine();
+                if (std::fabs(snappedLine - movingNote->num) > pitchDragEpsilon)
+                    movingNotePitchPreviewLineMidi = snappedLine;
+                else
+                    movingNotePitchPreviewLineMidi.reset();
                 
             } else {
                 last_lmb_x = mouseX;
@@ -1513,7 +1541,7 @@ void PianoRoll::RenderNotes() {
     for(std::shared_ptr<Note> note : region->notes) {
 
         float noteX = getNotePosX(note) +1;
-        float noteY = getY(note->num);
+        float noteY = getY(noteMidiForRender(note));
         float noteEnd = getNoteEnd(note) -2;
         float noteTop = noteY + noteHeight;
 
@@ -1525,7 +1553,7 @@ void PianoRoll::RenderNotes() {
 
     for(std::shared_ptr<Note> note : region->notes) {
             float noteX = getNotePosX(note) +1;
-            float noteY = getY(note->num);
+            float noteY = getY(noteMidiForRender(note));
             float noteEnd = getNoteEnd(note) -2;
 
             //noteRadius = (noteTop - noteY)/2;
@@ -1555,8 +1583,8 @@ bool PianoRoll::getExistingNote() {
         // Get the required positions and size once per iteration
         const int notePosX = getNotePosX(note);
         const int noteEnd = getNoteEnd(note);
-        const int noteY = getY(note->num);
-        
+        const int noteY = getY(noteMidiForRender(note));
+
         // Check if mouse is within note bounds
         if (mouseX >= notePosX && mouseX <= noteEnd &&
             mouseY <= noteY + noteRadius && mouseY >= (noteY - noteRadius)) {
@@ -1624,7 +1652,7 @@ bool PianoRoll::getStretchingNote() {
     for (std::shared_ptr<Note> note : region->notes) {
         const int notePosX = getNotePosX(note);
         const int noteEnd = getNoteEnd(note);
-        const int noteY = getY(note->num);
+        const int noteY = getY(noteMidiForRender(note));
 
         if ((mouseY >= noteY - noteRadius && mouseY <= (noteY + noteRadius))) {
             if(mouseX >= notePosX - selectThresholdX/2 && mouseX <= notePosX + selectThresholdX/2) {
@@ -1649,6 +1677,8 @@ void PianoRoll::stretchElement(int amount) {
     if(stretchingNote == nullptr) {
         return;
     }
+    if (amount != 0)
+        stretchingNoteDragDirty = true;
     if(resizeDir == -1) {
         stretchingNote->start = stretchingNote->start + fract(amount,notesPerBar);
     } else if(resizeDir == 1) {
@@ -1663,31 +1693,34 @@ void PianoRoll::stretchElement(int amount) {
 }
 
 
-void PianoRoll::moveNote(std::shared_ptr<Note> note, int moveX, float y) {
-    if (moveX != 0 || std::fabs(y) >= 1e-6f)
-        movingNoteDragDirty = true;
-    fract xm = fract(moveX, notesPerBar);
+float PianoRoll::noteMidiForRender(const std::shared_ptr<Note>& note) const {
+    if (movingNote && movingNote.get() == note.get() && movingNotePitchPreviewLineMidi)
+        return *movingNotePitchPreviewLineMidi;
+    return note->num;
+}
 
+void PianoRoll::moveNoteTime(std::shared_ptr<Note> note, int moveX) {
+    if (moveX != 0)
+        movingNoteDragDirty = true;
+    const fract xm = fract(moveX, notesPerBar);
     note->start = note->start + xm;
     note->end = note->end + xm;
-    const float dy = y;
-    if (std::fabs(dy) < 1e-6f) {
-        Scroll();
-        return;
-    }
+    Scroll();
+}
+
+void PianoRoll::commitNotePitchSnap(std::shared_ptr<Note> note, float targetLineMidi) {
     note->tuningAnchorMidi = harmonicAnchorMidi;
     note->tuningAnchorHarmonic = harmonicAnchorNumber;
     note->tuningEdoAnchorMidi = edoAnchorMidi;
     note->tuningEdoStep = edoStep;
-    const float targetMidi = note->num + dy;
-    const size_t li = closestLineIndexForMidi(targetMidi);
+    const size_t li = closestLineIndexForMidi(targetLineMidi);
     if (li != SIZE_MAX && li < pitchLines.size()) {
         note->pitchIntegerPairs = pitchLines[li].integerPairs;
         if (tuningMode == TuningMode::Harmonic && li < lineStructural.size())
             note->harmonicNumber = std::max(1, lineStructural[li]);
+        movingNoteDragDirty = true;
     }
     stampNoteTuning(note);
-
     Scroll();
 }
 

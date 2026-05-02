@@ -1420,7 +1420,7 @@ IoPortChannelAction::IoPortChannelAction(Project* p, int opIn, std::vector<int> 
 }
 
 MoveNoteAction::MoveNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, int noteID, json before,
-                               json after) :
+                               json after, std::string actionName) :
         ProjectAction(p, MoveNote),
         managerPath(std::move(managerPath)),
         nodeID(nodeID),
@@ -1429,7 +1429,7 @@ MoveNoteAction::MoveNoteAction(Project* p, std::vector<int> managerPath, int nod
         before(std::move(before)),
         after(std::move(after)) {
     skipInitialDo = true;
-    name = "Move Note";
+    name = std::move(actionName);
     doAction = [this]() {
         Region& region = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
         auto it = region.id_to_index.find(this->noteID);
