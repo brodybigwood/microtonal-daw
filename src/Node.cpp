@@ -280,6 +280,16 @@ std::function<bool(SDL_Event&)> getModulationMatrixTicker(Node* node, Parameter*
 }
 }
 
+namespace {
+/** Ports / sever / wire start only on the patcher canvas, never on detached node or child utility windows. */
+bool connectionUiOnPatcherCanvas(const Node* n, const SDL_Event& e) {
+    if (!n || !n->ne)
+        return false;
+    const uint32_t wid = getEventWindowID(e);
+    return wid != 0 && wid == n->ne->getWindowID();
+}
+} // namespace
+
 json Node::serialize() {
     json j;
 
@@ -467,6 +477,8 @@ bool Node::handleInput(SDL_Event& e) {
             return true;
         }
         if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_RIGHT && hoverFound) {
+            if (!connectionUiOnPatcherCanvas(this, e))
+                return false;
             clickMouse(e);
             return true;
         }
@@ -544,7 +556,7 @@ void Node::clickMouse(SDL_Event& e) {
 
     if (e.button.button == SDL_BUTTON_LEFT) {
         if (ne && (!detached || !clickFromDetachedWindow)) ne->setMovingNode(this);
-        if (hoveredConnection != -1) {
+        if (hoveredConnection != -1 && connectionUiOnPatcherCanvas(this, e)) {
             switch (hoveredDirection) {
                 case Direction::input:
                     if (ne) ne->setDstConn(this, hoveredConnection);
@@ -552,7 +564,7 @@ void Node::clickMouse(SDL_Event& e) {
                 case Direction::output:
                     if (ne) ne->setSrcConn(this, hoveredConnection);
                     break;
-            }    
+            }
         }
 
         auto time = SDL_GetTicks();
@@ -598,9 +610,13 @@ void Node::clickMouse(SDL_Event& e) {
             auto t = getParameterMenu(hoveredParam);
             ctxMenu->dynamicTick = getTreeMenuTicker(t);
         } else if (hoveredConnection != -1) {
+            if (!connectionUiOnPatcherCanvas(this, e)) {
+                ctxMenu->active = false;
+                return;
+            }
             ctxMenu->locX = clickFromDetachedWindow ? msX : *mouseX;
             ctxMenu->locY = clickFromDetachedWindow ? msY : *mouseY;
-    
+
             Connection* c;
             switch (hoveredDirection) {
                 case Direction::input:
@@ -612,7 +628,7 @@ void Node::clickMouse(SDL_Event& e) {
             }
 
             auto t = getConnectionMenu(c);
-    
+
             ctxMenu->dynamicTick = getTreeMenuTicker(t);
         } else {
             if (clickFromDetachedWindow) {
@@ -998,22 +1014,53 @@ void Node::renderContentHelper(SDL_Renderer* renderer) {
 }
 
 void Node::render() {
+    // RTT/content: prefer the node's renderer (owns textures with the embedding context); fallback to editor.
+    SDL_Renderer* texR = detached ? renderer : (renderer ? renderer : ((ne && ne->renderer) ? ne->renderer : nullptr));
+    if (!texR)
+        return;
 
     if (!detached && !texture) {
-        texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, TEX_W, TEX_H);
+        texture = SDL_CreateTexture(texR, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, TEX_W, TEX_H);
     } else if (detached && !texture_detached) {
+        if (!renderer) return;
         texture_detached = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, TEX_W, TEX_H);
     }
 
-    renderContentHelper(renderer);
+    renderContentHelper(texR);
 
-    for(auto conn : inputs.connections) conn->render(ne->renderer, conn->id == hoveredConnection);
-    for(auto conn : outputs.connections) conn->render(ne->renderer, conn->id == hoveredConnection);
+    // Ports and connected-socket cable previews always use the NodeEditor for this node's graph — e.g. a patcher's
+    // mainEditor window for inner nodes, root editor for top-level nodes — never the node's own detached window/renderer.
+    SDL_Renderer* portR = nullptr;
+    if (nm && nm->ne && nm->ne->renderer)
+        portR = nm->ne->renderer;
+    else if (ne && ne->renderer)
+        portR = ne->renderer;
+    else
+        portR = texR;
+    if (!portR)
+        return;
+
+    // Connection objects can be deleted on the audio thread (e.g. I/O socket remove). Lock only for port
+    // iteration + draw — not for renderContentHelper — so RT audio is not stalled for texture work.
+    auto drawPorts = [&] {
+        for (auto* conn : inputs.connections) {
+            if (conn) conn->render(portR, conn->id == hoveredConnection);
+        }
+        for (auto* conn : outputs.connections) {
+            if (conn) conn->render(portR, conn->id == hoveredConnection);
+        }
+    };
+    if (nm)
+        nm->runWithGraphLock(drawPorts);
+    else
+        drawPorts();
 }
 
 void Connection::render(SDL_Renderer* renderer, bool hover) {
+    if (!renderer) return;
+
     const PortDisplayMode mode = nm ? nm->portDisplayMode : PortDisplayMode::RectLabels;
-    SDL_Color c;
+    SDL_Color c{128, 128, 128, 255};
 
     switch (type) {
         case DataType::Events:
@@ -1023,7 +1070,9 @@ void Connection::render(SDL_Renderer* renderer, bool hover) {
         case DataType::Waveform:
             if (is_connected) c = {255, 160, 160, 255};
             else c = {255, 120, 120, 255};
-            break;        
+            break;
+        default:
+            break;
     }
 
     SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
@@ -1078,15 +1127,17 @@ void Connection::render(SDL_Renderer* renderer, bool hover) {
     }
 
     if (!is_connected || dir == Direction::output) return;
+
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     auto src = srcRect();
     if (src.w == 0.0f && src.h == 0.0f) return;
 
     SDL_FColor color;
     if (type == DataType::Events) color = {0.5f, 1.0f, 0.5f, 1.0f};
-    else color = {1.0f, 0.5f, 0.5f, 1.0f};    
+    else color = {1.0f, 0.5f, 0.5f, 1.0f};
 
-    nm->ne->renderSine(rect.x+rect.w/2.0f, rect.y+rect.h/2.0f, src.x+src.w/2.0f, src.y+src.h/2.0f, color);
+    NodeEditor::renderPatchCable(renderer, rect.x + rect.w * 0.5f, rect.y + rect.h * 0.5f,
+        src.x + src.w * 0.5f, src.y + src.h * 0.5f, color);
 }
 
 void Node::renderParams(SDL_Renderer* renderer) {
@@ -1265,31 +1316,8 @@ void Node::handleWindowInput(SDL_Event& e) {
         msX = gx - wx;
         msY = gy - wy;
 
+        hoveredConnection = -1;
         bool handled = inPolygon(vx, vy, vCount, msX, msY);
-        bool hoverFound = false;
-        for (auto conn : inputs.connections) {
-            if (MouseOn(&conn->rect)) {
-                hoverFound = true;
-                hoveredConnection = conn->id;
-                hoveredDirection = Direction::input;
-                break;
-            }
-        }
-        if (!hoverFound) {
-            for (auto conn : outputs.connections) {
-                if (MouseOn(&conn->rect)) {
-                    hoverFound = true;
-                    hoveredConnection = conn->id;
-                    hoveredDirection = Direction::output;
-                    break;
-                }
-            }
-        }
-        if (hoverFound) {
-            handled = true;
-        } else if (!handled) {
-            hoveredConnection = -1;
-        }
 
         for (auto p : params) {
             if (inPolygon(p->vx.data(), p->vy.data(), p->vx.size(), msX, msY)) {
@@ -1345,6 +1373,11 @@ void Node::resetNE() {
     }
 
     ne = nullptr;
+    // Borrowed from NodeEditor while attached; once ne is cleared they must not be used for rendering.
+    if (!detached) {
+        window = nullptr;
+        renderer = nullptr;
+    }
 
     resetNEFinal();
 }

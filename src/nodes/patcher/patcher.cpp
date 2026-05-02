@@ -3,6 +3,7 @@
 #include "NodeEditor.h"
 #include "OutputNode.h"
 #include "InputNode.h"
+#include "Preferences.h"
 #include <cstring>
 #include <iostream>
 #include <vector>
@@ -96,7 +97,10 @@ void PatcherNode::removeLastLinkedWaveformFromBlock() {
 
 void PatcherNode::setLinkedWaveformChannelCount(size_t count) {
     while (leadingWaveformOutputCount() > count) {
+        const size_t before = leadingWaveformOutputCount();
         removeLastLinkedWaveformFromBlock();
+        if (leadingWaveformOutputCount() >= before)
+            break;
     }
     while (leadingWaveformOutputCount() < count) {
         insertLinkedWaveformAtEndOfBlock();
@@ -142,7 +146,10 @@ void PatcherNode::removeLastTrailingEventOutput() {
 
 void PatcherNode::setLinkedEventOutputCount(size_t count) {
     while (trailingEventOutputCount() > count) {
+        const size_t before = trailingEventOutputCount();
         removeLastTrailingEventOutput();
+        if (trailingEventOutputCount() >= before)
+            break;
     }
     while (trailingEventOutputCount() < count) {
         appendEventOutput();
@@ -230,7 +237,10 @@ void PatcherNode::removeLastTrailingEventInput() {
 
 void PatcherNode::setLinkedWaveformInputCount(size_t count) {
     while (leadingWaveformInputCount() > count) {
+        const size_t before = leadingWaveformInputCount();
         removeWaveformInputAt(static_cast<int>(leadingWaveformInputCount() - 1));
+        if (leadingWaveformInputCount() >= before)
+            break;
     }
     while (leadingWaveformInputCount() < count) {
         insertWaveformInputAt(static_cast<int>(leadingWaveformInputCount()));
@@ -239,7 +249,10 @@ void PatcherNode::setLinkedWaveformInputCount(size_t count) {
 
 void PatcherNode::setLinkedEventInputCount(size_t count) {
     while (trailingEventInputCount() > count) {
+        const size_t before = trailingEventInputCount();
         removeLastTrailingEventInput();
+        if (trailingEventInputCount() >= before)
+            break;
     }
     while (trailingEventInputCount() < count) {
         appendEventInput();
@@ -389,12 +402,17 @@ void PatcherNode::renderContent(SDL_Renderer*) {
         }
 
         renderParams(renderer);
+        // Embedded patch — no inner NodeEditor tick; drain deferred deletes for mainManager anyway.
+        mainManager->flushUiDeferred();
     }
 }
 
 void PatcherNode::attachFinal() {
     mainManager->resetNE();
-    if (mainEditor) delete mainEditor;
+    if (mainEditor) {
+        mainEditor->clearWireDragState();
+        delete mainEditor;
+    }
     mainEditor = nullptr;
 }
 

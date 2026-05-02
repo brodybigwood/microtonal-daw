@@ -23,6 +23,7 @@ class ElementManager {
 
         void removeElementById(uint16_t elementId);
         void restoreRegionFromSnapshot(const json& regionJson);
+        void restoreRegionFromSnapshotAt(size_t insertIndex, const json& regionJson);
 
         uint16_t getIndex(uint16_t);
         idManager id_pool;

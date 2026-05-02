@@ -38,6 +38,12 @@ class GridElement {
 
         void createPos(fract, uint16_t);
 
+        static json positionToJson(const Position& pos);
+        static void applyPositionFromJson(Position* pos, const json& j);
+        /** Returns false if id not found. Optionally returns list index before removal (for undo). */
+        bool removePositionById(int positionId, size_t* removedIndex = nullptr);
+        void insertPositionAt(size_t index, const json& posJson);
+
         std::vector<Position*> positions;
 
         SDL_Texture* texture = nullptr;

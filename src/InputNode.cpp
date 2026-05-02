@@ -1,10 +1,12 @@
 #include "InputNode.h"
+#include "UndoManager.h"
 #include "NodeManager.h"
 #include "nodes/patcher/patcher.h"
 #include "styles.h"
 #include <cstring>
 #include <string>
 #include <algorithm>
+#include <limits>
 
 namespace {
 using Quad = std::array<SDL_FPoint, 4>;
@@ -105,7 +107,7 @@ size_t InputNode::countLocalEventOutputs() const {
     return n;
 }
 
-void InputNode::addEventOutputChannel() {
+void InputNode::addEventOutputSocket() {
     auto* c = new Connection;
     c->type = DataType::Events;
     c->dir = Direction::output;
@@ -118,7 +120,7 @@ void InputNode::addEventOutputChannel() {
     nm->markTopologyDirty();
 }
 
-void InputNode::removeLastEventOutputChannel() {
+void InputNode::removeLastEventOutputSocket() {
     for (int i = static_cast<int>(outputs.connections.size()) - 1; i >= 0; --i) {
         Connection* c = outputs.connections[static_cast<size_t>(i)];
         if (c->type != DataType::Events) continue;
@@ -240,15 +242,22 @@ void InputNode::renderContent(SDL_Renderer* renderer) {
 void InputNode::handleWindowInput(SDL_Event& e) {
     Node::handleWindowInput(e);
     if (e.type != SDL_EVENT_MOUSE_BUTTON_DOWN || e.button.button != SDL_BUTTON_LEFT) return;
+    if (!project || !project->um) return;
 
     if (pointInQuad(msX, msY, addQuad)) {
-        addChannel();
+        project->um->newAction(new IoPortChannelAction(project, IoPortChannelOp::InputAddWaveform, nm->managerPath, 0, 0));
     } else if (pointInQuad(msX, msY, removeQuad)) {
-        removeChannel();
+        uint16_t rid = 0;
+        size_t ridx = 0;
+        if (!nm->peekRemovableInputWaveform(&rid, &ridx)) return;
+        project->um->newAction(new IoPortChannelAction(project, IoPortChannelOp::InputRemoveWaveform, nm->managerPath, rid, ridx));
     } else if (pointInQuad(msX, msY, evAddQuad)) {
-        addEventOutputChannel();
+        project->um->newAction(new IoPortChannelAction(project, IoPortChannelOp::InputAddEvent, nm->managerPath, 0, 0));
     } else if (pointInQuad(msX, msY, evRemoveQuad)) {
-        removeLastEventOutputChannel();
+        uint16_t rid = 0;
+        size_t ridx = 0;
+        if (!nm->peekRemovableInputEvent(&rid, &ridx)) return;
+        project->um->newAction(new IoPortChannelAction(project, IoPortChannelOp::InputRemoveEvent, nm->managerPath, rid, ridx));
     }
 }
 
@@ -357,7 +366,7 @@ void InputNode::deSerialize(json j) {
     shouldAutoPlaceFromWindow = false;
 }
 
-void InputNode::addChannel() {
+void InputNode::addWaveformOutputChannel() {
     const size_t pos = countWaveformOutputs();
     auto* c = new Connection;
     c->nm = outputs.nm;
@@ -385,7 +394,7 @@ void InputNode::addChannel() {
     nm->markTopologyDirty();
 }
 
-void InputNode::removeChannel() {
+void InputNode::removeLastWaveformOutputChannel() {
     const size_t minWf = nm->managerPath.empty() ? 1 : 0;
     if (countWaveformOutputs() <= minWf) return;
 
@@ -414,4 +423,148 @@ void InputNode::removeChannel() {
         nm->markTopologyDirty();
         return;
     }
+}
+
+bool InputNode::peekLastRemovableWaveformOutput(uint16_t* outId, size_t* outIndex) const {
+    const size_t minWf = nm->managerPath.empty() ? 1 : 0;
+    if (countWaveformOutputs() <= minWf) return false;
+    for (int i = static_cast<int>(outputs.connections.size()) - 1; i >= 0; --i) {
+        Connection* c = outputs.connections[static_cast<size_t>(i)];
+        if (c->type != DataType::Waveform) continue;
+        if (c->is_connected) return false;
+        if (outId) *outId = c->id;
+        if (outIndex) *outIndex = static_cast<size_t>(i);
+        return true;
+    }
+    return false;
+}
+
+bool InputNode::removeWaveformOutputById(uint16_t id) {
+    const size_t minWf = nm->managerPath.empty() ? 1 : 0;
+    if (countWaveformOutputs() <= minWf) return false;
+    const uint16_t idx = outputs.getIndex(id);
+    if (idx == std::numeric_limits<uint16_t>::max()) return false;
+    if (idx >= outputs.connections.size()) return false;
+    Connection* c = outputs.connections[idx];
+    if (!c || c->type != DataType::Waveform || c->is_connected) return false;
+
+    if (c->buffer) {
+        delete[] c->buffer;
+        c->buffer = nullptr;
+    }
+    outputs.id_pool.releaseID(c->id);
+    outputs.ids.erase(c->id);
+    outputs.connections.erase(outputs.connections.begin() + static_cast<ptrdiff_t>(idx));
+    delete c;
+    outputs.ids.clear();
+    for (size_t j = 0; j < outputs.connections.size(); ++j) {
+        outputs.ids[outputs.connections[j]->id] = static_cast<uint16_t>(j);
+    }
+    makeConnectionRects();
+    if (coupledPatcher) {
+        coupledPatcher->setLinkedWaveformInputCount(countWaveformOutputs());
+        coupledPatcher->nm->markTopologyDirty();
+    }
+    nm->markTopologyDirty();
+    return true;
+}
+
+void InputNode::insertWaveformOutputChannelAt(size_t index, uint16_t id) {
+    outputs.id_pool.reserveID(id);
+    auto* c = new Connection;
+    c->nm = outputs.nm;
+    c->id = id;
+    c->type = DataType::Waveform;
+    c->dir = Direction::output;
+    c->is_connected = false;
+    c->input_node = outputs.nodeID;
+    c->input_connection = c->id;
+    c->output_node = -1;
+    c->output_connection = -1;
+    c->events = nullptr;
+    c->buffer = nullptr;
+    c->bufferSize = bufferSize;
+    if (bufferSize > 0) {
+        c->buffer = new float[static_cast<size_t>(bufferSize)];
+        std::memset(c->buffer, 0, static_cast<size_t>(bufferSize) * sizeof(float));
+    }
+    outputs.connections.insert(outputs.connections.begin() + static_cast<ptrdiff_t>(index), c);
+    outputs.ids.clear();
+    for (size_t j = 0; j < outputs.connections.size(); ++j) {
+        outputs.ids[outputs.connections[j]->id] = static_cast<uint16_t>(j);
+    }
+    makeConnectionRects();
+    if (coupledPatcher) {
+        coupledPatcher->setLinkedWaveformInputCount(countWaveformOutputs());
+        coupledPatcher->nm->markTopologyDirty();
+    }
+    nm->markTopologyDirty();
+}
+
+bool InputNode::peekLastRemovableEventOutput(uint16_t* outId, size_t* outIndex) const {
+    for (int i = static_cast<int>(outputs.connections.size()) - 1; i >= 0; --i) {
+        Connection* c = outputs.connections[static_cast<size_t>(i)];
+        if (c->type != DataType::Events) continue;
+        if (c->is_connected) return false;
+        if (outId) *outId = c->id;
+        if (outIndex) *outIndex = static_cast<size_t>(i);
+        return true;
+    }
+    return false;
+}
+
+bool InputNode::removeEventOutputById(uint16_t id) {
+    const uint16_t idx = outputs.getIndex(id);
+    if (idx == std::numeric_limits<uint16_t>::max()) return false;
+    if (idx >= outputs.connections.size()) return false;
+    Connection* c = outputs.connections[idx];
+    if (!c || c->type != DataType::Events || c->is_connected) return false;
+
+    if (c->events) {
+        delete c->events;
+        c->events = nullptr;
+    }
+    outputs.id_pool.releaseID(c->id);
+    outputs.ids.erase(c->id);
+    outputs.connections.erase(outputs.connections.begin() + static_cast<ptrdiff_t>(idx));
+    delete c;
+    outputs.ids.clear();
+    for (size_t j = 0; j < outputs.connections.size(); ++j) {
+        outputs.ids[outputs.connections[j]->id] = static_cast<uint16_t>(j);
+    }
+    makeConnectionRects();
+    if (coupledPatcher) {
+        coupledPatcher->setLinkedEventInputCount(countLocalEventOutputs());
+        coupledPatcher->nm->markTopologyDirty();
+    }
+    nm->markTopologyDirty();
+    return true;
+}
+
+void InputNode::insertEventOutputChannelAt(size_t index, uint16_t id) {
+    outputs.id_pool.reserveID(id);
+    auto* c = new Connection;
+    c->nm = outputs.nm;
+    c->id = id;
+    c->type = DataType::Events;
+    c->dir = Direction::output;
+    c->is_connected = false;
+    c->input_node = outputs.nodeID;
+    c->input_connection = c->id;
+    c->output_node = -1;
+    c->output_connection = -1;
+    c->buffer = nullptr;
+    c->bufferSize = 0;
+    c->events = new std::vector<Event>;
+    outputs.connections.insert(outputs.connections.begin() + static_cast<ptrdiff_t>(index), c);
+    outputs.ids.clear();
+    for (size_t j = 0; j < outputs.connections.size(); ++j) {
+        outputs.ids[outputs.connections[j]->id] = static_cast<uint16_t>(j);
+    }
+    makeConnectionRects();
+    if (coupledPatcher) {
+        coupledPatcher->setLinkedEventInputCount(countLocalEventOutputs());
+        coupledPatcher->nm->markTopologyDirty();
+    }
+    nm->markTopologyDirty();
 }

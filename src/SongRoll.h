@@ -64,7 +64,8 @@ class SongRoll : public GridView{
 
         void clickMouse(SDL_Event& e) override;
 
-        void deleteElement() override;
+        enum class PositionDragKind { None = 0, Move, ResizeLeft, ResizeRight };
+        PositionDragKind positionDragKind = PositionDragKind::None;
 
         GridElement::Position lastPosition;
         GridElement::Position* movingPosition = nullptr; 
@@ -83,6 +84,17 @@ class SongRoll : public GridView{
         bool pianoRollDetached = true;
         PianoRoll* pianoRoll = nullptr;
         void createPianoRoll(Region*);
+
+    private:
+        /** When a piano roll is open, the region id it belongs to (for undo safety after the region is removed). */
+        int pianoRollTrackedRegionId = -1;
+        int timelineHoverElementId = -1;
+        int timelineHoverPositionId = -1;
+        int timelineDragElementId = -1;
+        int timelineDragPositionId = -1;
+
+        void validateTimelinePointers();
+        void clearPianoRoll();
 };
 
 #endif

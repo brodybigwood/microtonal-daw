@@ -29,6 +29,18 @@ class OutputNode : public Node {
 
         size_t countWaveformInputs() const;
 
+        void addWaveformInputChannel();
+        void removeLastWaveformInputChannel();
+        bool removeWaveformInputById(uint16_t id);
+        void insertWaveformInputChannelAt(size_t index, uint16_t id);
+        bool peekLastRemovableWaveformInput(uint16_t* outId, size_t* outIndex) const;
+
+        void addEventInputSocket();
+        void removeLastEventInputSocket();
+        bool removeEventInputById(uint16_t id);
+        void insertEventInputChannelAt(size_t index, uint16_t id);
+        bool peekLastRemovableEventInput(uint16_t* outId, size_t* outIndex) const;
+
     private:
         SDL_FRect addRect{20, 20, 48, 32};
         SDL_FRect removeRect{76, 20, 48, 32};
@@ -39,10 +51,6 @@ class OutputNode : public Node {
         Quad removeQuad{};
         Quad evAddQuad{};
         Quad evRemoveQuad{};
-        void addChannel();
-        void removeChannel();
-        void addEventOutputChannel();
-        void removeLastEventOutputChannel();
         size_t countLocalEventInputs() const;
 
         PatcherNode* coupledPatcher = nullptr;

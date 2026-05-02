@@ -6,6 +6,7 @@
 #include <thread>
 #include <csignal>
 #include <iostream>
+#include <cstdlib>
 #include <string>
 #include <atomic>
 #include <vector>
@@ -14,6 +15,15 @@
 #include <sstream>
 
 static std::atomic<bool> g_stopRequested{false};
+
+/** Saved at startup so we can restore canonical+echo if we exit while stdinThread left the TTY raw. */
+static termios g_stdinTermiosAtStartup{};
+static bool g_stdinTermiosAtStartupValid = false;
+
+static void restoreStdinTermiosAtExit() {
+    if (g_stdinTermiosAtStartupValid && isatty(STDIN_FILENO))
+        (void)tcsetattr(STDIN_FILENO, TCSADRAIN, &g_stdinTermiosAtStartup);
+}
 
 static std::string commandHint(const std::string& line) {
     std::stringstream ss(line);
@@ -82,7 +92,10 @@ static bool readCommandLineRaw(std::string& outLine, std::vector<std::string>& h
         }
         if (ch == 27) {
             char s1 = 0, s2 = 0;
-            if (::read(STDIN_FILENO, &s1, 1) <= 0 || ::read(STDIN_FILENO, &s2, 1) <= 0) continue;
+            if (::read(STDIN_FILENO, &s1, 1) <= 0 || ::read(STDIN_FILENO, &s2, 1) <= 0) {
+                tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+                return false;
+            }
             if (s1 == '[' && s2 == 'A') {
                 if (!history.empty()) {
                     if (historyIndex < 0) historyIndex = static_cast<int>(history.size()) - 1;
@@ -123,7 +136,15 @@ static bool readCommandLineRaw(std::string& outLine, std::vector<std::string>& h
 
 int main(int argc, char* argv[]) {
 
-    std::signal(SIGINT, [](int){ g_stopRequested.store(true); });
+    if (isatty(STDIN_FILENO) && tcgetattr(STDIN_FILENO, &g_stdinTermiosAtStartup) == 0) {
+        g_stdinTermiosAtStartupValid = true;
+        std::atexit(restoreStdinTermiosAtExit);
+    }
+
+    std::signal(SIGINT, [](int) {
+        restoreStdinTermiosAtExit();
+        g_stopRequested.store(true);
+    });
     
     if(!initFonts()) {
         std::cerr << "ttf init failed failed" << std::endl;
@@ -180,10 +201,11 @@ int main(int argc, char* argv[]) {
 
     project->save();
     audioManager->stop();
-    SDL_Quit();
 
+    // SDL_DestroyWindow must run before SDL_Quit (Quit tears down video first).
     delete audioManager;
     delete project;
+    SDL_Quit();
 
     return 0;
 }

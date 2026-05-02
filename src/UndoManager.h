@@ -29,7 +29,12 @@ enum ActionType {
     AssignNoteHarmonic = 11,
     AddModSourceUndo = 12,
     RemoveModSourceUndo = 13,
-    CreateRegion = 14
+    CreateRegion = 14,
+    DeleteRegion = 15,
+    CreatePosition = 16,
+    DeletePosition = 17,
+    MoveElementPosition = 18,
+    IoPortChannel = 19
 };
 
 
@@ -146,14 +151,8 @@ struct UndoManager {
         current = current->parent;
     }
 
-    void redo(size_t idx = -1) {
-        if (idx == -1) idx = current->last_index;
-        if (current->children.size()) {
-            current = current->children[idx];
-            if (current->audioThreadAction) enqueueAudioAction(current->doAction);
-            else current->doAction();
-        }
-    }
+    /** @param childIndex branch to redo; -1 uses `current->last_index` (clamped to valid range). */
+    void redo(int childIndex = -1);
 
     void goTo(ProjectAction*);
     bool clicked = false;
@@ -261,14 +260,66 @@ struct CreateRegionAction : ProjectAction {
     std::vector<int> managerPath;
     int nodeID = 0;
     int regionID = -1;
-    fract start;
-    uint16_t trackID = 0;
     json regionSnapshot = json::object();
     bool snapshotValid = false;
 
-    CreateRegionAction(Project* p, std::vector<int> managerPath, int nodeID, fract start, uint16_t trackID);
+    /** Creates an empty region (no timeline positions). */
+    CreateRegionAction(Project* p, std::vector<int> managerPath, int nodeID);
     /** Restored from project / undo JSON (`skipInitialDo`, graph already matches "after" for current pointer). */
     CreateRegionAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, json regionSnapshot);
+};
+
+struct CreatePositionAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    int elementID = 0;
+    fract start;
+    uint16_t trackID = 0;
+    int positionID = -1;
+
+    CreatePositionAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID, fract start, uint16_t trackID);
+};
+
+struct DeletePositionAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    int elementID = 0;
+    int positionID = 0;
+    size_t insertIndex = 0;
+    json positionSnapshot;
+
+    DeletePositionAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID, int positionID);
+    DeletePositionAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID, int positionID, size_t insertIndex,
+                         json positionSnapshot);
+
+private:
+    void wireLambdas();
+};
+
+struct MoveElementPositionAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    int elementID = 0;
+    int positionID = 0;
+    json before;
+    json after;
+
+    MoveElementPositionAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID, int positionID, json before,
+                              json after);
+};
+
+struct DeleteRegionAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    int regionID = 0;
+    size_t elementInsertIndex = 0;
+    json regionSnapshot;
+
+    DeleteRegionAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID);
+    DeleteRegionAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, size_t elementInsertIndex, json regionSnapshot);
+
+private:
+    void wireDeleteRegionLambdas();
 };
 
 struct AddArrangerTrackAction : ProjectAction {
@@ -298,6 +349,10 @@ struct AddNodeAction : ProjectAction {
     float x;
     float y;
     int nodeID = -1;
+    /** After undo(removal), redo must restore snapshot (ports, patcher internals, layout) — not a fresh empty node. */
+    bool hasRedoRestore = false;
+    json redoNodeSnapshot;
+    json redoConnectionsSnapshot = json::array();
 
     AddNodeAction(Project* p, std::vector<int> managerPath, int type, float x, float y);
 };
@@ -329,4 +384,27 @@ struct SeverNodeConnectionAction : ProjectAction {
     int dstConID;
 
     SeverNodeConnectionAction(Project* p, std::vector<int> managerPath, int srcNodeID, int srcConID, int dstNodeID, int dstConID);
+};
+
+namespace IoPortChannelOp {
+inline constexpr int InputAddWaveform = 0;
+inline constexpr int InputRemoveWaveform = 1;
+inline constexpr int InputAddEvent = 2;
+inline constexpr int InputRemoveEvent = 3;
+inline constexpr int OutputAddWaveform = 4;
+inline constexpr int OutputRemoveWaveform = 5;
+inline constexpr int OutputAddEvent = 6;
+inline constexpr int OutputRemoveEvent = 7;
+} // namespace IoPortChannelOp
+
+/** In/Out node ± socket changes (waveform + event buses). `connectionId` / `connectionIndex` are set after do for add ops, or snapshotted in ctor for remove ops. */
+struct IoPortChannelAction : ProjectAction {
+    std::vector<int> managerPath;
+    int op = 0;
+    uint16_t connectionId = 0;
+    size_t connectionIndex = 0;
+    /** For add-* ops: false until first do assigns connectionId (handles id 0 from id pool). */
+    bool idAssigned = false;
+
+    IoPortChannelAction(Project* p, int op, std::vector<int> managerPath, uint16_t connectionId, size_t connectionIndex);
 };

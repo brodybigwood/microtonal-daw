@@ -69,9 +69,10 @@ void ElementManager::process(int bufferSize) {
                             break;
                         }
                         auto* region = static_cast<Region*>(element);
+                        const float trim = static_cast<float>(static_cast<double>(pos.startOffset));
                         for (auto& note : region->notes) {
-                            float start = (float)note->start + regTime;
-                            float end = (float)note->end + regTime;
+                            float start = (float)note->start + regTime - trim;
+                            float end = (float)note->end + regTime - trim;
 
                             if (std::find(dispatched.begin(), dispatched.end(), note) == dispatched.end() && start < time+window+epsilon && start+epsilon >= time) {
                                
@@ -117,7 +118,9 @@ void ElementManager::process(int bufferSize) {
                         if (!project->isPlaying.load()) break;
                         if (!(*track->buffer)) break;
 
-                        int readIdx = project->beatsToSamples(time - pos.start);
+                        const double localBeats = time - static_cast<double>(pos.start);
+                        const double fileBeats = localBeats + static_cast<double>(pos.startOffset);
+                        int readIdx = project->beatsToSamples(static_cast<float>(fileBeats));
                         if (readIdx < 0) break;
                         AudioClip* ac = static_cast<AudioClip*>(element);
                         float* rbuffer = ac->buffer;
@@ -207,16 +210,24 @@ void ElementManager::removeElementById(uint16_t elementId) {
 }
 
 void ElementManager::restoreRegionFromSnapshot(const json& regionJson) {
+    restoreRegionFromSnapshotAt(elements.size(), regionJson);
+}
+
+void ElementManager::restoreRegionFromSnapshotAt(size_t insertIndex, const json& regionJson) {
     if (!regionJson.contains("type") || regionJson["type"].get<int>() != ElementType::region)
-        throw std::runtime_error("ElementManager::restoreRegionFromSnapshot: not a region snapshot");
+        throw std::runtime_error("ElementManager::restoreRegionFromSnapshotAt: not a region snapshot");
     const uint16_t rid = regionJson.at("id").get<uint16_t>();
     if (ids.count(rid))
-        throw std::runtime_error("ElementManager::restoreRegionFromSnapshot: id already in use");
+        throw std::runtime_error("ElementManager::restoreRegionFromSnapshotAt: id already in use");
+    if (insertIndex > elements.size())
+        insertIndex = elements.size();
     auto* r = new Region(project, parentNode);
     r->fromJSON(regionJson);
     id_pool.reserveID(rid);
-    elements.push_back(r);
-    ids[rid] = static_cast<uint16_t>(elements.size() - 1);
+    elements.insert(elements.begin() + static_cast<std::ptrdiff_t>(insertIndex), r);
+    ids.clear();
+    for (size_t i = 0; i < elements.size(); ++i)
+        ids[elements[i]->id] = static_cast<uint16_t>(i);
 }
 
 AudioClip* ElementManager::newAudioClip(std::string filepath) {

@@ -1,4 +1,6 @@
 #include "SongRoll.h"
+#include <algorithm>
+#include <cmath>
 #include "GridElement.h"
 #include "GridView.h"
 #include <SDL3/SDL_events.h>
@@ -10,8 +12,88 @@
 #include "PianoRoll.h"
 #include "Preferences.h"
 #include "UndoManager.h"
+#include "ContextMenu.h"
+#include "TreeEntry.h"
 #include "nodes/arranger/arranger.h"
 #include "NodeManager.h"
+
+namespace {
+constexpr float kTimelinePosBorderH = 4.0f;
+constexpr float kTimelinePosBorderV = 4.0f;
+/** Half-width of resize grab zone from each vertical edge (screen px). */
+constexpr float kPositionResizeEdgePx = 5.0f;
+
+fract nearestBeatFromScreenX(float screenX, float scrollX, float leftMargin, double dW, double notesPerBar) {
+    const int gridDen = static_cast<int>(std::max(1.0, std::round(notesPerBar)));
+    const double cellPx = dW / notesPerBar;
+    const int cell = static_cast<int>(std::lround((static_cast<double>(screenX) + static_cast<double>(scrollX) - static_cast<double>(leftMargin)) / cellPx));
+    return fract(cell, gridDen);
+}
+} // namespace
+
+void SongRoll::clearPianoRoll() {
+    delete pianoRoll;
+    pianoRoll = nullptr;
+    pianoRollTrackedRegionId = -1;
+}
+
+void SongRoll::validateTimelinePointers() {
+    if (pianoRoll) {
+        if (pianoRollTrackedRegionId < 0 ||
+            !em->ids.count(static_cast<uint16_t>(pianoRollTrackedRegionId))) {
+            clearPianoRoll();
+        }
+    }
+
+    if (timelineHoverPositionId >= 0) {
+        if (!em->ids.count(static_cast<uint16_t>(timelineHoverElementId))) {
+            hoveredPosition = nullptr;
+            timelineHoverElementId = -1;
+            timelineHoverPositionId = -1;
+        } else {
+            GridElement* ge = em->getElement(static_cast<uint16_t>(timelineHoverElementId));
+            hoveredPosition = nullptr;
+            for (auto* p : ge->positions) {
+                if (p->id == timelineHoverPositionId) {
+                    hoveredPosition = p;
+                    break;
+                }
+            }
+            if (!hoveredPosition) {
+                timelineHoverElementId = -1;
+                timelineHoverPositionId = -1;
+            }
+        }
+    }
+
+    if (lmb && timelineDragPositionId >= 0) {
+        if (!em->ids.count(static_cast<uint16_t>(timelineDragElementId))) {
+            movingPosition = nullptr;
+            positionDragKind = PositionDragKind::None;
+            lmb = false;
+            timelineDragElementId = -1;
+            timelineDragPositionId = -1;
+        } else {
+            GridElement* ge = em->getElement(static_cast<uint16_t>(timelineDragElementId));
+            GridElement::Position* resolved = nullptr;
+            for (auto* p : ge->positions) {
+                if (p->id == timelineDragPositionId) {
+                    resolved = p;
+                    break;
+                }
+            }
+            if (!resolved) {
+                movingPosition = nullptr;
+                positionDragKind = PositionDragKind::None;
+                lmb = false;
+                timelineDragElementId = -1;
+                timelineDragPositionId = -1;
+            } else {
+                movingPosition = resolved;
+            }
+        }
+    }
+}
 
 SongRoll::SongRoll(SDL_FRect* rect, bool* detached, Window* w, Project* p, ArrangerNode* n) : GridView(detached, rect, 200, w, p), parentNode(n) {
     this->windowHandler = WindowHandler::instance();
@@ -56,6 +138,7 @@ SongRoll::SongRoll(SDL_FRect* rect, bool* detached, Window* w, Project* p, Arran
 
 bool SongRoll::customTick() {
     syncLayout();
+    validateTimelinePointers();
 
     auto target = SDL_GetRenderTarget(renderer);
 
@@ -107,26 +190,62 @@ void SongRoll::renderMargins() {
 
 
 SongRoll::~SongRoll() {
-
+    clearPianoRoll();
 }
 
 void SongRoll::movePosition() {
     if (!movingPosition) return;
-    
-    auto amnt_x = mouseX - last_lmb_x;
-    auto amnt_y = mouseY - last_lmb_x;
 
-    auto oldPos = fract(std::floor((last_lmb_x+scrollX-leftMargin)/(dW / notesPerBar)),notesPerBar);
-    auto newPos = fract(std::floor((mouseX+scrollX-leftMargin)/(dW / notesPerBar)),notesPerBar);
-    auto change = newPos - oldPos;
-    // change = fract(std::floor((amnt_x)/(dW / notesPerBar)),notesPerBar)
-    
-    movingPosition->start = lastPosition.start + change;
+    const int gridDen = static_cast<int>(std::max(1.0, std::round(notesPerBar)));
+    const fract minLen(1, gridDen);
+    const fract oldPos = nearestBeatFromScreenX(last_lmb_x, static_cast<float>(scrollX), leftMargin, dW, notesPerBar);
+    const fract newPos = nearestBeatFromScreenX(mouseX, static_cast<float>(scrollX), leftMargin, dW, notesPerBar);
+    const fract change = newPos - oldPos;
 
-    int trackID = getHoveredTrack(); 
-    auto track = tracks->getTrack(trackID);
-    auto oldTrack = tracks->getTrack(lastPosition.trackID);
-    if (track && oldTrack && track->type == oldTrack->type) movingPosition->trackID = trackID;
+    switch (positionDragKind) {
+        case PositionDragKind::ResizeLeft: {
+            // Move timeline `start` right while keeping `end` fixed; advance `startOffset` so media trims from
+            // the left (regions and audio clips).
+            fract newStart = lastPosition.start + change;
+            fract newLen = lastPosition.end - newStart;
+            if ((double)newLen < (double)minLen) {
+                newLen = minLen;
+                newStart = lastPosition.end - newLen;
+            }
+            movingPosition->start = newStart;
+            movingPosition->length = newLen;
+            movingPosition->end = newStart + newLen;
+            const fract trim = newStart - lastPosition.start;
+            movingPosition->startOffset = lastPosition.startOffset + trim;
+            break;
+        }
+        case PositionDragKind::ResizeRight: {
+            fract newEnd = lastPosition.end + change;
+            fract newLen = newEnd - lastPosition.start;
+            if ((double)newLen < (double)minLen) {
+                newLen = minLen;
+                newEnd = lastPosition.start + newLen;
+            }
+            movingPosition->start = lastPosition.start;
+            movingPosition->length = newLen;
+            movingPosition->end = newEnd;
+            break;
+        }
+        case PositionDragKind::Move:
+        default:
+            movingPosition->start = lastPosition.start + change;
+            movingPosition->end = lastPosition.end + change;
+            movingPosition->length = lastPosition.length;
+            break;
+    }
+
+    if (positionDragKind == PositionDragKind::Move) {
+        int trackID = getHoveredTrack();
+        auto track = tracks->getTrack(trackID);
+        auto oldTrack = tracks->getTrack(lastPosition.trackID);
+        if (track && oldTrack && track->type == oldTrack->type)
+            movingPosition->trackID = trackID;
+    }
 }
 
 void SongRoll::handleCustomInput(SDL_Event& e) {
@@ -138,6 +257,24 @@ void SongRoll::handleCustomInput(SDL_Event& e) {
         case SDL_EVENT_MOUSE_MOTION:
             getHoveredPosition();
             movePosition();
+            if (mouseX < rightRect.x) {
+                const bool resizing = lmb && (positionDragKind == PositionDragKind::ResizeLeft ||
+                                              positionDragKind == PositionDragKind::ResizeRight);
+                bool overResize = resizing;
+                if (!overResize && hoveredPosition) {
+                    const float xL = getX(static_cast<float>(static_cast<double>(hoveredPosition->start)));
+                    const float xR = getX(static_cast<float>(static_cast<double>(hoveredPosition->end)));
+                    const float edge = std::max(kPositionResizeEdgePx, kTimelinePosBorderV + 1.0f);
+                    if (mouseX <= xL + edge || mouseX >= xR - edge)
+                        overResize = true;
+                }
+                if (overResize)
+                    SDL_SetCursor(cursors.resize);
+                else if (lmb && positionDragKind == PositionDragKind::Move)
+                    SDL_SetCursor(cursors.mover);
+                else
+                    SDL_SetCursor(cursors.selector);
+            }
             break;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             break;
@@ -204,8 +341,26 @@ void SongRoll::renderElement(GridElement* element) {
         }
         SDL_RenderFillRect(renderer, &dstRectE);
         SDL_RenderTexture(renderer, element->texture, &srcRect, &dstRectE);
-        SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
-        SDL_RenderRect(renderer, &dstRectE);
+
+        const float wPx = (float)pos.length * dW;
+        const float hPx = divHeight;
+        const float x0 = topLeftCornerX;
+        const float y0 = topLeftCornerY;
+
+        const float midY = y0 + kTimelinePosBorderH;
+        const float midH = std::max(0.0f, hPx - 2.0f * kTimelinePosBorderH);
+        SDL_SetRenderDrawColor(renderer, 120, 200, 255, 255);
+        SDL_FRect vLeft{x0, midY, kTimelinePosBorderV, midH};
+        SDL_RenderFillRect(renderer, &vLeft);
+        SDL_SetRenderDrawColor(renderer, 255, 190, 140, 255);
+        SDL_FRect vRight{x0 + wPx - kTimelinePosBorderV, midY, kTimelinePosBorderV, midH};
+        SDL_RenderFillRect(renderer, &vRight);
+
+        SDL_SetRenderDrawColor(renderer, 52, 54, 62, 255);
+        SDL_FRect hTop{x0, y0, wPx, kTimelinePosBorderH};
+        SDL_FRect hBot{x0, y0 + hPx - kTimelinePosBorderH, wPx, kTimelinePosBorderH};
+        SDL_RenderFillRect(renderer, &hTop);
+        SDL_RenderFillRect(renderer, &hBot);
     }
 }
 
@@ -222,11 +377,15 @@ void SongRoll::getHoveredPosition() {
                 mouseY < getY(index+1)
             ) {
                 hoveredPosition = &pos;
+                timelineHoverElementId = static_cast<int>(e->id);
+                timelineHoverPositionId = pos.id;
                 return;
             }
         }
     }
     hoveredPosition = nullptr;
+    timelineHoverElementId = -1;
+    timelineHoverPositionId = -1;
 }
 
 float SongRoll::getHoveredLine() {
@@ -255,9 +414,8 @@ void SongRoll::createElement() {
     if (track->getType() == TrackType::Notes && elem->type != ElementType::region) return;
     if (elem->type == ElementType::region && track->getType() != TrackType::Notes) return;
 
-    elem->createPos(
-        start, trackID
-    );
+    project->um->newAction(new CreatePositionAction(project, parentNode->nm->managerPath, static_cast<int>(parentNode->id),
+        static_cast<int>(id), start, static_cast<uint16_t>(trackID)));
 
     refreshGrid = true;
 }
@@ -274,8 +432,10 @@ void SongRoll::doubleClick() {
         auto track = tracks->getTrack(trackID);
         if (track && track->type == TrackType::Notes) {
             fract start = getHoveredTime();
-            project->um->newAction(new CreateRegionAction(project, parentNode->nm->managerPath, static_cast<int>(parentNode->id),
-                start, static_cast<uint16_t>(trackID)));
+            auto* cra = new CreateRegionAction(project, parentNode->nm->managerPath, static_cast<int>(parentNode->id));
+            project->um->newAction(cra);
+            project->um->newAction(new CreatePositionAction(project, parentNode->nm->managerPath, static_cast<int>(parentNode->id),
+                cra->regionID, start, static_cast<uint16_t>(trackID)));
             refreshGrid = true;
         }
     }
@@ -290,8 +450,24 @@ void SongRoll::clickMouse(SDL_Event& e) {
                 last_lmb_x = mouseX;
                 last_lmb_y = mouseY;
 
+                positionDragKind = PositionDragKind::None;
                 movingPosition = hoveredPosition;
-                if (movingPosition) lastPosition = *movingPosition;
+                timelineDragElementId = -1;
+                timelineDragPositionId = -1;
+                if (movingPosition) {
+                    lastPosition = *movingPosition;
+                    timelineDragElementId = static_cast<int>(movingPosition->element->id);
+                    timelineDragPositionId = movingPosition->id;
+                    const float xL = getX(static_cast<float>(static_cast<double>(movingPosition->start)));
+                    const float xR = getX(static_cast<float>(static_cast<double>(movingPosition->end)));
+                    const float handlePx = std::max(kPositionResizeEdgePx, kTimelinePosBorderV + 1.0f);
+                    if (mouseX <= xL + handlePx)
+                        positionDragKind = PositionDragKind::ResizeLeft;
+                    else if (mouseX >= xR - handlePx)
+                        positionDragKind = PositionDragKind::ResizeRight;
+                    else
+                        positionDragKind = PositionDragKind::Move;
+                }
                
                 if (SDL_GetTicks() - lastLmbTime < DCT) doubleClick();
                 else if (!hoveredPosition &&
@@ -304,34 +480,70 @@ void SongRoll::clickMouse(SDL_Event& e) {
             }
             if (e.button.button == SDL_BUTTON_RIGHT) {
                 rmb = true;
-                if (!MouseOn(&rightRect) && !MouseOn(&leftRect)) deleteElement();
+                if (hoveredPosition && mouseX < rightRect.x) {
+                    GridElement* el = hoveredPosition->element;
+                    const int elemId = static_cast<int>(el->id);
+                    const int posId = hoveredPosition->id;
+                    if (el->type == ElementType::region) {
+                        auto* reg = static_cast<Region*>(el);
+                        if (pianoRoll && pianoRoll->region == reg && reg->positions.size() == 1u)
+                            clearPianoRoll();
+                    }
+                    project->um->newAction(new DeletePositionAction(project, parentNode->nm->managerPath,
+                        static_cast<int>(parentNode->id), elemId, posId));
+                    refreshGrid = true;
+                } else if (MouseOn(&rightRect) && em->hoveredElement != -1 && !em->hoverNew) {
+                    GridElement* ge = em->getElement(static_cast<uint16_t>(em->hoveredElement));
+                    if (ge->type == ElementType::region) {
+                        auto* ctxMenu = ContextMenu::get();
+                        ctxMenu->active = true;
+                        ctxMenu->window_id = SDL_GetWindowID(window);
+                        ctxMenu->renderer = renderer;
+                        ctxMenu->locX = mouseX;
+                        ctxMenu->locY = mouseY;
+                        const uint16_t rid = ge->id;
+                        auto root = uTreeEntry();
+                        auto del = uTreeEntry();
+                        del->label = "Delete Region";
+                        del->click = [this, rid]() {
+                            auto* reg = static_cast<Region*>(em->getElement(rid));
+                            if (pianoRoll && pianoRoll->region == reg)
+                                clearPianoRoll();
+                            project->um->newAction(new DeleteRegionAction(project, parentNode->nm->managerPath,
+                                static_cast<int>(parentNode->id), static_cast<int>(rid)));
+                            refreshGrid = true;
+                        };
+                        root->addChild(del);
+                        ctxMenu->dynamicTick = getTreeMenuTicker(root);
+                    }
+                }
             }
             break;
         case SDL_EVENT_MOUSE_BUTTON_UP:
             if (e.button.button == SDL_BUTTON_LEFT) {
+                if (movingPosition) {
+                    json after = GridElement::positionToJson(*movingPosition);
+                    json before = GridElement::positionToJson(lastPosition);
+                    if (before != after) {
+                        GridElement* el = movingPosition->element;
+                        project->um->newAction(new MoveElementPositionAction(project, parentNode->nm->managerPath,
+                            static_cast<int>(parentNode->id), static_cast<int>(el->id), movingPosition->id, std::move(before),
+                            std::move(after)));
+                        refreshGrid = true;
+                    }
+                }
                 lmb = false;
                 movingPosition = nullptr;
+                positionDragKind = PositionDragKind::None;
+                timelineDragElementId = -1;
+                timelineDragPositionId = -1;
+                if (mouseX < rightRect.x)
+                    SDL_SetCursor(cursors.selector);
             }
             if (e.button.button == SDL_BUTTON_RIGHT) {
                 rmb = false;
             }
             break;
-    }
-}
-
-void SongRoll::deleteElement() {
-    for (auto e : em->elements) {
-        auto& positions = e->positions;
-
-        auto it = std::find_if(positions.begin(), positions.end(),
-                               [this](const GridElement::Position* p) {
-                                   return p == hoveredPosition;
-                               });
-
-        if (it != positions.end()) {
-            positions.erase(it);
-            return;
-        }
     }
 }
 
@@ -375,9 +587,8 @@ void SongRoll::dropFile(SDL_DropEvent& d) {
     if (track  == nullptr) return;
     if (track->type != TrackType::Audio) return; // cant put audioclip on region track
 
-    e->createPos(
-        start, trackID
-    );
+    project->um->newAction(new CreatePositionAction(project, parentNode->nm->managerPath, static_cast<int>(parentNode->id),
+        static_cast<int>(e->id), start, static_cast<uint16_t>(trackID)));
 
     refreshGrid = true;
 }
@@ -404,6 +615,7 @@ void SongRoll::generateTextures() {
 }
 
 void SongRoll::createPianoRoll(Region* region) {
-    if (pianoRoll) delete pianoRoll;
+    clearPianoRoll();
     pianoRoll = new PianoRoll(&pianoRollDetached, &pianoRollRect, region, this);
+    pianoRollTrackedRegionId = static_cast<int>(region->id);
 }

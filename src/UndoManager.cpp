@@ -1,4 +1,5 @@
 #include "UndoManager.h"
+#include "GridElement.h"
 #include "SDL_Events.h"
 #include "styles.h"
 #include <functional>
@@ -6,6 +7,8 @@
 #include "NodeProcessor.h"
 #include "nodes/nodetypes.h"
 #include "NodeManager.h"
+#include "InputNode.h"
+#include "OutputNode.h"
 #include "Note.h"
 #include "PianoRoll.h"
 #include <stdexcept>
@@ -52,6 +55,23 @@ ElementManager* undoResolveArrangerElementManager(Project* p, const std::vector<
     return arr ? arr->activeElementManager() : nullptr;
 }
 
+static GridElement* undoResolveGridElement(Project* p, const std::vector<int>& managerPath, int nodeID, int elementID) {
+    ElementManager* em = undoResolveArrangerElementManager(p, managerPath, nodeID);
+    if (!em)
+        throw std::runtime_error("undoResolveGridElement: element manager missing");
+    return em->getElement(static_cast<uint16_t>(elementID));
+}
+
+static GridElement::Position* undoResolveElementPosition(Project* p, const std::vector<int>& managerPath, int nodeID, int elementID,
+                                                         int positionID) {
+    GridElement* ge = undoResolveGridElement(p, managerPath, nodeID, elementID);
+    for (auto* pos : ge->positions) {
+        if (pos->id == positionID)
+            return pos;
+    }
+    throw std::runtime_error("undoResolveElementPosition: position id not found");
+}
+
 const std::unordered_map<std::string, ActionType>& UndoManager::actionRegistry() {
     static const std::unordered_map<std::string, ActionType> reg = {
         {"create_note", CreateNote},
@@ -62,6 +82,10 @@ const std::unordered_map<std::string, ActionType>& UndoManager::actionRegistry()
         {"make_node_connection", MakeNodeConnection},
         {"sever_node_connection", SeverNodeConnection},
         {"create_region", CreateRegion},
+        {"delete_region", DeleteRegion},
+        {"create_position", CreatePosition},
+        {"delete_position", DeletePosition},
+        {"move_element_position", MoveElementPosition},
     };
     return reg;
 }
@@ -86,7 +110,19 @@ std::string UndoManager::actionSchema(const std::string& actionName) {
         return R"({"managerPath":[int,...],"nodeID":int,"regionID":int,"start":fract_json,"length":fract_json,"pitch":float,"pitchIntegerPairs":[[int,int],...]})";
     }
     if (actionName == "create_region") {
-        return R"({"managerPath":[int,...],"nodeID":int,"start":fract_json,"trackID":int})";
+        return R"({"managerPath":[int,...],"nodeID":int})";
+    }
+    if (actionName == "delete_region") {
+        return R"({"managerPath":[int,...],"nodeID":int,"regionID":int})";
+    }
+    if (actionName == "create_position") {
+        return R"({"managerPath":[int,...],"nodeID":int,"elementID":int,"start":fract_json,"trackID":int})";
+    }
+    if (actionName == "delete_position") {
+        return R"({"managerPath":[int,...],"nodeID":int,"elementID":int,"positionID":int})";
+    }
+    if (actionName == "move_element_position") {
+        return R"({"managerPath":[int,...],"nodeID":int,"elementID":int,"positionID":int,"before":object,"after":object})";
     }
     throw std::runtime_error("actionSchema: unknown action name");
 }
@@ -145,8 +181,24 @@ bool UndoManager::runRegisteredAction(const std::string& actionName, const json&
             break;
         }
         case CreateRegion:
-            pa = new CreateRegionAction(head->p, params.at("managerPath").get<std::vector<int>>(), params.at("nodeID").get<int>(),
-                fract::fromJSON(params.at("start")), static_cast<uint16_t>(params.at("trackID").get<int>()));
+            pa = new CreateRegionAction(head->p, params.at("managerPath").get<std::vector<int>>(), params.at("nodeID").get<int>());
+            break;
+        case DeleteRegion:
+            pa = new DeleteRegionAction(head->p, params.at("managerPath").get<std::vector<int>>(), params.at("nodeID").get<int>(),
+                params.at("regionID").get<int>());
+            break;
+        case CreatePosition:
+            pa = new CreatePositionAction(head->p, params.at("managerPath").get<std::vector<int>>(), params.at("nodeID").get<int>(),
+                params.at("elementID").get<int>(), fract::fromJSON(params.at("start")),
+                static_cast<uint16_t>(params.at("trackID").get<int>()));
+            break;
+        case DeletePosition:
+            pa = new DeletePositionAction(head->p, params.at("managerPath").get<std::vector<int>>(), params.at("nodeID").get<int>(),
+                params.at("elementID").get<int>(), params.at("positionID").get<int>());
+            break;
+        case MoveElementPosition:
+            pa = new MoveElementPositionAction(head->p, params.at("managerPath").get<std::vector<int>>(), params.at("nodeID").get<int>(),
+                params.at("elementID").get<int>(), params.at("positionID").get<int>(), params.at("before"), params.at("after"));
             break;
         default:
             throw std::runtime_error("runRegisteredAction: unsupported action");
@@ -185,6 +237,11 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
         case AddNode: {
             auto an = new AddNodeAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeType").get<int>(), j.at("x").get<float>(), j.at("y").get<float>());
             an->nodeID = j.at("nodeID").get<int>();
+            if (j.contains("redoNodeSnapshot")) {
+                an->hasRedoRestore = true;
+                an->redoNodeSnapshot = j.at("redoNodeSnapshot");
+                an->redoConnectionsSnapshot = j.value("redoConnectionsSnapshot", json::array());
+            }
             pa = an;
             break;
         }
@@ -245,8 +302,34 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
             if (j.value("snapshotValid", false))
                 pa = new CreateRegionAction(p, managerPath, nodeID, j.at("regionID").get<int>(), j.at("regionSnapshot"));
             else
-                pa = new CreateRegionAction(p, managerPath, nodeID, fract::fromJSON(j.at("start")),
-                    static_cast<uint16_t>(j.at("trackID").get<int>()));
+                pa = new CreateRegionAction(p, managerPath, nodeID);
+            break;
+        }
+        case DeleteRegion:
+            pa = new DeleteRegionAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(), j.at("regionID").get<int>(),
+                j.at("elementInsertIndex").get<size_t>(), j.at("regionSnapshot"));
+            break;
+        case CreatePosition: {
+            const auto managerPath = j.at("managerPath").get<std::vector<int>>();
+            auto cpp = new CreatePositionAction(p, managerPath, j.at("nodeID").get<int>(), j.at("elementID").get<int>(),
+                fract::fromJSON(j.at("start")), static_cast<uint16_t>(j.at("trackID").get<int>()));
+            cpp->positionID = j.at("positionID").get<int>();
+            pa = cpp;
+            break;
+        }
+        case DeletePosition:
+            pa = new DeletePositionAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(), j.at("elementID").get<int>(),
+                j.at("positionID").get<int>(), j.at("insertIndex").get<size_t>(), j.at("positionSnapshot"));
+            break;
+        case MoveElementPosition:
+            pa = new MoveElementPositionAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(), j.at("elementID").get<int>(),
+                j.at("positionID").get<int>(), j.at("before"), j.at("after"));
+            break;
+        case IoPortChannel: {
+            auto* io = new IoPortChannelAction(p, j.at("op").get<int>(), j.at("managerPath").get<std::vector<int>>(),
+                static_cast<uint16_t>(j.at("connectionId").get<int>()), j.at("connectionIndex").get<size_t>());
+            io->idAssigned = j.value("idAssigned", true);
+            pa = io;
             break;
         }
         default:
@@ -307,10 +390,18 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["x"] = an->x;
             j["y"] = an->y;
             j["nodeID"] = an->nodeID;
+            if (an->hasRedoRestore) {
+                j["redoNodeSnapshot"] = an->redoNodeSnapshot;
+                j["redoConnectionsSnapshot"] = an->redoConnectionsSnapshot;
+            }
             break;
         }
         case RemoveNode: {
             auto rn = static_cast<RemoveNodeAction*>(pa);
+            if (rn->nodeData.is_null()) {
+                NodeManager& nm = requireManager(rn->p, rn->managerPath);
+                (void)nm.snapshotNode(static_cast<uint16_t>(rn->nodeID), rn->nodeData, rn->connectionsData);
+            }
             j["managerPath"] = rn->managerPath;
             j["nodeID"] = rn->nodeID;
             j["nodeData"] = rn->nodeData;
@@ -399,10 +490,56 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["managerPath"] = cr->managerPath;
             j["nodeID"] = cr->nodeID;
             j["regionID"] = cr->regionID;
-            j["start"] = cr->start.toJSON();
-            j["trackID"] = cr->trackID;
             j["regionSnapshot"] = cr->regionSnapshot;
             j["snapshotValid"] = cr->snapshotValid;
+            break;
+        }
+        case DeleteRegion: {
+            auto dr = static_cast<DeleteRegionAction*>(pa);
+            j["managerPath"] = dr->managerPath;
+            j["nodeID"] = dr->nodeID;
+            j["regionID"] = dr->regionID;
+            j["elementInsertIndex"] = dr->elementInsertIndex;
+            j["regionSnapshot"] = dr->regionSnapshot;
+            break;
+        }
+        case CreatePosition: {
+            auto cp = static_cast<CreatePositionAction*>(pa);
+            j["managerPath"] = cp->managerPath;
+            j["nodeID"] = cp->nodeID;
+            j["elementID"] = cp->elementID;
+            j["start"] = cp->start.toJSON();
+            j["trackID"] = cp->trackID;
+            j["positionID"] = cp->positionID;
+            break;
+        }
+        case DeletePosition: {
+            auto dp = static_cast<DeletePositionAction*>(pa);
+            j["managerPath"] = dp->managerPath;
+            j["nodeID"] = dp->nodeID;
+            j["elementID"] = dp->elementID;
+            j["positionID"] = dp->positionID;
+            j["insertIndex"] = dp->insertIndex;
+            j["positionSnapshot"] = dp->positionSnapshot;
+            break;
+        }
+        case MoveElementPosition: {
+            auto mp = static_cast<MoveElementPositionAction*>(pa);
+            j["managerPath"] = mp->managerPath;
+            j["nodeID"] = mp->nodeID;
+            j["elementID"] = mp->elementID;
+            j["positionID"] = mp->positionID;
+            j["before"] = mp->before;
+            j["after"] = mp->after;
+            break;
+        }
+        case IoPortChannel: {
+            auto* io = static_cast<IoPortChannelAction*>(pa);
+            j["managerPath"] = io->managerPath;
+            j["op"] = io->op;
+            j["connectionId"] = io->connectionId;
+            j["connectionIndex"] = io->connectionIndex;
+            j["idAssigned"] = io->idAssigned;
             break;
         }
         default:
@@ -419,6 +556,27 @@ json ProjectAction::serialize(ProjectAction* pa) {
     j["name"] = pa->name;
     j["last_index"] = pa->last_index;
     return j;
+}
+
+void UndoManager::redo(int childIndex) {
+    if (current->children.empty())
+        return;
+    int idx = childIndex;
+    if (idx < 0) {
+        idx = current->last_index;
+        if (idx < 0 || static_cast<size_t>(idx) >= current->children.size())
+            idx = static_cast<int>(current->children.size()) - 1;
+        // Shortcut redo must behave like undo-tree navigation (goTo), not a subtly different redo() path.
+        goTo(current->children[static_cast<size_t>(idx)]);
+        return;
+    }
+    if (idx < 0 || static_cast<size_t>(idx) >= current->children.size())
+        idx = static_cast<int>(current->children.size()) - 1;
+    current = current->children[static_cast<size_t>(idx)];
+    if (current->audioThreadAction)
+        enqueueAudioAction(current->doAction);
+    else
+        current->doAction();
 }
 
 bool UndoManager::mouseHitsRect(SDL_FRect* rect) const {
@@ -584,7 +742,6 @@ void wireCreateRegionDoUndo(CreateRegionAction* t) {
             throw std::runtime_error("CreateRegionAction::doAction: element manager missing");
         if (!t->snapshotValid) {
             Region* r = em->newRegion();
-            r->createPos(t->start, t->trackID);
             t->regionID = static_cast<int>(r->id);
             t->regionSnapshot = r->toJSON();
             t->snapshotValid = true;
@@ -604,12 +761,10 @@ void wireCreateRegionDoUndo(CreateRegionAction* t) {
 }
 } // namespace
 
-CreateRegionAction::CreateRegionAction(Project* p, std::vector<int> managerPath, int nodeID, fract start, uint16_t trackID) :
+CreateRegionAction::CreateRegionAction(Project* p, std::vector<int> managerPath, int nodeID) :
         ProjectAction(p, CreateRegion),
         managerPath(std::move(managerPath)),
-        nodeID(nodeID),
-        start(std::move(start)),
-        trackID(trackID) {
+        nodeID(nodeID) {
     wireCreateRegionDoUndo(this);
 }
 
@@ -623,6 +778,147 @@ CreateRegionAction::CreateRegionAction(Project* p, std::vector<int> managerPath,
     skipInitialDo = true;
     name = "Create Region " + std::to_string(this->regionID);
     wireCreateRegionDoUndo(this);
+}
+
+void DeleteRegionAction::wireDeleteRegionLambdas() {
+    doAction = [this]() {
+        ElementManager* em = undoResolveArrangerElementManager(this->p, this->managerPath, this->nodeID);
+        if (!em)
+            throw std::runtime_error("DeleteRegionAction::doAction: element manager missing");
+        em->removeElementById(static_cast<uint16_t>(this->regionID));
+    };
+    undoAction = [this]() {
+        ElementManager* em = undoResolveArrangerElementManager(this->p, this->managerPath, this->nodeID);
+        if (!em)
+            throw std::runtime_error("DeleteRegionAction::undoAction: element manager missing");
+        em->restoreRegionFromSnapshotAt(this->elementInsertIndex, this->regionSnapshot);
+    };
+}
+
+DeleteRegionAction::DeleteRegionAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID) :
+        ProjectAction(p, DeleteRegion),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        regionID(regionID) {
+    ElementManager* em = undoResolveArrangerElementManager(p, this->managerPath, nodeID);
+    if (!em)
+        throw std::runtime_error("DeleteRegionAction: element manager missing");
+    const uint16_t rid = static_cast<uint16_t>(regionID);
+    const auto idxIt = em->ids.find(rid);
+    if (idxIt == em->ids.end())
+        throw std::runtime_error("DeleteRegionAction: region id not in element manager");
+    const size_t idx = static_cast<size_t>(idxIt->second);
+    if (idx >= em->elements.size())
+        throw std::runtime_error("DeleteRegionAction: index out of range");
+    GridElement* ge = em->elements[idx];
+    if (ge->type != ElementType::region || ge->id != rid)
+        throw std::runtime_error("DeleteRegionAction: not a region or id mismatch");
+    regionSnapshot = static_cast<Region*>(ge)->toJSON();
+    elementInsertIndex = idx;
+    name = "Delete Region " + std::to_string(regionID);
+    wireDeleteRegionLambdas();
+}
+
+DeleteRegionAction::DeleteRegionAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, size_t elementInsertIndex,
+                                       json regionSnapshot) :
+        ProjectAction(p, DeleteRegion),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        regionID(regionID),
+        elementInsertIndex(elementInsertIndex),
+        regionSnapshot(std::move(regionSnapshot)) {
+    skipInitialDo = true;
+    name = "Delete Region " + std::to_string(regionID);
+    wireDeleteRegionLambdas();
+}
+
+CreatePositionAction::CreatePositionAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID, fract start, uint16_t trackID) :
+        ProjectAction(p, CreatePosition),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        elementID(elementID),
+        start(std::move(start)),
+        trackID(trackID) {
+    doAction = [this]() {
+        GridElement* ge = undoResolveGridElement(this->p, this->managerPath, this->nodeID, this->elementID);
+        ge->createPos(this->start, this->trackID);
+        this->positionID = ge->positions.back()->id;
+        this->name = "Create Position " + std::to_string(this->positionID);
+    };
+    undoAction = [this]() {
+        GridElement* ge = undoResolveGridElement(this->p, this->managerPath, this->nodeID, this->elementID);
+        if (!ge->removePositionById(this->positionID))
+            throw std::runtime_error("CreatePositionAction::undoAction: position id missing");
+    };
+}
+
+void DeletePositionAction::wireLambdas() {
+    doAction = [this]() {
+        GridElement* ge = undoResolveGridElement(this->p, this->managerPath, this->nodeID, this->elementID);
+        if (!ge->removePositionById(this->positionID))
+            throw std::runtime_error("DeletePositionAction::doAction: position id missing");
+    };
+    undoAction = [this]() {
+        GridElement* ge = undoResolveGridElement(this->p, this->managerPath, this->nodeID, this->elementID);
+        ge->insertPositionAt(this->insertIndex, this->positionSnapshot);
+    };
+}
+
+DeletePositionAction::DeletePositionAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID, int positionID) :
+        ProjectAction(p, DeletePosition),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        elementID(elementID),
+        positionID(positionID) {
+    GridElement* ge = undoResolveGridElement(p, this->managerPath, nodeID, elementID);
+    bool found = false;
+    for (size_t i = 0; i < ge->positions.size(); ++i) {
+        if (ge->positions[i]->id == positionID) {
+            insertIndex = i;
+            positionSnapshot = GridElement::positionToJson(*ge->positions[i]);
+            found = true;
+            break;
+        }
+    }
+    if (!found)
+        throw std::runtime_error("DeletePositionAction: position id not found on element");
+    name = "Delete Position " + std::to_string(positionID);
+    wireLambdas();
+}
+
+DeletePositionAction::DeletePositionAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID, int positionID,
+                                           size_t insertIndex, json positionSnapshot) :
+        ProjectAction(p, DeletePosition),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        elementID(elementID),
+        positionID(positionID),
+        insertIndex(insertIndex),
+        positionSnapshot(std::move(positionSnapshot)) {
+    skipInitialDo = true;
+    name = "Delete Position " + std::to_string(positionID);
+    wireLambdas();
+}
+
+MoveElementPositionAction::MoveElementPositionAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID, int positionID,
+                                                     json before, json after) :
+        ProjectAction(p, MoveElementPosition),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        elementID(elementID),
+        positionID(positionID),
+        before(std::move(before)),
+        after(std::move(after)) {
+    skipInitialDo = true;
+    name = "Move Position";
+    doAction = [this]() {
+        GridElement::Position* pos = undoResolveElementPosition(this->p, this->managerPath, this->nodeID, this->elementID, this->positionID);
+        GridElement::applyPositionFromJson(pos, this->after);
+    };
+    undoAction = [this]() {
+        GridElement::Position* pos = undoResolveElementPosition(this->p, this->managerPath, this->nodeID, this->elementID, this->positionID);
+        GridElement::applyPositionFromJson(pos, this->before);
+    };
 }
 
 AddArrangerTrackAction::AddArrangerTrackAction(Project* p, std::vector<int> managerPath, int nodeID, int trackType) :
@@ -683,6 +979,17 @@ AddNodeAction::AddNodeAction(Project* p, std::vector<int> managerPath, int type,
     name = "Add Node";
     doAction = [this] () {
         NodeManager& nm = requireManager(this->p, this->managerPath);
+        if (hasRedoRestore) {
+            auto* restored = nm.addNodeNow(redoNodeSnapshot);
+            if (!restored)
+                throw std::runtime_error("AddNodeAction::doAction: addNodeNow(json) failed");
+            nodeID = restored->id;
+            for (auto c : redoConnectionsSnapshot) {
+                nm.makeNodeConnectionNow(c.at("srcNodeID").get<int>(), c.at("srcConID").get<int>(), c.at("dstNodeID").get<int>(),
+                                         c.at("dstConID").get<int>());
+            }
+            return;
+        }
         auto* node = nm.addNodeNow(static_cast<NodeType>(nodeType), this->x, this->y, nodeID);
         if (!node)
             throw std::runtime_error("AddNodeAction::doAction: addNodeNow failed");
@@ -692,6 +999,9 @@ AddNodeAction::AddNodeAction(Project* p, std::vector<int> managerPath, int type,
         NodeManager& nm = requireManager(this->p, this->managerPath);
         if (nodeID < 0)
             throw std::runtime_error("AddNodeAction::undoAction: invalid nodeID");
+        if (!nm.snapshotNode(static_cast<uint16_t>(nodeID), redoNodeSnapshot, redoConnectionsSnapshot))
+            throw std::runtime_error("AddNodeAction::undoAction: snapshotNode failed");
+        hasRedoRestore = true;
         nm.removeNodeNow(nodeID);
     };
 }
@@ -702,10 +1012,11 @@ RemoveNodeAction::RemoveNodeAction(Project* p, std::vector<int> managerPath, int
         nodeID(nodeID) {
     audioThreadAction = true;
     name = "Remove Node";
-    NodeManager& nm = requireManager(p, this->managerPath);
-    nm.snapshotNode(nodeID, nodeData, connectionsData);
     doAction = [this] () {
         NodeManager& nm2 = requireManager(this->p, this->managerPath);
+        if (nodeData.is_null()) {
+            (void)nm2.snapshotNode(static_cast<uint16_t>(this->nodeID), nodeData, connectionsData);
+        }
         nm2.removeNodeNow(this->nodeID);
     };
     undoAction = [this] () {
@@ -762,6 +1073,154 @@ SeverNodeConnectionAction::SeverNodeConnectionAction(Project* p, std::vector<int
     undoAction = [this] () {
         NodeManager& nm = requireManager(this->p, this->managerPath);
         nm.makeNodeConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
+    };
+}
+
+IoPortChannelAction::IoPortChannelAction(Project* p, int opIn, std::vector<int> managerPathIn, uint16_t connectionIdIn, size_t connectionIndexIn) :
+        ProjectAction(p, IoPortChannel),
+        managerPath(std::move(managerPathIn)),
+        op(opIn),
+        connectionId(connectionIdIn),
+        connectionIndex(connectionIndexIn) {
+    audioThreadAction = true;
+    switch (op) {
+        case IoPortChannelOp::InputAddWaveform:
+            name = "Add input bus waveform";
+            break;
+        case IoPortChannelOp::InputRemoveWaveform:
+            name = "Remove input bus waveform";
+            idAssigned = true;
+            break;
+        case IoPortChannelOp::InputAddEvent:
+            name = "Add input bus event output";
+            break;
+        case IoPortChannelOp::InputRemoveEvent:
+            name = "Remove input bus event output";
+            idAssigned = true;
+            break;
+        case IoPortChannelOp::OutputAddWaveform:
+            name = "Add output bus waveform";
+            break;
+        case IoPortChannelOp::OutputRemoveWaveform:
+            name = "Remove output bus waveform";
+            idAssigned = true;
+            break;
+        case IoPortChannelOp::OutputAddEvent:
+            name = "Add output bus event input";
+            break;
+        case IoPortChannelOp::OutputRemoveEvent:
+            name = "Remove output bus event input";
+            idAssigned = true;
+            break;
+        default:
+            name = "I/O port channel";
+            break;
+    }
+
+    doAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        InputNode* in = nm.inNode;
+        OutputNode* out = nm.outNode;
+        switch (this->op) {
+            case IoPortChannelOp::InputAddWaveform: {
+                if (!this->idAssigned) {
+                    const size_t pos = in->countWaveformOutputs();
+                    in->addWaveformOutputChannel();
+                    this->connectionId = in->outputs.connections[pos]->id;
+                    this->connectionIndex = pos;
+                    this->idAssigned = true;
+                } else if (in->outputs.getConnection(this->connectionId) == nullptr) {
+                    in->insertWaveformOutputChannelAt(this->connectionIndex, this->connectionId);
+                }
+                break;
+            }
+            case IoPortChannelOp::InputRemoveWaveform:
+                in->removeWaveformOutputById(this->connectionId);
+                break;
+            case IoPortChannelOp::InputAddEvent: {
+                if (!this->idAssigned) {
+                    in->addEventOutputSocket();
+                    this->connectionId = in->outputs.connections.back()->id;
+                    this->connectionIndex = in->outputs.connections.size() - 1;
+                    this->idAssigned = true;
+                } else if (in->outputs.getConnection(this->connectionId) == nullptr) {
+                    in->insertEventOutputChannelAt(this->connectionIndex, this->connectionId);
+                }
+                break;
+            }
+            case IoPortChannelOp::InputRemoveEvent:
+                in->removeEventOutputById(this->connectionId);
+                break;
+            case IoPortChannelOp::OutputAddWaveform: {
+                if (!this->idAssigned) {
+                    const size_t pos = out->countWaveformInputs();
+                    out->addWaveformInputChannel();
+                    this->connectionId = out->inputs.connections[pos]->id;
+                    this->connectionIndex = pos;
+                    this->idAssigned = true;
+                } else if (out->inputs.getConnection(this->connectionId) == nullptr) {
+                    out->insertWaveformInputChannelAt(this->connectionIndex, this->connectionId);
+                }
+                break;
+            }
+            case IoPortChannelOp::OutputRemoveWaveform:
+                out->removeWaveformInputById(this->connectionId);
+                break;
+            case IoPortChannelOp::OutputAddEvent: {
+                if (!this->idAssigned) {
+                    out->addEventInputSocket();
+                    this->connectionId = out->inputs.connections.back()->id;
+                    this->connectionIndex = out->inputs.connections.size() - 1;
+                    this->idAssigned = true;
+                } else if (out->inputs.getConnection(this->connectionId) == nullptr) {
+                    out->insertEventInputChannelAt(this->connectionIndex, this->connectionId);
+                }
+                break;
+            }
+            case IoPortChannelOp::OutputRemoveEvent:
+                out->removeEventInputById(this->connectionId);
+                break;
+            default:
+                break;
+        }
+    };
+
+    undoAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        InputNode* in = nm.inNode;
+        OutputNode* out = nm.outNode;
+        switch (this->op) {
+            case IoPortChannelOp::InputAddWaveform:
+                in->removeWaveformOutputById(this->connectionId);
+                break;
+            case IoPortChannelOp::InputRemoveWaveform:
+                if (in->outputs.getConnection(this->connectionId) == nullptr)
+                    in->insertWaveformOutputChannelAt(this->connectionIndex, this->connectionId);
+                break;
+            case IoPortChannelOp::InputAddEvent:
+                in->removeEventOutputById(this->connectionId);
+                break;
+            case IoPortChannelOp::InputRemoveEvent:
+                if (in->outputs.getConnection(this->connectionId) == nullptr)
+                    in->insertEventOutputChannelAt(this->connectionIndex, this->connectionId);
+                break;
+            case IoPortChannelOp::OutputAddWaveform:
+                out->removeWaveformInputById(this->connectionId);
+                break;
+            case IoPortChannelOp::OutputRemoveWaveform:
+                if (out->inputs.getConnection(this->connectionId) == nullptr)
+                    out->insertWaveformInputChannelAt(this->connectionIndex, this->connectionId);
+                break;
+            case IoPortChannelOp::OutputAddEvent:
+                out->removeEventInputById(this->connectionId);
+                break;
+            case IoPortChannelOp::OutputRemoveEvent:
+                if (out->inputs.getConnection(this->connectionId) == nullptr)
+                    out->insertEventInputChannelAt(this->connectionIndex, this->connectionId);
+                break;
+            default:
+                break;
+        }
     };
 }
 

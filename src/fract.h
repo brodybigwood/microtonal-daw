@@ -75,7 +75,7 @@ struct fract {
         return new_fract;
     }
 
-    nlohmann::json toJSON() {
+    nlohmann::json toJSON() const {
         return nlohmann::json{{"num", num}, {"den", den}};
     }
 

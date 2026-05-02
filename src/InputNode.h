@@ -28,6 +28,19 @@ class InputNode : public Node {
 
         size_t countWaveformOutputs() const;
 
+        /** Graph edits (IoPortChannelAction / NodeManager). */
+        void addWaveformOutputChannel();
+        void removeLastWaveformOutputChannel();
+        bool removeWaveformOutputById(uint16_t id);
+        void insertWaveformOutputChannelAt(size_t index, uint16_t id);
+        bool peekLastRemovableWaveformOutput(uint16_t* outId, size_t* outIndex) const;
+
+        void addEventOutputSocket();
+        void removeLastEventOutputSocket();
+        bool removeEventOutputById(uint16_t id);
+        void insertEventOutputChannelAt(size_t index, uint16_t id);
+        bool peekLastRemovableEventOutput(uint16_t* outId, size_t* outIndex) const;
+
     private:
         SDL_FRect addRect{20, 20, 48, 32};
         SDL_FRect removeRect{76, 20, 48, 32};
@@ -38,10 +51,6 @@ class InputNode : public Node {
         Quad removeQuad{};
         Quad evAddQuad{};
         Quad evRemoveQuad{};
-        void addChannel();
-        void removeChannel();
-        void addEventOutputChannel();
-        void removeLastEventOutputChannel();
         size_t countLocalEventOutputs() const;
 
         PatcherNode* coupledPatcher = nullptr;

@@ -3,12 +3,15 @@
 #include "NodeEditor.h"
 #include "UndoManager.h"
 #include "Project.h"
+#include "Preferences.h"
+#include <SDL3/SDL.h>
 
 #include <iostream>
 #include <limits>
 #include "nodes/nodetypes.h"
 
 NodeManager::NodeManager(Project* p, std::vector<int> managerPath) : project(p), managerPath(std::move(managerPath)) {
+    portDisplayMode = Preferences::defaultPortDisplayMode;
     outNode = new OutputNode(this);
     inNode = new InputNode(this);
     id_pool.reserveID(0); // id of outputnode
@@ -29,6 +32,9 @@ void NodeManager::setNE(NodeEditor* ne) {
     outNode->placeDefaultByWindowSize(static_cast<float>(ww), static_cast<float>(wh));
     inNode->placeDefaultByWindowSize(static_cast<float>(ww), static_cast<float>(wh));
     for (auto n : nodes) n->setNE(ne);
+    for (auto n : nodes) n->makeConnectionRects();
+    inNode->makeConnectionRects();
+    outNode->makeConnectionRects();
 }
 
 void NodeManager::resetNE() {
@@ -164,7 +170,8 @@ NodeManager::~NodeManager() {
 }
 
 std::vector<Node*> NodeManager::getNodes() {
-    std::lock_guard<std::recursive_mutex> lock(graphMutex);
+    std::unique_lock<std::recursive_mutex> lk(graphMutex, std::try_to_lock);
+    if (!lk.owns_lock()) return {};
     return nodes;
 }
 
@@ -186,7 +193,8 @@ void NodeManager::makeNodeConnection(
 }
 
 void NodeManager::severConnection(Connection* c) {
-    std::lock_guard<std::recursive_mutex> lock(graphMutex);
+    std::unique_lock<std::recursive_mutex> lk(graphMutex, std::try_to_lock);
+    if (!lk.owns_lock()) return;
     if (!c->is_connected) return;
     uint16_t srcNodeID, srcConID, dstNodeID, dstConID;
     if (c->dir == Direction::input) {
@@ -240,6 +248,10 @@ void NodeManager::removeNode(Node* n) {
 
 void NodeManager::process(float* output, int& bufferSize, int& numChannels, int& sampleRate) {
     std::lock_guard<std::recursive_mutex> lock(graphMutex);
+
+    // Apply queued graph mutations before this buffer's DSP so the tree matches the latest undo/redo.
+    project->um->flushAudioActions();
+
     bool update = false;
     if(bufferSize != this->bufferSize) {
         update = true;
@@ -276,9 +288,6 @@ void NodeManager::process(float* output, int& bufferSize, int& numChannels, int&
     // Event buses (if any): outNode->outputs event connections in array order — host / future bridges can read in order.
     outNode->processTree();
     outNode->resetProcessTree();
-
-    // Apply deferred graph edits at the audio-buffer boundary.
-    project->um->flushAudioActions();
 }
 
 Node* NodeManager::addNodeNow(NodeType t, float x, float y, int forcedID) {
@@ -357,6 +366,7 @@ void NodeManager::removeNodeNow(uint16_t id) {
     ids.erase(node->id);
     Node* removed = nodes.back();
     nodes.pop_back();
+    if (ne) ne->clearPointersToNode(removed);
     {
         std::lock_guard<std::mutex> lock(deferredDeleteMutex);
         deferredDeleteNodes.push_back(removed);
@@ -480,6 +490,30 @@ bool NodeManager::snapshotNode(uint16_t nodeID, json& nodeData, json& connection
     return true;
 }
 
+bool NodeManager::peekRemovableInputWaveform(uint16_t* outId, size_t* outIndex) {
+    std::unique_lock<std::recursive_mutex> lk(graphMutex, std::try_to_lock);
+    if (!lk.owns_lock()) return false;
+    return inNode->peekLastRemovableWaveformOutput(outId, outIndex);
+}
+
+bool NodeManager::peekRemovableInputEvent(uint16_t* outId, size_t* outIndex) {
+    std::unique_lock<std::recursive_mutex> lk(graphMutex, std::try_to_lock);
+    if (!lk.owns_lock()) return false;
+    return inNode->peekLastRemovableEventOutput(outId, outIndex);
+}
+
+bool NodeManager::peekRemovableOutputWaveform(uint16_t* outId, size_t* outIndex) {
+    std::unique_lock<std::recursive_mutex> lk(graphMutex, std::try_to_lock);
+    if (!lk.owns_lock()) return false;
+    return outNode->peekLastRemovableWaveformInput(outId, outIndex);
+}
+
+bool NodeManager::peekRemovableOutputEvent(uint16_t* outId, size_t* outIndex) {
+    std::unique_lock<std::recursive_mutex> lk(graphMutex, std::try_to_lock);
+    if (!lk.owns_lock()) return false;
+    return outNode->peekLastRemovableEventInput(outId, outIndex);
+}
+
 void NodeManager::flushUiDeferred() {
     std::vector<Node*> pending;
     {
@@ -487,6 +521,13 @@ void NodeManager::flushUiDeferred() {
         pending.swap(deferredDeleteNodes);
     }
     for (auto* n : pending) {
+        // Undo add-node removes a popped-out node's window without changing SDL keyboard focus — the OS
+        // often moves focus back to another app (e.g. terminal). Raising the parent editor here only when the
+        // detached window actually had focus (main thread — avoid doing this from the audio enqueue path).
+        if (n && n->detached && n->window) {
+            if (SDL_GetKeyboardFocus() == n->window && n->ne && n->ne->window)
+                SDL_RaiseWindow(n->ne->window);
+        }
         delete n;
     }
 }

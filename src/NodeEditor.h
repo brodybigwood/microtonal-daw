@@ -48,8 +48,17 @@ class NodeEditor : public Window {
 
         SDL_FRect nodeRect{0, 0, 1920, 1080};
 
+        /** Draw curved patch cable preview; uses `r` so it matches the same render target as socket drawing. */
+        static void renderPatchCable(SDL_Renderer* r, float x1, float y1, float x2, float y2, SDL_FColor color);
+
         void renderSine(float x1, float y1, float x2, float y2, SDL_FColor);
         void togglePortDisplayMode();
+
+        /** Invalidate wire/drag pointers before `n` is deferred-deleted or replaced by undo. */
+        void clearPointersToNode(Node* n);
+
+        /** Clear all in-progress connection / drag state (e.g. before destroying this editor). */
+        void clearWireDragState();
 
     private:
 

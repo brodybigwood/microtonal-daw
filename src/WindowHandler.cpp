@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 #include <vector>
 #include "nodes/nodetypes.h"
+#include "fract.h"
 using json = nlohmann::json;
 
 static std::vector<int> parseManagerPath(const std::string& s) {
@@ -88,6 +89,31 @@ static bool buildActionParamsPositional(const std::string& actionName, std::stri
             params["length"] = fract(lNum, lDen).toJSON();
             params["pitch"] = pitch;
             params["pitchIntegerPairs"] = json::array();
+            return true;
+        }
+        if (actionName == "create_region") {
+            std::string path;
+            int nodeID;
+            if (!(ss >> path >> nodeID)) {
+                error = "usage: action create_region <path|-|root> <nodeID>";
+                return false;
+            }
+            params["managerPath"] = parseManagerPath(path);
+            params["nodeID"] = nodeID;
+            return true;
+        }
+        if (actionName == "create_position") {
+            std::string path;
+            int nodeID, elementID, sNum, sDen, trackID;
+            if (!(ss >> path >> nodeID >> elementID >> sNum >> sDen >> trackID)) {
+                error = "usage: action create_position <path|-|root> <nodeID> <elementID> <startNum> <startDen> <trackID>";
+                return false;
+            }
+            params["managerPath"] = parseManagerPath(path);
+            params["nodeID"] = nodeID;
+            params["elementID"] = elementID;
+            params["start"] = fract(sNum, sDen).toJSON();
+            params["trackID"] = trackID;
             return true;
         }
         error = "unknown action";
@@ -177,16 +203,22 @@ bool WindowHandler::tick() {
                 const SDL_Keymod mods = SDL_GetModState();
                 const bool ctrlDown = (mods & SDL_KMOD_CTRL) != 0;
                 const bool shiftDown = (mods & SDL_KMOD_SHIFT) != 0;
-                if (ctrlDown) {
-                    if (e.key.key == SDLK_Z) {
-                        if (shiftDown) {
-                            project->redo();
-                        } else {
-                            if (project->um->current == project->um->head) continue;
-                            project->undo();
-                        }
+                // Use scancode (physical Z) — e.key.key == SDLK_Z often misses with modifiers / some layouts / SDL3.
+                const bool zKey = (e.key.scancode == SDL_SCANCODE_Z) || (e.key.key == SDLK_Z);
+                if (ctrlDown && zKey) {
+                    // SDL key-repeat would fire undo/redo many times per key hold; undo tree navigates once per click.
+                    if (e.key.repeat)
                         continue;
-                    } else if (e.key.key == SDLK_S) {
+                    if (shiftDown) {
+                        project->redo();
+                    } else {
+                        if (project->um->current == project->um->head) continue;
+                        project->undo();
+                    }
+                    continue;
+                }
+                if (ctrlDown) {
+                    if (e.key.key == SDLK_S) {
                         SDL_Renderer* eventRenderer = nullptr;
                         for (auto* w : windows) {
                             if (w && SDL_GetWindowFromID(e.key.windowID) == w->window) {

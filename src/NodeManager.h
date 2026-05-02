@@ -46,6 +46,12 @@ class NodeManager {
         void moveNodeNow(uint16_t, float, float);
         bool snapshotNode(uint16_t, json&, json&);
 
+        /** Peek last removable socket (under graph lock). Used when building remove undo actions. */
+        bool peekRemovableInputWaveform(uint16_t* outId, size_t* outIndex);
+        bool peekRemovableInputEvent(uint16_t* outId, size_t* outIndex);
+        bool peekRemovableOutputWaveform(uint16_t* outId, size_t* outIndex);
+        bool peekRemovableOutputEvent(uint16_t* outId, size_t* outIndex);
+
         std::vector<Node*> getNodes();
 
         void markTopologyDirty();
