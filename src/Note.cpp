@@ -21,16 +21,20 @@ static void primesForSlots(int slotCount, std::vector<int>& out) {
     }
 }
 
-void Note::syncNumFromPitchIntegerPairs() {
+float Note::midiFromPitchIntegerPairs(const std::vector<std::pair<int, int>>& pairs) {
     double prod = 1.0;
     std::vector<int> primes;
-    primesForSlots(static_cast<int>(pitchIntegerPairs.size()), primes);
-    for (size_t i = 0; i < pitchIntegerPairs.size(); ++i) {
-        const double e = static_cast<double>(pitchIntegerPairs[i].first) /
-                         static_cast<double>(pitchIntegerPairs[i].second);
+    primesForSlots(static_cast<int>(pairs.size()), primes);
+    for (size_t i = 0; i < pairs.size(); ++i) {
+        const double e =
+            static_cast<double>(pairs[i].first) / static_cast<double>(pairs[i].second);
         prod *= std::pow(static_cast<double>(primes[i]), e);
     }
-    num = 69.0f + static_cast<float>(12.0 * std::log2(prod));
+    return 69.0f + static_cast<float>(12.0 * std::log2(prod));
+}
+
+void Note::syncNumFromPitchIntegerPairs() {
+    num = midiFromPitchIntegerPairs(pitchIntegerPairs);
 }
 
 Note::Note(fract start, fract end, float /*legacy pitch argument ignored*/) {

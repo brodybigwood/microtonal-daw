@@ -30,6 +30,8 @@ class Note {
         // num = 69 + 12*log2(product of primes[i]^(num/den)); empty vector => product 1 => num 69.
         std::vector<std::pair<int, int>> pitchIntegerPairs;
 
+        /** Same mapping as syncNumFromPitchIntegerPairs → num (69 + 12·log₂ prime product). */
+        static float midiFromPitchIntegerPairs(const std::vector<std::pair<int, int>>& pairs);
         void syncNumFromPitchIntegerPairs();
         void move(fract x, fract y);
 

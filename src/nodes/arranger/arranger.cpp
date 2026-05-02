@@ -183,15 +183,22 @@ void ArrangerNode::ensureSongRoll() {
     if (sl || !ne || !ne->window || !ne->renderer) return;
     sl = new SongRoll(slRect, &slDetached, ne, project, this);
     std::cout << "[DBG_DESER] ArrangerNode::ensureSongRoll node=" << id << " created" << std::endl;
-    if (hasPendingExtraState) {
-        auto j = pendingExtraState;
-        hasPendingExtraState = false;
-        pendingExtraState = json{};
+    /* Seed the UI from the live runtime graph: undo/redo (and AddArrangerTrack, etc.) may have run while
+       SongRoll did not exist; pendingExtraState is only the deserialize snapshot and would clobber that. */
+    if (runtimeTracks && runtimeElements) {
+        sl->tracks->fromJSON(runtimeTracks->toJSON());
+        sl->em->fromJSON(runtimeElements->toJSON());
+        std::cout << "[DBG_DESER] ArrangerNode::ensureSongRoll node=" << id << " copied runtime track/element -> SongRoll"
+                  << std::endl;
+    } else if (hasPendingExtraState) {
+        const auto j = pendingExtraState;
         if (j.contains("TrackManager")) sl->tracks->fromJSON(j["TrackManager"]);
         if (j.contains("ElementManager")) sl->em->fromJSON(j["ElementManager"]);
-        rebuildRuntimeState(j);
-        std::cout << "[DBG_DESER] ArrangerNode::ensureSongRoll node=" << id << " applied deferred track/element" << std::endl;
+        std::cout << "[DBG_DESER] ArrangerNode::ensureSongRoll node=" << id << " applied pending track/element fallback"
+                  << std::endl;
     }
+    hasPendingExtraState = false;
+    pendingExtraState = json{};
 }
 
 void ArrangerNode::rebuildRuntimeState(json j) {

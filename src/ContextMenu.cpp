@@ -17,10 +17,11 @@ void ContextMenu::tick(SDL_Event& e) {
     }
 }
 
-std::function<bool(SDL_Event& e)> getTextInputTicker(std::function<void(std::string text)> enter)
+std::function<bool(SDL_Event& e)> getTextInputTicker(std::function<void(std::string text)> enter,
+                                                     std::function<void()> onDismiss)
 {
 
-return [enter](SDL_Event& e) {
+return [enter, onDismiss](SDL_Event& e) {
     auto ctxMenu = ContextMenu::get();
     auto& renderer = ctxMenu->renderer;
     auto& x = ctxMenu->locX;
@@ -47,7 +48,9 @@ return [enter](SDL_Event& e) {
         if (e.key.key == SDLK_BACKSPACE && !text.empty()) {
             new_text.pop_back();
         }
-
+        if (e.key.key == SDLK_ESCAPE) {
+            done = true;
+        }
     }
 
     if (!surf || text != new_text) surf = TTF_RenderText_Blended(fonts.mainFont, new_text.c_str(), 0, textColor);
@@ -74,6 +77,7 @@ return [enter](SDL_Event& e) {
 
         surf = nullptr;
         tex = nullptr;
+        if (onDismiss) onDismiss();
     } else {
         SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
         SDL_RenderFillRect(renderer, &rect);

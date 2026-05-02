@@ -52,5 +52,5 @@ bool initFonts() {
     } else {
         return false;
     }
-    
+
 }

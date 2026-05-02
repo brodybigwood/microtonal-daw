@@ -27,6 +27,7 @@ class ContextMenu {
         bool keepOpenOnNextTreeLeafClick = false;
 };
 
-std::function<bool(SDL_Event& e)> getTextInputTicker(std::function<void(std::string text)> enter);
+std::function<bool(SDL_Event& e)> getTextInputTicker(std::function<void(std::string text)> enter,
+                                                    std::function<void()> onDismiss = {});
 
 std::function<bool(SDL_Event& e)> getTreeMenuTicker(std::shared_ptr<TreeEntry> t);

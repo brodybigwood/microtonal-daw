@@ -1,5 +1,6 @@
 #include "UndoManager.h"
 #include "GridElement.h"
+#include <cmath>
 #include "SDL_Events.h"
 #include "styles.h"
 #include <functional>
@@ -13,6 +14,7 @@
 #include "PianoRoll.h"
 #include <stdexcept>
 #include <unordered_map>
+#include <vector>
 
 static NodeManager& requireManager(Project* p, const std::vector<int>& path) {
     if (!p || !p->processor)
@@ -219,6 +221,8 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
             auto cn = new CreateNoteAction(p, managerPath, j.at("nodeID").get<int>(), j.at("regionID").get<int>(), fract::fromJSON(j.at("start")),
                 fract::fromJSON(j.at("length")), j.at("pitch").get<float>(), std::move(pairs));
             cn->noteID = j.at("noteID").get<int>();
+            if (j.contains("noteStampedSnapshot") && !j["noteStampedSnapshot"].is_null())
+                cn->noteStampedSnapshot = j["noteStampedSnapshot"];
             pa = cn;
             break;
         }
@@ -343,6 +347,7 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
 
     pa->last_index = j.at("last_index").get<int>();
     pa->name = j.at("name").get<std::string>();
+    pa->undoTreeExpanded = j.value("undoTreeExpanded", false);
     return pa;
 }
 
@@ -362,6 +367,8 @@ json ProjectAction::serialize(ProjectAction* pa) {
             for (const auto& pr : cn->pitchIntegerPairs)
                 j["pitchIntegerPairs"].push_back(json::array({pr.first, pr.second}));
             j["noteID"] = cn->noteID;
+            if (!cn->noteStampedSnapshot.is_null())
+                j["noteStampedSnapshot"] = cn->noteStampedSnapshot;
             break;
         }
         case AddArrangerTrack: {
@@ -555,6 +562,7 @@ json ProjectAction::serialize(ProjectAction* pa) {
     j["children"] = children;
     j["name"] = pa->name;
     j["last_index"] = pa->last_index;
+    j["undoTreeExpanded"] = pa->undoTreeExpanded;
     return j;
 }
 
@@ -577,6 +585,7 @@ void UndoManager::redo(int childIndex) {
         enqueueAudioAction(current->doAction);
     else
         current->doAction();
+    flushAudioActions();
 }
 
 bool UndoManager::mouseHitsRect(SDL_FRect* rect) const {
@@ -606,41 +615,152 @@ void UndoManager::clearAllRenderTextures() {
         wipe(head);
 }
 
-bool UndoManager::render(SDL_Renderer* renderer) {
-    if (!baseRect || !head)
-        return false;
-    bool handled = renderAction(renderer, baseRect, head);
-    clicked = false;
-    return handled;
+namespace {
+
+ProjectAction* directChildOnPath(ProjectAction* root, ProjectAction* descendant) {
+    if (!root || !descendant || descendant == root)
+        return nullptr;
+    for (ProjectAction* n = descendant; n; n = n->parent) {
+        if (n->parent == root)
+            return n;
+        if (n == root)
+            return nullptr;
+    }
+    return nullptr;
 }
 
-bool UndoManager::renderAction(SDL_Renderer* renderer, SDL_FRect* rect, ProjectAction* pa) {
+struct UndoTreeProbe {
+    ProjectAction* hit = nullptr;
+    float bottomY = 0.f;
+};
 
+UndoTreeProbe probeUndoTreeAt(float lx, float ly, float x, float y, float layoutFullWidth, float rowH, ProjectAction* pa) {
+    SDL_FRect row{x, y, layoutFullWidth, rowH};
+    ProjectAction* selfHit = nullptr;
+    if (lx >= row.x && lx < row.x + row.w && ly >= row.y && ly < row.y + row.h)
+        selfHit = pa;
+    float cursorY = y + rowH;
+    if (!pa->undoTreeExpanded || pa->children.empty())
+        return {selfHit, cursorY};
+    const float childLeft = x + rowH;
+    ProjectAction* best = selfHit;
+    for (ProjectAction* c : pa->children) {
+        UndoTreeProbe sub = probeUndoTreeAt(lx, ly, childLeft, cursorY, layoutFullWidth, rowH, c);
+        if (sub.hit)
+            best = sub.hit;
+        cursorY = sub.bottomY;
+    }
+    return {best, cursorY};
+}
+
+bool undoNodeChainReachHead(ProjectAction* n, ProjectAction* realHead) {
+    while (n) {
+        if (n == realHead)
+            return true;
+        n = n->parent;
+    }
+    return false;
+}
+
+void sanitizeUndoTreeViewRoot(UndoManager& um) {
+    if (!um.head) {
+        um.undoTreeViewRoot = nullptr;
+        return;
+    }
+    if (um.undoTreeViewRoot && !undoNodeChainReachHead(um.undoTreeViewRoot, um.head))
+        um.undoTreeViewRoot = nullptr;
+}
+
+} // namespace
+
+void UndoManager::undoTreeHandleWheel(const SDL_FRect& layoutAnchor, float rowPixels, float mouseX, float mouseY,
+    float wheelY) {
+    if (!head)
+        return;
+    sanitizeUndoTreeViewRoot(*this);
+    const float rowH = rowPixels > 0.f ? rowPixels : undoTreeRowH;
+    ProjectAction* vr = undoTreeViewRoot ? undoTreeViewRoot : head;
+
+    constexpr float eps = 0.05f;
+    if (std::fabs(wheelY) < eps)
+        return;
+
+    /* SDL: positive Y scrolls finger away — treat as drill down into a child row. */
+    if (wheelY < 0.f) {
+        if (vr != head && vr->parent)
+            undoTreeViewRoot = (vr->parent == head) ? nullptr : vr->parent;
+        return;
+    }
+
+    ProjectAction* h = probeUndoTreeAt(mouseX, mouseY, layoutAnchor.x, layoutAnchor.y, layoutAnchor.w, rowH, vr).hit;
+
+    ProjectAction* const cChild = (current != vr) ? directChildOnPath(vr, current) : nullptr;
+    ProjectAction* const hChild = (h && h != vr) ? directChildOnPath(vr, h) : nullptr;
+
+    /* Prefer the branch under the hovered row; otherwise follow the path to the undo tip. */
+    ProjectAction* next = hChild ? hChild : cChild;
+
+    if (!next && !vr->children.empty()) {
+        int idx = vr->last_index;
+        const int nch = static_cast<int>(vr->children.size());
+        if (idx < 0 || idx >= nch)
+            idx = nch - 1;
+        next = vr->children[static_cast<size_t>(idx)];
+    }
+
+    if (next)
+        undoTreeViewRoot = next;
+}
+
+void UndoManager::syncUndoTreeExpansionPathToCurrent() {
+    if (!head || !current)
+        return;
+    for (ProjectAction* n = current; n && n != head; n = n->parent) {
+        if (n->parent)
+            n->parent->undoTreeExpanded = true;
+    }
+}
+
+void UndoManager::applyUndoTreeClickAfterLayout() {
+    const bool left = undoTreeFrameLeft;
+    const bool right = undoTreeFrameRight;
+    undoTreeFrameLeft = false;
+    undoTreeFrameRight = false;
+    ProjectAction* hit = undoTreeHitUnderCursor;
+    undoTreeHitUnderCursor = nullptr;
+    if (!hit)
+        return;
+    /* Prefer navigation if both landed same frame (e.g. odd hardware). */
+    if (left) {
+        goTo(hit);
+        return;
+    }
+    if (right && !hit->children.empty())
+        hit->undoTreeExpanded = !hit->undoTreeExpanded;
+}
+
+bool UndoManager::drawUndoTreeRow(SDL_Renderer* renderer, SDL_FRect* rect, ProjectAction* pa) {
     bool hovering = false;
 
     SDL_Color color;
-
     if (pa == current) {
-        if (mouseHitsRect(rect)) {
-            color = {100, 200, 100, 255};   
-        } else {
+        if (mouseHitsRect(rect))
+            color = {100, 200, 100, 255};
+        else
             color = {100, 255, 100, 255};
-        }
     } else {
-        if (mouseHitsRect(rect)) {
+        if (mouseHitsRect(rect))
             color = {255, 255, 255, 255};
-        } else {
+        else
             color = {200, 200, 200, 255};
-        }
     }
-
 
     SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
     SDL_RenderFillRect(renderer, rect);
 
     SDL_Texture*& texture = pa->texture;
     if (!texture) {
-        SDL_Color textColor{0,0,0,255};
+        SDL_Color textColor{0, 0, 0, 255};
         SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, pa->name.c_str(), 0, textColor);
         texture = SDL_CreateTextureFromSurface(renderer, surf);
         SDL_DestroySurface(surf);
@@ -651,21 +771,79 @@ bool UndoManager::renderAction(SDL_Renderer* renderer, SDL_FRect* rect, ProjectA
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderRect(renderer, rect);
 
-    if (mouseHitsRect(rect)) hovering = true;
-    if (hovering && clicked) {
-        goTo(pa);
-        clicked = false;
-    }
-
-    SDL_FRect subRect = *rect;
-    subRect.y += subRect.h;
-
-    for (auto c : pa->children) {
-        if (renderAction(renderer, &subRect, c)) hovering = true;
-        subRect.x += subRect.w;
+    if (mouseHitsRect(rect)) {
+        hovering = true;
+        if (undoTreeFrameLeft || undoTreeFrameRight)
+            undoTreeHitUnderCursor = pa;
     }
 
     return hovering;
+}
+
+UndoManager::UndoTreeLayoutBox UndoManager::layoutUndoTreeGeom(SDL_Renderer* renderer, float x, float y, float w, float rowH, ProjectAction* pa) {
+    UndoTreeLayoutBox out;
+    SDL_FRect row{x, y, w, rowH};
+    out.hovering = drawUndoTreeRow(renderer, &row, pa);
+    float cursorY = y + rowH;
+
+    if (!pa->undoTreeExpanded || pa->children.empty()) {
+        out.bottomY = cursorY;
+        return out;
+    }
+
+    const float kIndent = rowH;
+    const float childLeft = x + kIndent;
+    const float childW = baseRect->w;
+    const float trunkX = row.x + kIndent * 0.5f;
+
+    std::vector<float> directChildRowMidY;
+    directChildRowMidY.reserve(pa->children.size());
+    for (ProjectAction* c : pa->children) {
+        const float sliceTop = cursorY;
+        directChildRowMidY.push_back(sliceTop + rowH * 0.5f);
+
+        UndoTreeLayoutBox sub =
+            layoutUndoTreeGeom(renderer, childLeft, cursorY, childW, rowH, c);
+        out.hovering |= sub.hovering;
+        cursorY = sub.bottomY;
+    }
+
+    /* Vertical spine to the last sibling’s row mid; one horizontal per direct child at its own row.
+       Expanding a child only adds pixels below that row — earlier horizontals stay put. */
+    const float trunkTop = row.y + row.h;
+    const float spineBottom = directChildRowMidY.back();
+    const float hRunEnd = std::fmax(childLeft - 2.5f, trunkX);
+
+    SDL_SetRenderDrawColor(renderer, 160, 160, 164, 255);
+    SDL_RenderLine(renderer, trunkX, trunkTop + 0.5f, trunkX, spineBottom + 0.5f);
+    for (float midY : directChildRowMidY)
+        SDL_RenderLine(renderer, trunkX, midY + 0.5f, hRunEnd, midY + 0.5f);
+
+    out.bottomY = cursorY;
+    return out;
+}
+
+bool UndoManager::render(SDL_Renderer* renderer) {
+    if (!baseRect || !head)
+        return false;
+    sanitizeUndoTreeViewRoot(*this);
+    syncUndoTreeExpansionPathToCurrent();
+    undoTreeHitUnderCursor = nullptr;
+    undoTreeFrameLeft = undoTreePendingLeft;
+    undoTreeFrameRight = undoTreePendingRight;
+    undoTreePendingLeft = false;
+    undoTreePendingRight = false;
+    const float rowH = undoTreeRowH > 1.f ? undoTreeRowH : 20.f;
+    auto viewRoot = [&]() -> ProjectAction* { return undoTreeViewRoot ? undoTreeViewRoot : head; };
+    UndoTreeLayoutBox box =
+        layoutUndoTreeGeom(renderer, baseRect->x, baseRect->y, baseRect->w, rowH, viewRoot());
+    ProjectAction* const tipBeforeClick = current;
+    applyUndoTreeClickAfterLayout();
+    syncUndoTreeExpansionPathToCurrent();
+    sanitizeUndoTreeViewRoot(*this);
+    if (current != tipBeforeClick)
+        box = layoutUndoTreeGeom(renderer, baseRect->x, baseRect->y, baseRect->w, rowH, viewRoot());
+    return box.hovering;
 }
 
 void UndoManager::goTo(ProjectAction* target) {
@@ -673,6 +851,8 @@ void UndoManager::goTo(ProjectAction* target) {
 
     if (!target || !current || !head)
         throw std::runtime_error("UndoManager::goTo: null target, current, or head");
+
+    flushAudioActions();
 
     std::vector<int> headToCurrent;
     std::vector<int> headToTarget;
@@ -726,6 +906,14 @@ CreateNoteAction::CreateNoteAction(Project* p, std::vector<int> managerPath, int
         Region& region = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
         noteID = region.createNote(this->start, this->length, this->pitch, this->pitchIntegerPairs);
         name = "Create Note " + std::to_string(noteID) + " " + std::to_string(this->regionID);
+        if (!noteStampedSnapshot.is_null()) {
+            auto it = region.id_to_index.find(noteID);
+            if (it != region.id_to_index.end()) {
+                const size_t idx = static_cast<size_t>(it->second);
+                if (idx < region.notes.size() && region.notes[idx])
+                    region.notes[idx]->applyUndoSnapshot(noteStampedSnapshot);
+            }
+        }
     };
 
     undoAction = [this]() {
@@ -932,7 +1120,11 @@ AddArrangerTrackAction::AddArrangerTrackAction(Project* p, std::vector<int> mana
         auto* node = dynamic_cast<ArrangerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
         if (!node)
             throw std::runtime_error("AddArrangerTrackAction::doAction: node is not an arranger");
-        auto* track = node->sl->tracks->addTrackNow(static_cast<TrackType>(this->trackType), this->trackID, this->connectionID);
+        TrackManager* tm = node->activeTrackManager();
+        if (!tm)
+            throw std::runtime_error("AddArrangerTrackAction::doAction: no active track manager");
+        auto* track =
+            tm->addTrackNow(static_cast<TrackType>(this->trackType), this->trackID, this->connectionID);
         if (!track)
             throw std::runtime_error("AddArrangerTrackAction::doAction: addTrackNow failed");
         this->trackID = track->id;
@@ -946,7 +1138,10 @@ AddArrangerTrackAction::AddArrangerTrackAction(Project* p, std::vector<int> mana
             throw std::runtime_error("AddArrangerTrackAction::undoAction: node is not an arranger");
         if (this->trackID < 0)
             throw std::runtime_error("AddArrangerTrackAction::undoAction: invalid trackID");
-        node->sl->tracks->removeTrackNow(static_cast<uint16_t>(this->trackID));
+        TrackManager* tm = node->activeTrackManager();
+        if (!tm)
+            throw std::runtime_error("AddArrangerTrackAction::undoAction: no active track manager");
+        tm->removeTrackNow(static_cast<uint16_t>(this->trackID));
     };
 }
 

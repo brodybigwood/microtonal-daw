@@ -4,7 +4,7 @@
 
 class Project;
 
-/** Utility window that draws `UndoManager::render` / `renderAction` so you can see `current` in the tree. */
+/** Utility window that draws `UndoManager::render` for the undo graph. */
 class UndoTreeWindow : public Window {
 public:
     explicit UndoTreeWindow(Project* project);
@@ -15,6 +15,6 @@ public:
 
 private:
     Project* project = nullptr;
-    SDL_FRect rootCell{8.0f, 8.0f, 96.0f, 26.0f};
+    SDL_FRect rootCell{8.0f, 8.0f, 96.0f, 20.0f};
     SDL_Renderer* lastUndoRenderer = nullptr;
 };

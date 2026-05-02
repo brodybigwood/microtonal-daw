@@ -524,6 +524,9 @@ void PianoRoll::newTuning() {
 }
 
 void PianoRoll::updateLines() {
+    // Snap tuningMode / anchors from region before building pitchLines so snapping never uses a stale lattice.
+    loadTuningFromRegion();
+
     pitchLines.clear();
     lineLabels.clear();
     lineStructural.clear();
@@ -549,19 +552,20 @@ void PianoRoll::updateLines() {
             lineStructural.push_back(h);
         }
     } else {
-        const float step = std::max(1e-5f, edoStep);
         const int subdiv = region ? region->tuningEdoSubdivisionSteps : 0;
-        for (int k = -1024; k <= 1024; ++k) {
-            const float midi = edoAnchorMidi + static_cast<float>(k) * step;
-            if (midi < -24.0f || midi > 152.0f) continue;
-            pitchLines.emplace_back(midi);
-            if (region && subdiv > 0)
-                pitchLines.back().integerPairs =
+        if (region && subdiv > 0) {
+            for (int k = -1024; k <= 1024; ++k) {
+                std::vector<std::pair<int, int>> pairs =
                     edoVectorForK(k, subdiv, region->tuningEdoLowerVector, region->tuningEdoUpperVector);
-            std::ostringstream ss;
-            ss << std::fixed << std::setprecision(2) << midi;
-            lineLabels.push_back(ss.str());
-            lineStructural.push_back(k);
+                const float midi = Note::midiFromPitchIntegerPairs(pairs);
+                if (midi < -24.0f || midi > 152.0f) continue;
+                pitchLines.emplace_back(midi);
+                pitchLines.back().integerPairs = std::move(pairs);
+                std::ostringstream ss;
+                ss << std::fixed << std::setprecision(2) << midi;
+                lineLabels.push_back(ss.str());
+                lineStructural.push_back(k);
+            }
         }
     }
     Scroll();
@@ -673,7 +677,6 @@ PianoRoll::PianoRoll(bool* detached, SDL_FRect* rect, Region* region, Window* w)
     if (*detached) WindowHandler::instance()->addWindow(this);
     leftMargin = 80.0f;
  
-    loadTuningFromRegion();
     updateLines();
 
     SDL_SetCursor(cursors.grabber);
@@ -864,9 +867,14 @@ bool PianoRoll::customTick() {
 
     SDL_RenderTexture(renderer, backgroundTexture, nullptr, dstRect);
 
-    if (selectingInterval) {
-        const float yStart = getY(intervalStartLine);
-        const float yEnd = getY(intervalEndLine);
+    const bool showIntervalPreview = selectingInterval || intervalEdoDefineDialogOpen;
+    const float visIntervalStartLine =
+        selectingInterval ? intervalStartLine : intervalDialogFrozenStartLine;
+    const float visIntervalEndLine = selectingInterval ? intervalEndLine : intervalDialogFrozenEndLine;
+
+    if (showIntervalPreview) {
+        const float yStart = getY(visIntervalStartLine);
+        const float yEnd = getY(visIntervalEndLine);
         const float yTop = std::min(yStart, yEnd);
         const float yBot = std::max(yStart, yEnd);
         SDL_FRect band{leftMargin, yTop, width - leftMargin, std::max(1.0f, yBot - yTop)};
@@ -888,8 +896,8 @@ bool PianoRoll::customTick() {
 
     SDL_RenderTexture(renderer, PianoTexture, nullptr, dstRect);
 
-    if (selectingInterval) {
-        const float yEnd = getY(intervalEndLine);
+    if (showIntervalPreview) {
+        const float yEnd = getY(visIntervalEndLine);
         SDL_SetRenderDrawColor(renderer, 65, 190, 240, 128);
         SDL_RenderLine(renderer, mouseX, yEnd, leftMargin, yEnd);
     }
@@ -1022,11 +1030,17 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     return;
                 }
                 if (isShiftPressed && mouseX > leftMargin) {
+                    intervalEdoDefineDialogOpen = false;
                     selectingInterval = true;
                     intervalSelectStartedHarmonic = (tuningMode == TuningMode::Harmonic);
                     intervalStartNote = std::dynamic_pointer_cast<Note>(hoveredElement);
                     intervalStartLine = intervalStartNote ? intervalStartNote->num : getHoveredLine();
                     intervalEndLine = intervalStartLine;
+                    intervalDragEndVertexPairs.clear();
+                    if (intervalStartNote)
+                        intervalDragStartVertexPairs = intervalStartNote->pitchIntegerPairs;
+                    else
+                        intervalDragStartVertexPairs.clear();
                     intervalDragMoved = false;
                     if (tuningMode == TuningMode::Harmonic) {
                         intervalDragHarmA =
@@ -1149,8 +1163,9 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     auto endNote = std::dynamic_pointer_cast<Note>(hoveredElement);
                     const bool sameNoteClick = !intervalDragMoved &&
                         intervalStartNote && endNote && (intervalStartNote->id == endNote->id);
-                    selectingInterval = false;
                     if (sameNoteClick) {
+                        selectingInterval = false;
+                        intervalEdoDefineDialogOpen = false;
                         auto before = captureRegionTuning(region);
                         applyNoteTuning(intervalStartNote);
                         auto after = captureRegionTuning(region);
@@ -1164,10 +1179,18 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                         return;
                     }
                     if (std::fabs(intervalEndLine - intervalStartLine) < 0.01f) {
+                        selectingInterval = false;
+                        intervalEdoDefineDialogOpen = false;
                         intervalStartNote = nullptr;
                         refreshGrid = true;
                         return;
                     }
+                    intervalDialogFrozenStartLine = intervalStartLine;
+                    intervalDialogFrozenEndLine = intervalEndLine;
+                    intervalDialogFrozenStartVertexPairs = intervalDragStartVertexPairs;
+                    intervalDialogFrozenEndVertexPairs = intervalDragEndVertexPairs;
+                    intervalEdoDefineDialogOpen = true;
+                    selectingInterval = false;
                     const bool capStartedHarm = intervalSelectStartedHarmonic;
                     const int capHarmA = intervalDragHarmA;
                     const int capHarmB = intervalDragHarmB;
@@ -1194,19 +1217,34 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     SDL_StartTextInput(window);
                     ctxMenu->locX = mouseX;
                     ctxMenu->locY = mouseY;
-                    const float a = intervalStartLine;
-                    const float b = intervalEndLine;
+                    const float a = intervalDialogFrozenStartLine;
+                    const float b = intervalDialogFrozenEndLine;
+                    const std::shared_ptr<Note> capIntervalStartNote = intervalStartNote;
+                    const std::shared_ptr<Note> capIntervalEndNote = endNote;
+                    const std::vector<std::pair<int, int>> capDragStartVertexPairs = intervalDialogFrozenStartVertexPairs;
+                    const std::vector<std::pair<int, int>> capDragEndVertexPairs = intervalDialogFrozenEndVertexPairs;
                     ctxMenu->dynamicTick = getTextInputTicker(
                         [this, a, b, capStartedHarm, capHarmA, capHarmB, capEdoKA, capEdoKB, intervalFromTwoNotes,
-                            intervalLoNotePairs, intervalHiNotePairs](std::string text) {
+                            intervalLoNotePairs, intervalHiNotePairs, capIntervalStartNote, capIntervalEndNote,
+                            capDragStartVertexPairs, capDragEndVertexPairs](std::string text) {
                         try {
                             const int steps = std::max(1, std::stoi(text));
                             const float loF = std::min(a, b);
                             const float hiF = std::max(a, b);
+                            // Snapshots track rational endpoints while dragging; b can be off-grid note MIDI with
+                            // hoveredElement on the staff (endNote null) — never pitchIntegerPairsAtGridMidi(note->num).
+                            const std::vector<std::pair<int, int>> vecAtA =
+                                capIntervalStartNote ? capDragStartVertexPairs : pitchIntegerPairsAtGridMidi(a);
+                            const std::vector<std::pair<int, int>> vecAtB =
+                                !capDragEndVertexPairs.empty()
+                                    ? capDragEndVertexPairs
+                                    : (capIntervalEndNote ? capIntervalEndNote->pitchIntegerPairs
+                                                          : pitchIntegerPairsAtGridMidi(b));
                             const std::vector<std::pair<int, int>> lowerLineVec =
-                                intervalFromTwoNotes ? intervalLoNotePairs : pitchIntegerPairsAtGridMidi(loF);
+                                intervalFromTwoNotes ? intervalLoNotePairs : (a <= b ? vecAtA : vecAtB);
                             const std::vector<std::pair<int, int>> upperLineVec =
-                                intervalFromTwoNotes ? intervalHiNotePairs : pitchIntegerPairsAtGridMidi(hiF);
+                                intervalFromTwoNotes ? intervalHiNotePairs : (a <= b ? vecAtB : vecAtA);
+
                             auto before = captureRegionTuning(region);
                             auto after = before;
 
@@ -1281,7 +1319,10 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                                 regionTuningSnapshotToUndoJson(after), "Define EDO Interval"));
                         } catch (...) {
                         }
-                    });
+                    },
+                        [this]() {
+                            intervalEdoDefineDialogOpen = false;
+                        });
                     intervalStartNote = nullptr;
                 }
             }
@@ -1344,26 +1385,19 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                 auto endNote = std::dynamic_pointer_cast<Note>(hoveredElement);
                 if (endNote) {
                     intervalEndLine = endNote->num;
+                    intervalDragEndVertexPairs = endNote->pitchIntegerPairs;
                     if (!intervalStartNote || endNote->id != intervalStartNote->id) {
                         intervalDragMoved = true;
                     }
                 } else {
+                    // Always follow the hovered lattice line. The old dNearest<dStart rule kept intervalEndLine
+                    // pinned to intervalStartLine while the cursor was still nearer in Y to the start note, so loF
+                    // stayed at the note MIDI and pitchIntegerPairsAtGridMidi(loF) used the wrong lattice row.
                     const float nearest = getHoveredLine();
-                    if (intervalStartNote) {
-                        const float dStart = std::fabs(mouseY - getY(intervalStartLine));
-                        const float dNearest = std::fabs(mouseY - getY(nearest));
-                        if (dNearest < dStart) {
-                            intervalEndLine = nearest;
-                            intervalDragMoved = true;
-                        } else {
-                            intervalEndLine = intervalStartLine;
-                        }
-                    } else {
-                        intervalEndLine = nearest;
-                        if (std::fabs(intervalEndLine - intervalStartLine) > 0.01f) {
-                            intervalDragMoved = true;
-                        }
-                    }
+                    intervalEndLine = nearest;
+                    intervalDragEndVertexPairs.clear();
+                    if (std::fabs(intervalEndLine - intervalStartLine) > 0.01f)
+                        intervalDragMoved = true;
                 }
                 if (intervalSelectStartedHarmonic) {
                     if (endNote)
@@ -1412,7 +1446,8 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                     last_lmb_x += steps * step;
                 } 
 
-                if (getHoveredLine() != movingNote->num) {
+                constexpr float pitchDragEpsilon = 1e-3f;
+                if (std::fabs(getHoveredLine() - movingNote->num) > pitchDragEpsilon) {
                     moveNote(movingNote, 0, getHoveredLine() - movingNote->num);
                     lastHoveredLine = getHoveredLine();
                 }
@@ -1461,6 +1496,9 @@ void PianoRoll::createElement() {
             note->harmonicNumber = 0;
         }
         stampNoteTuning(note);
+        // CreateNoteAction::doAction does not rerun stampNoteTuning on redo; persist post-stamp state on the action.
+        if (project && project->um && project->um->current && project->um->current->type == CreateNote)
+            static_cast<CreateNoteAction*>(project->um->current)->noteStampedSnapshot = note->toJSON();
     }
     refreshGrid = true;
 }
@@ -1661,7 +1699,6 @@ void PianoRoll::notifyTuningUndoApplied(Project* p, const std::vector<int>& mana
     PianoRoll* pr = arr->sl->pianoRoll;
     if (!pr || !pr->region || pr->region->id != regionId)
         return;
-    pr->loadTuningFromRegion();
     pr->updateLines();
     pr->refreshGrid = true;
     if (noteIdToStamp < 0)

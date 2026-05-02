@@ -132,6 +132,15 @@ class PianoRoll : public GridView {
         int intervalDragHarmB = 0;
         int intervalDragEdoKA = INT_MAX;
         int intervalDragEdoKB = INT_MAX;
+        /** Rational snapshot at mousedown / while hovering end note; avoids pitchIntegerPairsAtGridMidi(note->num). */
+        std::vector<std::pair<int, int>> intervalDragStartVertexPairs;
+        std::vector<std::pair<int, int>> intervalDragEndVertexPairs;
+        /** Define-EDO text dialog: keep band + commit vectors frozen from last drag frame until dialog closes. */
+        bool intervalEdoDefineDialogOpen = false;
+        float intervalDialogFrozenStartLine = 0.0f;
+        float intervalDialogFrozenEndLine = 0.0f;
+        std::vector<std::pair<int, int>> intervalDialogFrozenStartVertexPairs;
+        std::vector<std::pair<int, int>> intervalDialogFrozenEndVertexPairs;
         SDL_FRect modeButtonRect{8.0f, 0.0f, 180.0f, 0.0f};
 
         size_t closestLineIndexForMidi(float midiPitch) const;

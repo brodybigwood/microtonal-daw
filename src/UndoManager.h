@@ -84,6 +84,9 @@ struct ProjectAction {
 
     std::string name;
     SDL_Texture* texture = nullptr;
+
+    /** Undo-tree window: show child rows; persisted per node in save files. */
+    bool undoTreeExpanded = false;
 };
 
 struct UndoHeadAction : ProjectAction {
@@ -135,6 +138,7 @@ struct UndoManager {
 
     void deSerialize(json j, Project* p) {
         if (head) delete head;
+        undoTreeViewRoot = nullptr;
         head = ProjectAction::deSerialize(j["head"], p);
         current = head;
         const std::vector<int> version = j.at("version").get<std::vector<int>>();
@@ -149,22 +153,46 @@ struct UndoManager {
         else current->undoAction();
         current->parent->last_index = current->index;
         current = current->parent;
+        /* UI undo/redo and goTo run outside the audio callback; queued graph mutations must run before the next edit. */
+        flushAudioActions();
     }
 
     /** @param childIndex branch to redo; -1 uses `current->last_index` (clamped to valid range). */
     void redo(int childIndex = -1);
 
     void goTo(ProjectAction*);
-    bool clicked = false;
+    /** Undone at start of each undo-tree `render`: left = navigate to row, right = toggle expand (non-leaf). */
+    bool undoTreePendingLeft = false;
+    bool undoTreePendingRight = false;
+    bool undoTreeFrameLeft = false;
+    bool undoTreeFrameRight = false;
+    ProjectAction* undoTreeHitUnderCursor = nullptr;
 
     /** When non-null, hit-testing for the undo tree uses client coords of this window instead of `MouseOn`. */
     SDL_Window* hitTestWindow = nullptr;
 
     SDL_FRect* baseRect = nullptr;
+    /** Vertical size of each tree row when rendering; horizontal layout width uses `baseRect->w`. */
+    float undoTreeRowH = 20.f;
+    /** Optional top of the drawn subtree; nullptr means the real undo `head`. Wheel scroll shifts this toward parent/child. */
+    ProjectAction* undoTreeViewRoot = nullptr;
+
     bool mouseHitsRect(SDL_FRect* rect) const;
+    /** Window-client hit test (`mouse_xy` vs this window): positive wheel Y scrolls deeper, negative moves view toward parent. */
+    void undoTreeHandleWheel(const SDL_FRect& layoutAnchor, float rowPixels, float mouseX, float mouseY, float wheelY);
     void clearAllRenderTextures();
     bool render(SDL_Renderer*);
-    bool renderAction(SDL_Renderer*, SDL_FRect*, ProjectAction*);
+
+    /** Ensures every ancestor of `current` is expanded so the tip row is reachable in the tree view. */
+    void syncUndoTreeExpansionPathToCurrent();
+    void applyUndoTreeClickAfterLayout();
+    bool drawUndoTreeRow(SDL_Renderer* renderer, SDL_FRect* rect, ProjectAction* pa);
+
+    struct UndoTreeLayoutBox {
+        bool hovering = false;
+        float bottomY = 0.0f;
+    };
+    UndoTreeLayoutBox layoutUndoTreeGeom(SDL_Renderer* renderer, float x, float y, float w, float rowH, ProjectAction* pa);
 
     static const std::unordered_map<std::string, ActionType>& actionRegistry();
     static std::string actionSchema(const std::string& actionName);
@@ -251,6 +279,8 @@ struct CreateNoteAction : ProjectAction {
     fract length;
     float pitch;
     std::vector<std::pair<int, int>> pitchIntegerPairs;
+    /** Filled after PianoRoll::stampNoteTuning on first create; reapplied on redo (doAction) so tuningMode matches the lattice. */
+    json noteStampedSnapshot = json();
 
     CreateNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, fract start, fract length,
                      float pitch, std::vector<std::pair<int, int>> pitchIntegerPairs);
