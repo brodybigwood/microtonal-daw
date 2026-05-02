@@ -3,17 +3,33 @@
 #include "Region.h"
 #include "ElementManager.h"
 #include <mutex>
+#include <string>
 #include <unordered_map>
 
+class Project;
+class ArrangerNode;
+
+/** Resolve arranger region for undo/redo (same addressing as note actions). */
+Region* undoResolveArrangerRegion(Project* p, const std::vector<int>& managerPath, int nodeID, int regionID);
+ArrangerNode* undoResolveArrangerNode(Project* p, const std::vector<int>& managerPath, int nodeID);
+ElementManager* undoResolveArrangerElementManager(Project* p, const std::vector<int>& managerPath, int nodeID);
+
 enum ActionType {
-    CreateNote,
-    AddArrangerTrack,
-    MoveNode,
-    AddNode,
-    RemoveNode,
-    MakeNodeConnection,
-    SeverNodeConnection,
-    NullAction
+    CreateNote = 0,
+    AddArrangerTrack = 1,
+    MoveNode = 2,
+    AddNode = 3,
+    RemoveNode = 4,
+    MakeNodeConnection = 5,
+    SeverNodeConnection = 6,
+    UndoHead = 7,
+    MoveNote = 8,
+    DeleteNote = 9,
+    PianoRollRegionTuning = 10,
+    AssignNoteHarmonic = 11,
+    AddModSourceUndo = 12,
+    RemoveModSourceUndo = 13,
+    CreateRegion = 14
 };
 
 
@@ -23,6 +39,8 @@ struct ProjectAction {
     std::function<void()> doAction;
     std::function<void()> undoAction;
     bool audioThreadAction = false;
+    /** If true, `UndoManager::newAction` does not run `doAction` immediately (state already matches do). */
+    bool skipInitialDo = false;
 
     std::vector<ProjectAction*> children;
     
@@ -51,13 +69,20 @@ struct ProjectAction {
 
     Project* p;
 
-    ProjectAction(Project* p, ActionType type) : p(p), type(type) {}
+    ProjectAction(Project* p, ActionType type) : p(p), type(type) {
+        doAction = []() {};
+        undoAction = []() {};
+    }
 
     bool open = false;
     int hoveredIndex = -1;
 
     std::string name;
     SDL_Texture* texture = nullptr;
+};
+
+struct UndoHeadAction : ProjectAction {
+    explicit UndoHeadAction(Project* p) : ProjectAction(p, UndoHead) {}
 };
 
 struct UndoManager {
@@ -82,7 +107,7 @@ struct UndoManager {
     }
 
     UndoManager(Project* p) {
-        head = new ProjectAction(p, NullAction);
+        head = new UndoHeadAction(p);
         current = head;
     }
 
@@ -90,6 +115,8 @@ struct UndoManager {
         current->newAction(pa);
         current->last_index = pa->index;
         current = pa;
+        if (pa->skipInitialDo)
+            return;
         if (pa->audioThreadAction) enqueueAudioAction(pa->doAction);
         else pa->doAction();
     }
@@ -104,10 +131,10 @@ struct UndoManager {
     void deSerialize(json j, Project* p) {
         if (head) delete head;
         head = ProjectAction::deSerialize(j["head"], p);
-        std::vector<int> version = j["version"];
         current = head;
-        for (auto i : version) {
-            current = current->children[i];
+        const std::vector<int> version = j.at("version").get<std::vector<int>>();
+        for (int i : version) {
+            current = current->children[static_cast<size_t>(i)];
         }
     }
 
@@ -129,15 +156,91 @@ struct UndoManager {
     }
 
     void goTo(ProjectAction*);
-    bool clicked = false; 
+    bool clicked = false;
 
-    SDL_FRect* baseRect;   
+    /** When non-null, hit-testing for the undo tree uses client coords of this window instead of `MouseOn`. */
+    SDL_Window* hitTestWindow = nullptr;
+
+    SDL_FRect* baseRect = nullptr;
+    bool mouseHitsRect(SDL_FRect* rect) const;
+    void clearAllRenderTextures();
     bool render(SDL_Renderer*);
     bool renderAction(SDL_Renderer*, SDL_FRect*, ProjectAction*);
 
     static const std::unordered_map<std::string, ActionType>& actionRegistry();
     static std::string actionSchema(const std::string& actionName);
     bool runRegisteredAction(const std::string& actionName, const json& params, std::string& error);
+};
+
+struct PianoRollRegionTuningUndoAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    int regionID = 0;
+    json beforeRegion;
+    json afterRegion;
+
+    PianoRollRegionTuningUndoAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, json beforeRegion,
+                                    json afterRegion, std::string actionName);
+};
+
+struct AssignNoteHarmonicUndoAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    int regionID = 0;
+    int noteID = 0;
+    json beforeRegion;
+    json afterRegion;
+    json beforeNote;
+    json afterNote;
+
+    AssignNoteHarmonicUndoAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, int noteID,
+                                 json beforeRegion, json afterRegion, json beforeNote, json afterNote);
+};
+
+struct AddModSourceUndoAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    size_t paramIndex = 0;
+
+    AddModSourceUndoAction(Project* p, std::vector<int> managerPath, int nodeID, size_t paramIndex);
+};
+
+struct RemoveModSourceUndoAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    size_t paramIndex = 0;
+    size_t modIndex = 0;
+
+    RemoveModSourceUndoAction(Project* p, std::vector<int> managerPath, int nodeID, size_t paramIndex, size_t modIndex);
+};
+
+struct MoveNoteAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    int regionID = 0;
+    int noteID = 0;
+    json before;
+    json after;
+
+    MoveNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, int noteID, json before,
+                   json after);
+};
+
+struct DeleteNoteAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    int regionID = 0;
+    int noteID = 0;
+    size_t insertIndex = 0;
+    json noteSnapshot;
+
+    DeleteNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, int noteID);
+    /** Restored from project file (skips live snapshot). */
+    DeleteNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, int noteID, size_t insertIndex,
+                     json noteSnapshot);
+
+private:
+    void wireDeleteLambdas();
 };
 
 struct CreateNoteAction : ProjectAction {
@@ -148,8 +251,24 @@ struct CreateNoteAction : ProjectAction {
     fract start;
     fract length;
     float pitch;
+    std::vector<std::pair<int, int>> pitchIntegerPairs;
 
-    CreateNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, fract start, fract length, float pitch);
+    CreateNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, fract start, fract length,
+                     float pitch, std::vector<std::pair<int, int>> pitchIntegerPairs);
+};
+
+struct CreateRegionAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    int regionID = -1;
+    fract start;
+    uint16_t trackID = 0;
+    json regionSnapshot = json::object();
+    bool snapshotValid = false;
+
+    CreateRegionAction(Project* p, std::vector<int> managerPath, int nodeID, fract start, uint16_t trackID);
+    /** Restored from project / undo JSON (`skipInitialDo`, graph already matches "after" for current pointer). */
+    CreateRegionAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, json regionSnapshot);
 };
 
 struct AddArrangerTrackAction : ProjectAction {

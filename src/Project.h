@@ -1,4 +1,5 @@
 #include "Note.h"
+#include <utility>
 #include <vector>
 #include "fract.h"
 #include <iostream>
@@ -17,6 +18,7 @@ namespace DAW {
 class TrackManager;
 class ElementManager;
 class NodeProcessor;
+class UndoTreeWindow;
 
 class Project : public Window {
     public:
@@ -44,7 +46,10 @@ class Project : public Window {
 
         void save(uint32_t triggerWindowID = 0, SDL_Renderer* triggerRenderer = nullptr);
 
-        void createNote(int, fract, fract, float, int, std::vector<int> managerPath = {});
+        void createNote(int, fract, fract, float, int, std::vector<int> managerPath = {},
+                        std::vector<std::pair<int, int>> pitchIntegerPairs = {});
+
+        void deleteNote(int nodeID, int regionID, int noteID, std::vector<int> managerPath = {});
 
         fract startTime;
 
@@ -75,6 +80,8 @@ class Project : public Window {
         UndoManager* um;
         void undo() { um->undo(); }
         void redo() { um->redo(); }
+
+        UndoTreeWindow* undoTreeWindow = nullptr;
 
     private:
 

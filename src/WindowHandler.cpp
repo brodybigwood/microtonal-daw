@@ -1,6 +1,7 @@
 #include "WindowHandler.h"
 #include "SDL_Events.h"
 #include "NodeEditor.h"
+#include "UndoTreeWindow.h"
 #include "Node.h"
 #include <sstream>
 #include <iostream>
@@ -86,6 +87,7 @@ static bool buildActionParamsPositional(const std::string& actionName, std::stri
             params["start"] = fract(sNum, sDen).toJSON();
             params["length"] = fract(lNum, lDen).toJSON();
             params["pitch"] = pitch;
+            params["pitchIntegerPairs"] = json::array();
             return true;
         }
         error = "unknown action";
@@ -218,6 +220,10 @@ bool WindowHandler::tick() {
             ctxMenu->tick(e);
         } else if (!ctxMenu->active) {
             project->render();
+        }
+        for (auto* w : windows) {
+            if (auto* uw = dynamic_cast<UndoTreeWindow*>(w))
+                uw->renderFrame();
         }
         project->renderPresent();
     }

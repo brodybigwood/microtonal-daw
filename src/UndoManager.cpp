@@ -1,22 +1,55 @@
 #include "UndoManager.h"
 #include "SDL_Events.h"
 #include "styles.h"
+#include <functional>
 #include "Project.h"
 #include "NodeProcessor.h"
 #include "nodes/nodetypes.h"
 #include "NodeManager.h"
+#include "Note.h"
+#include "PianoRoll.h"
+#include <stdexcept>
 #include <unordered_map>
 
-static NodeManager* resolveManager(Project* p, const std::vector<int>& path) {
-    if (!p || !p->processor) return nullptr;
+static NodeManager& requireManager(Project* p, const std::vector<int>& path) {
+    if (!p || !p->processor)
+        throw std::runtime_error("requireManager: project or processor missing");
     NodeManager* nm = p->processor->getManager();
-    if (!nm) return nullptr;
+    if (!nm)
+        throw std::runtime_error("requireManager: root node manager missing");
     for (int patcherNodeID : path) {
-        auto patcher = dynamic_cast<PatcherNode*>(nm->getNode(static_cast<uint16_t>(patcherNodeID)));
-        if (!patcher || !patcher->mainManager) return nullptr;
+        auto* patcher = dynamic_cast<PatcherNode*>(nm->getNode(static_cast<uint16_t>(patcherNodeID)));
+        if (!patcher || !patcher->mainManager)
+            throw std::runtime_error("requireManager: invalid patcher in managerPath");
         nm = patcher->mainManager;
     }
-    return nm;
+    return *nm;
+}
+
+Region* undoResolveArrangerRegion(Project* p, const std::vector<int>& managerPath, int nodeID, int regionID) {
+    NodeManager& nm = requireManager(p, managerPath);
+    auto* arr = dynamic_cast<ArrangerNode*>(nm.getNode(static_cast<uint16_t>(nodeID)));
+    ElementManager* em = arr ? arr->activeElementManager() : nullptr;
+    if (!arr || !em)
+        throw std::runtime_error("undoResolveArrangerRegion: arranger or element manager missing");
+    auto* r = dynamic_cast<Region*>(em->getElement(static_cast<uint16_t>(regionID)));
+    if (!r)
+        throw std::runtime_error("undoResolveArrangerRegion: region not found");
+    return r;
+}
+
+ArrangerNode* undoResolveArrangerNode(Project* p, const std::vector<int>& managerPath, int nodeID) {
+    NodeManager& nm = requireManager(p, managerPath);
+    auto* arr = dynamic_cast<ArrangerNode*>(nm.getNode(static_cast<uint16_t>(nodeID)));
+    if (!arr)
+        throw std::runtime_error("undoResolveArrangerNode: arranger not found");
+    return arr;
+}
+
+ElementManager* undoResolveArrangerElementManager(Project* p, const std::vector<int>& managerPath, int nodeID) {
+    NodeManager& nm = requireManager(p, managerPath);
+    auto* arr = dynamic_cast<ArrangerNode*>(nm.getNode(static_cast<uint16_t>(nodeID)));
+    return arr ? arr->activeElementManager() : nullptr;
 }
 
 const std::unordered_map<std::string, ActionType>& UndoManager::actionRegistry() {
@@ -27,135 +60,96 @@ const std::unordered_map<std::string, ActionType>& UndoManager::actionRegistry()
         {"add_node", AddNode},
         {"remove_node", RemoveNode},
         {"make_node_connection", MakeNodeConnection},
-        {"sever_node_connection", SeverNodeConnection}
+        {"sever_node_connection", SeverNodeConnection},
+        {"create_region", CreateRegion},
     };
     return reg;
 }
 
 std::string UndoManager::actionSchema(const std::string& actionName) {
     if (actionName == "add_node") {
-        return R"({"managerPath":[int,...]?,"nodeType":int,"x":float,"y":float})";
+        return R"({"managerPath":[int,...],"nodeType":int,"x":float,"y":float})";
     }
     if (actionName == "remove_node") {
-        return R"({"managerPath":[int,...]?,"nodeID":int})";
+        return R"({"managerPath":[int,...],"nodeID":int})";
     }
     if (actionName == "make_node_connection" || actionName == "sever_node_connection") {
-        return R"({"managerPath":[int,...]?,"srcNodeID":int,"srcConID":int,"dstNodeID":int,"dstConID":int})";
+        return R"({"managerPath":[int,...],"srcNodeID":int,"srcConID":int,"dstNodeID":int,"dstConID":int})";
     }
     if (actionName == "move_node") {
-        return R"({"managerPath":[int,...]?,"nodeID":int,"toX":float,"toY":float})";
+        return R"({"managerPath":[int,...],"nodeID":int,"toX":float,"toY":float})";
     }
     if (actionName == "add_arranger_track") {
-        return R"({"managerPath":[int,...]?,"nodeID":int,"trackType":int})";
+        return R"({"managerPath":[int,...],"nodeID":int,"trackType":int})";
     }
     if (actionName == "create_note") {
-        return R"({"managerPath":[int,...]?,"nodeID":int,"regionID":int,"start":fract_json,"length":fract_json,"pitch":float})";
+        return R"({"managerPath":[int,...],"nodeID":int,"regionID":int,"start":fract_json,"length":fract_json,"pitch":float,"pitchIntegerPairs":[[int,int],...]})";
     }
-    return "{}";
+    if (actionName == "create_region") {
+        return R"({"managerPath":[int,...],"nodeID":int,"start":fract_json,"trackID":int})";
+    }
+    throw std::runtime_error("actionSchema: unknown action name");
 }
 
 bool UndoManager::runRegisteredAction(const std::string& actionName, const json& params, std::string& error) {
-    if (!head || !head->p) {
-        error = "undo manager not initialized";
-        return false;
-    }
-    if (!params.is_object()) {
-        error = "params must be a json object";
-        return false;
-    }
+    (void)error;
+    if (!head || !head->p)
+        throw std::runtime_error("runRegisteredAction: undo manager not initialized");
+    if (!params.is_object())
+        throw std::runtime_error("runRegisteredAction: params must be a json object");
     auto it = actionRegistry().find(actionName);
-    if (it == actionRegistry().end()) {
-        error = "unknown action";
-        return false;
-    }
+    if (it == actionRegistry().end())
+        throw std::runtime_error("runRegisteredAction: unknown action");
     ProjectAction* pa = nullptr;
-    try {
-        switch (it->second) {
-            case AddNode:
-                if (!params.contains("nodeType") || !params.contains("x") || !params.contains("y")) {
-                    error = "missing required keys for add_node";
-                    return false;
-                }
-                pa = new AddNodeAction(head->p, params.value("managerPath", std::vector<int>{}), params["nodeType"], params["x"], params["y"]);
-                break;
-            case RemoveNode:
-                if (!params.contains("nodeID")) {
-                    error = "missing required key nodeID";
-                    return false;
-                }
-                pa = new RemoveNodeAction(head->p, params.value("managerPath", std::vector<int>{}), params["nodeID"]);
-                break;
-            case MakeNodeConnection:
-                if (!params.contains("srcNodeID") || !params.contains("srcConID") || !params.contains("dstNodeID") || !params.contains("dstConID")) {
-                    error = "missing required keys for make_node_connection";
-                    return false;
-                }
-                pa = new MakeNodeConnectionAction(head->p, params.value("managerPath", std::vector<int>{}), params["srcNodeID"], params["srcConID"], params["dstNodeID"], params["dstConID"]);
-                break;
-            case SeverNodeConnection:
-                if (!params.contains("srcNodeID") || !params.contains("srcConID") || !params.contains("dstNodeID") || !params.contains("dstConID")) {
-                    error = "missing required keys for sever_node_connection";
-                    return false;
-                }
-                pa = new SeverNodeConnectionAction(head->p, params.value("managerPath", std::vector<int>{}), params["srcNodeID"], params["srcConID"], params["dstNodeID"], params["dstConID"]);
-                break;
-            case MoveNode:
-                if (!params.contains("nodeID") || !params.contains("toX") || !params.contains("toY")) {
-                    error = "missing required keys for move_node";
-                    return false;
-                }
-                {
-                    auto managerPath = params.value("managerPath", std::vector<int>{});
-                    auto nm = resolveManager(head->p, managerPath);
-                    if (!nm) {
-                        error = "manager path not found";
-                        return false;
-                    }
-                    auto nodeID = params["nodeID"].get<int>();
-                    Node* node = (nodeID == 0) ? nm->outNode : nm->getNode(static_cast<uint16_t>(nodeID));
-                    if (!node) {
-                        error = "node not found";
-                        return false;
-                    }
-                    float fromX = node->dstRect.x;
-                    float fromY = node->dstRect.y;
-                    pa = new MoveNodeAction(head->p, managerPath, nodeID, fromX, fromY, params["toX"], params["toY"]);
-                }
-                break;
-            case AddArrangerTrack:
-                if (!params.contains("nodeID") || !params.contains("trackType")) {
-                    error = "missing required keys for add_arranger_track";
-                    return false;
-                }
-                pa = new AddArrangerTrackAction(head->p, params.value("managerPath", std::vector<int>{}), params["nodeID"], params["trackType"]);
-                break;
-            case CreateNote: {
-                if (!params.contains("nodeID") || !params.contains("regionID") || !params.contains("start") || !params.contains("length") || !params.contains("pitch")) {
-                    error = "missing required keys for create_note";
-                    return false;
-                }
-                auto managerPath = params.value("managerPath", std::vector<int>{});
-                auto nm = resolveManager(head->p, managerPath);
-                auto n = nm ? static_cast<ArrangerNode*>(nm->getNode(params["nodeID"])) : nullptr;
-                if (!n || !n->sl) {
-                    error = "arranger/songroll not ready for create_note";
-                    return false;
-                }
-                pa = new CreateNoteAction(head->p, managerPath, params["nodeID"], params["regionID"],
-                    fract::fromJSON(params["start"]), fract::fromJSON(params["length"]), params["pitch"]);
-                break;
-            }
-            default:
-                error = "unsupported action";
-                return false;
+    switch (it->second) {
+        case AddNode:
+            pa = new AddNodeAction(head->p, params.at("managerPath").get<std::vector<int>>(), params.at("nodeType").get<int>(),
+                params.at("x").get<float>(), params.at("y").get<float>());
+            break;
+        case RemoveNode:
+            pa = new RemoveNodeAction(head->p, params.at("managerPath").get<std::vector<int>>(), params.at("nodeID").get<int>());
+            break;
+        case MakeNodeConnection:
+            pa = new MakeNodeConnectionAction(head->p, params.at("managerPath").get<std::vector<int>>(), params.at("srcNodeID").get<int>(),
+                params.at("srcConID").get<int>(), params.at("dstNodeID").get<int>(), params.at("dstConID").get<int>());
+            break;
+        case SeverNodeConnection:
+            pa = new SeverNodeConnectionAction(head->p, params.at("managerPath").get<std::vector<int>>(), params.at("srcNodeID").get<int>(),
+                params.at("srcConID").get<int>(), params.at("dstNodeID").get<int>(), params.at("dstConID").get<int>());
+            break;
+        case MoveNode: {
+            auto managerPath = params.at("managerPath").get<std::vector<int>>();
+            NodeManager& nm = requireManager(head->p, managerPath);
+            auto nodeID = params.at("nodeID").get<int>();
+            Node* node = (nodeID == 0) ? nm.outNode : nm.getNode(static_cast<uint16_t>(nodeID));
+            if (!node)
+                throw std::runtime_error("runRegisteredAction move_node: node not found");
+            float fromX = node->dstRect.x;
+            float fromY = node->dstRect.y;
+            pa = new MoveNodeAction(head->p, managerPath, nodeID, fromX, fromY, params.at("toX").get<float>(), params.at("toY").get<float>());
+            break;
         }
-    } catch (const std::exception& e) {
-        error = e.what();
-        return false;
-    }
-    if (!pa) {
-        error = "failed to build action";
-        return false;
+        case AddArrangerTrack:
+            pa = new AddArrangerTrackAction(head->p, params.at("managerPath").get<std::vector<int>>(), params.at("nodeID").get<int>(), params.at("trackType").get<int>());
+            break;
+        case CreateNote: {
+            auto managerPath = params.at("managerPath").get<std::vector<int>>();
+            requireManager(head->p, managerPath);
+            std::vector<std::pair<int, int>> pairs;
+            for (const auto& el : params.at("pitchIntegerPairs")) {
+                pairs.push_back({el.at(0).get<int>(), el.at(1).get<int>()});
+            }
+            pa = new CreateNoteAction(head->p, managerPath, params.at("nodeID").get<int>(), params.at("regionID").get<int>(),
+                fract::fromJSON(params.at("start")), fract::fromJSON(params.at("length")), params.at("pitch").get<float>(),
+                std::move(pairs));
+            break;
+        }
+        case CreateRegion:
+            pa = new CreateRegionAction(head->p, params.at("managerPath").get<std::vector<int>>(), params.at("nodeID").get<int>(),
+                fract::fromJSON(params.at("start")), static_cast<uint16_t>(params.at("trackID").get<int>()));
+            break;
+        default:
+            throw std::runtime_error("runRegisteredAction: unsupported action");
     }
     newAction(pa);
     return true;
@@ -163,66 +157,109 @@ bool UndoManager::runRegisteredAction(const std::string& actionName, const json&
 
 ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
     ProjectAction* pa;
-    switch (j["type"].get<int>()) {
+    switch (j.at("type").get<int>()) {
         case CreateNote: {
-            auto managerPath = j.value("managerPath", std::vector<int>{});
-            auto nm = resolveManager(p, managerPath);
-            auto n = nm ? dynamic_cast<ArrangerNode*>(nm->getNode(j["nodeID"])) : nullptr;
-            if (!n || !n->sl || !n->sl->em) {
-                pa = new ProjectAction(p, NullAction);
-                break;
+            auto managerPath = j.at("managerPath").get<std::vector<int>>();
+            std::vector<std::pair<int, int>> pairs;
+            for (const auto& el : j.at("pitchIntegerPairs")) {
+                pairs.push_back({el.at(0).get<int>(), el.at(1).get<int>()});
             }
-            auto cn = new CreateNoteAction(
-                p, managerPath, j["nodeID"], j["regionID"], fract::fromJSON(j["start"]), fract::fromJSON(j["length"]),
-                j["pitch"]);
-            cn->noteID = j["noteID"];
+            auto cn = new CreateNoteAction(p, managerPath, j.at("nodeID").get<int>(), j.at("regionID").get<int>(), fract::fromJSON(j.at("start")),
+                fract::fromJSON(j.at("length")), j.at("pitch").get<float>(), std::move(pairs));
+            cn->noteID = j.at("noteID").get<int>();
             pa = cn;
             break;
         }
         case AddArrangerTrack: {
-            auto at = new AddArrangerTrackAction(p, j.value("managerPath", std::vector<int>{}), j["nodeID"], j["trackType"]);
-            at->trackID = j["trackID"];
-            at->connectionID = j["connectionID"];
+            auto at = new AddArrangerTrackAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(), j.at("trackType").get<int>());
+            at->trackID = j.at("trackID").get<int>();
+            at->connectionID = j.at("connectionID").get<int>();
             pa = at;
             break;
         }
         case MoveNode: {
-            pa = new MoveNodeAction(p, j.value("managerPath", std::vector<int>{}), j["nodeID"], j["fromX"], j["fromY"], j["toX"], j["toY"]);
+            pa = new MoveNodeAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(), j.at("fromX").get<float>(), j.at("fromY").get<float>(),
+                j.at("toX").get<float>(), j.at("toY").get<float>());
             break;
         }
         case AddNode: {
-            auto an = new AddNodeAction(p, j.value("managerPath", std::vector<int>{}), j["nodeType"], j["x"], j["y"]);
-            an->nodeID = j["nodeID"];
+            auto an = new AddNodeAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeType").get<int>(), j.at("x").get<float>(), j.at("y").get<float>());
+            an->nodeID = j.at("nodeID").get<int>();
             pa = an;
             break;
         }
         case RemoveNode: {
-            auto rn = new RemoveNodeAction(p, j.value("managerPath", std::vector<int>{}), j["nodeID"]);
-            rn->nodeData = j["nodeData"];
-            rn->connectionsData = j["connectionsData"];
+            auto rn = new RemoveNodeAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>());
+            rn->nodeData = j.at("nodeData");
+            rn->connectionsData = j.at("connectionsData");
             pa = rn;
             break;
         }
         case MakeNodeConnection: {
-            pa = new MakeNodeConnectionAction(p, j.value("managerPath", std::vector<int>{}), j["srcNodeID"], j["srcConID"], j["dstNodeID"], j["dstConID"]);
+            pa = new MakeNodeConnectionAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("srcNodeID").get<int>(), j.at("srcConID").get<int>(),
+                j.at("dstNodeID").get<int>(), j.at("dstConID").get<int>());
             break;
         }
         case SeverNodeConnection: {
-            pa = new SeverNodeConnectionAction(p, j.value("managerPath", std::vector<int>{}), j["srcNodeID"], j["srcConID"], j["dstNodeID"], j["dstConID"]);
+            pa = new SeverNodeConnectionAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("srcNodeID").get<int>(), j.at("srcConID").get<int>(),
+                j.at("dstNodeID").get<int>(), j.at("dstConID").get<int>());
+            break;
+        }
+        case MoveNote: {
+            pa = new MoveNoteAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(), j.at("regionID").get<int>(), j.at("noteID").get<int>(),
+                j.at("before"), j.at("after"));
+            break;
+        }
+        case DeleteNote: {
+            pa = new DeleteNoteAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(), j.at("regionID").get<int>(), j.at("noteID").get<int>(),
+                j.at("insertIndex").get<size_t>(), j.at("noteSnapshot"));
+            break;
+        }
+        case UndoHead: {
+            (void)j.at("managerPath");
+            pa = new UndoHeadAction(p);
+            break;
+        }
+        case PianoRollRegionTuning: {
+            pa = new PianoRollRegionTuningUndoAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(), j.at("regionID").get<int>(),
+                j.at("beforeRegion"), j.at("afterRegion"), j.at("name").get<std::string>());
+            break;
+        }
+        case AssignNoteHarmonic: {
+            pa = new AssignNoteHarmonicUndoAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(), j.at("regionID").get<int>(), j.at("noteID").get<int>(),
+                j.at("beforeRegion"), j.at("afterRegion"), j.at("beforeNote"), j.at("afterNote"));
+            break;
+        }
+        case AddModSourceUndo: {
+            pa = new AddModSourceUndoAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(), j.at("paramIndex").get<size_t>());
+            break;
+        }
+        case RemoveModSourceUndo: {
+            pa = new RemoveModSourceUndoAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(), j.at("paramIndex").get<size_t>(),
+                j.at("modIndex").get<size_t>());
+            break;
+        }
+        case CreateRegion: {
+            const auto managerPath = j.at("managerPath").get<std::vector<int>>();
+            const int nodeID = j.at("nodeID").get<int>();
+            if (j.value("snapshotValid", false))
+                pa = new CreateRegionAction(p, managerPath, nodeID, j.at("regionID").get<int>(), j.at("regionSnapshot"));
+            else
+                pa = new CreateRegionAction(p, managerPath, nodeID, fract::fromJSON(j.at("start")),
+                    static_cast<uint16_t>(j.at("trackID").get<int>()));
             break;
         }
         default:
-            pa = new ProjectAction(p, NullAction); // head
-            break;
+            throw std::runtime_error("invalid undo action type in save");
     }
 
-    for (auto jc : j["children"]) {
+    for (auto jc : j.at("children")) {
         auto c = ProjectAction::deSerialize(jc, p);
         pa->newAction(c);
     }
 
-    pa->last_index = j["last_index"];
-    pa->name = j["name"];
+    pa->last_index = j.at("last_index").get<int>();
+    pa->name = j.at("name").get<std::string>();
     return pa;
 }
 
@@ -238,6 +275,9 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["start"] = cn->start.toJSON();
             j["length"] = cn->length.toJSON();
             j["pitch"] = cn->pitch;
+            j["pitchIntegerPairs"] = json::array();
+            for (const auto& pr : cn->pitchIntegerPairs)
+                j["pitchIntegerPairs"].push_back(json::array({pr.first, pr.second}));
             j["noteID"] = cn->noteID;
             break;
         }
@@ -295,9 +335,79 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["dstConID"] = sc->dstConID;
             break;
         }
-        default:
+        case MoveNote: {
+            auto mn = static_cast<MoveNoteAction*>(pa);
+            j["managerPath"] = mn->managerPath;
+            j["nodeID"] = mn->nodeID;
+            j["regionID"] = mn->regionID;
+            j["noteID"] = mn->noteID;
+            j["before"] = mn->before;
+            j["after"] = mn->after;
             break;
-}
+        }
+        case DeleteNote: {
+            auto dn = static_cast<DeleteNoteAction*>(pa);
+            j["managerPath"] = dn->managerPath;
+            j["nodeID"] = dn->nodeID;
+            j["regionID"] = dn->regionID;
+            j["noteID"] = dn->noteID;
+            j["insertIndex"] = dn->insertIndex;
+            j["noteSnapshot"] = dn->noteSnapshot;
+            break;
+        }
+        case UndoHead:
+            j["managerPath"] = json::array();
+            break;
+        case PianoRollRegionTuning: {
+            auto pr = static_cast<PianoRollRegionTuningUndoAction*>(pa);
+            j["managerPath"] = pr->managerPath;
+            j["nodeID"] = pr->nodeID;
+            j["regionID"] = pr->regionID;
+            j["beforeRegion"] = pr->beforeRegion;
+            j["afterRegion"] = pr->afterRegion;
+            break;
+        }
+        case AssignNoteHarmonic: {
+            auto ah = static_cast<AssignNoteHarmonicUndoAction*>(pa);
+            j["managerPath"] = ah->managerPath;
+            j["nodeID"] = ah->nodeID;
+            j["regionID"] = ah->regionID;
+            j["noteID"] = ah->noteID;
+            j["beforeRegion"] = ah->beforeRegion;
+            j["afterRegion"] = ah->afterRegion;
+            j["beforeNote"] = ah->beforeNote;
+            j["afterNote"] = ah->afterNote;
+            break;
+        }
+        case AddModSourceUndo: {
+            auto am = static_cast<AddModSourceUndoAction*>(pa);
+            j["managerPath"] = am->managerPath;
+            j["nodeID"] = am->nodeID;
+            j["paramIndex"] = am->paramIndex;
+            break;
+        }
+        case RemoveModSourceUndo: {
+            auto rm = static_cast<RemoveModSourceUndoAction*>(pa);
+            j["managerPath"] = rm->managerPath;
+            j["nodeID"] = rm->nodeID;
+            j["paramIndex"] = rm->paramIndex;
+            j["modIndex"] = rm->modIndex;
+            break;
+        }
+        case CreateRegion: {
+            auto cr = static_cast<CreateRegionAction*>(pa);
+            j["managerPath"] = cr->managerPath;
+            j["nodeID"] = cr->nodeID;
+            j["regionID"] = cr->regionID;
+            j["start"] = cr->start.toJSON();
+            j["trackID"] = cr->trackID;
+            j["regionSnapshot"] = cr->regionSnapshot;
+            j["snapshotValid"] = cr->snapshotValid;
+            break;
+        }
+        default:
+            throw std::runtime_error("invalid undo action type when serializing");
+    }
 
     json children = json::array();
     for (auto c : pa->children) {
@@ -311,7 +421,36 @@ json ProjectAction::serialize(ProjectAction* pa) {
     return j;
 }
 
+bool UndoManager::mouseHitsRect(SDL_FRect* rect) const {
+    if (!hitTestWindow)
+        return MouseOn(rect);
+    float gx = 0.0f;
+    float gy = 0.0f;
+    SDL_GetGlobalMouseState(&gx, &gy);
+    int wx = 0;
+    int wy = 0;
+    SDL_GetWindowPosition(hitTestWindow, &wx, &wy);
+    const float lx = gx - static_cast<float>(wx);
+    const float ly = gy - static_cast<float>(wy);
+    return lx >= rect->x && lx < rect->x + rect->w && ly >= rect->y && ly < rect->y + rect->h;
+}
+
+void UndoManager::clearAllRenderTextures() {
+    const std::function<void(ProjectAction*)> wipe = [&](ProjectAction* pa) {
+        if (pa->texture) {
+            SDL_DestroyTexture(pa->texture);
+            pa->texture = nullptr;
+        }
+        for (ProjectAction* c : pa->children)
+            wipe(c);
+    };
+    if (head)
+        wipe(head);
+}
+
 bool UndoManager::render(SDL_Renderer* renderer) {
+    if (!baseRect || !head)
+        return false;
     bool handled = renderAction(renderer, baseRect, head);
     clicked = false;
     return handled;
@@ -324,13 +463,13 @@ bool UndoManager::renderAction(SDL_Renderer* renderer, SDL_FRect* rect, ProjectA
     SDL_Color color;
 
     if (pa == current) {
-        if (MouseOn(rect)) {
+        if (mouseHitsRect(rect)) {
             color = {100, 200, 100, 255};   
         } else {
             color = {100, 255, 100, 255};
         }
     } else {
-        if (MouseOn(rect)) {
+        if (mouseHitsRect(rect)) {
             color = {255, 255, 255, 255};
         } else {
             color = {200, 200, 200, 255};
@@ -354,7 +493,7 @@ bool UndoManager::renderAction(SDL_Renderer* renderer, SDL_FRect* rect, ProjectA
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderRect(renderer, rect);
 
-    if (MouseOn(rect)) hovering = true;
+    if (mouseHitsRect(rect)) hovering = true;
     if (hovering && clicked) {
         goTo(pa);
         clicked = false;
@@ -374,7 +513,8 @@ bool UndoManager::renderAction(SDL_Renderer* renderer, SDL_FRect* rect, ProjectA
 void UndoManager::goTo(ProjectAction* target) {
     // traverse the tree to some arbitrary action node
 
-    if (!target || !current || !head) return;
+    if (!target || !current || !head)
+        throw std::runtime_error("UndoManager::goTo: null target, current, or head");
 
     std::vector<int> headToCurrent;
     std::vector<int> headToTarget;
@@ -414,34 +554,75 @@ void UndoManager::goTo(ProjectAction* target) {
 }
 
 
-CreateNoteAction::CreateNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, fract start, fract length, float pitch) :
+CreateNoteAction::CreateNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, fract start,
+                                   fract length, float pitch, std::vector<std::pair<int, int>> pitchIntegerPairs) :
         ProjectAction(p, CreateNote),
         managerPath(std::move(managerPath)),
         regionID(regionID),
         start(start),
         length(length),
         pitch(pitch),
-        nodeID(nodeID)
-        {
+        pitchIntegerPairs(std::move(pitchIntegerPairs)),
+        nodeID(nodeID) {
+    doAction = [this]() {
+        Region& region = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
+        noteID = region.createNote(this->start, this->length, this->pitch, this->pitchIntegerPairs);
+        name = "Create Note " + std::to_string(noteID) + " " + std::to_string(this->regionID);
+    };
 
-        auto nm = resolveManager(p, this->managerPath);
-        auto n = nm ? dynamic_cast<ArrangerNode*>(nm->getNode(nodeID)) : nullptr;
-        if (!n || !n->sl || !n->sl->em) {
-            doAction = [](){};
-            undoAction = [](){};
-            return;
+    undoAction = [this]() {
+        Region& region = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
+        region.deleteNote(this->noteID);
+    };
+}
+
+namespace {
+void wireCreateRegionDoUndo(CreateRegionAction* t) {
+    t->doAction = [t]() {
+        ElementManager* em = undoResolveArrangerElementManager(t->p, t->managerPath, t->nodeID);
+        if (!em)
+            throw std::runtime_error("CreateRegionAction::doAction: element manager missing");
+        if (!t->snapshotValid) {
+            Region* r = em->newRegion();
+            r->createPos(t->start, t->trackID);
+            t->regionID = static_cast<int>(r->id);
+            t->regionSnapshot = r->toJSON();
+            t->snapshotValid = true;
+            t->name = "Create Region " + std::to_string(t->regionID);
+        } else {
+            em->restoreRegionFromSnapshot(t->regionSnapshot);
         }
+    };
+    t->undoAction = [t]() {
+        if (!t->snapshotValid)
+            return;
+        ElementManager* em = undoResolveArrangerElementManager(t->p, t->managerPath, t->nodeID);
+        if (!em)
+            throw std::runtime_error("CreateRegionAction::undoAction: element manager missing");
+        em->removeElementById(static_cast<uint16_t>(t->regionID));
+    };
+}
+} // namespace
 
-        doAction = [this, n] () {
-            auto region = static_cast<Region*>(n->sl->em->getElement(this->regionID));
-            noteID = region->createNote(this->start, this->length, this->pitch);
-            name = "Create Note " + std::to_string(noteID) + " " + std::to_string(this->regionID);
-        };
+CreateRegionAction::CreateRegionAction(Project* p, std::vector<int> managerPath, int nodeID, fract start, uint16_t trackID) :
+        ProjectAction(p, CreateRegion),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        start(std::move(start)),
+        trackID(trackID) {
+    wireCreateRegionDoUndo(this);
+}
 
-        undoAction = [this, n] () {
-            auto region = static_cast<Region*>(n->sl->em->getElement(this->regionID));
-            region->deleteNote(this->noteID);
-        };
+CreateRegionAction::CreateRegionAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, json regionSnapshot) :
+        ProjectAction(p, CreateRegion),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        regionID(regionID),
+        regionSnapshot(std::move(regionSnapshot)),
+        snapshotValid(true) {
+    skipInitialDo = true;
+    name = "Create Region " + std::to_string(this->regionID);
+    wireCreateRegionDoUndo(this);
 }
 
 AddArrangerTrackAction::AddArrangerTrackAction(Project* p, std::vector<int> managerPath, int nodeID, int trackType) :
@@ -451,21 +632,24 @@ AddArrangerTrackAction::AddArrangerTrackAction(Project* p, std::vector<int> mana
         trackType(trackType) {
     name = "Add Arranger Track";
     doAction = [this] () {
-        auto nm = resolveManager(this->p, this->managerPath);
-        if (!nm) return;
-        auto node = static_cast<ArrangerNode*>(nm->getNode(this->nodeID));
-        if (!node) return;
-        auto track = node->sl->tracks->addTrackNow(static_cast<TrackType>(this->trackType), this->trackID, this->connectionID);
-        if (track) {
-            this->trackID = track->id;
-            if (track->connection) this->connectionID = track->connection->id;
-        }
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        auto* node = dynamic_cast<ArrangerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!node)
+            throw std::runtime_error("AddArrangerTrackAction::doAction: node is not an arranger");
+        auto* track = node->sl->tracks->addTrackNow(static_cast<TrackType>(this->trackType), this->trackID, this->connectionID);
+        if (!track)
+            throw std::runtime_error("AddArrangerTrackAction::doAction: addTrackNow failed");
+        this->trackID = track->id;
+        if (track->connection)
+            this->connectionID = track->connection->id;
     };
     undoAction = [this] () {
-        auto nm = resolveManager(this->p, this->managerPath);
-        if (!nm) return;
-        auto node = static_cast<ArrangerNode*>(nm->getNode(this->nodeID));
-        if (!node || this->trackID < 0) return;
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        auto* node = dynamic_cast<ArrangerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!node)
+            throw std::runtime_error("AddArrangerTrackAction::undoAction: node is not an arranger");
+        if (this->trackID < 0)
+            throw std::runtime_error("AddArrangerTrackAction::undoAction: invalid trackID");
         node->sl->tracks->removeTrackNow(static_cast<uint16_t>(this->trackID));
     };
 }
@@ -480,14 +664,12 @@ MoveNodeAction::MoveNodeAction(Project* p, std::vector<int> managerPath, int nod
         toY(toY) {
     name = "Move Node";
     doAction = [this] () {
-        auto nm = resolveManager(this->p, this->managerPath);
-        if (!nm) return;
-        nm->moveNodeNow(this->nodeID, this->toX, this->toY);
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        nm.moveNodeNow(this->nodeID, this->toX, this->toY);
     };
     undoAction = [this] () {
-        auto nm = resolveManager(this->p, this->managerPath);
-        if (!nm) return;
-        nm->moveNodeNow(this->nodeID, this->fromX, this->fromY);
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        nm.moveNodeNow(this->nodeID, this->fromX, this->fromY);
     };
 }
 
@@ -500,15 +682,17 @@ AddNodeAction::AddNodeAction(Project* p, std::vector<int> managerPath, int type,
     audioThreadAction = true;
     name = "Add Node";
     doAction = [this] () {
-        auto nm = resolveManager(this->p, this->managerPath);
-        if (!nm) return;
-        auto node = nm->addNodeNow(static_cast<NodeType>(nodeType), this->x, this->y, nodeID);
-        if (node) nodeID = node->id;
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        auto* node = nm.addNodeNow(static_cast<NodeType>(nodeType), this->x, this->y, nodeID);
+        if (!node)
+            throw std::runtime_error("AddNodeAction::doAction: addNodeNow failed");
+        nodeID = node->id;
     };
     undoAction = [this] () {
-        auto nm = resolveManager(this->p, this->managerPath);
-        if (!nm) return;
-        if (nodeID >= 0) nm->removeNodeNow(nodeID);
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        if (nodeID < 0)
+            throw std::runtime_error("AddNodeAction::undoAction: invalid nodeID");
+        nm.removeNodeNow(nodeID);
     };
 }
 
@@ -518,18 +702,17 @@ RemoveNodeAction::RemoveNodeAction(Project* p, std::vector<int> managerPath, int
         nodeID(nodeID) {
     audioThreadAction = true;
     name = "Remove Node";
-    auto nm = resolveManager(p, this->managerPath);
-    if (nm) nm->snapshotNode(nodeID, nodeData, connectionsData);
+    NodeManager& nm = requireManager(p, this->managerPath);
+    nm.snapshotNode(nodeID, nodeData, connectionsData);
     doAction = [this] () {
-        auto nm2 = resolveManager(this->p, this->managerPath);
-        if (!nm2) return;
-        nm2->removeNodeNow(this->nodeID);
+        NodeManager& nm2 = requireManager(this->p, this->managerPath);
+        nm2.removeNodeNow(this->nodeID);
     };
     undoAction = [this] () {
-        auto nm2 = resolveManager(this->p, this->managerPath);
-        if (!nm2) return;
-        auto restored = nm2->addNodeNow(nodeData);
-        if (!restored) return;
+        NodeManager& nm2 = requireManager(this->p, this->managerPath);
+        auto* restored = nm2.addNodeNow(nodeData);
+        if (!restored)
+            throw std::runtime_error("RemoveNodeAction::undoAction: addNodeNow failed");
         std::cout << "[DBG_DESER] RemoveNodeAction::undo restored node id=" << restored->id << " managerPath=";
         for (size_t i = 0; i < this->managerPath.size(); ++i) {
             std::cout << this->managerPath[i] << (i + 1 < this->managerPath.size() ? "/" : "");
@@ -539,7 +722,7 @@ RemoveNodeAction::RemoveNodeAction(Project* p, std::vector<int> managerPath, int
         for (auto c : connectionsData) {
             std::cout << "[DBG_DESER]  undo replay srcNode=" << c["srcNodeID"] << " srcCon=" << c["srcConID"]
                       << " dstNode=" << c["dstNodeID"] << " dstCon=" << c["dstConID"] << std::endl;
-            nm2->makeNodeConnectionNow(c["srcNodeID"], c["srcConID"], c["dstNodeID"], c["dstConID"]);
+            nm2.makeNodeConnectionNow(c["srcNodeID"], c["srcConID"], c["dstNodeID"], c["dstConID"]);
         }
     };
 }
@@ -554,14 +737,12 @@ MakeNodeConnectionAction::MakeNodeConnectionAction(Project* p, std::vector<int> 
     audioThreadAction = true;
     name = "Connect Nodes";
     doAction = [this] () {
-        auto nm = resolveManager(this->p, this->managerPath);
-        if (!nm) return;
-        nm->makeNodeConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        nm.makeNodeConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
     };
     undoAction = [this] () {
-        auto nm = resolveManager(this->p, this->managerPath);
-        if (!nm) return;
-        nm->severConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        nm.severConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
     };
 }
 
@@ -575,13 +756,213 @@ SeverNodeConnectionAction::SeverNodeConnectionAction(Project* p, std::vector<int
     audioThreadAction = true;
     name = "Sever Connection";
     doAction = [this] () {
-        auto nm = resolveManager(this->p, this->managerPath);
-        if (!nm) return;
-        nm->severConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        nm.severConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
     };
     undoAction = [this] () {
-        auto nm = resolveManager(this->p, this->managerPath);
-        if (!nm) return;
-        nm->makeNodeConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        nm.makeNodeConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
+    };
+}
+
+MoveNoteAction::MoveNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, int noteID, json before,
+                               json after) :
+        ProjectAction(p, MoveNote),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        regionID(regionID),
+        noteID(noteID),
+        before(std::move(before)),
+        after(std::move(after)) {
+    skipInitialDo = true;
+    name = "Move Note";
+    doAction = [this]() {
+        Region& region = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
+        auto it = region.id_to_index.find(this->noteID);
+        if (it == region.id_to_index.end())
+            throw std::runtime_error("MoveNoteAction::doAction: note id not in region");
+        const size_t idx = static_cast<size_t>(it->second);
+        if (idx >= region.notes.size())
+            throw std::runtime_error("MoveNoteAction::doAction: note index out of range");
+        region.notes[idx]->applyUndoSnapshot(this->after);
+    };
+    undoAction = [this]() {
+        Region& region = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
+        auto it = region.id_to_index.find(this->noteID);
+        if (it == region.id_to_index.end())
+            throw std::runtime_error("MoveNoteAction::undoAction: note id not in region");
+        const size_t idx = static_cast<size_t>(it->second);
+        if (idx >= region.notes.size())
+            throw std::runtime_error("MoveNoteAction::undoAction: note index out of range");
+        region.notes[idx]->applyUndoSnapshot(this->before);
+    };
+}
+
+void DeleteNoteAction::wireDeleteLambdas() {
+    doAction = [this]() {
+        Region& r = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
+        r.deleteNote(this->noteID);
+    };
+    undoAction = [this]() {
+        Region& r = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
+        json snap = this->noteSnapshot;
+        std::shared_ptr<Note> n = Note::fromJSON(snap);
+        r.restoreNoteAt(std::move(n), this->insertIndex);
+    };
+}
+
+DeleteNoteAction::DeleteNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, int noteID) :
+        ProjectAction(p, DeleteNote),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        regionID(regionID),
+        noteID(noteID) {
+    name = "Delete Note";
+    Region& region = *undoResolveArrangerRegion(p, this->managerPath, nodeID, regionID);
+    auto it = region.id_to_index.find(noteID);
+    if (it == region.id_to_index.end())
+        throw std::runtime_error("DeleteNoteAction: note id not in region");
+    insertIndex = static_cast<size_t>(it->second);
+    if (insertIndex >= region.notes.size() || !region.notes[insertIndex] || region.notes[insertIndex]->id != noteID)
+        throw std::runtime_error("DeleteNoteAction: note index or id mismatch");
+    noteSnapshot = region.notes[insertIndex]->toJSON();
+    wireDeleteLambdas();
+}
+
+DeleteNoteAction::DeleteNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, int noteID,
+                                   size_t insertIndex, json noteSnapshot) :
+        ProjectAction(p, DeleteNote),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        regionID(regionID),
+        noteID(noteID),
+        insertIndex(insertIndex),
+        noteSnapshot(std::move(noteSnapshot)) {
+    name = "Delete Note";
+    wireDeleteLambdas();
+}
+
+PianoRollRegionTuningUndoAction::PianoRollRegionTuningUndoAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID,
+                                                                 json beforeRegion, json afterRegion, std::string actionName) :
+        ProjectAction(p, PianoRollRegionTuning),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        regionID(regionID),
+        beforeRegion(std::move(beforeRegion)),
+        afterRegion(std::move(afterRegion)) {
+    if (actionName.empty())
+        throw std::runtime_error("PianoRollRegionTuningUndoAction: actionName must be non-empty");
+    name = std::move(actionName);
+    doAction = [this]() {
+        Region& r = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
+        r.applyTuningUndoFromJSON(this->afterRegion);
+        PianoRoll::notifyTuningUndoApplied(this->p, this->managerPath, this->nodeID, this->regionID, -1);
+    };
+    undoAction = [this]() {
+        Region& r = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
+        r.applyTuningUndoFromJSON(this->beforeRegion);
+        PianoRoll::notifyTuningUndoApplied(this->p, this->managerPath, this->nodeID, this->regionID, -1);
+    };
+}
+
+AssignNoteHarmonicUndoAction::AssignNoteHarmonicUndoAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID,
+                                                           int noteID, json beforeRegion, json afterRegion, json beforeNote,
+                                                           json afterNote) :
+        ProjectAction(p, AssignNoteHarmonic),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        regionID(regionID),
+        noteID(noteID),
+        beforeRegion(std::move(beforeRegion)),
+        afterRegion(std::move(afterRegion)),
+        beforeNote(std::move(beforeNote)),
+        afterNote(std::move(afterNote)) {
+    name = "Assign Note Harmonic";
+    doAction = [this]() {
+        Region& r = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
+        r.applyTuningUndoFromJSON(this->afterRegion);
+        auto it = r.id_to_index.find(this->noteID);
+        if (it == r.id_to_index.end())
+            throw std::runtime_error("AssignNoteHarmonicUndoAction::doAction: note id not in region");
+        const size_t idx = static_cast<size_t>(it->second);
+        if (idx >= r.notes.size())
+            throw std::runtime_error("AssignNoteHarmonicUndoAction::doAction: note index out of range");
+        const std::shared_ptr<Note>& note = r.notes[idx];
+        if (!note)
+            throw std::runtime_error("AssignNoteHarmonicUndoAction::doAction: null note");
+        note->applyTuningFieldsUndoFromJSON(this->afterNote);
+        PianoRoll::notifyTuningUndoApplied(this->p, this->managerPath, this->nodeID, this->regionID, this->noteID);
+    };
+    undoAction = [this]() {
+        Region& r = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
+        r.applyTuningUndoFromJSON(this->beforeRegion);
+        auto it = r.id_to_index.find(this->noteID);
+        if (it == r.id_to_index.end())
+            throw std::runtime_error("AssignNoteHarmonicUndoAction::undoAction: note id not in region");
+        const size_t idx = static_cast<size_t>(it->second);
+        if (idx >= r.notes.size())
+            throw std::runtime_error("AssignNoteHarmonicUndoAction::undoAction: note index out of range");
+        const std::shared_ptr<Note>& note = r.notes[idx];
+        if (!note)
+            throw std::runtime_error("AssignNoteHarmonicUndoAction::undoAction: null note");
+        note->applyTuningFieldsUndoFromJSON(this->beforeNote);
+        PianoRoll::notifyTuningUndoApplied(this->p, this->managerPath, this->nodeID, this->regionID, this->noteID);
+    };
+}
+
+AddModSourceUndoAction::AddModSourceUndoAction(Project* p, std::vector<int> managerPath, int nodeID, size_t paramIndex) :
+        ProjectAction(p, AddModSourceUndo),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        paramIndex(paramIndex) {
+    doAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        Node* target = (this->nodeID == 0) ? static_cast<Node*>(nm.outNode)
+                     : (this->nodeID == 1) ? static_cast<Node*>(nm.inNode)
+                                            : nm.getNode(static_cast<uint16_t>(this->nodeID));
+        if (!target)
+            throw std::runtime_error("AddModSourceUndoAction::doAction: target node not found");
+        target->addModSourceNow(this->paramIndex);
+    };
+    undoAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        Node* target = (this->nodeID == 0) ? static_cast<Node*>(nm.outNode)
+                     : (this->nodeID == 1) ? static_cast<Node*>(nm.inNode)
+                                            : nm.getNode(static_cast<uint16_t>(this->nodeID));
+        if (!target)
+            throw std::runtime_error("AddModSourceUndoAction::undoAction: target node not found");
+        if (this->paramIndex >= target->params.size())
+            throw std::runtime_error("AddModSourceUndoAction::undoAction: paramIndex out of range");
+        auto* param = target->params[this->paramIndex];
+        if (!param || param->modulators.empty())
+            throw std::runtime_error("AddModSourceUndoAction::undoAction: no modulator to remove");
+        target->removeModSourceNow(this->paramIndex, param->modulators.size() - 1);
+    };
+}
+
+RemoveModSourceUndoAction::RemoveModSourceUndoAction(Project* p, std::vector<int> managerPath, int nodeID, size_t paramIndex,
+                                                     size_t modIndex) :
+        ProjectAction(p, RemoveModSourceUndo),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        paramIndex(paramIndex),
+        modIndex(modIndex) {
+    doAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        Node* target = (this->nodeID == 0) ? static_cast<Node*>(nm.outNode)
+                     : (this->nodeID == 1) ? static_cast<Node*>(nm.inNode)
+                                            : nm.getNode(static_cast<uint16_t>(this->nodeID));
+        if (!target)
+            throw std::runtime_error("RemoveModSourceUndoAction::doAction: target node not found");
+        target->removeModSourceNow(this->paramIndex, this->modIndex);
+    };
+    undoAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        Node* target = (this->nodeID == 0) ? static_cast<Node*>(nm.outNode)
+                     : (this->nodeID == 1) ? static_cast<Node*>(nm.inNode)
+                                            : nm.getNode(static_cast<uint16_t>(this->nodeID));
+        if (!target)
+            throw std::runtime_error("RemoveModSourceUndoAction::undoAction: target node not found");
+        target->addModSourceNow(this->paramIndex);
     };
 }

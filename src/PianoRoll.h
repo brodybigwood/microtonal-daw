@@ -1,6 +1,7 @@
 
 #include <climits>
 #include <SDL_ttf.h>
+#include <utility>
 #include <vector>
 #include "GridView.h"
 #include "Region.h"
@@ -12,6 +13,12 @@
 
 #ifndef PIANOROLL_H
 #define PIANOROLL_H
+
+struct PianoRollPitchLine {
+    float midi = 0.f;
+    std::vector<std::pair<int, int>> integerPairs{{1, 1}};
+    explicit PianoRollPitchLine(float m) : midi(m), integerPairs{{1, 1}} {}
+};
 
 class PianoRoll : public GridView {
 
@@ -53,6 +60,9 @@ class PianoRoll : public GridView {
         double yMax;
 
         std::shared_ptr<Note> movingNote;
+        json movingNoteUndoBefore;
+        bool movingNoteHasUndoSnapshot = false;
+        bool movingNoteDragDirty = false;
 
         bool customTick() override;
 
@@ -98,6 +108,10 @@ class PianoRoll : public GridView {
 
         void moveNote(std::shared_ptr<Note>, int, float);
 
+        /** Sync open piano roll UI after region tuning undo/redo; pass noteIdToStamp >= 0 to run stampNoteTuning. */
+        static void notifyTuningUndoApplied(Project* p, const std::vector<int>& managerPath, int arrangerNodeId, int regionId,
+                                            int noteIdToStamp);
+
         void handleWindowInput(SDL_Event&) override;
         
     private:
@@ -121,6 +135,7 @@ class PianoRoll : public GridView {
         SDL_FRect modeButtonRect{8.0f, 0.0f, 180.0f, 0.0f};
 
         size_t closestLineIndexForMidi(float midiPitch) const;
+        std::vector<std::pair<int, int>> pitchIntegerPairsAtGridMidi(float midiPitch) const;
         void refreshHoveredPitchLineIndex();
         int hoveredHarmonicFromGrid();
         int hoveredEdoKFromGrid();
@@ -128,7 +143,6 @@ class PianoRoll : public GridView {
         int structuralEdoKNearNote(const std::shared_ptr<Note>& n);
 
         float harmonicToMidi(int harmonic) const;
-        int midiToNearestHarmonic(float midi) const;
         void applyHarmonicAnchor(float midi, int harmonic);
         void defineEdoFromInterval(float a, float b, int steps);
         void syncTuningToRegion();
@@ -158,6 +172,9 @@ class PianoRoll : public GridView {
 
         // Discrete pitch line under cursor (UI → int); scale logic reads this, not mouseY/num.
         size_t hoveredPitchLineIndex = SIZE_MAX;
+
+        std::vector<PianoRollPitchLine> pitchLines;
+        void renderPianoRollGridTexture();
 };
 
 #endif

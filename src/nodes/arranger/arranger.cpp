@@ -32,9 +32,17 @@ ArrangerNode::~ArrangerNode() {
     }
 }
 
+TrackManager* ArrangerNode::activeTrackManager() {
+    return sl ? sl->tracks : runtimeTracks;
+}
+
+ElementManager* ArrangerNode::activeElementManager() {
+    return sl ? sl->em : runtimeElements;
+}
+
 void ArrangerNode::process() {
-    TrackManager* tracks = sl ? sl->tracks : runtimeTracks;
-    ElementManager* elements = sl ? sl->em : runtimeElements;
+    TrackManager* tracks = activeTrackManager();
+    ElementManager* elements = activeElementManager();
     if (!tracks || !elements) return;
     tracks->process(nullptr, bufferSize);
     elements->process(bufferSize);

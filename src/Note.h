@@ -3,6 +3,8 @@
 #include <SDL3/SDL.h>
 #include <cstdint>
 #include <memory>
+#include <utility>
+#include <vector>
 #include "fract.h"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
@@ -24,11 +26,21 @@ class Note {
         int tuningAnchorHarmonic = 1;
         float tuningEdoAnchorMidi = 69.0f;
         float tuningEdoStep = 1.0f;
+        // Rational prime-power factors for pitch (same meaning as PianoRollPitchLine::integerPairs).
+        // num = 69 + 12*log2(product of primes[i]^(num/den)); empty vector => product 1 => num 69.
+        std::vector<std::pair<int, int>> pitchIntegerPairs;
 
+        void syncNumFromPitchIntegerPairs();
         void move(fract x, fract y);
 
         json toJSON();
         static std::shared_ptr<Note> fromJSON(json&);
+        /** Apply start/end/pitch/tuning from a snapshot (e.g. undo); keeps existing id. */
+        void applyUndoSnapshot(const json& j);
+
+        /** Subset used by assign-harmonic undo (no start/end/pairs). */
+        json tuningFieldsUndoToJSON() const;
+        void applyTuningFieldsUndoFromJSON(const json& j);
 };
 
 #endif

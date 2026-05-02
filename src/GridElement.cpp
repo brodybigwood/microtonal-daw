@@ -28,6 +28,12 @@ idManager* GridElement::id_pool() {
 
 GridElement::~GridElement() {
     SDL_DestroyTexture(texture);
+    texture = nullptr;
+    for (auto* p : positions) {
+        id_pool()->releaseID(static_cast<uint16_t>(p->id));
+        delete p;
+    }
+    positions.clear();
 }
 
 json GridElement::toJSON() {

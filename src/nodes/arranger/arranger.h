@@ -25,6 +25,10 @@ class ArrangerNode : public Node {
         json extraSerialize() override;
         void extraDeSerialize(json) override;
 
+        /** SongRoll UI when open; otherwise the runtime managers used for audio/offline edits. */
+        TrackManager* activeTrackManager();
+        ElementManager* activeElementManager();
+
     private:
         void rebuildRuntimeState(json);
         void ensureSongRoll();

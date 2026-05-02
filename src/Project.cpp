@@ -9,6 +9,7 @@
 #include "NodeProcessor.h"
 #include "WindowHandler.h"
 #include "ContextMenu.h"
+#include "UndoTreeWindow.h"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
@@ -42,6 +43,8 @@ void Project::handleWindowInput(SDL_Event& e) {
 }
 
 Project::~Project() {
+    delete undoTreeWindow;
+    undoTreeWindow = nullptr;
     delete um;
     delete processor;
 }
@@ -123,8 +126,15 @@ void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {
     } else save_l();
 }
 
-void Project::createNote(int nodeID, fract start, fract length, float pitch, int regionID, std::vector<int> managerPath) {
-    auto pa = new CreateNoteAction(this, std::move(managerPath), nodeID, regionID, start, length, pitch);
+void Project::createNote(int nodeID, fract start, fract length, float pitch, int regionID, std::vector<int> managerPath,
+                         std::vector<std::pair<int, int>> pitchIntegerPairs) {
+    auto pa = new CreateNoteAction(this, std::move(managerPath), nodeID, regionID, start, length, pitch,
+                                   std::move(pitchIntegerPairs));
+    um->newAction(pa);
+}
+
+void Project::deleteNote(int nodeID, int regionID, int noteID, std::vector<int> managerPath) {
+    auto pa = new DeleteNoteAction(this, std::move(managerPath), nodeID, regionID, noteID);
     um->newAction(pa);
 }
 
@@ -152,4 +162,6 @@ void Project::tick() {
 }
 
 void Project::setup() {
+    if (!undoTreeWindow)
+        undoTreeWindow = new UndoTreeWindow(this);
 }

@@ -9,6 +9,9 @@
 #include "SDL_Events.h"
 #include "PianoRoll.h"
 #include "Preferences.h"
+#include "UndoManager.h"
+#include "nodes/arranger/arranger.h"
+#include "NodeManager.h"
 
 SongRoll::SongRoll(SDL_FRect* rect, bool* detached, Window* w, Project* p, ArrangerNode* n) : GridView(detached, rect, 200, w, p), parentNode(n) {
     this->windowHandler = WindowHandler::instance();
@@ -270,9 +273,10 @@ void SongRoll::doubleClick() {
         auto trackID = getHoveredTrack();
         auto track = tracks->getTrack(trackID);
         if (track && track->type == TrackType::Notes) {
-            auto reg = em->newRegion();
             fract start = getHoveredTime();
-            reg->createPos(start, trackID);
+            project->um->newAction(new CreateRegionAction(project, parentNode->nm->managerPath, static_cast<int>(parentNode->id),
+                start, static_cast<uint16_t>(trackID)));
+            refreshGrid = true;
         }
     }
 }
@@ -341,7 +345,7 @@ float SongRoll::getY(float index) {
 void SongRoll::UpdateGrid() {
     lines.clear();
     float y = -20;
-    while(y<20) {
+    while (y < 20) {
         lines.push_back(y);
         y++;
     }

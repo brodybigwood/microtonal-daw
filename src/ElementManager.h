@@ -21,6 +21,9 @@ class ElementManager {
         Region* newRegion();
         AudioClip* newAudioClip(std::string);
 
+        void removeElementById(uint16_t elementId);
+        void restoreRegionFromSnapshot(const json& regionJson);
+
         uint16_t getIndex(uint16_t);
         idManager id_pool;
         std::unordered_map<uint16_t, uint16_t> ids;

@@ -1,4 +1,5 @@
 #include "Region.h"
+#include <iostream>
 #include <climits>
 #include <set>
 #include <functional>
@@ -53,6 +54,9 @@ json Region::toJSON() {
     j["tuningMode"] = tuningMode;
     j["tuningAnchorMidi"] = tuningAnchorMidi;
     j["tuningAnchorHarmonic"] = tuningAnchorHarmonic;
+    j["tuningHarmonicAnchorVector"] = json::array();
+    for (const auto& pr : tuningHarmonicAnchorVector)
+        j["tuningHarmonicAnchorVector"].push_back(json::array({pr.first, pr.second}));
     j["tuningEdoAnchorMidi"] = tuningEdoAnchorMidi;
     j["tuningEdoStep"] = tuningEdoStep;
     j["tuningEdoSpanDivisions"] = tuningEdoSpanDivisions;
@@ -64,6 +68,13 @@ json Region::toJSON() {
     j["tuningSpanHiEdoK"] = tuningSpanHiEdoK;
     j["tuningEdoStepSemiNum"] = tuningEdoStepSemiNum;
     j["tuningEdoStepSemiDen"] = tuningEdoStepSemiDen;
+    j["tuningEdoSubdivisionSteps"] = tuningEdoSubdivisionSteps;
+    j["tuningEdoLowerVector"] = json::array();
+    for (const auto& pr : tuningEdoLowerVector)
+        j["tuningEdoLowerVector"].push_back(json::array({pr.first, pr.second}));
+    j["tuningEdoUpperVector"] = json::array();
+    for (const auto& pr : tuningEdoUpperVector)
+        j["tuningEdoUpperVector"].push_back(json::array({pr.first, pr.second}));
 
     return j;
 }
@@ -82,6 +93,13 @@ void Region::fromJSON(json j) {
     tuningMode = j.value("tuningMode", 0);
     tuningAnchorMidi = j.value("tuningAnchorMidi", 69.0f);
     tuningAnchorHarmonic = j.value("tuningAnchorHarmonic", 1);
+    tuningHarmonicAnchorVector.clear();
+    if (j.contains("tuningHarmonicAnchorVector") && j["tuningHarmonicAnchorVector"].is_array()) {
+        for (const auto& el : j["tuningHarmonicAnchorVector"]) {
+            if (el.is_array() && el.size() >= 2)
+                tuningHarmonicAnchorVector.push_back({el[0].get<int>(), el[1].get<int>()});
+        }
+    }
     tuningEdoAnchorMidi = j.value("tuningEdoAnchorMidi", 69.0f);
     tuningEdoStep = j.value("tuningEdoStep", 1.0f);
     tuningEdoSpanDivisions = j.value("tuningEdoSpanDivisions", 0);
@@ -93,10 +111,95 @@ void Region::fromJSON(json j) {
     tuningSpanHiEdoK = j.value("tuningSpanHiEdoK", INT_MAX);
     tuningEdoStepSemiNum = j.value("tuningEdoStepSemiNum", 1);
     tuningEdoStepSemiDen = j.value("tuningEdoStepSemiDen", 1);
+    tuningEdoSubdivisionSteps = j.value("tuningEdoSubdivisionSteps", 12);
+    tuningEdoLowerVector.clear();
+    if (j.contains("tuningEdoLowerVector") && j["tuningEdoLowerVector"].is_array()) {
+        for (const auto& el : j["tuningEdoLowerVector"]) {
+            if (el.is_array() && el.size() >= 2)
+                tuningEdoLowerVector.push_back({el[0].get<int>(), el[1].get<int>()});
+        }
+    }
+    tuningEdoUpperVector.clear();
+    if (j.contains("tuningEdoUpperVector") && j["tuningEdoUpperVector"].is_array()) {
+        for (const auto& el : j["tuningEdoUpperVector"]) {
+            if (el.is_array() && el.size() >= 2)
+                tuningEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
+        }
+    }
 }
 
-int Region::createNote(fract start, fract length, float pitch) {
+json Region::tuningUndoToJSON() const {
+    json j;
+    j["tuningMode"] = tuningMode;
+    j["tuningAnchorMidi"] = tuningAnchorMidi;
+    j["tuningAnchorHarmonic"] = tuningAnchorHarmonic;
+    j["tuningEdoAnchorMidi"] = tuningEdoAnchorMidi;
+    j["tuningEdoStep"] = tuningEdoStep;
+    j["tuningEdoSpanDivisions"] = tuningEdoSpanDivisions;
+    j["tuningEdoSpanLoMidi"] = tuningEdoSpanLoMidi;
+    j["tuningEdoSpanHiMidi"] = tuningEdoSpanHiMidi;
+    j["tuningSpanLoHarm"] = tuningSpanLoHarm;
+    j["tuningSpanHiHarm"] = tuningSpanHiHarm;
+    j["tuningSpanLoEdoK"] = tuningSpanLoEdoK;
+    j["tuningSpanHiEdoK"] = tuningSpanHiEdoK;
+    j["tuningEdoStepSemiNum"] = tuningEdoStepSemiNum;
+    j["tuningEdoStepSemiDen"] = tuningEdoStepSemiDen;
+    j["tuningEdoSubdivisionSteps"] = tuningEdoSubdivisionSteps;
+    j["tuningEdoLowerVector"] = json::array();
+    for (const auto& pr : tuningEdoLowerVector)
+        j["tuningEdoLowerVector"].push_back(json::array({pr.first, pr.second}));
+    j["tuningEdoUpperVector"] = json::array();
+    for (const auto& pr : tuningEdoUpperVector)
+        j["tuningEdoUpperVector"].push_back(json::array({pr.first, pr.second}));
+    j["tuningHarmonicAnchorVector"] = json::array();
+    for (const auto& pr : tuningHarmonicAnchorVector)
+        j["tuningHarmonicAnchorVector"].push_back(json::array({pr.first, pr.second}));
+    return j;
+}
+
+void Region::applyTuningUndoFromJSON(const json& j) {
+    tuningMode = j.value("tuningMode", 0);
+    tuningAnchorMidi = j.value("tuningAnchorMidi", 69.0f);
+    tuningAnchorHarmonic = j.value("tuningAnchorHarmonic", 1);
+    tuningEdoAnchorMidi = j.value("tuningEdoAnchorMidi", 69.0f);
+    tuningEdoStep = j.value("tuningEdoStep", 1.0f);
+    tuningEdoSpanDivisions = j.value("tuningEdoSpanDivisions", 0);
+    tuningEdoSpanLoMidi = j.value("tuningEdoSpanLoMidi", 0.0f);
+    tuningEdoSpanHiMidi = j.value("tuningEdoSpanHiMidi", 0.0f);
+    tuningSpanLoHarm = j.value("tuningSpanLoHarm", 0);
+    tuningSpanHiHarm = j.value("tuningSpanHiHarm", 0);
+    tuningSpanLoEdoK = j.value("tuningSpanLoEdoK", INT_MAX);
+    tuningSpanHiEdoK = j.value("tuningSpanHiEdoK", INT_MAX);
+    tuningEdoStepSemiNum = j.value("tuningEdoStepSemiNum", 1);
+    tuningEdoStepSemiDen = j.value("tuningEdoStepSemiDen", 1);
+    tuningEdoSubdivisionSteps = j.value("tuningEdoSubdivisionSteps", 12);
+    tuningEdoLowerVector.clear();
+    if (j.contains("tuningEdoLowerVector") && j["tuningEdoLowerVector"].is_array()) {
+        for (const auto& el : j["tuningEdoLowerVector"]) {
+            if (el.is_array() && el.size() >= 2)
+                tuningEdoLowerVector.push_back({el[0].get<int>(), el[1].get<int>()});
+        }
+    }
+    tuningEdoUpperVector.clear();
+    if (j.contains("tuningEdoUpperVector") && j["tuningEdoUpperVector"].is_array()) {
+        for (const auto& el : j["tuningEdoUpperVector"]) {
+            if (el.is_array() && el.size() >= 2)
+                tuningEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
+        }
+    }
+    tuningHarmonicAnchorVector.clear();
+    if (j.contains("tuningHarmonicAnchorVector") && j["tuningHarmonicAnchorVector"].is_array()) {
+        for (const auto& el : j["tuningHarmonicAnchorVector"]) {
+            if (el.is_array() && el.size() >= 2)
+                tuningHarmonicAnchorVector.push_back({el[0].get<int>(), el[1].get<int>()});
+        }
+    }
+}
+
+int Region::createNote(fract start, fract length, float pitch, std::vector<std::pair<int, int>> pitchIntegerPairs) {
     auto n = std::make_shared<Note>(start, start + length, pitch);
+    n->pitchIntegerPairs = std::move(pitchIntegerPairs);
+    n->syncNumFromPitchIntegerPairs();
     notes.push_back(n);
     n->id = id_pool.newID();
     id_to_index[n->id] = notes.size() - 1;
@@ -121,4 +224,16 @@ void Region::deleteNote(int id) {
     }
 
     id_pool.releaseID(id);
+}
+
+void Region::restoreNoteAt(std::shared_ptr<Note> n, size_t insertIndex) {
+    if (!n)
+        return;
+    if (insertIndex > notes.size())
+        insertIndex = notes.size();
+    id_pool.reserveID(static_cast<uint16_t>(n->id));
+    notes.insert(notes.begin() + insertIndex, std::move(n));
+    id_to_index.clear();
+    for (size_t i = 0; i < notes.size(); ++i)
+        id_to_index[notes[i]->id] = static_cast<int>(i);
 }

@@ -176,7 +176,7 @@ void GridView::RenderGridTexture() {
         SDL_RenderLine(renderer, val, 0, val, height);
     }
 
-    for(auto line : lines) {
+    for (auto line : lines) {
         float val = getY(line);
         SDL_RenderLine(renderer, 0, val, width, val);
     }

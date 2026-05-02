@@ -668,30 +668,10 @@ void Node::addModSource(Parameter* p) {
         }
     }
     if (paramIndex == std::numeric_limits<size_t>::max()) return;
-    NodeManager* ownerNm = nm;
-    const uint16_t nodeId = id;
-
-    auto* pa = new ProjectAction(project, NullAction);
+    std::vector<int> managerPath = nm ? nm->managerPath : std::vector<int>{};
+    auto* pa = new AddModSourceUndoAction(project, std::move(managerPath), static_cast<int>(id), paramIndex);
     pa->audioThreadAction = true;
     pa->name = "Add Mod Source";
-    pa->doAction = [ownerNm, nodeId, paramIndex]() {
-        if (!ownerNm) return;
-        Node* target = (nodeId == 0) ? static_cast<Node*>(ownerNm->outNode)
-                     : (nodeId == 1) ? static_cast<Node*>(ownerNm->inNode)
-                     : ownerNm->getNode(nodeId);
-        if (!target) return;
-        target->addModSourceNow(paramIndex);
-    };
-    pa->undoAction = [ownerNm, nodeId, paramIndex]() {
-        if (!ownerNm) return;
-        Node* target = (nodeId == 0) ? static_cast<Node*>(ownerNm->outNode)
-                     : (nodeId == 1) ? static_cast<Node*>(ownerNm->inNode)
-                     : ownerNm->getNode(nodeId);
-        if (!target || paramIndex >= target->params.size()) return;
-        auto* param = target->params[paramIndex];
-        if (!param || param->modulators.empty()) return;
-        target->removeModSourceNow(paramIndex, param->modulators.size() - 1);
-    };
     project->um->newAction(pa);
 }
 
@@ -732,29 +712,10 @@ void Node::removeModSource(Parameter* p, size_t modIndex) {
         }
     }
     if (paramIndex == std::numeric_limits<size_t>::max()) return;
-    NodeManager* ownerNm = nm;
-    const uint16_t nodeId = id;
-
-    auto* pa = new ProjectAction(project, NullAction);
+    std::vector<int> managerPath = nm ? nm->managerPath : std::vector<int>{};
+    auto* pa = new RemoveModSourceUndoAction(project, std::move(managerPath), static_cast<int>(id), paramIndex, modIndex);
     pa->audioThreadAction = true;
     pa->name = "Remove Mod Source";
-    pa->doAction = [ownerNm, nodeId, paramIndex, modIndex]() {
-        if (!ownerNm) return;
-        Node* target = (nodeId == 0) ? static_cast<Node*>(ownerNm->outNode)
-                     : (nodeId == 1) ? static_cast<Node*>(ownerNm->inNode)
-                     : ownerNm->getNode(nodeId);
-        if (!target) return;
-        target->removeModSourceNow(paramIndex, modIndex);
-    };
-    // Re-add on undo as the last source for this parameter.
-    pa->undoAction = [ownerNm, nodeId, paramIndex]() {
-        if (!ownerNm) return;
-        Node* target = (nodeId == 0) ? static_cast<Node*>(ownerNm->outNode)
-                     : (nodeId == 1) ? static_cast<Node*>(ownerNm->inNode)
-                     : ownerNm->getNode(nodeId);
-        if (!target) return;
-        target->addModSourceNow(paramIndex);
-    };
     project->um->newAction(pa);
 }
 

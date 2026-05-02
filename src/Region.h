@@ -1,4 +1,5 @@
 #include <iostream>
+#include <utility>
 #include <vector>
 #include <climits>
 #include "Note.h"
@@ -29,8 +30,9 @@ class Region : public GridElement {
         std::string name = "MIDI Region FX Rack";
         std::vector<std::shared_ptr<Note>> notes;
 
-    int createNote(fract, fract, float);
+    int createNote(fract, fract, float, std::vector<std::pair<int, int>> pitchIntegerPairs = {});
     void deleteNote(int);
+    void restoreNoteAt(std::shared_ptr<Note> n, size_t insertIndex);
 
  void sort();
 
@@ -40,6 +42,8 @@ int releaseMS = 1000;
 int tuningMode = 0; // 0=harmonic, 1=edo
 float tuningAnchorMidi = 69.0f;
 int tuningAnchorHarmonic = 1;
+// Slot-wise rational lattice offset at the anchor; integer harmonic lines add dense prime exponents on top.
+std::vector<std::pair<int, int>> tuningHarmonicAnchorVector;
 float tuningEdoAnchorMidi = 69.0f;
 float tuningEdoStep = 1.0f;
 // When >0, subdividing [tuningEdoSpanLoMidi, tuningEdoSpanHiMidi] into this many parts (grid / UI).
@@ -53,11 +57,19 @@ int tuningSpanLoEdoK = INT_MAX;
 int tuningSpanHiEdoK = INT_MAX;
 int tuningEdoStepSemiNum = 1;
 int tuningEdoStepSemiDen = 1;
+// Equal subdivision of rational pitch vector from lower to upper into this many steps (EDO line factors).
+int tuningEdoSubdivisionSteps = 12;
+std::vector<std::pair<int, int>> tuningEdoLowerVector;
+std::vector<std::pair<int, int>> tuningEdoUpperVector;
 
 void draw(SDL_Renderer*, float, int) override;
 
 json toJSON() override;
 void fromJSON(json) override;
+
+/** Piano-roll / undo: capture procedural tuning fields only (round-trips with applyTuningUndoFromJSON). */
+json tuningUndoToJSON() const;
+void applyTuningUndoFromJSON(const json& j);
 
 std::unordered_map<int, int> id_to_index;
 idManager id_pool;

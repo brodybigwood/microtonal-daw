@@ -188,6 +188,37 @@ Region* ElementManager::newRegion() {
     return r;
 }
 
+void ElementManager::removeElementById(uint16_t elementId) {
+    auto it = ids.find(elementId);
+    if (it == ids.end())
+        throw std::runtime_error("ElementManager::removeElementById: unknown element id");
+    const size_t idx = static_cast<size_t>(it->second);
+    if (idx >= elements.size())
+        throw std::runtime_error("ElementManager::removeElementById: index out of range");
+    GridElement* ge = elements[idx];
+    if (ge->id != elementId)
+        throw std::runtime_error("ElementManager::removeElementById: id mismatch");
+    elements.erase(elements.begin() + static_cast<std::ptrdiff_t>(idx));
+    id_pool.releaseID(elementId);
+    delete ge;
+    ids.erase(elementId);
+    for (size_t i = idx; i < elements.size(); ++i)
+        ids[elements[i]->id] = static_cast<uint16_t>(i);
+}
+
+void ElementManager::restoreRegionFromSnapshot(const json& regionJson) {
+    if (!regionJson.contains("type") || regionJson["type"].get<int>() != ElementType::region)
+        throw std::runtime_error("ElementManager::restoreRegionFromSnapshot: not a region snapshot");
+    const uint16_t rid = regionJson.at("id").get<uint16_t>();
+    if (ids.count(rid))
+        throw std::runtime_error("ElementManager::restoreRegionFromSnapshot: id already in use");
+    auto* r = new Region(project, parentNode);
+    r->fromJSON(regionJson);
+    id_pool.reserveID(rid);
+    elements.push_back(r);
+    ids[rid] = static_cast<uint16_t>(elements.size() - 1);
+}
+
 AudioClip* ElementManager::newAudioClip(std::string filepath) {
 
     auto a = new AudioClip(project, parentNode);
