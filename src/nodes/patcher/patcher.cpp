@@ -410,6 +410,7 @@ void PatcherNode::renderContent(SDL_Renderer*) {
 void PatcherNode::attachFinal() {
     mainManager->resetNE();
     if (mainEditor) {
+        mainEditor->setTopMenuBarHostNode(nullptr);
         mainEditor->clearWireDragState();
         delete mainEditor;
     }
@@ -420,6 +421,8 @@ void PatcherNode::detachFinal() {
     mainEditor = new NodeEditor;
     mainEditor->window = window;
     mainEditor->renderer = renderer;
+    mainEditor->setEmbeddedCanvasSize(static_cast<float>(TEX_W), static_cast<float>(TEX_H));
+    mainEditor->setTopMenuBarHostNode(this);
     mainManager->setNE(mainEditor);
     mainEditor->retach();
 }

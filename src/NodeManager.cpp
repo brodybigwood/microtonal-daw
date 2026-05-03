@@ -29,6 +29,7 @@ void NodeManager::setNE(NodeEditor* ne) {
     int ww = ne->windowWidth;
     int wh = ne->windowHeight;
     if (ne->window) SDL_GetWindowSize(ne->window, &ww, &wh);
+    ne->updateRootMenuBarLayout();
     outNode->placeDefaultByWindowSize(static_cast<float>(ww), static_cast<float>(wh));
     inNode->placeDefaultByWindowSize(static_cast<float>(ww), static_cast<float>(wh));
     for (auto n : nodes) n->setNE(ne);
@@ -40,7 +41,10 @@ void NodeManager::setNE(NodeEditor* ne) {
 void NodeManager::resetNE() {
     std::lock_guard<std::recursive_mutex> lock(graphMutex);
     if (ne) portDisplayMode = ne->portDisplayMode;
-    if (ne) ne->nm = nullptr;
+    if (ne) {
+        ne->resetRootMenuBarLayout();
+        ne->nm = nullptr;
+    }
     ne = nullptr;
     outNode->resetNE();
     inNode->resetNE();

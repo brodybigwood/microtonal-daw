@@ -48,6 +48,16 @@ class NodeEditor : public Window {
 
         SDL_FRect nodeRect{0, 0, 1920, 1080};
 
+        /** Full patch canvas (menu draws in the top band; `nodeRect` is the graph area below when the menu is on). */
+        void setEmbeddedCanvasSize(float w, float h);
+
+        /** Only `PatcherNode::detachFinal` sets this on `mainEditor` (top-level patcher = host lives on canvas with empty `managerPath`). */
+        void setTopMenuBarHostNode(Node* hostPatchNode) { menuBarHostNode_ = hostPatchNode; }
+
+        /** Called from `NodeManager::setNE` / `resetNE` only (menu bar layout for hosted patch editor). */
+        void updateRootMenuBarLayout();
+        void resetRootMenuBarLayout();
+
         /** Draw curved patch cable preview; uses `r` so it matches the same render target as socket drawing. */
         static void renderPatchCable(SDL_Renderer* r, float x1, float y1, float x2, float y2, SDL_FColor color);
 
@@ -89,7 +99,15 @@ class NodeEditor : public Window {
         void renderConnector(SDL_Renderer*);
 
         void hover();
-        void render(SDL_Renderer*, SDL_FRect*);
+        /** `surfaceRect` is the full canvas (0,0,canvas); menu then everything in `nodeRect` (clipped). */
+        void render(SDL_Renderer*, SDL_FRect* surfaceRect);
+
+        /** Top menu strip (skeleton) when `menuBarHostNode_` marks a top-level patcher editor. */
+        void renderRootMenuBarSkeleton(SDL_Renderer*, const SDL_FRect* surfaceRect);
+
+        bool isPointerOverMenuBar(float mx, float my) const;
+
+        static constexpr float kRootMenuBarStripH = 22.0f;
 
         bool inside(float&, float&, SDL_FRect*);
 
@@ -102,4 +120,10 @@ class NodeEditor : public Window {
         float moveOffY;
 
         SDL_FRect portModeButtonRect{12.0f, 12.0f, 190.0f, 32.0f};
+
+        /** Patcher node that owns this editor when embedded; null for processor host / other editors. */
+        Node* menuBarHostNode_ = nullptr;
+
+        float canvasW_ = 1920.f;
+        float canvasH_ = 1080.f;
 };

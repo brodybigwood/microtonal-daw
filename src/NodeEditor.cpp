@@ -7,6 +7,8 @@
 #include <iostream>
 #include "Preferences.h"
 #include "styles.h"
+#include <algorithm>
+#include <array>
 #include <cmath>
 
 void NodeEditor::renderPatchCable(SDL_Renderer* r, float x1, float y1, float x2, float y2, SDL_FColor color) {
@@ -181,6 +183,80 @@ NodeEditor::~NodeEditor() {
     window = nullptr;
 }
 
+void NodeEditor::setEmbeddedCanvasSize(float w, float h) {
+    canvasW_ = w;
+    canvasH_ = h;
+    nodeRect = SDL_FRect{0.f, 0.f, w, h};
+}
+
+void NodeEditor::resetRootMenuBarLayout() {
+    topMargin = 0.f;
+    nodeRect = SDL_FRect{0.f, 0.f, canvasW_, canvasH_};
+    portModeButtonRect.x = 12.f;
+    portModeButtonRect.y = 12.f;
+}
+
+void NodeEditor::updateRootMenuBarLayout() {
+    resetRootMenuBarLayout();
+    if (!nm || !menuBarHostNode_) return;
+    /* Top-level patcher: the patcher node lives on the processor canvas (`nm` has empty `managerPath`). */
+    if (!menuBarHostNode_->nm || !menuBarHostNode_->nm->managerPath.empty()) return;
+    topMargin = kRootMenuBarStripH;
+    nodeRect = SDL_FRect{0.f, topMargin, canvasW_, std::max(1.f, canvasH_ - topMargin)};
+    portModeButtonRect.y = 12.f + topMargin;
+}
+
+bool NodeEditor::isPointerOverMenuBar(float mx, float my) const {
+    if (topMargin <= 0.f) return false;
+    return mx >= 0.f && mx < canvasW_ && my >= 0.f && my < topMargin;
+}
+
+void NodeEditor::renderRootMenuBarSkeleton(SDL_Renderer* ren, const SDL_FRect* surface) {
+    auto fill = [ren](uint8_t R, uint8_t G, uint8_t B, const SDL_FRect& r) {
+        SDL_SetRenderDrawColor(ren, R, G, B, 255);
+        SDL_RenderFillRect(ren, &r);
+    };
+
+    fill(38, 38, 40, SDL_FRect{surface->x, surface->y, surface->w, topMargin});
+
+    static constexpr std::array<const char*, 4> kLabels{"File", "Edit", "View", "Window"};
+    constexpr float kPadX = 6.f;
+    constexpr float kMinItemW = 52.f;
+    float x = surface->x + kPadX;
+    const float y = surface->y + 2.f;
+    const float h = topMargin - 4.f;
+
+    for (const char* label : kLabels) {
+        int tw = 0;
+        int th = 0;
+        SDL_Surface* surf = nullptr;
+        if (fonts.mainFont)
+            surf = TTF_RenderText_Blended(fonts.mainFont, label, 0, SDL_Color{255, 255, 255, 255});
+        if (surf) {
+            tw = surf->w;
+            th = surf->h;
+        }
+        const float w = std::max(kMinItemW, static_cast<float>(tw) + 16.f);
+        const SDL_FRect cell{x, y, w, h};
+        fill(44, 44, 48, cell);
+        SDL_SetRenderDrawColor(ren, 20, 20, 22, 255);
+        SDL_RenderRect(ren, &cell);
+
+        if (surf) {
+            SDL_Texture* tex = SDL_CreateTextureFromSurface(ren, surf);
+            SDL_DestroySurface(surf);
+            if (tex) {
+                const float tx = x + (w - static_cast<float>(tw)) * 0.5f;
+                const float ty = y + (h - static_cast<float>(th)) * 0.5f;
+                SDL_FRect tr{tx, ty, static_cast<float>(tw), static_cast<float>(th)};
+                SDL_RenderTexture(ren, tex, nullptr, &tr);
+                SDL_DestroyTexture(tex);
+            }
+        }
+        x += w + 4.f;
+    }
+}
+
 void NodeEditor::renderConnector(SDL_Renderer* renderer) {
 
     int x;
@@ -217,9 +293,8 @@ void NodeEditor::renderSine(float x1, float y1, float x2, float y2, SDL_FColor c
 
 void NodeEditor::tick() {
     if (!nm || !renderer) return;
-    render(renderer, &nodeRect);
-    // Wire preview reads Connection* from port lists; same graph mutation race as Node::render ports.
-    nm->runWithGraphLock([this]() { renderConnector(renderer); });
+    SDL_FRect surface{0.f, 0.f, canvasW_, canvasH_};
+    render(renderer, &surface);
     // Free nodes removed by the audio thread only after this frame finishes drawing — avoids
     // UI use-after-free without holding graphMutex for the whole paint (which would block RT audio).
     nm->flushUiDeferred();
@@ -284,6 +359,25 @@ void NodeEditor::zoom(float amount) {
 }
 
 void NodeEditor::handleInput(SDL_Event& e) {
+    moveMouse();
+
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+        releaseMovingNode();
+        leftClick = false;
+    }
+
+    if (topMargin > 0.f && isPointerOverMenuBar(mouseX, mouseY)) {
+        switch (e.type) {
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            case SDL_EVENT_MOUSE_BUTTON_UP:
+            case SDL_EVENT_MOUSE_MOTION:
+            case SDL_EVENT_MOUSE_WHEEL:
+                return;
+            default:
+                break;
+        }
+    }
+
     switch (e.type) {
         case SDL_EVENT_MOUSE_MOTION:
             if (isCtrlPressed && leftClick) move();
@@ -294,8 +388,6 @@ void NodeEditor::handleInput(SDL_Event& e) {
             moveOffY = mouseY;
             break;
         case SDL_EVENT_MOUSE_BUTTON_UP:
-            releaseMovingNode();
-            leftClick = false;
             break;
         case SDL_EVENT_MOUSE_WHEEL:
             if (isCtrlPressed) zoom(std::pow(1.1, e.wheel.y));
@@ -303,7 +395,6 @@ void NodeEditor::handleInput(SDL_Event& e) {
         default:
             break;
     }
-    moveMouse();
     if (nm->inNode->handleInput(e)) return;
     if (nm->outNode->handleInput(e)) return;
     for (auto n : nm->getNodes()) {
@@ -412,9 +503,21 @@ void NodeEditor::keydown(SDL_Event& e) {
 
 }
 
-void NodeEditor::render(SDL_Renderer* renderer, SDL_FRect* dstRect) {
+void NodeEditor::render(SDL_Renderer* renderer, SDL_FRect* surfaceRect) {
+    if (topMargin > 0.f)
+        renderRootMenuBarSkeleton(renderer, surfaceRect);
+
     SDL_SetRenderDrawColor(renderer, 220, 220, 220, 255);
-    SDL_RenderFillRect(renderer, dstRect);
+    SDL_RenderFillRect(renderer, &nodeRect);
+
+    SDL_Rect clip{
+        static_cast<int>(std::floor(nodeRect.x)),
+        static_cast<int>(std::floor(nodeRect.y)),
+        static_cast<int>(std::ceil(nodeRect.w)),
+        static_cast<int>(std::ceil(nodeRect.h)),
+    };
+    if (clip.w > 0 && clip.h > 0)
+        SDL_SetRenderClipRect(renderer, &clip);
 
     SDL_SetRenderDrawColor(renderer, 235, 235, 235, 255);
     SDL_RenderFillRect(renderer, &portModeButtonRect);
@@ -443,11 +546,15 @@ void NodeEditor::render(SDL_Renderer* renderer, SDL_FRect* dstRect) {
             SDL_DestroySurface(surf);
         }
     }
-    
-    for( auto node : nm->getNodes() ) {
+
+    for (auto node : nm->getNodes()) {
         node->render();
     }
 
     nm->inNode->render();
     nm->outNode->render();
+
+    nm->runWithGraphLock([this]() { renderConnector(this->renderer); });
+
+    SDL_SetRenderClipRect(renderer, nullptr);
 }
