@@ -3,6 +3,7 @@
 #include "NodeEditor.h"
 #include "UndoTreeWindow.h"
 #include "Node.h"
+#include <algorithm>
 #include <sstream>
 #include <iostream>
 #include <nlohmann/json.hpp>
@@ -259,6 +260,8 @@ bool WindowHandler::tick() {
         }
         project->renderPresent();
     }
+    // Compact nulled-out window pointers (deferred from removeWindow during iteration).
+    windows.erase(std::remove(windows.begin(), windows.end(), nullptr), windows.end());
     return running;
 
 }
@@ -385,6 +388,6 @@ void WindowHandler::addWindow(Window* w) {
 void WindowHandler::removeWindow(Window* w) {
     auto it = std::find(windows.begin(), windows.end(), w);
     if (it != windows.end()) {
-        windows.erase(it);
+        *it = nullptr;  // null out to keep iterators valid; compacted at end of tick()
     }
 }

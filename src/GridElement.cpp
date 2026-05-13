@@ -7,7 +7,7 @@ GridElement::GridElement(Project* p, ArrangerNode* n) : project(p), parentNode(n
 }
 
 void GridElement::createPos(fract startTime, uint16_t trackID) {
-    uint16_t id = GridElement::id_pool()->newID();
+    uint16_t id = pos_id_pool->newID();
 
     Position* pos = new Position{
         fract{},
@@ -21,17 +21,11 @@ void GridElement::createPos(fract startTime, uint16_t trackID) {
     positions.push_back(pos);
 }
 
-idManager* GridElement::id_pool() {
-    static idManager im;
-    return &im;
-}
-
-
 GridElement::~GridElement() {
     SDL_DestroyTexture(texture);
     texture = nullptr;
     for (auto* p : positions) {
-        id_pool()->releaseID(static_cast<uint16_t>(p->id));
+        pos_id_pool->releaseID(static_cast<uint16_t>(p->id));
         delete p;
     }
     positions.clear();
@@ -64,7 +58,7 @@ void GridElement::fromJSON(json j) {
             p["id"],
             this
         };
-        GridElement::id_pool()->reserveID(p["id"]);
+        pos_id_pool->reserveID(p["id"]);
         positions.push_back(pos);
     }
 }
@@ -95,7 +89,7 @@ bool GridElement::removePositionById(int positionId, size_t* removedIndex) {
         if (positions[i]->id == positionId) {
             if (removedIndex)
                 *removedIndex = i;
-            id_pool()->releaseID(static_cast<uint16_t>(positions[i]->id));
+            pos_id_pool->releaseID(static_cast<uint16_t>(positions[i]->id));
             delete positions[i];
             positions.erase(positions.begin() + static_cast<std::ptrdiff_t>(i));
             return true;
@@ -114,7 +108,7 @@ void GridElement::insertPositionAt(size_t index, const json& p) {
         p.at("id").get<int>(),
         this
     };
-    id_pool()->reserveID(p.at("id").get<int>());
+    pos_id_pool->reserveID(p.at("id").get<int>());
     index = std::min(index, positions.size());
     positions.insert(positions.begin() + static_cast<std::ptrdiff_t>(index), pos);
 }

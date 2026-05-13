@@ -60,6 +60,8 @@ void Project::load(std::string path) {
         return;
     }
 
+    loading.store(true);
+
     filepath = path;
 
     json j;
@@ -70,6 +72,8 @@ void Project::load(std::string path) {
 
     if (processor && j.contains("nodeManager")) processor->deSerialize(j["nodeManager"]);
     um->deSerialize(j["undoManager"], this);
+
+    loading.store(false);
 }
 
 void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {

@@ -20,7 +20,6 @@ NodeManager::NodeManager(Project* p, std::vector<int> managerPath) : project(p),
 }
 
 void NodeManager::setNE(NodeEditor* ne) {
-    std::lock_guard<std::recursive_mutex> lock(graphMutex);
     this->ne = ne;
     ne->nm = this;
     ne->portDisplayMode = portDisplayMode;
@@ -39,7 +38,6 @@ void NodeManager::setNE(NodeEditor* ne) {
 }
 
 void NodeManager::resetNE() {
-    std::lock_guard<std::recursive_mutex> lock(graphMutex);
     if (ne) portDisplayMode = ne->portDisplayMode;
     if (ne) {
         ne->resetRootMenuBarLayout();
@@ -52,7 +50,6 @@ void NodeManager::resetNE() {
 }
 
 json NodeManager::serialize() {
-    std::lock_guard<std::recursive_mutex> lock(graphMutex);
     if (ne) portDisplayMode = ne->portDisplayMode;
     json j;
     j["idManager"] = id_pool.toJSON();
@@ -91,7 +88,6 @@ json NodeManager::serialize() {
 }
 
 void NodeManager::deSerialize(json j) {
-    std::lock_guard<std::recursive_mutex> lock(graphMutex);
     std::cout << "[DBG_DESER] NodeManager::deSerialize begin path=";
     for (size_t i = 0; i < managerPath.size(); ++i) {
         std::cout << managerPath[i] << (i + 1 < managerPath.size() ? "/" : "");
@@ -108,13 +104,13 @@ void NodeManager::deSerialize(json j) {
     for (auto n : j["nodes"]) {
         auto node = Node::deSerialize(n, this);
         if (node) {
-            nodes.push_back(node); 
+            nodes.push_back(node);
             ids[node->id] = nodes.size() - 1;
             if (ne) node->setNE(ne);
             std::cout << "[DBG_DESER]  node restored id=" << node->id << " type=" << static_cast<int>(node->nodeType) << std::endl;
         }
     }
-    
+
     outNode->deSerialize(j["outNode"]);
     if (j.contains("inNode")) inNode->deSerialize(j["inNode"]);
     std::cout << "[DBG_DESER]  outNode inputs=" << outNode->inputs.connections.size() << std::endl;
@@ -125,7 +121,7 @@ void NodeManager::deSerialize(json j) {
         if (dstNodeID == 0) dstNode = outNode;
         else if (dstNodeID == 1) dstNode = inNode;
         else dstNode = getNode(dstNodeID);
-        
+
         auto dstConID = s["dstConID"];
         int srcNodeID = s["srcNodeID"];
         Node* srcNode = nullptr;
@@ -153,7 +149,6 @@ void NodeManager::deSerialize(json j) {
 }
 
 Node* NodeManager::getNode(uint16_t id) {
-    std::lock_guard<std::recursive_mutex> lock(graphMutex);
     if (id == 0) return outNode;
     if (id == 1) return inNode;
     auto it = ids.find(id);
@@ -162,8 +157,6 @@ Node* NodeManager::getNode(uint16_t id) {
 }
 
 NodeManager::~NodeManager() {
-    std::lock_guard<std::recursive_mutex> lock(graphMutex);
-    flushUiDeferred();
     for(auto n : nodes) {
         delete n;
     }
@@ -174,20 +167,13 @@ NodeManager::~NodeManager() {
 }
 
 std::vector<Node*> NodeManager::getNodes() {
-    std::unique_lock<std::recursive_mutex> lk(graphMutex, std::try_to_lock);
-    if (!lk.owns_lock()) return {};
     return nodes;
 }
 
 void NodeManager::markTopologyDirty() {
-    std::lock_guard<std::recursive_mutex> lock(graphMutex);
     topologyDirty = true;
 }
 
-void NodeManager::runWithGraphLock(const std::function<void()>& fn) {
-    std::lock_guard<std::recursive_mutex> lock(graphMutex);
-    if (fn) fn();
-}
 void NodeManager::makeNodeConnection(
         Node* srcNode, uint16_t srcConID,
         Node* dstNode, uint16_t dstConID
@@ -197,8 +183,6 @@ void NodeManager::makeNodeConnection(
 }
 
 void NodeManager::severConnection(Connection* c) {
-    std::unique_lock<std::recursive_mutex> lk(graphMutex, std::try_to_lock);
-    if (!lk.owns_lock()) return;
     if (!c->is_connected) return;
     uint16_t srcNodeID, srcConID, dstNodeID, dstConID;
     if (c->dir == Direction::input) {
@@ -251,11 +235,6 @@ void NodeManager::removeNode(Node* n) {
 }
 
 void NodeManager::process(float* output, int& bufferSize, int& numChannels, int& sampleRate) {
-    std::lock_guard<std::recursive_mutex> lock(graphMutex);
-
-    // Apply queued graph mutations before this buffer's DSP so the tree matches the latest undo/redo.
-    project->um->flushAudioActions();
-
     bool update = false;
     if(bufferSize != this->bufferSize) {
         update = true;
@@ -286,16 +265,13 @@ void NodeManager::process(float* output, int& bufferSize, int& numChannels, int&
         outNode->relinkInputs();
         topologyDirty = false;
     }
-   
+
     outNode->output = output;
-    // Waveform device buffer follows outNode->inputs waveform connections in index order (see OutputNode::process).
-    // Event buses (if any): outNode->outputs event connections in array order — host / future bridges can read in order.
     outNode->processTree();
     outNode->resetProcessTree();
 }
 
 Node* NodeManager::addNodeNow(NodeType t, float x, float y, int forcedID) {
-    std::lock_guard<std::recursive_mutex> lock(graphMutex);
     uint16_t id;
     if (forcedID >= 0) {
         id = static_cast<uint16_t>(forcedID);
@@ -324,7 +300,6 @@ Node* NodeManager::addNodeNow(NodeType t, float x, float y, int forcedID) {
 }
 
 Node* NodeManager::addNodeNow(json j) {
-    std::lock_guard<std::recursive_mutex> lock(graphMutex);
     uint16_t id = j["id"];
     id_pool.reserveID(id);
     auto node = Node::deSerialize(j, this);
@@ -344,7 +319,6 @@ Node* NodeManager::addNodeNow(json j) {
 }
 
 void NodeManager::removeNodeNow(uint16_t id) {
-    std::lock_guard<std::recursive_mutex> lock(graphMutex);
     auto node = getNode(id);
     if (!node) return;
 
@@ -371,15 +345,11 @@ void NodeManager::removeNodeNow(uint16_t id) {
     Node* removed = nodes.back();
     nodes.pop_back();
     if (ne) ne->clearPointersToNode(removed);
-    {
-        std::lock_guard<std::mutex> lock(deferredDeleteMutex);
-        deferredDeleteNodes.push_back(removed);
-    }
+    delete removed;
     topologyDirty = true;
 }
 
 void NodeManager::makeNodeConnectionNow(uint16_t srcNodeID, uint16_t srcConID, uint16_t dstNodeID, uint16_t dstConID) {
-    std::lock_guard<std::recursive_mutex> lock(graphMutex);
     Node* srcNode = (srcNodeID == 0) ? static_cast<Node*>(outNode)
                     : (srcNodeID == 1) ? static_cast<Node*>(inNode)
                     : getNode(srcNodeID);
@@ -425,7 +395,6 @@ void NodeManager::makeNodeConnectionNow(uint16_t srcNodeID, uint16_t srcConID, u
 }
 
 void NodeManager::severConnectionNow(uint16_t srcNodeID, uint16_t srcConID, uint16_t dstNodeID, uint16_t dstConID) {
-    std::lock_guard<std::recursive_mutex> lock(graphMutex);
     Node* srcNode = (srcNodeID == 0) ? static_cast<Node*>(outNode)
                     : (srcNodeID == 1) ? static_cast<Node*>(inNode)
                     : getNode(srcNodeID);
@@ -450,7 +419,6 @@ void NodeManager::severConnectionNow(uint16_t srcNodeID, uint16_t srcConID, uint
 }
 
 void NodeManager::moveNodeNow(uint16_t nodeID, float x, float y) {
-    std::lock_guard<std::recursive_mutex> lock(graphMutex);
     Node* node = nullptr;
     if (nodeID == 0) {
         node = outNode;
@@ -464,7 +432,6 @@ void NodeManager::moveNodeNow(uint16_t nodeID, float x, float y) {
 }
 
 bool NodeManager::snapshotNode(uint16_t nodeID, json& nodeData, json& connections) {
-    std::lock_guard<std::recursive_mutex> lock(graphMutex);
     auto node = getNode(nodeID);
     if (!node) return false;
 
@@ -495,43 +462,17 @@ bool NodeManager::snapshotNode(uint16_t nodeID, json& nodeData, json& connection
 }
 
 bool NodeManager::peekRemovableInputWaveform(uint16_t* outId, size_t* outIndex) {
-    std::unique_lock<std::recursive_mutex> lk(graphMutex, std::try_to_lock);
-    if (!lk.owns_lock()) return false;
     return inNode->peekLastRemovableWaveformOutput(outId, outIndex);
 }
 
 bool NodeManager::peekRemovableInputEvent(uint16_t* outId, size_t* outIndex) {
-    std::unique_lock<std::recursive_mutex> lk(graphMutex, std::try_to_lock);
-    if (!lk.owns_lock()) return false;
     return inNode->peekLastRemovableEventOutput(outId, outIndex);
 }
 
 bool NodeManager::peekRemovableOutputWaveform(uint16_t* outId, size_t* outIndex) {
-    std::unique_lock<std::recursive_mutex> lk(graphMutex, std::try_to_lock);
-    if (!lk.owns_lock()) return false;
     return outNode->peekLastRemovableWaveformInput(outId, outIndex);
 }
 
 bool NodeManager::peekRemovableOutputEvent(uint16_t* outId, size_t* outIndex) {
-    std::unique_lock<std::recursive_mutex> lk(graphMutex, std::try_to_lock);
-    if (!lk.owns_lock()) return false;
     return outNode->peekLastRemovableEventInput(outId, outIndex);
-}
-
-void NodeManager::flushUiDeferred() {
-    std::vector<Node*> pending;
-    {
-        std::lock_guard<std::mutex> lock(deferredDeleteMutex);
-        pending.swap(deferredDeleteNodes);
-    }
-    for (auto* n : pending) {
-        // Undo add-node removes a popped-out node's window without changing SDL keyboard focus — the OS
-        // often moves focus back to another app (e.g. terminal). Raising the parent editor here only when the
-        // detached window actually had focus (main thread — avoid doing this from the audio enqueue path).
-        if (n && n->detached && n->window) {
-            if (SDL_GetKeyboardFocus() == n->window && n->ne && n->ne->window)
-                SDL_RaiseWindow(n->ne->window);
-        }
-        delete n;
-    }
 }

@@ -55,7 +55,7 @@ class GridElement {
         virtual json toJSON();
         virtual void fromJSON(json);
 
-        static idManager* id_pool();
+        idManager* pos_id_pool = nullptr;
 
         uint16_t id;
 };

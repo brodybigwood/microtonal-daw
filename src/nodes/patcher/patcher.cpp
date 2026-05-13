@@ -402,8 +402,6 @@ void PatcherNode::renderContent(SDL_Renderer*) {
         }
 
         renderParams(renderer);
-        // Embedded patch — no inner NodeEditor tick; drain deferred deletes for mainManager anyway.
-        mainManager->flushUiDeferred();
     }
 }
 

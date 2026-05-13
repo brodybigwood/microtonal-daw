@@ -1,4 +1,5 @@
 #include "AudioManager.h"
+#include "NodeProcessor.h"
 
 AudioManager::AudioManager() {
 
@@ -25,6 +26,12 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
 
     Project* project = audioManager->project;
 
+    if (project->loading.load()) {
+        unsigned int numChannels = audioManager->outputChannels;
+        memset(outputBuffer, 0, bufferSize * numChannels * sizeof(float));
+        return 0;
+    }
+
     project->sampleTime += bufferSize;
 
     if(project->isPlaying.load()) {
@@ -37,6 +44,12 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
     unsigned int numChannels = audioManager->outputChannels;
 
     memset(outputBuffer, 0, bufferSize * numChannels * sizeof(float));
+
+    // Apply queued actions to the audio copy before DSP.
+    if (project->um) {
+        project->processor->setThreadActiveRoot(project->processor->audioManager);
+        project->um->flushAudioSync();
+    }
 
     float *outBuffer = static_cast<float *>(outputBuffer);
     float *inBuffer = static_cast<float *>(inputBuffer);

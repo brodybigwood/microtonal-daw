@@ -12,7 +12,16 @@ public:
 
     void setNode(Node* n) { node = n; }
     Node* getNode() const { return node; }
-    NodeManager* getManager() const { return manager; }
+    NodeManager* getManager() const { return guiManager; }
+
+    /** GUI-owned project copy (rendering, editing). */
+    NodeManager* guiManager = nullptr;
+    /** Audio-owned project copy (DSP, must not have SDL resources). */
+    NodeManager* audioManager = nullptr;
+
+    /** Set the thread-local active manager. Call once per thread before any action. */
+    static void setThreadActiveRoot(NodeManager* r);
+
     PatcherNode* getRootPatcher() const;
     SDL_Window* getHostWindow() const;
     SDL_Renderer* getHostRenderer() const;
@@ -27,7 +36,6 @@ public:
 
 private:
     Project* project = nullptr;
-    NodeManager* manager = nullptr;
     Node* node = nullptr;
     class NodeEditor* editor = nullptr;
 };

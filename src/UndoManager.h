@@ -43,7 +43,6 @@ struct ProjectAction {
 
     std::function<void()> doAction;
     std::function<void()> undoAction;
-    bool audioThreadAction = false;
     /** If true, `UndoManager::newAction` does not run `doAction` immediately (state already matches do). */
     bool skipInitialDo = false;
 
@@ -97,19 +96,19 @@ struct UndoManager {
     ProjectAction* head;
     ProjectAction* current;
 
-    std::mutex audioActionMutex;
-    std::vector<std::function<void()>> pendingAudioActions;
+    std::mutex audioSyncMutex;
+    std::vector<std::function<void()>> pendingAudioSync;
 
-    void enqueueAudioAction(std::function<void()> fn) {
-        std::lock_guard<std::mutex> lock(audioActionMutex);
-        pendingAudioActions.push_back(std::move(fn));
+    void enqueueAudioSync(std::function<void()> fn) {
+        std::lock_guard<std::mutex> lock(audioSyncMutex);
+        pendingAudioSync.push_back(std::move(fn));
     }
 
-    void flushAudioActions() {
+    void flushAudioSync() {
         std::vector<std::function<void()>> actions;
         {
-            std::lock_guard<std::mutex> lock(audioActionMutex);
-            actions.swap(pendingAudioActions);
+            std::lock_guard<std::mutex> lock(audioSyncMutex);
+            actions.swap(pendingAudioSync);
         }
         for (auto& fn : actions) fn();
     }
@@ -119,15 +118,7 @@ struct UndoManager {
         current = head;
     }
 
-    void newAction(ProjectAction* pa) {
-        current->newAction(pa);
-        current->last_index = pa->index;
-        current = pa;
-        if (pa->skipInitialDo)
-            return;
-        if (pa->audioThreadAction) enqueueAudioAction(pa->doAction);
-        else pa->doAction();
-    }
+    void newAction(ProjectAction* pa);
 
     json serialize() {
         json j;
@@ -147,15 +138,7 @@ struct UndoManager {
         }
     }
 
-    void undo() {
-        if (current == head) return;
-        if (current->audioThreadAction) enqueueAudioAction(current->undoAction);
-        else current->undoAction();
-        current->parent->last_index = current->index;
-        current = current->parent;
-        /* UI undo/redo and goTo run outside the audio callback; queued graph mutations must run before the next edit. */
-        flushAudioActions();
-    }
+    void undo();
 
     /** @param childIndex branch to redo; -1 uses `current->last_index` (clamped to valid range). */
     void redo(int childIndex = -1);

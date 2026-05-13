@@ -70,6 +70,7 @@ class Project : public Window {
         fract playHeadPos = fract(0,1);
 
         std::atomic<bool> isPlaying{false};
+        std::atomic<bool> loading{false};
 
         std::atomic<double> timeSeconds{0.0};
 

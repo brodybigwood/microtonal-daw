@@ -106,6 +106,9 @@ json ArrangerNode::extraSerialize() {
         j["ElementManager"] = sl->em->toJSON();
     } else if (hasPendingExtraState) {
         j = pendingExtraState;
+    } else if (runtimeTracks && runtimeElements) {
+        j["TrackManager"] = runtimeTracks->toJSON();
+        j["ElementManager"] = runtimeElements->toJSON();
     } else {
         j["TrackManager"] = json::object();
         j["ElementManager"] = json::object();

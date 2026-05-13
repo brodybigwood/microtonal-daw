@@ -16,10 +16,17 @@
 #include <unordered_map>
 #include <vector>
 
+/** Each thread sets this once to the copy it owns (GUI → guiManager, audio → audioManager). */
+static thread_local NodeManager* tls_activeManager = nullptr;
+
+void NodeProcessor::setThreadActiveRoot(NodeManager* r) { tls_activeManager = r; }
+
 static NodeManager& requireManager(Project* p, const std::vector<int>& path) {
     if (!p || !p->processor)
         throw std::runtime_error("requireManager: project or processor missing");
-    NodeManager* nm = p->processor->getManager();
+    NodeManager* nm = tls_activeManager;
+    if (!nm)
+        nm = p->processor->guiManager;  // fallback: first use on GUI thread before explicit set
     if (!nm)
         throw std::runtime_error("requireManager: root node manager missing");
     for (int patcherNodeID : path) {
@@ -29,6 +36,31 @@ static NodeManager& requireManager(Project* p, const std::vector<int>& path) {
         nm = patcher->mainManager;
     }
     return *nm;
+}
+
+void UndoManager::newAction(ProjectAction* pa) {
+    current->newAction(pa);
+    current->last_index = pa->index;
+    current = pa;
+    // Apply to GUI copy (active root defaults to GUI), unless already done via direct mutation.
+    if (!pa->skipInitialDo)
+        pa->doAction();
+    // Always enqueue for audio copy replay before next DSP pass.
+    if (pa->p && pa->p->processor && pa->p->processor->audioManager) {
+        ProjectAction* cap = pa;
+        enqueueAudioSync([cap]() { cap->doAction(); });
+    }
+}
+
+void UndoManager::undo() {
+    if (current == head) return;
+    // Apply undo to GUI copy (active root is already GUI).
+    current->undoAction();
+    // Enqueue for audio copy (applied before next DSP callback).
+    ProjectAction* cap = current;
+    enqueueAudioSync([cap]() { cap->undoAction(); });
+    current->parent->last_index = current->index;
+    current = current->parent;
 }
 
 Region* undoResolveArrangerRegion(Project* p, const std::vector<int>& managerPath, int nodeID, int regionID) {
@@ -574,18 +606,17 @@ void UndoManager::redo(int childIndex) {
         idx = current->last_index;
         if (idx < 0 || static_cast<size_t>(idx) >= current->children.size())
             idx = static_cast<int>(current->children.size()) - 1;
-        // Shortcut redo must behave like undo-tree navigation (goTo), not a subtly different redo() path.
         goTo(current->children[static_cast<size_t>(idx)]);
         return;
     }
     if (idx < 0 || static_cast<size_t>(idx) >= current->children.size())
         idx = static_cast<int>(current->children.size()) - 1;
     current = current->children[static_cast<size_t>(idx)];
-    if (current->audioThreadAction)
-        enqueueAudioAction(current->doAction);
-    else
-        current->doAction();
-    flushAudioActions();
+    // Apply to GUI copy.
+    current->doAction();
+    // Enqueue for audio copy.
+    ProjectAction* cap = current;
+    enqueueAudioSync([cap]() { cap->doAction(); });
 }
 
 bool UndoManager::mouseHitsRect(SDL_FRect* rect) const {
@@ -851,8 +882,6 @@ void UndoManager::goTo(ProjectAction* target) {
 
     if (!target || !current || !head)
         throw std::runtime_error("UndoManager::goTo: null target, current, or head");
-
-    flushAudioActions();
 
     std::vector<int> headToCurrent;
     std::vector<int> headToTarget;
@@ -1170,8 +1199,7 @@ AddNodeAction::AddNodeAction(Project* p, std::vector<int> managerPath, int type,
         nodeType(type),
         x(x),
         y(y) {
-    audioThreadAction = true;
-    name = "Add Node";
+    name ="Add Node";
     doAction = [this] () {
         NodeManager& nm = requireManager(this->p, this->managerPath);
         if (hasRedoRestore) {
@@ -1205,8 +1233,7 @@ RemoveNodeAction::RemoveNodeAction(Project* p, std::vector<int> managerPath, int
         ProjectAction(p, RemoveNode),
         managerPath(std::move(managerPath)),
         nodeID(nodeID) {
-    audioThreadAction = true;
-    name = "Remove Node";
+    name ="Remove Node";
     doAction = [this] () {
         NodeManager& nm2 = requireManager(this->p, this->managerPath);
         if (nodeData.is_null()) {
@@ -1240,8 +1267,7 @@ MakeNodeConnectionAction::MakeNodeConnectionAction(Project* p, std::vector<int> 
         srcConID(srcConID),
         dstNodeID(dstNodeID),
         dstConID(dstConID) {
-    audioThreadAction = true;
-    name = "Connect Nodes";
+    name ="Connect Nodes";
     doAction = [this] () {
         NodeManager& nm = requireManager(this->p, this->managerPath);
         nm.makeNodeConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
@@ -1259,8 +1285,7 @@ SeverNodeConnectionAction::SeverNodeConnectionAction(Project* p, std::vector<int
         srcConID(srcConID),
         dstNodeID(dstNodeID),
         dstConID(dstConID) {
-    audioThreadAction = true;
-    name = "Sever Connection";
+    name ="Sever Connection";
     doAction = [this] () {
         NodeManager& nm = requireManager(this->p, this->managerPath);
         nm.severConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
@@ -1277,7 +1302,6 @@ IoPortChannelAction::IoPortChannelAction(Project* p, int opIn, std::vector<int> 
         op(opIn),
         connectionId(connectionIdIn),
         connectionIndex(connectionIndexIn) {
-    audioThreadAction = true;
     switch (op) {
         case IoPortChannelOp::InputAddWaveform:
             name = "Add input bus waveform";

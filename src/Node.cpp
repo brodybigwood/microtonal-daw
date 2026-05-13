@@ -686,7 +686,6 @@ void Node::addModSource(Parameter* p) {
     if (paramIndex == std::numeric_limits<size_t>::max()) return;
     std::vector<int> managerPath = nm ? nm->managerPath : std::vector<int>{};
     auto* pa = new AddModSourceUndoAction(project, std::move(managerPath), static_cast<int>(id), paramIndex);
-    pa->audioThreadAction = true;
     pa->name = "Add Mod Source";
     project->um->newAction(pa);
 }
@@ -698,7 +697,7 @@ bool Node::addModSourceNow(size_t paramIndex) {
     if (!p) return false;
 
     bool changed = false;
-    nm->runWithGraphLock([&]() {
+    {
         auto* c = new Connection;
         c->type = DataType::Waveform;
         c->dir = Direction::input;
@@ -712,7 +711,7 @@ bool Node::addModSourceNow(size_t paramIndex) {
         makeConnectionRects();
         nm->markTopologyDirty();
         changed = true;
-    });
+    }
     return changed;
 }
 
@@ -730,7 +729,6 @@ void Node::removeModSource(Parameter* p, size_t modIndex) {
     if (paramIndex == std::numeric_limits<size_t>::max()) return;
     std::vector<int> managerPath = nm ? nm->managerPath : std::vector<int>{};
     auto* pa = new RemoveModSourceUndoAction(project, std::move(managerPath), static_cast<int>(id), paramIndex, modIndex);
-    pa->audioThreadAction = true;
     pa->name = "Remove Mod Source";
     project->um->newAction(pa);
 }
@@ -742,14 +740,14 @@ bool Node::removeModSourceNow(size_t paramIndex, size_t modIndex) {
     if (!p || modIndex >= p->modulators.size()) return false;
 
     bool changed = false;
-    nm->runWithGraphLock([&]() {
-        if (modIndex >= p->modulators.size()) return;
+    {
+        if (modIndex >= p->modulators.size()) return false;
         Modulator* m = p->modulators[modIndex];
-        if (!m) return;
+        if (!m) return false;
 
         Connection* target = m->sourceConnection;
         if (target) {
-            if (target->is_connected) return;
+            if (target->is_connected) return false;
 
             auto it = std::find(inputs.connections.begin(), inputs.connections.end(), target);
             if (it != inputs.connections.end()) {
@@ -769,7 +767,7 @@ bool Node::removeModSourceNow(size_t paramIndex, size_t modIndex) {
         delete m;
         p->modulators.erase(p->modulators.begin() + static_cast<ptrdiff_t>(modIndex));
         changed = true;
-    });
+    }
     return changed;
 }
 
@@ -1040,20 +1038,12 @@ void Node::render() {
     if (!portR)
         return;
 
-    // Connection objects can be deleted on the audio thread (e.g. I/O socket remove). Lock only for port
-    // iteration + draw — not for renderContentHelper — so RT audio is not stalled for texture work.
-    auto drawPorts = [&] {
-        for (auto* conn : inputs.connections) {
-            if (conn) conn->render(portR, conn->id == hoveredConnection);
-        }
-        for (auto* conn : outputs.connections) {
-            if (conn) conn->render(portR, conn->id == hoveredConnection);
-        }
-    };
-    if (nm)
-        nm->runWithGraphLock(drawPorts);
-    else
-        drawPorts();
+    for (auto* conn : inputs.connections) {
+        if (conn) conn->render(portR, conn->id == hoveredConnection);
+    }
+    for (auto* conn : outputs.connections) {
+        if (conn) conn->render(portR, conn->id == hoveredConnection);
+    }
 }
 
 void Connection::render(SDL_Renderer* renderer, bool hover) {

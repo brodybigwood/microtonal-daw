@@ -2,7 +2,6 @@
 
 #include <vector>
 #include <unordered_map>
-#include <mutex>
 #include <functional>
 #include "idManager.h"
 #include <SDL3/SDL.h>
@@ -25,19 +24,17 @@ class NodeManager {
 
         Node* getNode(uint16_t);
 
-        // UI-thread requests (wrapped as UndoManager actions)
         void removeNode(Node*);
         void addNode(NodeType, float x, float y);
 
         void process(float*, int&, int&, int&);
-        void flushUiDeferred();
 
         void render(SDL_Renderer*, SDL_FRect*);
 
         void makeNodeConnection(Node*, uint16_t, Node*, uint16_t);
         void severConnection(Connection*);
 
-        // Audio-thread execution methods (called by action lambdas)
+        // Graph mutation methods (called by action lambdas)
         Node* addNodeNow(NodeType, float, float, int forcedID = -1);
         Node* addNodeNow(json);
         void removeNodeNow(uint16_t);
@@ -46,7 +43,6 @@ class NodeManager {
         void moveNodeNow(uint16_t, float, float);
         bool snapshotNode(uint16_t, json&, json&);
 
-        /** Peek last removable socket (under graph lock). Used when building remove undo actions. */
         bool peekRemovableInputWaveform(uint16_t* outId, size_t* outIndex);
         bool peekRemovableInputEvent(uint16_t* outId, size_t* outIndex);
         bool peekRemovableOutputWaveform(uint16_t* outId, size_t* outIndex);
@@ -55,7 +51,6 @@ class NodeManager {
         std::vector<Node*> getNodes();
 
         void markTopologyDirty();
-        void runWithGraphLock(const std::function<void()>& fn);
 
         Project* project;
         
@@ -77,8 +72,4 @@ class NodeManager {
         int sampleRate = 0;
         int numChannels = 0;
         bool topologyDirty = false;
-
-        std::mutex deferredDeleteMutex;
-        std::vector<Node*> deferredDeleteNodes;
-        mutable std::recursive_mutex graphMutex;
 };

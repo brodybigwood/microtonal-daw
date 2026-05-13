@@ -170,6 +170,7 @@ void ElementManager::fromJSON(json j) {
                 return; // unknown type, give up
         }
 
+        ge->pos_id_pool = &id_pool;
         ge->fromJSON(e);
         id_pool.reserveID(ge->id);
         elements.push_back(ge);
@@ -183,6 +184,7 @@ uint16_t ElementManager::getIndex(uint16_t id) {
 
 Region* ElementManager::newRegion() {
     auto r = new Region(project, parentNode);
+    r->pos_id_pool = &id_pool;
     r->id = id_pool.newID();
     elements.push_back(r);
 
@@ -222,6 +224,7 @@ void ElementManager::restoreRegionFromSnapshotAt(size_t insertIndex, const json&
     if (insertIndex > elements.size())
         insertIndex = elements.size();
     auto* r = new Region(project, parentNode);
+    r->pos_id_pool = &id_pool;
     r->fromJSON(regionJson);
     id_pool.reserveID(rid);
     elements.insert(elements.begin() + static_cast<std::ptrdiff_t>(insertIndex), r);
@@ -234,6 +237,7 @@ AudioClip* ElementManager::newAudioClip(std::string filepath) {
 
     auto a = new AudioClip(project, parentNode);
 
+    a->pos_id_pool = &id_pool;
     a->setFile(filepath);
     if (a->filepath == "") {
         delete a;

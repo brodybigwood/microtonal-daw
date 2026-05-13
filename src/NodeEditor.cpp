@@ -295,9 +295,6 @@ void NodeEditor::tick() {
     if (!nm || !renderer) return;
     SDL_FRect surface{0.f, 0.f, canvasW_, canvasH_};
     render(renderer, &surface);
-    // Free nodes removed by the audio thread only after this frame finishes drawing — avoids
-    // UI use-after-free without holding graphMutex for the whole paint (which would block RT audio).
-    nm->flushUiDeferred();
 }
 
 void NodeEditor::togglePortDisplayMode() {
@@ -554,7 +551,7 @@ void NodeEditor::render(SDL_Renderer* renderer, SDL_FRect* surfaceRect) {
     nm->inNode->render();
     nm->outNode->render();
 
-    nm->runWithGraphLock([this]() { renderConnector(this->renderer); });
+    renderConnector(this->renderer);
 
     SDL_SetRenderClipRect(renderer, nullptr);
 }
