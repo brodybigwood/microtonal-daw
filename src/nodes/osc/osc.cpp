@@ -29,7 +29,7 @@ void OscillatorNode::process() {
         if (output0->is_connected) {
             std::memset(output0->buffer, 0, bufferSize * sizeof(float));
         }
-    
+
         if (output1->is_connected) {
             std::memset(output1->buffer, 0, bufferSize * sizeof(float));
         }

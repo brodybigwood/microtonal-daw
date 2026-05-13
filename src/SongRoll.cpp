@@ -109,12 +109,12 @@ SongRoll::SongRoll(SDL_FRect* rect, bool* detached, Window* w, Project* p, Arran
 
     rightRect = SDL_FRect{dstRect->x + dstRect->w - rightMargin, dstRect->y + topMargin, rightMargin, dstRect->h - topMargin};
 
-    tracks = new TrackManager(n);
+    tracks = n->tracks;
     tracks->mouseX = &mouseX;
     tracks->mouseY = &mouseY;
     tracks->parentNode = parentNode;
 
-    em = new ElementManager(project, tracks, parentNode);
+    em = n->elements;
     em->dstRect = &rightRect;
 
     float x = -1000; //for now only this many measures

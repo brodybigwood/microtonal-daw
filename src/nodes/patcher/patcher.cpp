@@ -481,9 +481,14 @@ void PatcherNode::extraDeSerialize(json j) {
             c->input_connection = c->id;
             c->output_node = -1;
             c->output_connection = -1;
-            c->events = nullptr;
-            c->buffer = nullptr;
-            c->bufferSize = 0;
+            if (c->type == DataType::Events) {
+                c->events = new std::vector<Event>;
+                c->buffer = nullptr;
+            } else {
+                c->buffer = nullptr;
+                c->bufferSize = 0;
+                c->events = nullptr;
+            }
             outputs.connections.push_back(c);
             outputs.ids[c->id] = outputs.connections.size() - 1;
             outputs.id_pool.reserveID(c->id);

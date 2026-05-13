@@ -239,7 +239,7 @@ bool WindowHandler::tick() {
 
             if (ctxMenu->active) ctxMenu->tick(e);
             else for (auto w : windows)
-                if (SDL_GetWindowFromID(getEventWindowID(e)) == w->window) {
+                if (w && SDL_GetWindowFromID(getEventWindowID(e)) == w->window) {
                     w->handleWindowInput(e);
                     break;
                 }

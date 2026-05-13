@@ -66,7 +66,7 @@ void UndoManager::undo() {
 Region* undoResolveArrangerRegion(Project* p, const std::vector<int>& managerPath, int nodeID, int regionID) {
     NodeManager& nm = requireManager(p, managerPath);
     auto* arr = dynamic_cast<ArrangerNode*>(nm.getNode(static_cast<uint16_t>(nodeID)));
-    ElementManager* em = arr ? arr->activeElementManager() : nullptr;
+    ElementManager* em = arr ? arr->elements : nullptr;
     if (!arr || !em)
         throw std::runtime_error("undoResolveArrangerRegion: arranger or element manager missing");
     auto* r = dynamic_cast<Region*>(em->getElement(static_cast<uint16_t>(regionID)));
@@ -86,7 +86,7 @@ ArrangerNode* undoResolveArrangerNode(Project* p, const std::vector<int>& manage
 ElementManager* undoResolveArrangerElementManager(Project* p, const std::vector<int>& managerPath, int nodeID) {
     NodeManager& nm = requireManager(p, managerPath);
     auto* arr = dynamic_cast<ArrangerNode*>(nm.getNode(static_cast<uint16_t>(nodeID)));
-    return arr ? arr->activeElementManager() : nullptr;
+    return arr ? arr->elements : nullptr;
 }
 
 static GridElement* undoResolveGridElement(Project* p, const std::vector<int>& managerPath, int nodeID, int elementID) {
@@ -1149,7 +1149,7 @@ AddArrangerTrackAction::AddArrangerTrackAction(Project* p, std::vector<int> mana
         auto* node = dynamic_cast<ArrangerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
         if (!node)
             throw std::runtime_error("AddArrangerTrackAction::doAction: node is not an arranger");
-        TrackManager* tm = node->activeTrackManager();
+        TrackManager* tm = node->tracks;
         if (!tm)
             throw std::runtime_error("AddArrangerTrackAction::doAction: no active track manager");
         auto* track =
@@ -1167,7 +1167,7 @@ AddArrangerTrackAction::AddArrangerTrackAction(Project* p, std::vector<int> mana
             throw std::runtime_error("AddArrangerTrackAction::undoAction: node is not an arranger");
         if (this->trackID < 0)
             throw std::runtime_error("AddArrangerTrackAction::undoAction: invalid trackID");
-        TrackManager* tm = node->activeTrackManager();
+        TrackManager* tm = node->tracks;
         if (!tm)
             throw std::runtime_error("AddArrangerTrackAction::undoAction: no active track manager");
         tm->removeTrackNow(static_cast<uint16_t>(this->trackID));

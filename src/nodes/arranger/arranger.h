@@ -22,19 +22,14 @@ class ArrangerNode : public Node {
         bool slDetached = false;
         SongRoll* sl = nullptr;
 
+        TrackManager* tracks = nullptr;
+        ElementManager* elements = nullptr;
+
         json extraSerialize() override;
         void extraDeSerialize(json) override;
 
-        /** SongRoll UI when open; otherwise the runtime managers used for audio/offline edits. */
-        TrackManager* activeTrackManager();
-        ElementManager* activeElementManager();
-
     private:
-        void rebuildRuntimeState(json);
+        void rebuildState(json);
         void ensureSongRoll();
         void syncSongRollContext();
-        json pendingExtraState;
-        bool hasPendingExtraState = false;
-        TrackManager* runtimeTracks = nullptr;
-        ElementManager* runtimeElements = nullptr;
 };
