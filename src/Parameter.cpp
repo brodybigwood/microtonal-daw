@@ -6,19 +6,21 @@
 #include <cmath>
 #include "styles.h"
 
-Modulator::Modulator(float*& source, bool centered, float depth, Connection* sourceConnection) : 
+Modulator::Modulator(float*& source, bool centered, std::pair<std::vector<float>, std::vector<float>> depthPolygon, float depthValue, Connection* sourceConnection) :
     source(source),
     centered(centered),
-    depth(depth),
-    sourceConnection(sourceConnection) {}
+    depth(depthValue, std::move(depthPolygon)),
+    sourceConnection(sourceConnection) {
+    depth.clampOutput = false;
+}
 
 float Modulator::operator[](size_t i) {
     if (!source) return 0.0f;
+    float d = depth[i];
     if (centered) {
-        // Centered modulation maps source 0..1 to -1..1, scaled by depth.
-        return depth * (2.0f * source[i] - 1.0f);
+        return d * (2.0f * source[i] - 1.0f);
     }
-    return depth * source[i];
+    return d * source[i];
 }
 
 Parameter::Parameter(float value, std::pair<std::vector<float>, std::vector<float>> bound) :
@@ -30,7 +32,7 @@ Parameter::Parameter(float value, std::pair<std::vector<float>, std::vector<floa
 float Parameter::operator[](size_t i) {
     float v = value;
     for (auto& m : modulators) v += (*m)[i];
-    return std::clamp(v, 0.0f, 1.0f);
+    return clampOutput ? std::clamp(v, 0.0f, 1.0f) : v;
 }
 
 void Parameter::addModulator(Modulator* m) {

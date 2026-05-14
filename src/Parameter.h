@@ -6,22 +6,14 @@
 #include "Geometry.h"
 #include "Bus.h"
 
-struct Modulator {
-    bool centered;
-    float depth;
-    float*& source; // can either be a node's connection input, or some internal buffer
-    Connection* sourceConnection = nullptr;
-
-    float operator[](size_t);
-
-    Modulator(float*&, bool, float depth = 0.5, Connection* sourceConnection = nullptr);
-};
+struct Modulator;
 
 struct Parameter {
-    float value = 0; // the knob itself
+    float value = 0;
     float defaultValue = 0;
     std::vector<Modulator*> modulators;
-    
+    bool clampOutput = true;
+
     float operator[](size_t);
 
     void addModulator(Modulator*);
@@ -39,6 +31,17 @@ struct Parameter {
     void clearTextures();
 };
 
+struct Modulator {
+    bool centered;
+    Parameter depth;
+    float*& source;
+    Connection* sourceConnection = nullptr;
+
+    float operator[](size_t);
+
+    Modulator(float*&, bool, std::pair<std::vector<float>, std::vector<float>> depthPolygon, float depthValue = 0.5, Connection* sourceConnection = nullptr);
+};
+
 struct Knob : Parameter {
 
     float thetaMin;
@@ -46,7 +49,7 @@ struct Knob : Parameter {
     std::string label;
 
     void handleInput(SDL_Event&) override;
-    std::string filepath;        
+    std::string filepath;
     SDL_FRect knobRect;
     SDL_Texture* texture = nullptr;
     float wheelVelocity = 0.0f;

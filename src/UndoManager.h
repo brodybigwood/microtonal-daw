@@ -2,6 +2,8 @@
 
 #include "Region.h"
 #include "ElementManager.h"
+#include "Parameter.h"
+#include "Bus.h"
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -210,18 +212,29 @@ struct AssignNoteHarmonicUndoAction : ProjectAction {
 struct AddModSourceUndoAction : ProjectAction {
     std::vector<int> managerPath;
     int nodeID = 0;
-    size_t paramIndex = 0;
+    std::vector<size_t> paramPath;
 
-    AddModSourceUndoAction(Project* p, std::vector<int> managerPath, int nodeID, size_t paramIndex);
+    AddModSourceUndoAction(Project* p, std::vector<int> managerPath, int nodeID, std::vector<size_t> paramPath);
 };
 
 struct RemoveModSourceUndoAction : ProjectAction {
     std::vector<int> managerPath;
     int nodeID = 0;
-    size_t paramIndex = 0;
+    std::vector<size_t> paramPath;
     size_t modIndex = 0;
 
-    RemoveModSourceUndoAction(Project* p, std::vector<int> managerPath, int nodeID, size_t paramIndex, size_t modIndex);
+    /** Saved modulator subtree (removed from the parameter but kept alive here for undo). */
+    Modulator* savedModulator = nullptr;
+    /** Connections owned by the saved modulator tree, with their original indices and wiring. */
+    struct SavedConn {
+        Connection* conn;
+        size_t index;
+        bool wasConnected;
+        uint16_t srcNode, srcCon;
+    };
+    std::vector<SavedConn> savedConns;
+
+    RemoveModSourceUndoAction(Project* p, std::vector<int> managerPath, int nodeID, std::vector<size_t> paramPath, size_t modIndex);
 };
 
 struct MoveNoteAction : ProjectAction {

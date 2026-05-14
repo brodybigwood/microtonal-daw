@@ -94,6 +94,40 @@ return [enter, onDismiss](SDL_Event& e) {
 };
 }
 
+/** Recursively check if the mouse is on any visible part of the tree rooted at (x, y). */
+static bool mouseOnTree(std::shared_ptr<TreeEntry> t, float x, float y) {
+    float padding = 5.0f;
+    SDL_FRect rect{x, y, padding * 2, 10.0f};
+
+    for (auto& c : t->children) {
+        if (c->textWidth + padding * 2 > rect.w) rect.w = static_cast<float>(c->textWidth) + padding * 2;
+        if (c->textHeight > rect.h) rect.h = static_cast<float>(c->textHeight);
+    }
+
+    for (auto& c : t->children) {
+        if (MouseOn(&rect)) return true;
+
+        if (c->isOpen) {
+            if (c->customTick) {
+                SDL_FRect customArea{
+                    rect.x + rect.w,
+                    rect.y,
+                    c->customWidth > 0 ? c->customWidth : 0,
+                    c->customHeight > 0 ? c->customHeight : rect.h
+                };
+                if (MouseOn(&customArea)) return true;
+                if (!c->children.empty()) {
+                    if (mouseOnTree(c, rect.x + rect.w + c->customWidth, rect.y)) return true;
+                }
+            } else if (!c->children.empty()) {
+                if (mouseOnTree(c, rect.x + rect.w, rect.y)) return true;
+            }
+        }
+        rect.y += rect.h;
+    }
+    return false;
+}
+
 std::function<bool(SDL_Event& e)> getTreeMenuTicker(std::shared_ptr<TreeEntry> t)
 {
     auto listTick = std::make_shared<
@@ -158,13 +192,27 @@ std::function<bool(SDL_Event& e)> getTreeMenuTicker(std::shared_ptr<TreeEntry> t
             SDL_FRect textRect{rect.x + padding, rect.y, (float)c->textWidth, (float)c->textHeight};
             SDL_RenderTexture(renderer, c->labelTexture, nullptr, &textRect);
 
-            if (c->isOpen && !clickedNow) if (!(*listTick)(e, c, rect.x + rect.w, rect.y, renderer)) return false;
+            if (c->isOpen && !clickedNow) {
+                if (c->customTick) {
+                    const float customX = static_cast<float>(rect.x + rect.w);
+                    if (!c->customTick(e, customX, static_cast<float>(rect.y), renderer, c)) {
+                        c->isOpen = false;
+                    } else if (!c->children.empty()) {
+                        const float childX = customX + c->customWidth;
+                        if (!(*listTick)(e, c, static_cast<int>(childX), rect.y, renderer)) return false;
+                    }
+                } else {
+                    if (!(*listTick)(e, c, rect.x + rect.w, rect.y, renderer)) return false;
+                }
+            }
 
             rect.y += rect.h;
         }
 
-        // exit the menu if clicked somewhere else
-        if (!mouseOn && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) return false;
+        // exit the menu if clicked somewhere outside the visible tree
+        if (!mouseOn && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+            if (!mouseOnTree(t, static_cast<float>(x), static_cast<float>(y))) return false;
+        }
         return true;
     };
     return [t,listTick] (SDL_Event& e)

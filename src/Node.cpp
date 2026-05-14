@@ -14,7 +14,7 @@
 #include "styles.h"
 
 namespace {
-std::function<bool(SDL_Event&)> getModulationMatrixTicker(Node* node, Parameter* p) {
+std::function<bool(SDL_Event&, float, float, SDL_Renderer*, std::shared_ptr<TreeEntry>)> createMatrixTicker(Node* node, Parameter* p, std::vector<size_t> path) {
     struct State {
         int draggingIndex = -1;
     };
@@ -26,13 +26,9 @@ std::function<bool(SDL_Event&)> getModulationMatrixTicker(Node* node, Parameter*
         return std::clamp(snapped, minV, maxV);
     };
 
-    return [node, p, state, snapValue](SDL_Event& e) {
-        auto* ctxMenu = ContextMenu::get();
-        SDL_Renderer* renderer = ctxMenu->renderer;
+    return [node, p, state, snapValue, path](SDL_Event& e, float panelX, float panelY, SDL_Renderer* renderer, std::shared_ptr<TreeEntry> self) {
         if (!renderer || !p) return false;
 
-        const float panelX = ctxMenu->locX;
-        const float panelY = ctxMenu->locY;
         const float panelW = 520.0f;
         const float headerH = 30.0f;
         const float rowH = 34.0f;
@@ -40,9 +36,7 @@ std::function<bool(SDL_Event&)> getModulationMatrixTicker(Node* node, Parameter*
         const float panelH = headerH + rowH * static_cast<float>(std::max<size_t>(1, p->modulators.size())) + footerH + 12.0f;
         SDL_FRect panel{panelX, panelY, panelW, panelH};
 
-        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT && !MouseOn(&panel)) {
-            return false;
-        }
+        if (self) self->customHeight = panelH;
 
         if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
             state->draggingIndex = -1;
@@ -54,7 +48,8 @@ std::function<bool(SDL_Event&)> getModulationMatrixTicker(Node* node, Parameter*
         SDL_RenderRect(renderer, &panel);
 
         if (fonts.mainFont) {
-            SDL_Surface* titleSurf = TTF_RenderText_Blended(fonts.mainFont, "Modulation Matrix", 0, SDL_Color{0, 0, 0, 255});
+            std::string titleStr = path.empty() ? "Modulation Matrix" : ("Modulation Matrix - " + node->parameterPathLabel(path));
+            SDL_Surface* titleSurf = TTF_RenderText_Blended(fonts.mainFont, titleStr.c_str(), 0, SDL_Color{0, 0, 0, 255});
             if (titleSurf) {
                 SDL_Texture* titleTex = SDL_CreateTextureFromSurface(renderer, titleSurf);
                 if (titleTex) {
@@ -113,26 +108,39 @@ std::function<bool(SDL_Event&)> getModulationMatrixTicker(Node* node, Parameter*
             SDL_SetRenderDrawColor(renderer, 80, 80, 80, 255);
             SDL_RenderLine(renderer, markerX, slider.y - 5.0f, markerX, slider.y + slider.h + 5.0f);
 
-            m->depth = std::clamp(m->depth, minDepth, maxDepth);
-            const float t = (m->depth - minDepth) / range;
+            m->depth.value = std::clamp(m->depth.value, minDepth, maxDepth);
+            const float t = (m->depth.value - minDepth) / range;
             const float knobX = slider.x + t * slider.w;
             SDL_FRect knob{knobX - 4.0f, slider.y - 4.0f, 8.0f, slider.h + 8.0f};
             SDL_SetRenderDrawColor(renderer, 80, 120, 230, 255);
             SDL_RenderFillRect(renderer, &knob);
 
-            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-                if (MouseOn(&centerBtn)) {
-                    m->centered = !m->centered;
-                    if (m->centered) {
-                        m->depth = std::clamp(m->depth, -0.5f, 0.5f);
-                    } else {
-                        m->depth = std::clamp(m->depth, 0.0f, 1.0f);
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+                if (e.button.button == SDL_BUTTON_LEFT) {
+                    if (MouseOn(&centerBtn)) {
+                        m->centered = !m->centered;
+                        if (m->centered) {
+                            m->depth.value = std::clamp(m->depth.value, -0.5f, 0.5f);
+                        } else {
+                            m->depth.value = std::clamp(m->depth.value, 0.0f, 1.0f);
+                        }
+                    } else if (MouseOn(&removeBtn)) {
+                        node->removeModSource(path, i);
+                        return true;
+                    } else if (MouseOn(&slider)) {
+                        state->draggingIndex = static_cast<int>(i);
                     }
-                } else if (MouseOn(&removeBtn)) {
-                    node->removeModSource(p, i);
+                } else if (e.button.button == SDL_BUTTON_RIGHT && MouseOn(&slider)) {
+                    std::vector<size_t> depthPath = path;
+                    depthPath.push_back(i);
+                    auto menu = node->getParameterMenu(&m->depth, depthPath);
+                    if (self) {
+                        self->children.clear();
+                        for (auto& child : menu->children) {
+                            self->addChild(child);
+                        }
+                    }
                     return true;
-                } else if (MouseOn(&slider)) {
-                    state->draggingIndex = static_cast<int>(i);
                 }
             }
 
@@ -142,7 +150,7 @@ std::function<bool(SDL_Event&)> getModulationMatrixTicker(Node* node, Parameter*
                 const float norm = std::clamp((mx - slider.x) / slider.w, 0.0f, 1.0f);
                 const float dMin = m->centered ? -0.5f : 0.0f;
                 const float dMax = m->centered ? 0.5f : 1.0f;
-                m->depth = snapValue(dMin + norm * (dMax - dMin), dMin, dMax);
+                m->depth.value = snapValue(dMin + norm * (dMax - dMin), dMin, dMax);
             }
 
             if (fonts.mainFont) {
@@ -182,7 +190,7 @@ std::function<bool(SDL_Event&)> getModulationMatrixTicker(Node* node, Parameter*
                 }
 
                 std::ostringstream ds;
-                ds << std::fixed << std::setprecision(2) << m->depth;
+                ds << std::fixed << std::setprecision(2) << m->depth.value;
                 const std::string dText = ds.str();
                 SDL_Surface* dSurf = TTF_RenderText_Blended(fonts.mainFont, dText.c_str(), 0, SDL_Color{0, 0, 0, 255});
                 if (dSurf) {
@@ -214,7 +222,7 @@ std::function<bool(SDL_Event&)> getModulationMatrixTicker(Node* node, Parameter*
         SDL_SetRenderDrawColor(renderer, 90, 90, 90, 255);
         SDL_RenderRect(renderer, &addBtn);
         if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT && MouseOn(&addBtn)) {
-            node->addModSource(p);
+            node->addModSource(path);
             return true;
         }
         if (fonts.mainFont) {
@@ -243,11 +251,11 @@ std::function<bool(SDL_Event&)> getModulationMatrixTicker(Node* node, Parameter*
                 float a = 0.0f;
                 float b = 0.0f;
                 if (m->centered) {
-                    a = -m->depth;
-                    b = m->depth;
+                    a = -m->depth.value;
+                    b = m->depth.value;
                 } else {
                     a = 0.0f;
-                    b = m->depth;
+                    b = m->depth.value;
                 }
                 minV += std::min(a, b);
                 maxV += std::max(a, b);
@@ -290,6 +298,25 @@ bool connectionUiOnPatcherCanvas(const Node* n, const SDL_Event& e) {
 }
 } // namespace
 
+static void serializeModulators(const std::vector<Modulator*>& modulators, json& arr) {
+    for (auto* m : modulators) {
+        if (!m) continue;
+        json jm;
+        jm["centered"] = m->centered;
+        jm["depth"] = m->depth.value;
+        jm["sourceConnectionID"] = m->sourceConnection ? m->sourceConnection->id : -1;
+        jm["sourceLabel"] = (m->sourceConnection && !m->sourceConnection->label.empty())
+            ? m->sourceConnection->label
+            : "";
+        if (!m->depth.modulators.empty()) {
+            json nested = json::array();
+            serializeModulators(m->depth.modulators, nested);
+            jm["depthModulators"] = nested;
+        }
+        arr.push_back(jm);
+    }
+}
+
 json Node::serialize() {
     json j;
 
@@ -308,21 +335,50 @@ json Node::serialize() {
     for (size_t pi = 0; pi < params.size(); ++pi) {
         auto* p = params[pi];
         if (!p) continue;
-        for (auto* m : p->modulators) {
-            if (!m) continue;
-            json jm;
+        json arr = json::array();
+        serializeModulators(p->modulators, arr);
+        for (auto& jm : arr) {
             jm["paramIndex"] = pi;
-            jm["centered"] = m->centered;
-            jm["depth"] = m->depth;
-            jm["sourceConnectionID"] = m->sourceConnection ? m->sourceConnection->id : -1;
-            jm["sourceLabel"] = (m->sourceConnection && !m->sourceConnection->label.empty())
-                ? m->sourceConnection->label
-                : "";
             j["modulators"].push_back(jm);
         }
     }
 
     return j;
+}
+
+static void deserializeModulators(Parameter* p, const json& arr, Node* n) {
+    for (const auto& jm : arr) {
+        int sourceID = jm.value("sourceConnectionID", -1);
+        if (sourceID < 0) continue;
+
+        auto* c = new Connection;
+        c->nm = n->inputs.nm;
+        c->id = static_cast<uint16_t>(sourceID);
+        c->type = DataType::Waveform;
+        c->dir = Direction::input;
+        c->is_connected = false;
+        c->output_connection = c->id;
+        c->output_node = n->inputs.nodeID;
+        c->input_connection = -1;
+        c->input_node = -1;
+        c->events = nullptr;
+        c->buffer = nullptr;
+        c->bufferSize = 0;
+        c->label = jm.value("sourceLabel", std::string{});
+
+        n->inputs.connections.push_back(c);
+        n->inputs.id_pool.reserveID(c->id);
+        n->inputs.ids[c->id] = static_cast<uint16_t>(n->inputs.connections.size() - 1);
+
+        const bool centered = jm.value("centered", true);
+        const float depth = jm.value("depth", 0.5f);
+        auto* mod = new Modulator(c->buffer, centered, generateRect(0, 0, 200, 10), depth, c);
+        p->addModulator(mod);
+
+        if (jm.contains("depthModulators")) {
+            deserializeModulators(&mod->depth, jm["depthModulators"], n);
+        }
+    }
 }
 
 Node* Node::deSerialize(json j, NodeManager* nm) {
@@ -346,37 +402,18 @@ Node* Node::deSerialize(json j, NodeManager* nm) {
     }
 
     if (j.contains("modulators")) {
+        // Group modulators by paramIndex
+        std::map<size_t, json> byParam;
         for (const auto& jm : j["modulators"]) {
-            const size_t paramIndex = jm.value("paramIndex", static_cast<size_t>(std::numeric_limits<size_t>::max()));
-            if (paramIndex >= n->params.size()) continue;
-            auto* p = n->params[paramIndex];
+            size_t pi = jm.value("paramIndex", static_cast<size_t>(0));
+            if (!byParam.count(pi)) byParam[pi] = json::array();
+            byParam[pi].push_back(jm);
+        }
+        for (auto& [pi, arr] : byParam) {
+            if (pi >= n->params.size()) continue;
+            auto* p = n->params[pi];
             if (!p) continue;
-
-            int sourceID = jm.value("sourceConnectionID", -1);
-            if (sourceID < 0) continue;
-
-            auto* c = new Connection;
-            c->nm = n->inputs.nm;
-            c->id = static_cast<uint16_t>(sourceID);
-            c->type = DataType::Waveform;
-            c->dir = Direction::input;
-            c->is_connected = false;
-            c->output_connection = c->id;
-            c->output_node = n->inputs.nodeID;
-            c->input_connection = -1;
-            c->input_node = -1;
-            c->events = nullptr;
-            c->buffer = nullptr;
-            c->bufferSize = 0;
-            c->label = jm.value("sourceLabel", std::string{});
-
-            n->inputs.connections.push_back(c);
-            n->inputs.id_pool.reserveID(c->id);
-            n->inputs.ids[c->id] = static_cast<uint16_t>(n->inputs.connections.size() - 1);
-
-            const bool centered = jm.value("centered", true);
-            const float depth = jm.value("depth", 0.5f);
-            p->addModulator(new Modulator(c->buffer, centered, depth, c));
+            deserializeModulators(p, arr, n);
         }
     }
     n->makeConnectionRects();
@@ -384,7 +421,7 @@ Node* Node::deSerialize(json j, NodeManager* nm) {
     return n;
 }
 
-Node::Node(uint16_t id, NodeManager* nm, NodeType nt) : 
+Node::Node(uint16_t id, NodeManager* nm, NodeType nt) :
     id(id),
     project(nm->project),
     nm(nm),
@@ -501,7 +538,7 @@ bool Node::handleInput(SDL_Event& e) {
     } else {
         bool hoverFound = false;
 
-        // check if the mouse is hovering over any of the connectors           
+        // check if the mouse is hovering over any of the connectors
 
         for (auto conn : inputs.connections) {
             if (MouseOn(&conn->rect)) {
@@ -529,7 +566,7 @@ bool Node::handleInput(SDL_Event& e) {
             hoveredConnection = -1;
         }
     }
-    
+
     if (handled) {
         switch (e.type) {
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -607,7 +644,11 @@ void Node::clickMouse(SDL_Event& e) {
         if (hoveredParam) {
             ctxMenu->locX = clickFromDetachedWindow ? msX : *mouseX;
             ctxMenu->locY = clickFromDetachedWindow ? msY : *mouseY;
-            auto t = getParameterMenu(hoveredParam);
+            size_t paramIndex = 0;
+            for (size_t i = 0; i < params.size(); ++i) {
+                if (params[i] == hoveredParam) { paramIndex = i; break; }
+            }
+            auto t = getParameterMenu(hoveredParam, {paramIndex});
             ctxMenu->dynamicTick = getTreeMenuTicker(t);
         } else if (hoveredConnection != -1) {
             if (!connectionUiOnPatcherCanvas(this, e)) {
@@ -637,7 +678,7 @@ void Node::clickMouse(SDL_Event& e) {
             }
             ctxMenu->locX = *mouseX;
             ctxMenu->locY = *mouseY;
-        
+
             auto t = getNodeMenu();
             ctxMenu->dynamicTick = getTreeMenuTicker(t);
         }
@@ -672,28 +713,54 @@ std::shared_ptr<TreeEntry> Node::getConnectionMenu(Connection* c) {
     return t;
 }
 
+Parameter* Node::resolveParameterPath(const std::vector<size_t>& path) {
+    if (path.empty() || path[0] >= params.size()) return nullptr;
+    Parameter* p = params[path[0]];
+    for (size_t i = 1; i < path.size(); ++i) {
+        size_t modIdx = path[i];
+        if (modIdx >= p->modulators.size()) return nullptr;
+        p = &p->modulators[modIdx]->depth;
+    }
+    return p;
+}
+
+std::string Node::parameterPathLabel(const std::vector<size_t>& path) const {
+    if (path.empty()) return "Param";
+    std::string label;
+    Parameter* p = params[path[0]];
+    if (auto* k = dynamic_cast<Knob*>(p)) {
+        label = k->label.empty() ? "Param" : k->label;
+    } else {
+        label = "Param";
+    }
+    for (size_t i = 1; i < path.size(); ++i) {
+        label += ".mod" + std::to_string(path[i]) + ".depth";
+    }
+    return label;
+}
+
 void Node::addModSource(Parameter* p) {
     if (!p) return;
-    if (!nm || !project || !project->um) return;
-
-    size_t paramIndex = std::numeric_limits<size_t>::max();
     for (size_t i = 0; i < params.size(); ++i) {
         if (params[i] == p) {
-            paramIndex = i;
-            break;
+            addModSource({i});
+            return;
         }
     }
-    if (paramIndex == std::numeric_limits<size_t>::max()) return;
+}
+
+void Node::addModSource(const std::vector<size_t>& path) {
+    if (!nm || !project || !project->um) return;
+    if (path.empty() || path[0] >= params.size()) return;
     std::vector<int> managerPath = nm ? nm->managerPath : std::vector<int>{};
-    auto* pa = new AddModSourceUndoAction(project, std::move(managerPath), static_cast<int>(id), paramIndex);
+    auto* pa = new AddModSourceUndoAction(project, std::move(managerPath), static_cast<int>(id), path);
     pa->name = "Add Mod Source";
     project->um->newAction(pa);
 }
 
-bool Node::addModSourceNow(size_t paramIndex) {
+bool Node::addModSourceNow(const std::vector<size_t>& path) {
     if (!nm) return false;
-    if (paramIndex >= params.size()) return false;
-    Parameter* p = params[paramIndex];
+    Parameter* p = resolveParameterPath(path);
     if (!p) return false;
 
     bool changed = false;
@@ -702,12 +769,8 @@ bool Node::addModSourceNow(size_t paramIndex) {
         c->type = DataType::Waveform;
         c->dir = Direction::input;
         inputs.addConnection(c);
-        std::string paramName = "Param";
-        if (auto* k = dynamic_cast<Knob*>(p)) {
-            if (!k->label.empty()) paramName = k->label;
-        }
-        c->label = paramName + " " + std::to_string(c->id);
-        p->addModulator(new Modulator(c->buffer, true, 0.5f, c));
+        c->label = parameterPathLabel(path);
+        p->addModulator(new Modulator(c->buffer, true, generateRect(0, 0, 200, 10), 0.5f, c));
         makeConnectionRects();
         nm->markTopologyDirty();
         changed = true;
@@ -717,61 +780,71 @@ bool Node::addModSourceNow(size_t paramIndex) {
 
 void Node::removeModSource(Parameter* p, size_t modIndex) {
     if (!p || modIndex >= p->modulators.size()) return;
-    if (!nm || !project || !project->um) return;
-
-    size_t paramIndex = std::numeric_limits<size_t>::max();
     for (size_t i = 0; i < params.size(); ++i) {
         if (params[i] == p) {
-            paramIndex = i;
-            break;
+            removeModSource({i}, modIndex);
+            return;
         }
     }
-    if (paramIndex == std::numeric_limits<size_t>::max()) return;
+}
+
+void Node::removeModSource(const std::vector<size_t>& path, size_t modIndex) {
+    if (!nm || !project || !project->um) return;
+    if (path.empty() || path[0] >= params.size()) return;
     std::vector<int> managerPath = nm ? nm->managerPath : std::vector<int>{};
-    auto* pa = new RemoveModSourceUndoAction(project, std::move(managerPath), static_cast<int>(id), paramIndex, modIndex);
+    auto* pa = new RemoveModSourceUndoAction(project, std::move(managerPath), static_cast<int>(id), path, modIndex);
     pa->name = "Remove Mod Source";
     project->um->newAction(pa);
 }
 
-bool Node::removeModSourceNow(size_t paramIndex, size_t modIndex) {
+bool Node::removeModSourceNow(const std::vector<size_t>& path, size_t modIndex) {
     if (!nm) return false;
-    if (paramIndex >= params.size()) return false;
-    Parameter* p = params[paramIndex];
+    Parameter* p = resolveParameterPath(path);
     if (!p || modIndex >= p->modulators.size()) return false;
 
-    bool changed = false;
-    {
-        if (modIndex >= p->modulators.size()) return false;
-        Modulator* m = p->modulators[modIndex];
-        if (!m) return false;
+    Modulator* m = p->modulators[modIndex];
+    if (!m) return false;
 
-        Connection* target = m->sourceConnection;
-        if (target) {
-            if (target->is_connected) return false;
+    // Sever any wired cables in the modulator tree, then remove.
+    std::function<void(Modulator*)> severTree = [&](Modulator* mod) {
+        for (auto* nested : mod->depth.modulators) severTree(nested);
+        if (mod->sourceConnection && mod->sourceConnection->is_connected) {
+            nm->severConnectionNow(
+                static_cast<uint16_t>(mod->sourceConnection->output_node),
+                static_cast<uint16_t>(mod->sourceConnection->output_connection),
+                id, mod->sourceConnection->id);
+            mod->sourceConnection->is_connected = false;
+        }
+    };
+    severTree(m);
 
-            auto it = std::find(inputs.connections.begin(), inputs.connections.end(), target);
+    // Remove connections from inputs.
+    std::function<void(Modulator*)> removeConns = [&](Modulator* mod) {
+        for (auto* nested : mod->depth.modulators) removeConns(nested);
+        if (mod->sourceConnection) {
+            auto it = std::find(inputs.connections.begin(), inputs.connections.end(), mod->sourceConnection);
             if (it != inputs.connections.end()) {
-                inputs.id_pool.releaseID(target->id);
-                inputs.ids.erase(target->id);
-                delete target;
+                inputs.id_pool.releaseID(mod->sourceConnection->id);
+                inputs.ids.erase(mod->sourceConnection->id);
+                delete mod->sourceConnection;
                 inputs.connections.erase(it);
-                inputs.ids.clear();
-                for (size_t i = 0; i < inputs.connections.size(); ++i) {
-                    inputs.ids[inputs.connections[i]->id] = static_cast<uint16_t>(i);
-                }
-                makeConnectionRects();
-                nm->markTopologyDirty();
             }
         }
+    };
+    removeConns(m);
 
-        delete m;
-        p->modulators.erase(p->modulators.begin() + static_cast<ptrdiff_t>(modIndex));
-        changed = true;
-    }
-    return changed;
+    inputs.ids.clear();
+    for (size_t i = 0; i < inputs.connections.size(); ++i)
+        inputs.ids[inputs.connections[i]->id] = static_cast<uint16_t>(i);
+    makeConnectionRects();
+    nm->markTopologyDirty();
+
+    delete m;
+    p->modulators.erase(p->modulators.begin() + static_cast<ptrdiff_t>(modIndex));
+    return true;
 }
 
-std::shared_ptr<TreeEntry> Node::getParameterMenu(Parameter* p) {
+std::shared_ptr<TreeEntry> Node::getParameterMenu(Parameter* p, const std::vector<size_t>& path) {
     auto root = uTreeEntry();
     root->label = "Parameter Menu";
 
@@ -810,14 +883,8 @@ std::shared_ptr<TreeEntry> Node::getParameterMenu(Parameter* p) {
 
     auto modMatrix = uTreeEntry();
     modMatrix->label = "Edit Modulation Matrix";
-    modMatrix->click = [this, p]() {
-        auto* ctxMenu = ContextMenu::get();
-        ctxMenu->keepOpenOnNextTreeLeafClick = true;
-        ctxMenu->active = true;
-        ctxMenu->window_id = SDL_GetWindowID(detached ? window : ne->getWindow());
-        ctxMenu->renderer = detached ? renderer : ne->getRenderer();
-        ctxMenu->dynamicTick = getModulationMatrixTicker(this, p);
-    };
+    modMatrix->customTick = createMatrixTicker(this, p, path);
+    modMatrix->customWidth = 520.0f;
     root->addChild(modMatrix);
 
     return root;
@@ -867,7 +934,7 @@ void connectionSet::addConnection(Connection* c) {
         if (c->type == DataType::Events) {
             c->events = new std::vector<Event>;
         } else {
-            c->buffer = new float[bufferSize]; 
+            c->buffer = new float[bufferSize];
             c->bufferSize = bufferSize;
             if (bufferSize > 0) {
                 std::memset(c->buffer, 0, static_cast<size_t>(bufferSize) * sizeof(float));
@@ -886,7 +953,7 @@ void Node::resize(float rx, float ry) {
     } else {
         zoom((new_h / TEX_H)/zoomRatio);
 
-    } 
+    }
 
     zoom(1.0f);
 }
@@ -896,14 +963,14 @@ bool Node::canZoom(float amount) {
 }
 
 void Node::zoom(float amount) {
- 
+
     if (!canZoom(amount)) return;
 
     zoomRatio *= amount;
 
     dstRect.w = TEX_W * zoomRatio;
     dstRect.h = TEX_H * zoomRatio;
-    
+
     makeConnectionRects();
 }
 
@@ -1039,10 +1106,46 @@ void Node::render() {
         return;
 
     for (auto* conn : inputs.connections) {
-        if (conn) conn->render(portR, conn->id == hoveredConnection);
+        if (conn) conn->render(portR, conn->id == hoveredConnection && hoveredDirection == Direction::input);
     }
     for (auto* conn : outputs.connections) {
-        if (conn) conn->render(portR, conn->id == hoveredConnection);
+        if (conn) conn->render(portR, conn->id == hoveredConnection && hoveredDirection == Direction::output);
+    }
+
+    // Tooltip after all ports/cables so it draws on top
+    if (hoveredConnection != -1 && fonts.mainFont) {
+        Connection* hovered = nullptr;
+        for (auto* conn : inputs.connections) {
+            if (conn && conn->id == hoveredConnection && hoveredDirection == Direction::input) { hovered = conn; break; }
+        }
+        if (!hovered) {
+            for (auto* conn : outputs.connections) {
+                if (conn && conn->id == hoveredConnection && hoveredDirection == Direction::output) { hovered = conn; break; }
+            }
+        }
+        if (hovered) {
+            const std::string tipText = hovered->label.empty()
+                ? (std::string(hovered->dir == Direction::input ? "Input " : "Output ") + std::to_string(hovered->id))
+                : hovered->label;
+            float mx, my;
+            SDL_GetMouseState(&mx, &my);
+            SDL_Surface* tipSurf = TTF_RenderText_Blended(fonts.mainFont, tipText.c_str(), 0, SDL_Color{255, 255, 255, 255});
+            if (tipSurf) {
+                SDL_Texture* tipTex = SDL_CreateTextureFromSurface(portR, tipSurf);
+                if (tipTex) {
+                    const float pad = 4.0f;
+                    SDL_FRect bg{mx + 12.0f, my + 12.0f, static_cast<float>(tipSurf->w) + pad * 2, static_cast<float>(tipSurf->h) + pad * 2};
+                    SDL_SetRenderDrawColor(portR, 30, 30, 30, 230);
+                    SDL_RenderFillRect(portR, &bg);
+                    SDL_SetRenderDrawColor(portR, 180, 180, 180, 255);
+                    SDL_RenderRect(portR, &bg);
+                    SDL_FRect tr{mx + 12.0f + pad, my + 12.0f + pad, static_cast<float>(tipSurf->w), static_cast<float>(tipSurf->h)};
+                    SDL_RenderTexture(portR, tipTex, nullptr, &tr);
+                    SDL_DestroyTexture(tipTex);
+                }
+                SDL_DestroySurface(tipSurf);
+            }
+        }
     }
 }
 
@@ -1116,18 +1219,19 @@ void Connection::render(SDL_Renderer* renderer, bool hover) {
         }
     }
 
-    if (!is_connected || dir == Direction::output) return;
+    if (is_connected && dir == Direction::input) {
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        auto src = srcRect();
+        if (src.w > 0.0f || src.h > 0.0f) {
+            SDL_FColor color;
+            if (type == DataType::Events) color = {0.5f, 1.0f, 0.5f, 1.0f};
+            else color = {1.0f, 0.5f, 0.5f, 1.0f};
 
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    auto src = srcRect();
-    if (src.w == 0.0f && src.h == 0.0f) return;
+            NodeEditor::renderPatchCable(renderer, rect.x + rect.w * 0.5f, rect.y + rect.h * 0.5f,
+                src.x + src.w * 0.5f, src.y + src.h * 0.5f, color);
+        }
+    }
 
-    SDL_FColor color;
-    if (type == DataType::Events) color = {0.5f, 1.0f, 0.5f, 1.0f};
-    else color = {1.0f, 0.5f, 0.5f, 1.0f};
-
-    NodeEditor::renderPatchCable(renderer, rect.x + rect.w * 0.5f, rect.y + rect.h * 0.5f,
-        src.x + src.w * 0.5f, src.y + src.h * 0.5f, color);
 }
 
 void Node::renderParams(SDL_Renderer* renderer) {
@@ -1371,4 +1475,3 @@ void Node::resetNE() {
 
     resetNEFinal();
 }
-

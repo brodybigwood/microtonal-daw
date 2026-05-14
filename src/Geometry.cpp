@@ -16,3 +16,10 @@ std::pair<std::vector<float>, std::vector<float>> generateCircle(float centerX, 
 
     return {vx, vy};
 }
+
+std::pair<std::vector<float>, std::vector<float>> generateRect(float x, float y, float w, float h) {
+    return {
+        std::vector<float>{x, x + w, x + w, x},
+        std::vector<float>{y, y, y + h, y + h}
+    };
+}
