@@ -368,6 +368,19 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
             pa = io;
             break;
         }
+        case SetParamValue: {
+            pa = new SetParamValueUndoAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(),
+                j.at("paramPath").get<std::vector<size_t>>(), j.at("oldValue").get<float>(), j.at("newValue").get<float>(),
+                j.at("name").get<std::string>());
+            break;
+        }
+        case ToggleModulatorCentered: {
+            pa = new ToggleModulatorCenteredUndoAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(),
+                j.at("paramPath").get<std::vector<size_t>>(), j.at("modIndex").get<size_t>(),
+                j.at("oldCentered").get<bool>(), j.at("newCentered").get<bool>(),
+                j.at("oldDepth").get<float>(), j.at("newDepth").get<float>());
+            break;
+        }
         default:
             throw std::runtime_error("invalid undo action type in save");
     }
@@ -579,6 +592,27 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["connectionId"] = io->connectionId;
             j["connectionIndex"] = io->connectionIndex;
             j["idAssigned"] = io->idAssigned;
+            break;
+        }
+        case SetParamValue: {
+            auto* sv = static_cast<SetParamValueUndoAction*>(pa);
+            j["managerPath"] = sv->managerPath;
+            j["nodeID"] = sv->nodeID;
+            j["paramPath"] = sv->paramPath;
+            j["oldValue"] = sv->oldValue;
+            j["newValue"] = sv->newValue;
+            break;
+        }
+        case ToggleModulatorCentered: {
+            auto* tc = static_cast<ToggleModulatorCenteredUndoAction*>(pa);
+            j["managerPath"] = tc->managerPath;
+            j["nodeID"] = tc->nodeID;
+            j["paramPath"] = tc->paramPath;
+            j["modIndex"] = tc->modIndex;
+            j["oldCentered"] = tc->oldCentered;
+            j["newCentered"] = tc->newCentered;
+            j["oldDepth"] = tc->oldDepth;
+            j["newDepth"] = tc->newDepth;
             break;
         }
         default:
@@ -1716,5 +1750,79 @@ RemoveModSourceUndoAction::RemoveModSourceUndoAction(Project* p, std::vector<int
                     static_cast<uint16_t>(target->id), sc.conn->id);
             }
         }
+    };
+}
+
+SetParamValueUndoAction::SetParamValueUndoAction(Project* p, std::vector<int> managerPath, int nodeID, std::vector<size_t> paramPath,
+                                                 float oldValue, float newValue, std::string actionName) :
+        ProjectAction(p, SetParamValue),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        paramPath(std::move(paramPath)),
+        oldValue(oldValue),
+        newValue(newValue) {
+    skipInitialDo = true;
+    name = std::move(actionName);
+    doAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        Node* target = (this->nodeID == 0) ? static_cast<Node*>(nm.outNode)
+                     : (this->nodeID == 1) ? static_cast<Node*>(nm.inNode)
+                                           : nm.getNode(static_cast<uint16_t>(this->nodeID));
+        if (!target) throw std::runtime_error("SetParamValueUndoAction::doAction: node not found");
+        Parameter* param = target->resolveParameterPath(this->paramPath);
+        if (!param) throw std::runtime_error("SetParamValueUndoAction::doAction: parameter not found");
+        param->value = this->newValue;
+    };
+    undoAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        Node* target = (this->nodeID == 0) ? static_cast<Node*>(nm.outNode)
+                     : (this->nodeID == 1) ? static_cast<Node*>(nm.inNode)
+                                           : nm.getNode(static_cast<uint16_t>(this->nodeID));
+        if (!target) throw std::runtime_error("SetParamValueUndoAction::undoAction: node not found");
+        Parameter* param = target->resolveParameterPath(this->paramPath);
+        if (!param) throw std::runtime_error("SetParamValueUndoAction::undoAction: parameter not found");
+        param->value = this->oldValue;
+    };
+}
+
+ToggleModulatorCenteredUndoAction::ToggleModulatorCenteredUndoAction(Project* p, std::vector<int> managerPath, int nodeID,
+                                                                     std::vector<size_t> paramPath, size_t modIndex,
+                                                                     bool oldCentered, bool newCentered, float oldDepth, float newDepth) :
+        ProjectAction(p, ToggleModulatorCentered),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        paramPath(std::move(paramPath)),
+        modIndex(modIndex),
+        oldCentered(oldCentered),
+        newCentered(newCentered),
+        oldDepth(oldDepth),
+        newDepth(newDepth) {
+    skipInitialDo = true;
+    name = "Toggle Centered";
+    doAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        Node* target = (this->nodeID == 0) ? static_cast<Node*>(nm.outNode)
+                     : (this->nodeID == 1) ? static_cast<Node*>(nm.inNode)
+                                           : nm.getNode(static_cast<uint16_t>(this->nodeID));
+        if (!target) throw std::runtime_error("ToggleModulatorCenteredUndoAction::doAction: node not found");
+        Parameter* param = target->resolveParameterPath(this->paramPath);
+        if (!param || this->modIndex >= param->modulators.size())
+            throw std::runtime_error("ToggleModulatorCenteredUndoAction::doAction: modulator not found");
+        auto* mod = param->modulators[this->modIndex];
+        mod->centered = this->newCentered;
+        mod->depth.value = this->newDepth;
+    };
+    undoAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        Node* target = (this->nodeID == 0) ? static_cast<Node*>(nm.outNode)
+                     : (this->nodeID == 1) ? static_cast<Node*>(nm.inNode)
+                                           : nm.getNode(static_cast<uint16_t>(this->nodeID));
+        if (!target) throw std::runtime_error("ToggleModulatorCenteredUndoAction::undoAction: node not found");
+        Parameter* param = target->resolveParameterPath(this->paramPath);
+        if (!param || this->modIndex >= param->modulators.size())
+            throw std::runtime_error("ToggleModulatorCenteredUndoAction::undoAction: modulator not found");
+        auto* mod = param->modulators[this->modIndex];
+        mod->centered = this->oldCentered;
+        mod->depth.value = this->oldDepth;
     };
 }

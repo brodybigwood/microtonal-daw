@@ -36,7 +36,9 @@ enum ActionType {
     CreatePosition = 16,
     DeletePosition = 17,
     MoveElementPosition = 18,
-    IoPortChannel = 19
+    IoPortChannel = 19,
+    SetParamValue = 20,
+    ToggleModulatorCentered = 21
 };
 
 
@@ -235,6 +237,31 @@ struct RemoveModSourceUndoAction : ProjectAction {
     std::vector<SavedConn> savedConns;
 
     RemoveModSourceUndoAction(Project* p, std::vector<int> managerPath, int nodeID, std::vector<size_t> paramPath, size_t modIndex);
+};
+
+struct SetParamValueUndoAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    std::vector<size_t> paramPath;
+    float oldValue = 0.0f;
+    float newValue = 0.0f;
+
+    SetParamValueUndoAction(Project* p, std::vector<int> managerPath, int nodeID, std::vector<size_t> paramPath,
+                            float oldValue, float newValue, std::string actionName = "Set Param Value");
+};
+
+struct ToggleModulatorCenteredUndoAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    std::vector<size_t> paramPath;
+    size_t modIndex = 0;
+    bool oldCentered = false;
+    bool newCentered = false;
+    float oldDepth = 0.0f;
+    float newDepth = 0.0f;
+
+    ToggleModulatorCenteredUndoAction(Project* p, std::vector<int> managerPath, int nodeID, std::vector<size_t> paramPath,
+                                      size_t modIndex, bool oldCentered, bool newCentered, float oldDepth, float newDepth);
 };
 
 struct MoveNoteAction : ProjectAction {

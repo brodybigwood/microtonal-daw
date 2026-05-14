@@ -17,6 +17,7 @@ namespace {
 std::function<bool(SDL_Event&, float, float, SDL_Renderer*, std::shared_ptr<TreeEntry>)> createMatrixTicker(Node* node, Parameter* p, std::vector<size_t> path) {
     struct State {
         int draggingIndex = -1;
+        float oldDepth = 0.0f;
     };
     auto state = std::make_shared<State>();
 
@@ -39,6 +40,17 @@ std::function<bool(SDL_Event&, float, float, SDL_Renderer*, std::shared_ptr<Tree
         if (self) self->customHeight = panelH;
 
         if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+            if (state->draggingIndex >= 0 && state->draggingIndex < static_cast<int>(p->modulators.size())) {
+                auto* mod = p->modulators[static_cast<size_t>(state->draggingIndex)];
+                if (mod && mod->depth.value != state->oldDepth && node->project && node->project->um) {
+                    std::vector<int> mgrPath = node->nm ? node->nm->managerPath : std::vector<int>{};
+                    std::vector<size_t> depthPath = path;
+                    depthPath.push_back(static_cast<size_t>(state->draggingIndex));
+                    auto* pa2 = new SetParamValueUndoAction(node->project, std::move(mgrPath), static_cast<int>(node->id),
+                        depthPath, state->oldDepth, mod->depth.value, "Change Mod Depth");
+                    node->project->um->newAction(pa2);
+                }
+            }
             state->draggingIndex = -1;
         }
 
@@ -118,17 +130,26 @@ std::function<bool(SDL_Event&, float, float, SDL_Renderer*, std::shared_ptr<Tree
             if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
                 if (e.button.button == SDL_BUTTON_LEFT) {
                     if (MouseOn(&centerBtn)) {
+                        bool oldCentered = m->centered;
+                        float oldDepth2 = m->depth.value;
                         m->centered = !m->centered;
                         if (m->centered) {
                             m->depth.value = std::clamp(m->depth.value, -0.5f, 0.5f);
                         } else {
                             m->depth.value = std::clamp(m->depth.value, 0.0f, 1.0f);
                         }
+                        if (node->project && node->project->um) {
+                            std::vector<int> mgrPath = node->nm ? node->nm->managerPath : std::vector<int>{};
+                            auto* pa2 = new ToggleModulatorCenteredUndoAction(node->project, std::move(mgrPath), static_cast<int>(node->id),
+                                path, i, oldCentered, m->centered, oldDepth2, m->depth.value);
+                            node->project->um->newAction(pa2);
+                        }
                     } else if (MouseOn(&removeBtn)) {
                         node->removeModSource(path, i);
                         return true;
                     } else if (MouseOn(&slider)) {
                         state->draggingIndex = static_cast<int>(i);
+                        state->oldDepth = m->depth.value;
                     }
                 } else if (e.button.button == SDL_BUTTON_RIGHT && MouseOn(&slider)) {
                     std::vector<size_t> depthPath = path;
@@ -850,15 +871,24 @@ std::shared_ptr<TreeEntry> Node::getParameterMenu(Parameter* p, const std::vecto
 
     auto setValue = uTreeEntry();
     setValue->label = "Set Value";
-    setValue->click = [this, p]() {
+    setValue->click = [this, p, path]() {
         auto* ctxMenu = ContextMenu::get();
         ctxMenu->active = true;
         ctxMenu->window_id = SDL_GetWindowID(detached ? window : ne->getWindow());
         ctxMenu->renderer = detached ? renderer : ne->getRenderer();
-        ctxMenu->dynamicTick = getTextInputTicker([p](std::string text) {
+        ctxMenu->dynamicTick = getTextInputTicker([this, p, path](std::string text) {
             try {
-                const float v = std::stof(text);
-                p->value = std::clamp(v, 0.0f, 1.0f);
+                const float v = std::clamp(std::stof(text), 0.0f, 1.0f);
+                if (p->value != v && project && project->um) {
+                    float oldV = p->value;
+                    p->value = v;
+                    std::vector<int> mgrPath = nm ? nm->managerPath : std::vector<int>{};
+                    auto* pa = new SetParamValueUndoAction(project, std::move(mgrPath), static_cast<int>(id), path,
+                        oldV, v, "Set Param Value");
+                    project->um->newAction(pa);
+                } else {
+                    p->value = v;
+                }
             } catch (...) {
             }
         });
@@ -867,8 +897,17 @@ std::shared_ptr<TreeEntry> Node::getParameterMenu(Parameter* p, const std::vecto
 
     auto resetValue = uTreeEntry();
     resetValue->label = "Reset Value";
-    resetValue->click = [p]() {
-        p->value = p->defaultValue;
+    resetValue->click = [this, p, path]() {
+        if (p->value != p->defaultValue && project && project->um) {
+            float oldV = p->value;
+            p->value = p->defaultValue;
+            std::vector<int> mgrPath = nm ? nm->managerPath : std::vector<int>{};
+            auto* pa = new SetParamValueUndoAction(project, std::move(mgrPath), static_cast<int>(id), path,
+                oldV, p->defaultValue, "Reset Param Value");
+            project->um->newAction(pa);
+        } else {
+            p->value = p->defaultValue;
+        }
     };
     root->addChild(resetValue);
 
@@ -1393,9 +1432,28 @@ void Node::attach() {
 
 void Node::handleWindowInput(SDL_Event& e) {
     if (!detached) {
-        for (auto p : params) {
+        for (size_t pi = 0; pi < params.size(); ++pi) {
+            auto p = params[pi];
             if (inPolygon(p->vx.data(), p->vy.data(), p->vx.size(), msX, msY)) {
+                float oldValue = p->value;
                 p->handleInput(e);
+                if (p->value != oldValue && project && project->um) {
+                    std::vector<int> mgrPath = nm ? nm->managerPath : std::vector<int>{};
+                    // Coalesce rapid wheel events into a single undo action.
+                    bool merged = false;
+                    if (project->um->current->type == SetParamValue) {
+                        auto* prev = static_cast<SetParamValueUndoAction*>(project->um->current);
+                        if (prev->nodeID == static_cast<int>(id) && prev->paramPath == std::vector<size_t>{pi} && prev->managerPath == mgrPath) {
+                            prev->newValue = p->value;
+                            merged = true;
+                        }
+                    }
+                    if (!merged) {
+                        auto* pa = new SetParamValueUndoAction(project, std::move(mgrPath), static_cast<int>(id), {pi},
+                            oldValue, p->value, "Knob Change");
+                        project->um->newAction(pa);
+                    }
+                }
             }
         }
         handleCustomInput(e);
@@ -1413,9 +1471,28 @@ void Node::handleWindowInput(SDL_Event& e) {
         hoveredConnection = -1;
         bool handled = inPolygon(vx, vy, vCount, msX, msY);
 
-        for (auto p : params) {
+        for (size_t pi = 0; pi < params.size(); ++pi) {
+            auto p = params[pi];
             if (inPolygon(p->vx.data(), p->vy.data(), p->vx.size(), msX, msY)) {
+                float oldValue = p->value;
                 p->handleInput(e);
+                if (p->value != oldValue && project && project->um) {
+                    std::vector<int> mgrPath = nm ? nm->managerPath : std::vector<int>{};
+                    // Coalesce rapid wheel events into a single undo action.
+                    bool merged = false;
+                    if (project->um->current->type == SetParamValue) {
+                        auto* prev = static_cast<SetParamValueUndoAction*>(project->um->current);
+                        if (prev->nodeID == static_cast<int>(id) && prev->paramPath == std::vector<size_t>{pi} && prev->managerPath == mgrPath) {
+                            prev->newValue = p->value;
+                            merged = true;
+                        }
+                    }
+                    if (!merged) {
+                        auto* pa = new SetParamValueUndoAction(project, std::move(mgrPath), static_cast<int>(id), {pi},
+                            oldValue, p->value, "Knob Change");
+                        project->um->newAction(pa);
+                    }
+                }
                 handled = true;
             }
         }
