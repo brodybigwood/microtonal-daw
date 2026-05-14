@@ -6,6 +6,7 @@
 #include "UndoManager.h"
 #include <iostream>
 #include "Preferences.h"
+#include "PreferencesWindow.h"
 #include "styles.h"
 #include <algorithm>
 #include <array>
@@ -173,6 +174,18 @@ void NodeEditor::clearWireDragState() {
     srcNodeID = -1;
 }
 
+EmbeddedWindow* NodeEditor::addEmbeddedWindow(std::unique_ptr<EmbeddedWindow> w) {
+    if (!w) return nullptr;
+    // Auto-assign z-order to be on top.
+    int maxZ = 0;
+    for (auto& ew : embeddedWindows_)
+        if (ew->zOrder > maxZ) maxZ = ew->zOrder;
+    w->zOrder = maxZ + 1;
+    auto* ptr = w.get();
+    embeddedWindows_.push_back(std::move(w));
+    return ptr;
+}
+
 NodeEditor::NodeEditor() :
     isAltPressed(WindowHandler::instance()->isAltPressed),
     isCtrlPressed(WindowHandler::instance()->isCtrlPressed) {
@@ -226,19 +239,28 @@ void NodeEditor::renderRootMenuBarSkeleton(SDL_Renderer* ren, const SDL_FRect* s
     const float y = surface->y + 2.f;
     const float h = topMargin - 4.f;
 
-    for (const char* label : kLabels) {
+    for (size_t i = 0; i < kLabels.size(); ++i) {
         int tw = 0;
         int th = 0;
         SDL_Surface* surf = nullptr;
         if (fonts.mainFont)
-            surf = TTF_RenderText_Blended(fonts.mainFont, label, 0, SDL_Color{255, 255, 255, 255});
+            surf = TTF_RenderText_Blended(fonts.mainFont, kLabels[i], 0, SDL_Color{255, 255, 255, 255});
         if (surf) {
             tw = surf->w;
             th = surf->h;
         }
         const float w = std::max(kMinItemW, static_cast<float>(tw) + 16.f);
         const SDL_FRect cell{x, y, w, h};
-        fill(44, 44, 48, cell);
+
+        // Store for hit-testing in handleInput.
+        menuLabelRects_[i] = cell;
+
+        // Highlight the open menu label.
+        if (static_cast<int>(i) == menuOpenIndex_)
+            fill(58, 58, 64, cell);
+        else
+            fill(44, 44, 48, cell);
+
         SDL_SetRenderDrawColor(ren, 20, 20, 22, 255);
         SDL_RenderRect(ren, &cell);
 
@@ -255,6 +277,27 @@ void NodeEditor::renderRootMenuBarSkeleton(SDL_Renderer* ren, const SDL_FRect* s
         }
         x += w + 4.f;
     }
+}
+
+std::shared_ptr<TreeEntry> NodeEditor::buildMenuTree(int menuIndex) {
+    auto root = uTreeEntry();
+    switch (menuIndex) {
+        case 1: { // Edit
+            root->label = "Edit";
+            auto item = uTreeEntry();
+            item->label = "Preferences...";
+            item->click = [this]() {
+                auto pw = std::make_unique<PreferencesWindow>();
+                pw->x = (canvasW_ - pw->w) * 0.5f;
+                pw->y = (canvasH_ - pw->h) * 0.4f;
+                addEmbeddedWindow(std::move(pw));
+            };
+            root->addChild(item);
+            break;
+        }
+        default: break;
+    }
+    return root;
 }
 
 void NodeEditor::renderConnector(SDL_Renderer* renderer) {
@@ -363,16 +406,98 @@ void NodeEditor::handleInput(SDL_Event& e) {
         leftClick = false;
     }
 
-    if (topMargin > 0.f && isPointerOverMenuBar(mouseX, mouseY)) {
-        switch (e.type) {
-            case SDL_EVENT_MOUSE_BUTTON_DOWN:
-            case SDL_EVENT_MOUSE_BUTTON_UP:
-            case SDL_EVENT_MOUSE_MOTION:
-            case SDL_EVENT_MOUSE_WHEEL:
+    if (topMargin > 0.f) {
+        // Sync: detect when ContextMenu closed the dropdown (click outside, leaf click, etc.).
+        if (menuOpenIndex_ >= 0 && !ContextMenu::get()->active)
+            menuOpenIndex_ = -1;
+
+        const bool overMenuBar = isPointerOverMenuBar(mouseX, mouseY);
+        const bool menuIsOpen = menuOpenIndex_ >= 0;
+
+        if (overMenuBar || menuIsOpen) {
+            // Left-click on a menu label when no menu is open: open the dropdown via ContextMenu.
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT && overMenuBar && !menuIsOpen) {
+                int clickedLabel = -1;
+                for (size_t i = 0; i < menuLabelRects_.size(); ++i) {
+                    if (mouseX >= menuLabelRects_[i].x && mouseX < menuLabelRects_[i].x + menuLabelRects_[i].w &&
+                        mouseY >= menuLabelRects_[i].y && mouseY < menuLabelRects_[i].y + menuLabelRects_[i].h) {
+                        clickedLabel = static_cast<int>(i);
+                        break;
+                    }
+                }
+                if (clickedLabel >= 0) {
+                    auto tree = buildMenuTree(clickedLabel);
+                    if (tree && !tree->children.empty()) {
+                        auto* ctx = ContextMenu::get();
+                        ctx->active = true;
+                        ctx->skipNextEvent = true;
+                        ctx->window_id = SDL_GetWindowID(window);
+                        ctx->renderer = renderer;
+                        ctx->locX = menuLabelRects_[static_cast<size_t>(clickedLabel)].x;
+                        ctx->locY = topMargin;
+                        ctx->dynamicTick = getTreeMenuTicker(tree);
+                        menuOpenIndex_ = clickedLabel;
+                    }
+                }
                 return;
-            default:
-                break;
+            }
+
+            // Consume all mouse events while pointer is over menu bar or a menu is open.
+            switch (e.type) {
+                case SDL_EVENT_MOUSE_BUTTON_DOWN:
+                case SDL_EVENT_MOUSE_BUTTON_UP:
+                case SDL_EVENT_MOUSE_MOTION:
+                case SDL_EVENT_MOUSE_WHEEL:
+                    return;
+                default:
+                    break;
+            }
         }
+    }
+
+    // Embedded windows: captured window gets all mouse events until mouse up, else topmost hit.
+    {
+        // Release capture on mouse up.
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT)
+            capturedWindow_ = nullptr;
+
+        EmbeddedWindow* target = capturedWindow_;
+        if (!target) {
+            int topZ = -1;
+            for (auto& ew : embeddedWindows_) {
+                if (ew->visible && ew->zOrder > topZ && ew->hitTest(mouseX, mouseY)) {
+                    target = ew.get();
+                    topZ = ew->zOrder;
+                }
+            }
+        }
+
+        if (target) {
+            // Capture + focus on mousedown, raise on click.
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+                capturedWindow_ = target;
+                focusedWindow_ = target;
+                int maxZ = 0;
+                for (auto& ew : embeddedWindows_)
+                    if (ew->zOrder > maxZ) maxZ = ew->zOrder;
+                target->zOrder = maxZ + 1;
+            }
+            if (target->handleInput(e))
+                return;
+            // If the window closed itself during handling, clear capture/focus.
+            if (capturedWindow_ && !capturedWindow_->visible)
+                capturedWindow_ = nullptr;
+            if (focusedWindow_ && !focusedWindow_->visible)
+                focusedWindow_ = nullptr;
+        }
+    }
+
+    // Keyboard events go to the focused window.
+    if (e.type == SDL_EVENT_KEY_DOWN && focusedWindow_) {
+        if (!focusedWindow_->visible)
+            focusedWindow_ = nullptr;
+        else if (focusedWindow_->handleKeyboard(e))
+            return;
     }
 
     switch (e.type) {
@@ -552,6 +677,18 @@ void NodeEditor::render(SDL_Renderer* renderer, SDL_FRect* surfaceRect) {
     nm->outNode->render();
 
     renderConnector(this->renderer);
+
+    // Render embedded windows sorted by z-order (back to front).
+    {
+        std::vector<EmbeddedWindow*> sorted;
+        sorted.reserve(embeddedWindows_.size());
+        for (auto& ew : embeddedWindows_)
+            sorted.push_back(ew.get());
+        std::sort(sorted.begin(), sorted.end(),
+                  [](EmbeddedWindow* a, EmbeddedWindow* b) { return a->zOrder < b->zOrder; });
+        for (auto* ew : sorted)
+            ew->render(renderer);
+    }
 
     SDL_SetRenderClipRect(renderer, nullptr);
 }

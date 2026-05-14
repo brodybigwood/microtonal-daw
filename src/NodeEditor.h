@@ -5,6 +5,7 @@
 #include "nodes/nodetypes.h"
 #include "Window.h"
 #include "Bus.h"
+#include "EmbeddedWindow.h"
 
 #define SINE_SIZE 2000
 
@@ -70,6 +71,9 @@ class NodeEditor : public Window {
         /** Clear all in-progress connection / drag state (e.g. before destroying this editor). */
         void clearWireDragState();
 
+        /** Add an embedded pseudo-window to this canvas. */
+        EmbeddedWindow* addEmbeddedWindow(std::unique_ptr<EmbeddedWindow> w);
+
     private:
 
         void zoom(float);
@@ -124,6 +128,22 @@ class NodeEditor : public Window {
         /** Patcher node that owns this editor when embedded; null for processor host / other editors. */
         Node* menuBarHostNode_ = nullptr;
 
+        /** Which top-level menu label has its dropdown open (-1 = none). Index into kLabels (File=0, Edit=1, View=2, Window=3). */
+        int menuOpenIndex_ = -1;
+        /** Rects of the 4 menu-bar label cells, populated each render frame for hit-testing. */
+        std::array<SDL_FRect, 4> menuLabelRects_{};
+
+        /** Build the tree for a top-menu dropdown (delegates to ContextMenu for display). */
+        std::shared_ptr<TreeEntry> buildMenuTree(int menuIndex);
+
         float canvasW_ = 1920.f;
         float canvasH_ = 1080.f;
+
+        /** Embedded pseudo-windows on this canvas (sorted by zOrder for rendering, back to front). */
+        std::vector<std::unique_ptr<EmbeddedWindow>> embeddedWindows_;
+
+        /** Window that currently owns the mouse capture (mousedown → mouseup). */
+        EmbeddedWindow* capturedWindow_ = nullptr;
+        /** Window that receives keyboard events (last clicked). */
+        EmbeddedWindow* focusedWindow_ = nullptr;
 };

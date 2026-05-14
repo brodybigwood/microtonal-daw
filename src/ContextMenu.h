@@ -25,6 +25,7 @@ class ContextMenu {
 
         std::function<bool(SDL_Event& e)> dynamicTick;
         bool keepOpenOnNextTreeLeafClick = false;
+        bool skipNextEvent = false;
 };
 
 std::function<bool(SDL_Event& e)> getTextInputTicker(std::function<void(std::string text)> enter,

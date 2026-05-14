@@ -1,5 +1,6 @@
 #include <SDL3/SDL.h>
 #include <SDL_ttf.h>
+#include <string>
 
 #ifndef STYLES_H
 #define STYLES_H
@@ -53,5 +54,11 @@ extern Fonts fonts;
 bool initFonts();
 
 void createCursors();
+
+/** Render a tooltip label near (anchorX, anchorY), clamped inside bounds.
+ *  Matches the piano-roll pitch-factors tooltip style:
+ *  dark semi-transparent background, muted border, blended. */
+void renderTooltip(SDL_Renderer* r, const std::string& text, float anchorX, float anchorY,
+                   const SDL_FRect& bounds);
 
 #endif // STYLES_H

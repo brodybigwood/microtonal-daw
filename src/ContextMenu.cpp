@@ -11,6 +11,11 @@ ContextMenu* ContextMenu::get() {
 void ContextMenu::tick(SDL_Event& e) {
     if (!isEventForWindow(e, window_id)) return;
 
+    if (skipNextEvent) {
+        skipNextEvent = false;
+        return;
+    }
+
     if (!dynamicTick(e)) {
         active = false;
         return;

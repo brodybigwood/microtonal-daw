@@ -273,48 +273,8 @@ void PianoRoll::renderPitchFactorsHoverTooltip() {
         return;
 
     const std::string text = formatPrimePowerVector(note->pitchIntegerPairs);
-
-    SDL_Surface* surf =
-        TTF_RenderText_Blended(fonts.mainFont, text.c_str(), text.size(), SDL_Color{150, 165, 180, 200});
-    if (!surf)
-        return;
-    SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
-    if (!tex) {
-        SDL_DestroySurface(surf);
-        return;
-    }
-
-    constexpr float pad = 5;
-    constexpr float inset = 3;
-    const float bw = surf->w + pad * 2;
-    const float bh = surf->h + pad * 2;
-    float bx = mouseX + 14;
-    float by = mouseY - bh - 10;
-    if (bx + bw > width - inset)
-        bx = width - bw - inset;
-    if (bx < inset)
-        bx = inset;
-    if (by < inset)
-        by = inset;
-    if (by + bh > height - bottomMargin - inset)
-        by = height - bottomMargin - bh - inset;
-
-    SDL_BlendMode prevBm;
-    SDL_GetRenderDrawBlendMode(renderer, &prevBm);
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-
-    SDL_FRect bg{bx - 2, by - 2, bw + 4, bh + 4};
-    SDL_SetRenderDrawColor(renderer, 26, 30, 36, 210);
-    SDL_RenderFillRect(renderer, &bg);
-    SDL_SetRenderDrawColor(renderer, 72, 86, 102, 120);
-    SDL_RenderRect(renderer, &bg);
-
-    SDL_FRect tr{bx + pad - 2, by + pad - 2, static_cast<float>(surf->w), static_cast<float>(surf->h)};
-    SDL_RenderTexture(renderer, tex, nullptr, &tr);
-
-    SDL_SetRenderDrawBlendMode(renderer, prevBm);
-    SDL_DestroyTexture(tex);
-    SDL_DestroySurface(surf);
+    const SDL_FRect bounds{0.f, 0.f, static_cast<float>(width), static_cast<float>(height - bottomMargin)};
+    renderTooltip(renderer, text, mouseX, mouseY, bounds);
 }
 
 float PianoRoll::harmonicToMidi(int harmonic) const {
