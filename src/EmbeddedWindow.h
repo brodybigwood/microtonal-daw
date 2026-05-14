@@ -18,20 +18,28 @@ public:
     void close() { visible = false; }
     void open() { visible = true; }
 
-    /** Hit-test in window coordinates (caller offsets to world space). */
+    enum class ResizeZone : uint8_t { None, N, S, E, W, NE, NW, SE, SW };
+
+    /** Hit-test against the window polygon. */
     bool hitTest(float worldMx, float worldMy) const;
+
+    /** Which resize zone the point is near, or None. Virtual for custom shapes. */
+    virtual ResizeZone getResizeZone(float worldMx, float worldMy) const;
 
     /** Render chrome + content. Virtual so subclasses can customize the window shape. */
     virtual void render(SDL_Renderer* r);
 
-    /** Handle input; returns true if consumed. Virtual so subclasses can customize. */
+    /** Handle input; returns true if consumed. Virtual for subclasses. */
     virtual bool handleInput(SDL_Event& e);
 
-    /** World-space rect (for broad-phase / z-order hit). */
+    /** World-space bounding rect. */
     SDL_FRect worldRect() const;
 
     static constexpr float kTitleBarH = 24.f;
     static constexpr float kBorderW = 3.f;
+    static constexpr float kResizeHandleSz = 6.f;
+    static constexpr float kMinW = 120.f;
+    static constexpr float kMinH = 80.f;
 
     /** Override to handle keyboard events when this window is focused. */
     virtual bool handleKeyboard(SDL_Event&) { return false; }
@@ -46,9 +54,8 @@ protected:
     /** Override to customize window body shape. */
     virtual void renderChrome(SDL_Renderer* r);
 
+    SDL_FRect closeButtonRect() const;
+
     bool dragging_ = false;
     float dragOffX_ = 0.f, dragOffY_ = 0.f;
-
-private:
-    SDL_FRect closeButtonRect() const;
 };

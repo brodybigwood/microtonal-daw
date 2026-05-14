@@ -32,7 +32,7 @@ void PreferencesWindow::buildHitPolygon(std::vector<SDL_FPoint>& out) const {
     const int kGapSteps = 4; // sub-steps along inner circle between teeth
 
     const float sector = 2.f * static_cast<float>(M_PI) / static_cast<float>(N);
-    const float toothHalf = sector * 0.50f; // angular half-width of tooth
+    const float toothHalf = sector * 0.35f; // angular half-width of tooth
 
     out.clear();
 
@@ -45,16 +45,16 @@ void PreferencesWindow::buildHitPolygon(std::vector<SDL_FPoint>& out) const {
         const float aGapEnd = aNext - toothHalf;
 
         // Tooth: inner base → outer → outer → inner base
-        out.push_back({cx + Ri * cosf(a0), cy + Ri * sinf(a0)});
-        out.push_back({cx + Ro * cosf(a0), cy + Ro * sinf(a0)});
-        out.push_back({cx + Ro * cosf(a1), cy + Ro * sinf(a1)});
-        out.push_back({cx + Ri * cosf(a1), cy + Ri * sinf(a1)});
+        out.push_back({cx + Ri * std::cos(a0), cy + Ri * std::sin(a0)});
+        out.push_back({cx + Ro * std::cos(a0), cy + Ro * std::sin(a0)});
+        out.push_back({cx + Ro * std::cos(a1), cy + Ro * std::sin(a1)});
+        out.push_back({cx + Ri * std::cos(a1), cy + Ri * std::sin(a1)});
 
         // Gap: follow inner circle to next tooth
         for (int s = 1; s <= kGapSteps; ++s) {
             float t = static_cast<float>(s) / static_cast<float>(kGapSteps + 1);
             float a = aGapStart + (aGapEnd - aGapStart) * t;
-            out.push_back({cx + Ri * cosf(a), cy + Ri * sinf(a)});
+            out.push_back({cx + Ri * std::cos(a), cy + Ri * std::sin(a)});
         }
     }
 }
@@ -66,23 +66,26 @@ int PreferencesWindow::hitTooth(float worldMx, float worldMy) const {
     const float cy = centerY();
     const float dx = worldMx - cx;
     const float dy = worldMy - cy;
-    const float dist = sqrtf(dx * dx + dy * dy);
-
-    if (dist < toothBaseR() || dist > outerR())
-        return -1;
-
-    float angle = atan2f(dy, dx);
-    if (angle < 0.f) angle += 2.f * static_cast<float>(M_PI);
+    const float Ro = outerR();
+    const float Rtb = toothBaseR();
 
     const float sector = 2.f * static_cast<float>(M_PI) / static_cast<float>(kSections);
-    const float toothHalf = sector * 0.50f;
+    const float toothHalf = sector * 0.35f;
 
     for (int i = 0; i < kSections; ++i) {
         float mid = static_cast<float>(i) * sector;
+
+        // Project onto tooth's radial direction; compare against chord (matches visual quad).
+        const float proj = dx * std::cos(mid) + dy * std::sin(mid);
+        if (proj < Rtb * std::cos(toothHalf) || proj > Ro * std::cos(toothHalf))
+            continue;
+
+        float angle = std::atan2(dy, dx);
+        if (angle < 0.f) angle += 2.f * static_cast<float>(M_PI);
         float d = angle - mid;
         if (d > static_cast<float>(M_PI)) d -= 2.f * static_cast<float>(M_PI);
         if (d < -static_cast<float>(M_PI)) d += 2.f * static_cast<float>(M_PI);
-        if (fabsf(d) <= toothHalf)
+        if (std::abs(d) <= toothHalf)
             return i;
     }
     return -1;
@@ -100,7 +103,7 @@ void PreferencesWindow::render(SDL_Renderer* r) {
     const float Rtb = toothBaseR();
     const int N = kSections;
     const float sector = 2.f * static_cast<float>(M_PI) / static_cast<float>(N);
-    const float toothHalf = sector * 0.50f;
+    const float toothHalf = sector * 0.35f;
     const int kGapSteps = 4;
 
     // --- Body polygon ---
@@ -113,31 +116,33 @@ void PreferencesWindow::render(SDL_Renderer* r) {
         const float aGapStart = a1;
         const float aGapEnd = aNext - toothHalf;
 
-        poly.push_back({cx + Ri * cosf(a0), cy + Ri * sinf(a0)});
-        poly.push_back({cx + Ro * cosf(a0), cy + Ro * sinf(a0)});
-        poly.push_back({cx + Ro * cosf(a1), cy + Ro * sinf(a1)});
-        poly.push_back({cx + Ri * cosf(a1), cy + Ri * sinf(a1)});
+        poly.push_back({cx + Ri * std::cos(a0), cy + Ri * std::sin(a0)});
+        poly.push_back({cx + Ro * std::cos(a0), cy + Ro * std::sin(a0)});
+        poly.push_back({cx + Ro * std::cos(a1), cy + Ro * std::sin(a1)});
+        poly.push_back({cx + Ri * std::cos(a1), cy + Ri * std::sin(a1)});
 
         for (int s = 1; s <= kGapSteps; ++s) {
             float t = static_cast<float>(s) / static_cast<float>(kGapSteps + 1);
             float a = aGapStart + (aGapEnd - aGapStart) * t;
-            poly.push_back({cx + Ri * cosf(a), cy + Ri * sinf(a)});
+            poly.push_back({cx + Ri * std::cos(a), cy + Ri * std::sin(a)});
         }
     }
 
-    // Fill body.
+    // Fill body — triangle fan from center (cog is star-shaped).
     {
-        std::vector<SDL_Vertex> verts(poly.size());
+        std::vector<SDL_Vertex> verts(poly.size() + 1);
         SDL_FColor fc{0.20f, 0.20f, 0.22f, 1.f};
+        verts[0].position = {cx, cy};
+        verts[0].color = fc;
         for (size_t i = 0; i < poly.size(); ++i) {
-            verts[i].position = poly[i];
-            verts[i].color = fc;
+            verts[i + 1].position = poly[i];
+            verts[i + 1].color = fc;
         }
-        std::vector<int> idx((poly.size() - 2) * 3);
-        for (size_t i = 0; i < poly.size() - 2; ++i) {
+        std::vector<int> idx(poly.size() * 3);
+        for (size_t i = 0; i < poly.size(); ++i) {
             idx[i * 3 + 0] = 0;
             idx[i * 3 + 1] = static_cast<int>(i + 1);
-            idx[i * 3 + 2] = static_cast<int>(i + 2);
+            idx[i * 3 + 2] = static_cast<int>((i + 1) % poly.size() + 1);
         }
         SDL_RenderGeometry(r, nullptr, verts.data(), static_cast<int>(verts.size()),
                            idx.data(), static_cast<int>(idx.size()));
@@ -184,13 +189,13 @@ void PreferencesWindow::render(SDL_Renderer* r) {
             else if (hasSection) col = {0.216f, 0.216f, 0.235f, 1.f};
             else col = {0.165f, 0.165f, 0.180f, 1.f};
 
-            verts[0].position = {cx + Rtb * cosf(a0), cy + Rtb * sinf(a0)};
+            verts[0].position = {cx + Rtb * std::cos(a0), cy + Rtb * std::sin(a0)};
             verts[0].color = col;
-            verts[1].position = {cx + Ro * cosf(a0), cy + Ro * sinf(a0)};
+            verts[1].position = {cx + Ro * std::cos(a0), cy + Ro * std::sin(a0)};
             verts[1].color = col;
-            verts[2].position = {cx + Ro * cosf(a1), cy + Ro * sinf(a1)};
+            verts[2].position = {cx + Ro * std::cos(a1), cy + Ro * std::sin(a1)};
             verts[2].color = col;
-            verts[3].position = {cx + Rtb * cosf(a1), cy + Rtb * sinf(a1)};
+            verts[3].position = {cx + Rtb * std::cos(a1), cy + Rtb * std::sin(a1)};
             verts[3].color = col;
 
             int indices[] = {0, 1, 2, 0, 2, 3};
@@ -200,10 +205,10 @@ void PreferencesWindow::render(SDL_Renderer* r) {
         // Tooth button border.
         SDL_SetRenderDrawColor(r, 120, 120, 130, 255);
         SDL_FPoint tb[] = {
-            {cx + Rtb * cosf(a0), cy + Rtb * sinf(a0)},
-            {cx + Ro * cosf(a0),  cy + Ro * sinf(a0)},
-            {cx + Ro * cosf(a1),  cy + Ro * sinf(a1)},
-            {cx + Rtb * cosf(a1), cy + Rtb * sinf(a1)},
+            {cx + Rtb * std::cos(a0), cy + Rtb * std::sin(a0)},
+            {cx + Ro * std::cos(a0),  cy + Ro * std::sin(a0)},
+            {cx + Ro * std::cos(a1),  cy + Ro * std::sin(a1)},
+            {cx + Rtb * std::cos(a1), cy + Rtb * std::sin(a1)},
         };
         SDL_RenderLine(r, tb[0].x, tb[0].y, tb[1].x, tb[1].y);
         SDL_RenderLine(r, tb[1].x, tb[1].y, tb[2].x, tb[2].y);
@@ -217,8 +222,8 @@ void PreferencesWindow::render(SDL_Renderer* r) {
                 SDL_Texture* tex = SDL_CreateTextureFromSurface(r, s);
                 if (tex) {
                     const float Rmid = (Ro + Rtb) * 0.5f;
-                    const float lx = cx + Rmid * cosf(mid) - static_cast<float>(s->w) * 0.5f;
-                    const float ly = cy + Rmid * sinf(mid) - static_cast<float>(s->h) * 0.5f;
+                    const float lx = cx + Rmid * std::cos(mid) - static_cast<float>(s->w) * 0.5f;
+                    const float ly = cy + Rmid * std::sin(mid) - static_cast<float>(s->h) * 0.5f;
                     SDL_FRect tr{lx, ly, static_cast<float>(s->w), static_cast<float>(s->h)};
                     SDL_RenderTexture(r, tex, nullptr, &tr);
                     SDL_DestroyTexture(tex);
@@ -229,8 +234,8 @@ void PreferencesWindow::render(SDL_Renderer* r) {
 
         // Hover text label (shown only when hovering, using shared tooltip style).
         if (hovered && hasSection) {
-            const float tipX = cx + (Ro + 4.f) * cosf(mid);
-            const float tipY = cy + (Ro + 4.f) * sinf(mid);
+            const float tipX = cx + (Ro + 4.f) * std::cos(mid);
+            const float tipY = cy + (Ro + 4.f) * std::sin(mid);
             renderTooltip(r, kSectionNames[i], tipX, tipY, worldRect());
         }
     }
@@ -243,7 +248,7 @@ void PreferencesWindow::render(SDL_Renderer* r) {
         verts[0].color = {0.17f, 0.17f, 0.19f, 1.f};
         for (int i = 0; i <= circleSegs; ++i) {
             float a = static_cast<float>(i) * 2.f * static_cast<float>(M_PI) / static_cast<float>(circleSegs);
-            verts[static_cast<size_t>(i) + 1].position = {cx + Ri * cosf(a), cy + Ri * sinf(a)};
+            verts[static_cast<size_t>(i) + 1].position = {cx + Ri * std::cos(a), cy + Ri * std::sin(a)};
             verts[static_cast<size_t>(i) + 1].color = {0.17f, 0.17f, 0.19f, 1.f};
         }
         std::vector<int> idx(static_cast<size_t>(circleSegs) * 3);
@@ -261,8 +266,8 @@ void PreferencesWindow::render(SDL_Renderer* r) {
     for (int i = 0; i < circleSegs; ++i) {
         float a0 = static_cast<float>(i) * 2.f * static_cast<float>(M_PI) / static_cast<float>(circleSegs);
         float a1 = static_cast<float>(i + 1) * 2.f * static_cast<float>(M_PI) / static_cast<float>(circleSegs);
-        SDL_RenderLine(r, cx + Ri * cosf(a0), cy + Ri * sinf(a0),
-                       cx + Ri * cosf(a1), cy + Ri * sinf(a1));
+        SDL_RenderLine(r, cx + Ri * std::cos(a0), cy + Ri * std::sin(a0),
+                       cx + Ri * std::cos(a1), cy + Ri * std::sin(a1));
     }
 
     // --- Center content ---
@@ -316,21 +321,7 @@ bool PreferencesWindow::handleInput(SDL_Event& e) {
     float mx, my;
     SDL_GetMouseState(&mx, &my);
 
-    // Point-in-polygon on cog.
-    std::vector<SDL_FPoint> poly;
-    buildHitPolygon(poly);
-    bool onCog = false;
-    {
-        size_t n = poly.size();
-        for (size_t i = 0, j = n - 1; i < n; j = i++) {
-            float xi = poly[i].x, yi = poly[i].y;
-            float xj = poly[j].x, yj = poly[j].y;
-            if ((yi > my) != (yj > my) && mx < (xj - xi) * (my - yi) / (yj - yi) + xi)
-                onCog = !onCog;
-        }
-    }
-
-    if (!onCog) return false;
+    if (!hitTest(mx, my)) return false;
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         // Close button?

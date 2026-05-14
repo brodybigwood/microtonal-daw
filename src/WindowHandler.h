@@ -9,6 +9,7 @@
 #include "Project.h"
 #include "ContextMenu.h"
 #include "Window.h"
+#include "EmbeddedWindow.h"
 
 class WindowHandler {
     public:
@@ -49,9 +50,28 @@ class WindowHandler {
         void enqueueCommand(const std::string& cmd);
         void processCommands();
 
+        // --- Pseudo-window management (embedded windows on the main canvas) ---
+
+        /** Add a pseudo-window. Auto-assigns z-order on top. */
+        EmbeddedWindow* addEmbeddedWindow(std::unique_ptr<EmbeddedWindow> w);
+
+        /** Render all pseudo-windows on the project's main renderer. */
+        void renderEmbeddedWindows();
+
+        /** Route an event to pseudo-windows (resize check first, then window input).
+         *  Returns true if a pseudo-window consumed the event. */
+        bool routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mouseY);
+
+        /** Window that receives keyboard events (last clicked pseudo-window). */
+        EmbeddedWindow* focusedEmbeddedWindow() const { return focusedEmbeddedWindow_; }
+
     private:
         std::mutex commandMutex;
         std::queue<std::string> pendingCommands;
+
+        std::vector<std::unique_ptr<EmbeddedWindow>> embeddedWindows_;
+        EmbeddedWindow* capturedEmbeddedWindow_ = nullptr;
+        EmbeddedWindow* focusedEmbeddedWindow_ = nullptr;
 };
 
 #endif

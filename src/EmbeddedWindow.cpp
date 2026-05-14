@@ -2,6 +2,7 @@
 #include "styles.h"
 #include "SDL_Events.h"
 #include <algorithm>
+#include <cmath>
 
 EmbeddedWindow::EmbeddedWindow() = default;
 
@@ -22,7 +23,7 @@ static bool pointInPolygon(const std::vector<SDL_FPoint>& poly, float px, float 
     for (size_t i = 0, j = poly.size() - 1; i < poly.size(); j = i++) {
         float xi = poly[i].x, yi = poly[i].y;
         float xj = poly[j].x, yj = poly[j].y;
-        if ((yi > py) != (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi)
+        if ((yi >= py) != (yj >= py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi)
             inside = !inside;
     }
     return inside;
@@ -30,18 +31,14 @@ static bool pointInPolygon(const std::vector<SDL_FPoint>& poly, float px, float 
 
 static void renderFilledPolygon(SDL_Renderer* r, const std::vector<SDL_FPoint>& poly) {
     if (poly.size() < 3) return;
-    // Fan triangulation from vertex 0 (polygon must be convex or star-shaped from v0).
     std::vector<SDL_Vertex> verts(poly.size());
-    for (size_t i = 0; i < poly.size(); ++i) {
-        verts[i].position = poly[i];
-        verts[i].color = {0, 0, 0, 0}; // caller sets draw color; geometry reads vertex color
-    }
-    // SDL_RenderGeometry uses vertex colors, not draw color. We read the current draw color.
     Uint8 cr, cg, cb, ca;
     SDL_GetRenderDrawColor(r, &cr, &cg, &cb, &ca);
     SDL_FColor fc{cr / 255.f, cg / 255.f, cb / 255.f, ca / 255.f};
-    for (auto& v : verts) v.color = fc;
-
+    for (size_t i = 0; i < poly.size(); ++i) {
+        verts[i].position = poly[i];
+        verts[i].color = fc;
+    }
     std::vector<int> indices((poly.size() - 2) * 3);
     for (size_t i = 0; i < poly.size() - 2; ++i) {
         indices[i * 3 + 0] = 0;
@@ -60,7 +57,7 @@ static void renderPolygonOutline(SDL_Renderer* r, const std::vector<SDL_FPoint>&
     }
 }
 
-// --- EmbeddedWindow ---
+// --- Hit testing ---
 
 bool EmbeddedWindow::hitTest(float worldMx, float worldMy) const {
     if (!visible) return false;
@@ -77,20 +74,74 @@ void EmbeddedWindow::buildHitPolygon(std::vector<SDL_FPoint>& out) const {
     out[3] = {x, y + h};
 }
 
+EmbeddedWindow::ResizeZone EmbeddedWindow::getResizeZone(float mx, float my) const {
+    if (!visible) return ResizeZone::None;
+
+    std::vector<SDL_FPoint> poly;
+    buildHitPolygon(poly);
+    if (poly.size() < 3) return ResizeZone::None;
+
+    const float s = kResizeHandleSz;
+
+    // Find the closest polygon edge to the mouse point.
+    float bestDist = s;
+    SDL_FPoint bestEdgeA{}, bestEdgeB{};
+
+    for (size_t i = 0; i < poly.size(); ++i) {
+        size_t j = (i + 1) % poly.size();
+        float ax = poly[i].x, ay = poly[i].y;
+        float bx = poly[j].x, by = poly[j].y;
+
+        float edx = bx - ax, edy = by - ay;
+        float len2 = edx * edx + edy * edy;
+        if (len2 < 0.0001f) continue;
+
+        // Project mouse onto edge, clamped to [0,1].
+        float t = ((mx - ax) * edx + (my - ay) * edy) / len2;
+        t = t < 0.f ? 0.f : (t > 1.f ? 1.f : t);
+
+        float px = ax + t * edx;
+        float py = ay + t * edy;
+        float d2 = (mx - px) * (mx - px) + (my - py) * (my - py);
+        if (d2 < bestDist * bestDist) {
+            bestDist = std::sqrt(d2);
+            bestEdgeA = {ax, ay};
+            bestEdgeB = {bx, by};
+        }
+    }
+
+    if (bestDist >= s) return ResizeZone::None;
+
+    // Direction: vector from polygon centroid toward the mouse.
+    float cx = 0.f, cy = 0.f;
+    for (auto& v : poly) { cx += v.x; cy += v.y; }
+    cx /= static_cast<float>(poly.size());
+    cy /= static_cast<float>(poly.size());
+    float dx = mx - cx;
+    float dy = my - cy;
+
+    const float adx = std::abs(dx), ady = std::abs(dy);
+    if (adx > ady * 2.f)      return dx > 0 ? ResizeZone::E : ResizeZone::W;
+    if (ady > adx * 2.f)      return dy > 0 ? ResizeZone::S : ResizeZone::N;
+    if (dx > 0 && dy > 0)     return ResizeZone::SE;
+    if (dx > 0 && dy < 0)     return ResizeZone::NE;
+    if (dx < 0 && dy > 0)     return ResizeZone::SW;
+    return ResizeZone::NW;
+}
+
+// --- Rendering ---
+
 void EmbeddedWindow::renderChrome(SDL_Renderer* r) {
     std::vector<SDL_FPoint> poly;
     buildHitPolygon(poly);
 
-    // Window body fill — draw the polygon shape.
     SDL_SetRenderDrawColor(r, 52, 52, 56, 255);
     renderFilledPolygon(r, poly);
 
-    // Title bar (rectangle clipped at the top of the window).
     SDL_FRect tb{x, y, w, kTitleBarH};
     SDL_SetRenderDrawColor(r, 64, 64, 70, 255);
     SDL_RenderFillRect(r, &tb);
 
-    // Title text.
     if (fonts.mainFont && !title.empty()) {
         SDL_Surface* s = TTF_RenderText_Blended(fonts.mainFont, title.c_str(), 0, SDL_Color{220, 220, 224, 255});
         if (s) {
@@ -105,7 +156,6 @@ void EmbeddedWindow::renderChrome(SDL_Renderer* r) {
         }
     }
 
-    // Close button.
     SDL_FRect cb = closeButtonRect();
     SDL_SetRenderDrawColor(r, 90, 90, 96, 255);
     SDL_RenderFillRect(r, &cb);
@@ -116,7 +166,6 @@ void EmbeddedWindow::renderChrome(SDL_Renderer* r) {
     SDL_RenderLine(r, cb.x + pad, cb.y + pad, cb.x + cb.w - pad, cb.y + cb.h - pad);
     SDL_RenderLine(r, cb.x + cb.w - pad, cb.y + pad, cb.x + pad, cb.y + cb.h - pad);
 
-    // Border along the polygon outline.
     SDL_SetRenderDrawColor(r, 100, 100, 108, 255);
     renderPolygonOutline(r, poly);
 }
@@ -125,7 +174,6 @@ void EmbeddedWindow::render(SDL_Renderer* r) {
     if (!visible) return;
     renderChrome(r);
 
-    // Clip to content area for subclass rendering.
     SDL_Rect contentClip{
         static_cast<int>(x + kBorderW),
         static_cast<int>(y + kTitleBarH),
@@ -135,7 +183,6 @@ void EmbeddedWindow::render(SDL_Renderer* r) {
     if (contentClip.w > 0 && contentClip.h > 0) {
         SDL_Rect prevClip;
         SDL_GetRenderClipRect(r, &prevClip);
-
         SDL_Rect useClip = contentClip;
         if (!SDL_RectEmpty(&prevClip)) {
             SDL_Rect inter;
@@ -150,27 +197,35 @@ void EmbeddedWindow::render(SDL_Renderer* r) {
     }
 }
 
+// --- Input ---
+
 bool EmbeddedWindow::handleInput(SDL_Event& e) {
     if (!visible) return false;
 
     float mx, my;
     SDL_GetMouseState(&mx, &my);
 
-    bool onChrome = hitTest(mx, my);
+    const bool onChrome = hitTest(mx, my);
 
-    // Dragging (title bar).
+    // Close button.
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_FRect tb{x, y, w, kTitleBarH};
         SDL_FRect cb = closeButtonRect();
         if (mx >= cb.x && mx < cb.x + cb.w && my >= cb.y && my < cb.y + cb.h && onChrome) {
             close();
             return true;
         }
-        if (mx >= tb.x && mx < tb.x + tb.w && my >= tb.y && my < tb.y + tb.h) {
-            dragging_ = true;
-            dragOffX_ = mx - x;
-            dragOffY_ = my - y;
-            return true;
+    }
+
+    // Drag (title bar).
+    {
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+            SDL_FRect tb{x, y, w, kTitleBarH};
+            if (mx >= tb.x && mx < tb.x + tb.w && my >= tb.y && my < tb.y + tb.h && onChrome) {
+                dragging_ = true;
+                dragOffX_ = mx - x;
+                dragOffY_ = my - y;
+                return true;
+            }
         }
     }
 
@@ -185,7 +240,7 @@ bool EmbeddedWindow::handleInput(SDL_Event& e) {
         return true;
     }
 
-    // Delegate content input if mouse is inside; always consume (window occludes graph).
+    // Delegate content input if mouse is inside; always consume.
     if (onChrome && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
         handleContentInput(e);
         return true;

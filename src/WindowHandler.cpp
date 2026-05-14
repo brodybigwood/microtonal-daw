@@ -152,7 +152,7 @@ bool WindowHandler::tick() {
     if(timeSinceLastFrame >= frameTime) {
         lastTime = double(SDL_GetTicks())-frameTime;
 
-        if (ctxMenu->active) project->render(); // need to render behind ctxmenu first
+        if (ctxMenu->active) { project->render(); renderEmbeddedWindows(); } // render behind ctxmenu first
         bool eventHandled = false;
  
         SDL_Event e;
@@ -237,12 +237,20 @@ bool WindowHandler::tick() {
             toggleKey(e, SDL_SCANCODE_LCTRL, isCtrlPressed);
             toggleKey(e, SDL_SCANCODE_LALT, isAltPressed);
 
-            if (ctxMenu->active) ctxMenu->tick(e);
-            else for (auto w : windows)
-                if (w && SDL_GetWindowFromID(getEventWindowID(e)) == w->window) {
-                    w->handleWindowInput(e);
-                    break;
+            if (ctxMenu->active) {
+                ctxMenu->tick(e);
+            } else {
+                // Pseudo-windows get first crack at events (with resize-zone detection).
+                float mx, my;
+                SDL_GetMouseState(&mx, &my);
+                if (!routeEmbeddedWindowEvent(e, mx, my)) {
+                    for (auto w : windows)
+                        if (w && SDL_GetWindowFromID(getEventWindowID(e)) == w->window) {
+                            w->handleWindowInput(e);
+                            break;
+                        }
                 }
+            }
         }
 
         if (!running) return false;
@@ -253,6 +261,7 @@ bool WindowHandler::tick() {
             ctxMenu->tick(e);
         } else if (!ctxMenu->active) {
             project->render();
+            renderEmbeddedWindows();
         }
         for (auto* w : windows) {
             if (auto* uw = dynamic_cast<UndoTreeWindow*>(w))
@@ -390,4 +399,114 @@ void WindowHandler::removeWindow(Window* w) {
     if (it != windows.end()) {
         *it = nullptr;  // null out to keep iterators valid; compacted at end of tick()
     }
+}
+
+EmbeddedWindow* WindowHandler::addEmbeddedWindow(std::unique_ptr<EmbeddedWindow> w) {
+    if (!w) return nullptr;
+    int maxZ = 0;
+    for (auto& ew : embeddedWindows_)
+        if (ew->zOrder > maxZ) maxZ = ew->zOrder;
+    w->zOrder = maxZ + 1;
+    EmbeddedWindow* ptr = w.get();
+    embeddedWindows_.push_back(std::move(w));
+    return ptr;
+}
+
+void WindowHandler::renderEmbeddedWindows() {
+    std::vector<EmbeddedWindow*> sorted;
+    sorted.reserve(embeddedWindows_.size());
+    for (auto& ew : embeddedWindows_)
+        if (ew->visible) sorted.push_back(ew.get());
+    std::sort(sorted.begin(), sorted.end(),
+              [](EmbeddedWindow* a, EmbeddedWindow* b) { return a->zOrder < b->zOrder; });
+    // project->renderer may be a hidden utility window; prefer a visible window's renderer.
+    SDL_Renderer* r = nullptr;
+    for (auto* w : windows) {
+        if (w && w->renderer && w->window) {
+            if (!(SDL_GetWindowFlags(w->window) & SDL_WINDOW_HIDDEN)) {
+                r = w->renderer;
+                break;
+            }
+        }
+    }
+    if (!r) r = project ? project->renderer : nullptr;
+    if (!r) return;
+    for (auto* ew : sorted)
+        ew->render(r);
+}
+
+bool WindowHandler::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mouseY) {
+    // Release capture on mouse up.
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT)
+        capturedEmbeddedWindow_ = nullptr;
+
+    // Captured window gets all mouse events until mouse up, else topmost hit.
+    EmbeddedWindow* target = capturedEmbeddedWindow_;
+    if (!target) {
+        int topZ = -1;
+        for (auto& ew : embeddedWindows_) {
+            if (ew->visible && ew->zOrder > topZ && ew->hitTest(mouseX, mouseY)) {
+                target = ew.get();
+                topZ = ew->zOrder;
+            }
+        }
+    }
+
+    // Set resize cursor — check all visible windows for nearest edge proximity.
+    {
+        SDL_SystemCursor cur = SDL_SYSTEM_CURSOR_DEFAULT;
+        EmbeddedWindow::ResizeZone bestZone = EmbeddedWindow::ResizeZone::None;
+        int bestZ = -1;
+        for (auto& ew : embeddedWindows_) {
+            if (!ew->visible || ew->zOrder <= bestZ) continue;
+            auto zone = ew->getResizeZone(mouseX, mouseY);
+            if (zone != EmbeddedWindow::ResizeZone::None) {
+                bestZone = zone;
+                bestZ = ew->zOrder;
+            }
+        }
+        switch (bestZone) {
+            case EmbeddedWindow::ResizeZone::N:  cur = SDL_SYSTEM_CURSOR_N_RESIZE;  break;
+            case EmbeddedWindow::ResizeZone::S:  cur = SDL_SYSTEM_CURSOR_S_RESIZE;  break;
+            case EmbeddedWindow::ResizeZone::E:  cur = SDL_SYSTEM_CURSOR_E_RESIZE;  break;
+            case EmbeddedWindow::ResizeZone::W:  cur = SDL_SYSTEM_CURSOR_W_RESIZE;  break;
+            case EmbeddedWindow::ResizeZone::NE: cur = SDL_SYSTEM_CURSOR_NE_RESIZE; break;
+            case EmbeddedWindow::ResizeZone::NW: cur = SDL_SYSTEM_CURSOR_NW_RESIZE; break;
+            case EmbeddedWindow::ResizeZone::SE: cur = SDL_SYSTEM_CURSOR_SE_RESIZE; break;
+            case EmbeddedWindow::ResizeZone::SW: cur = SDL_SYSTEM_CURSOR_SW_RESIZE; break;
+            default: break;
+        }
+        SDL_SetCursor(SDL_CreateSystemCursor(cur));
+    }
+
+    if (!target) return false;
+
+    // Mousedown: capture + focus + raise.
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+        capturedEmbeddedWindow_ = target;
+        focusedEmbeddedWindow_ = target;
+        int maxZ = 0;
+        for (auto& ew : embeddedWindows_)
+            if (ew->zOrder > maxZ) maxZ = ew->zOrder;
+        target->zOrder = maxZ + 1;
+    }
+
+    if (target->handleInput(e))
+        return true;
+
+    // If window closed itself during handling, clear capture/focus.
+    if (capturedEmbeddedWindow_ && !capturedEmbeddedWindow_->visible)
+        capturedEmbeddedWindow_ = nullptr;
+    if (focusedEmbeddedWindow_ && !focusedEmbeddedWindow_->visible)
+        focusedEmbeddedWindow_ = nullptr;
+
+    // Keyboard events go to the focused embedded window.
+    if (e.type == SDL_EVENT_KEY_DOWN && focusedEmbeddedWindow_) {
+        if (!focusedEmbeddedWindow_->visible)
+            focusedEmbeddedWindow_ = nullptr;
+        else if (focusedEmbeddedWindow_->handleKeyboard(e))
+            return true;
+    }
+
+    return false;
 }

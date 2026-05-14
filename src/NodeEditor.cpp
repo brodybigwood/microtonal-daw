@@ -174,18 +174,6 @@ void NodeEditor::clearWireDragState() {
     srcNodeID = -1;
 }
 
-EmbeddedWindow* NodeEditor::addEmbeddedWindow(std::unique_ptr<EmbeddedWindow> w) {
-    if (!w) return nullptr;
-    // Auto-assign z-order to be on top.
-    int maxZ = 0;
-    for (auto& ew : embeddedWindows_)
-        if (ew->zOrder > maxZ) maxZ = ew->zOrder;
-    w->zOrder = maxZ + 1;
-    auto* ptr = w.get();
-    embeddedWindows_.push_back(std::move(w));
-    return ptr;
-}
-
 NodeEditor::NodeEditor() :
     isAltPressed(WindowHandler::instance()->isAltPressed),
     isCtrlPressed(WindowHandler::instance()->isCtrlPressed) {
@@ -286,11 +274,11 @@ std::shared_ptr<TreeEntry> NodeEditor::buildMenuTree(int menuIndex) {
             root->label = "Edit";
             auto item = uTreeEntry();
             item->label = "Preferences...";
-            item->click = [this]() {
+            item->click = [w = canvasW_, h = canvasH_]() {
                 auto pw = std::make_unique<PreferencesWindow>();
-                pw->x = (canvasW_ - pw->w) * 0.5f;
-                pw->y = (canvasH_ - pw->h) * 0.4f;
-                addEmbeddedWindow(std::move(pw));
+                pw->x = (w - pw->w) * 0.5f;
+                pw->y = (h - pw->h) * 0.4f;
+                WindowHandler::instance()->addEmbeddedWindow(std::move(pw));
             };
             root->addChild(item);
             break;
@@ -453,51 +441,6 @@ void NodeEditor::handleInput(SDL_Event& e) {
                     break;
             }
         }
-    }
-
-    // Embedded windows: captured window gets all mouse events until mouse up, else topmost hit.
-    {
-        // Release capture on mouse up.
-        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT)
-            capturedWindow_ = nullptr;
-
-        EmbeddedWindow* target = capturedWindow_;
-        if (!target) {
-            int topZ = -1;
-            for (auto& ew : embeddedWindows_) {
-                if (ew->visible && ew->zOrder > topZ && ew->hitTest(mouseX, mouseY)) {
-                    target = ew.get();
-                    topZ = ew->zOrder;
-                }
-            }
-        }
-
-        if (target) {
-            // Capture + focus on mousedown, raise on click.
-            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-                capturedWindow_ = target;
-                focusedWindow_ = target;
-                int maxZ = 0;
-                for (auto& ew : embeddedWindows_)
-                    if (ew->zOrder > maxZ) maxZ = ew->zOrder;
-                target->zOrder = maxZ + 1;
-            }
-            if (target->handleInput(e))
-                return;
-            // If the window closed itself during handling, clear capture/focus.
-            if (capturedWindow_ && !capturedWindow_->visible)
-                capturedWindow_ = nullptr;
-            if (focusedWindow_ && !focusedWindow_->visible)
-                focusedWindow_ = nullptr;
-        }
-    }
-
-    // Keyboard events go to the focused window.
-    if (e.type == SDL_EVENT_KEY_DOWN && focusedWindow_) {
-        if (!focusedWindow_->visible)
-            focusedWindow_ = nullptr;
-        else if (focusedWindow_->handleKeyboard(e))
-            return;
     }
 
     switch (e.type) {
@@ -677,18 +620,6 @@ void NodeEditor::render(SDL_Renderer* renderer, SDL_FRect* surfaceRect) {
     nm->outNode->render();
 
     renderConnector(this->renderer);
-
-    // Render embedded windows sorted by z-order (back to front).
-    {
-        std::vector<EmbeddedWindow*> sorted;
-        sorted.reserve(embeddedWindows_.size());
-        for (auto& ew : embeddedWindows_)
-            sorted.push_back(ew.get());
-        std::sort(sorted.begin(), sorted.end(),
-                  [](EmbeddedWindow* a, EmbeddedWindow* b) { return a->zOrder < b->zOrder; });
-        for (auto* ew : sorted)
-            ew->render(renderer);
-    }
 
     SDL_SetRenderClipRect(renderer, nullptr);
 }

@@ -5,7 +5,7 @@
 #include "nodes/nodetypes.h"
 #include "Window.h"
 #include "Bus.h"
-#include "EmbeddedWindow.h"
+
 
 #define SINE_SIZE 2000
 
@@ -71,8 +71,7 @@ class NodeEditor : public Window {
         /** Clear all in-progress connection / drag state (e.g. before destroying this editor). */
         void clearWireDragState();
 
-        /** Add an embedded pseudo-window to this canvas. */
-        EmbeddedWindow* addEmbeddedWindow(std::unique_ptr<EmbeddedWindow> w);
+
 
     private:
 
@@ -139,11 +138,5 @@ class NodeEditor : public Window {
         float canvasW_ = 1920.f;
         float canvasH_ = 1080.f;
 
-        /** Embedded pseudo-windows on this canvas (sorted by zOrder for rendering, back to front). */
-        std::vector<std::unique_ptr<EmbeddedWindow>> embeddedWindows_;
 
-        /** Window that currently owns the mouse capture (mousedown → mouseup). */
-        EmbeddedWindow* capturedWindow_ = nullptr;
-        /** Window that receives keyboard events (last clicked). */
-        EmbeddedWindow* focusedWindow_ = nullptr;
 };
