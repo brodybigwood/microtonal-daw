@@ -194,8 +194,6 @@ void NodeEditor::setEmbeddedCanvasSize(float w, float h) {
 void NodeEditor::resetRootMenuBarLayout() {
     topMargin = 0.f;
     nodeRect = SDL_FRect{0.f, 0.f, canvasW_, canvasH_};
-    portModeButtonRect.x = 12.f;
-    portModeButtonRect.y = 12.f;
 }
 
 void NodeEditor::updateRootMenuBarLayout() {
@@ -205,7 +203,6 @@ void NodeEditor::updateRootMenuBarLayout() {
     if (!menuBarHostNode_->nm || !menuBarHostNode_->nm->managerPath.empty()) return;
     topMargin = kRootMenuBarStripH;
     nodeRect = SDL_FRect{0.f, topMargin, canvasW_, std::max(1.f, canvasH_ - topMargin)};
-    portModeButtonRect.y = 12.f + topMargin;
 }
 
 bool NodeEditor::isPointerOverMenuBar(float mx, float my) const {
@@ -348,17 +345,6 @@ void NodeEditor::tick() {
     if (!nm || !renderer) return;
     SDL_FRect surface{0.f, 0.f, canvasW_, canvasH_};
     render(renderer, &surface);
-}
-
-void NodeEditor::togglePortDisplayMode() {
-    portDisplayMode = (portDisplayMode == PortDisplayMode::RectLabels)
-        ? PortDisplayMode::SquareIDs
-        : PortDisplayMode::RectLabels;
-    if (nm) nm->portDisplayMode = portDisplayMode;
-
-    for (auto* n : nm->getNodes()) n->makeConnectionRects();
-    nm->inNode->makeConnectionRects();
-    nm->outNode->makeConnectionRects();
 }
 
 void NodeEditor::renderPresent() {
@@ -522,11 +508,6 @@ void NodeEditor::hover() {
 
 void NodeEditor::clickMouse(SDL_Event& e) {
     if (e.button.button == SDL_BUTTON_LEFT) {
-        if (inside(mouseX, mouseY, &portModeButtonRect)) {
-            togglePortDisplayMode();
-            return;
-        }
-
         auto time = SDL_GetTicks();
         auto interval = time - lastLeftClick;
         lastLeftClick = time;
@@ -606,39 +587,14 @@ void NodeEditor::render(SDL_Renderer* renderer, SDL_FRect* surfaceRect) {
     if (clip.w > 0 && clip.h > 0)
         SDL_SetRenderClipRect(renderer, &clip);
 
-    SDL_SetRenderDrawColor(renderer, 235, 235, 235, 255);
-    SDL_RenderFillRect(renderer, &portModeButtonRect);
-    SDL_SetRenderDrawColor(renderer, 40, 40, 40, 255);
-    SDL_RenderRect(renderer, &portModeButtonRect);
-
-    if (fonts.mainFont) {
-        const char* modeText = (portDisplayMode == PortDisplayMode::RectLabels)
-            ? "Ports: Rect Labels"
-            : "Ports: Square IDs";
-        SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, modeText, 0, SDL_Color{0, 0, 0, 255});
-        if (surf) {
-            SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
-            if (tex) {
-                const float scale = std::min(1.0f, (portModeButtonRect.w - 12.0f) / static_cast<float>(surf->w));
-                const float tw = static_cast<float>(surf->w) * scale;
-                const float th = static_cast<float>(surf->h) * scale;
-                SDL_FRect tr{
-                    portModeButtonRect.x + (portModeButtonRect.w - tw) * 0.5f,
-                    portModeButtonRect.y + (portModeButtonRect.h - th) * 0.5f,
-                    tw, th
-                };
-                SDL_RenderTexture(renderer, tex, nullptr, &tr);
-                SDL_DestroyTexture(tex);
-            }
-            SDL_DestroySurface(surf);
-        }
-    }
-
     for (auto node : nm->getNodes()) {
+        node->makeConnectionRects();
         node->render();
     }
 
+    nm->inNode->makeConnectionRects();
     nm->inNode->render();
+    nm->outNode->makeConnectionRects();
     nm->outNode->render();
 
     renderConnector(this->renderer);

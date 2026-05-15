@@ -70,7 +70,7 @@ void Settings::loadDefaults() {
         // Hardcoded fallback defaults so the button always works.
         defaults_["showFps"] = false;
         defaults_["doubleClickTimeMs"] = 256;
-        defaults_["defaultPortDisplayMode"] = 1;
+        defaults_["portDisplayMode"] = 1;
     }
     json old = data_;           // snapshot current settings
     old.erase("backup");        // remove nested backup if present

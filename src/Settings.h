@@ -17,7 +17,8 @@ public:
     bool showFps() const { return getBool("showFps", false); }
     void setShowFps(bool v) { setBool("showFps", v); }
     int doubleClickTimeMs() const { return getInt("doubleClickTimeMs", 256); }
-    int defaultPortDisplayMode() const { return getInt("defaultPortDisplayMode", 1); }
+    int portDisplayMode() const { return getInt("portDisplayMode", 1); }
+    void setPortDisplayMode(int v) { setInt("portDisplayMode", v); }
 
     // Load defaults from settings.json.default, saving current values to "backup".
     void loadDefaults();

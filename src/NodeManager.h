@@ -60,7 +60,6 @@ class NodeManager {
         OutputNode* outNode;
         InputNode* inNode;
         std::vector<int> managerPath;
-        PortDisplayMode portDisplayMode = PortDisplayMode::RectLabels;
 
     private:
         std::unordered_map<uint16_t, uint16_t> ids;

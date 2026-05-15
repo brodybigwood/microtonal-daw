@@ -3,7 +3,6 @@
 #include "NodeEditor.h"
 #include "UndoManager.h"
 #include "Project.h"
-#include "Preferences.h"
 #include <SDL3/SDL.h>
 
 #include <iostream>
@@ -11,7 +10,6 @@
 #include "nodes/nodetypes.h"
 
 NodeManager::NodeManager(Project* p, std::vector<int> managerPath) : project(p), managerPath(std::move(managerPath)) {
-    portDisplayMode = Preferences::defaultPortDisplayMode();
     outNode = new OutputNode(this);
     inNode = new InputNode(this);
     id_pool.reserveID(0); // id of outputnode
@@ -22,7 +20,6 @@ NodeManager::NodeManager(Project* p, std::vector<int> managerPath) : project(p),
 void NodeManager::setNE(NodeEditor* ne) {
     this->ne = ne;
     ne->nm = this;
-    ne->portDisplayMode = portDisplayMode;
     outNode->setNE(ne);
     inNode->setNE(ne);
     int ww = ne->windowWidth;
@@ -38,7 +35,6 @@ void NodeManager::setNE(NodeEditor* ne) {
 }
 
 void NodeManager::resetNE() {
-    if (ne) portDisplayMode = ne->portDisplayMode;
     if (ne) {
         ne->resetRootMenuBarLayout();
         ne->nm = nullptr;
@@ -50,10 +46,8 @@ void NodeManager::resetNE() {
 }
 
 json NodeManager::serialize() {
-    if (ne) portDisplayMode = ne->portDisplayMode;
     json j;
     j["idManager"] = id_pool.toJSON();
-    j["portDisplayMode"] = static_cast<int>(portDisplayMode);
 
     j["nodes"] = json::array();
     j["connections"] = json::array();
@@ -95,11 +89,6 @@ void NodeManager::deSerialize(json j) {
     if (managerPath.empty()) std::cout << "root";
     std::cout << std::endl;
     id_pool.fromJSON(j["idManager"]);
-    const int mode = j.value("portDisplayMode", static_cast<int>(PortDisplayMode::RectLabels));
-    portDisplayMode = (mode == static_cast<int>(PortDisplayMode::SquareIDs))
-        ? PortDisplayMode::SquareIDs
-        : PortDisplayMode::RectLabels;
-    if (ne) ne->portDisplayMode = portDisplayMode;
 
     for (auto n : j["nodes"]) {
         auto node = Node::deSerialize(n, this);

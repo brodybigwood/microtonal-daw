@@ -377,7 +377,7 @@ void AudioSection::renderContent(SDL_Renderer* r, const SDL_FRect& b, float s) {
 const std::vector<SettingDesc>& GUISection::settings() const {
     static const std::vector<SettingDesc> s = {
         {SettingType::Bool, "showFps", "Show FPS"},
-        {SettingType::Int, "defaultPortDisplayMode", "Port display", 0, 1, 1, "Labels|Square"},
+        {SettingType::Int, "portDisplayMode", "Port display", 0, 1, 1, "Labels|Square"},
     };
     return s;
 }

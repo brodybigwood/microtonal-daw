@@ -6,6 +6,7 @@
 #include "NodeEditor.h"
 #include "WindowHandler.h"
 #include "Preferences.h"
+#include "Settings.h"
 #include "UndoManager.h"
 #include <cstring>
 #include <limits>
@@ -1014,7 +1015,7 @@ void Node::zoom(float amount) {
 }
 
 void Node::makeConnectionRects() {
-    const PortDisplayMode mode = nm ? nm->portDisplayMode : PortDisplayMode::RectLabels;
+    const PortDisplayMode mode = static_cast<PortDisplayMode>(Settings::instance().portDisplayMode());
     float dy = 2;
     float w = (mode == PortDisplayMode::RectLabels) ? 18.0f : 12.0f;
     float h = (mode == PortDisplayMode::RectLabels) ? 64.0f : 12.0f;
@@ -1191,7 +1192,7 @@ void Node::render() {
 void Connection::render(SDL_Renderer* renderer, bool hover) {
     if (!renderer) return;
 
-    const PortDisplayMode mode = nm ? nm->portDisplayMode : PortDisplayMode::RectLabels;
+    const PortDisplayMode mode = static_cast<PortDisplayMode>(Settings::instance().portDisplayMode());
     SDL_Color c{128, 128, 128, 255};
 
     switch (type) {

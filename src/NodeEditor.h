@@ -45,8 +45,6 @@ class NodeEditor : public Window {
 
         int windowWidth = 1920;
         int windowHeight = 1080;
-        PortDisplayMode portDisplayMode = PortDisplayMode::RectLabels;
-
         SDL_FRect nodeRect{0, 0, 1920, 1080};
 
         /** Full patch canvas (menu draws in the top band; `nodeRect` is the graph area below when the menu is on). */
@@ -63,8 +61,6 @@ class NodeEditor : public Window {
         static void renderPatchCable(SDL_Renderer* r, float x1, float y1, float x2, float y2, SDL_FColor color);
 
         void renderSine(float x1, float y1, float x2, float y2, SDL_FColor);
-        void togglePortDisplayMode();
-
         /** Invalidate wire/drag pointers before `n` is deferred-deleted or replaced by undo. */
         void clearPointersToNode(Node* n);
 
@@ -121,8 +117,6 @@ class NodeEditor : public Window {
         float movingNodeStartY = 0.0f;
         float moveOffX;
         float moveOffY;
-
-        SDL_FRect portModeButtonRect{12.0f, 12.0f, 190.0f, 32.0f};
 
         /** Patcher node that owns this editor when embedded; null for processor host / other editors. */
         Node* menuBarHostNode_ = nullptr;

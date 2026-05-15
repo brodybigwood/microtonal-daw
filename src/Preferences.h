@@ -8,8 +8,8 @@
 
 namespace Preferences {
 
-inline PortDisplayMode defaultPortDisplayMode() {
-    return static_cast<PortDisplayMode>(Settings::instance().defaultPortDisplayMode());
+inline PortDisplayMode portDisplayMode() {
+    return static_cast<PortDisplayMode>(Settings::instance().portDisplayMode());
 }
 
 } // namespace Preferences
