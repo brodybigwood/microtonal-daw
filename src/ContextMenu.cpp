@@ -23,20 +23,26 @@ void ContextMenu::tick(SDL_Event& e) {
 }
 
 std::function<bool(SDL_Event& e)> getTextInputTicker(std::function<void(std::string text)> enter,
-                                                     std::function<void()> onDismiss)
+                                                     std::function<void()> onDismiss,
+                                                     const std::string& initialText)
 {
 
-return [enter, onDismiss](SDL_Event& e) {
+return [enter, onDismiss, initialText](SDL_Event& e) {
     auto ctxMenu = ContextMenu::get();
     auto& renderer = ctxMenu->renderer;
     auto& x = ctxMenu->locX;
     auto& y = ctxMenu->locY;
 
-    SDL_FRect rect{x,y,100,100};
+    SDL_FRect rect{x, y, 180.f, 30.f};
 
     bool done = false;
 
     static std::string text = "";
+    static bool inited = false;
+    if (!inited) {
+        text = initialText;
+        inited = true;
+    }
     static SDL_Surface* surf = nullptr;
     static SDL_Texture* tex = nullptr;
     static SDL_Color textColor{0,0,0,255};
@@ -82,6 +88,7 @@ return [enter, onDismiss](SDL_Event& e) {
 
         surf = nullptr;
         tex = nullptr;
+        inited = false;
         if (onDismiss) onDismiss();
     } else {
         SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);

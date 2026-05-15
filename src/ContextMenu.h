@@ -29,6 +29,7 @@ class ContextMenu {
 };
 
 std::function<bool(SDL_Event& e)> getTextInputTicker(std::function<void(std::string text)> enter,
-                                                    std::function<void()> onDismiss = {});
+                                                    std::function<void()> onDismiss = {},
+                                                    const std::string& initialText = "");
 
 std::function<bool(SDL_Event& e)> getTreeMenuTicker(std::shared_ptr<TreeEntry> t);

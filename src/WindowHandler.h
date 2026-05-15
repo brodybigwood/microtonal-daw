@@ -38,8 +38,10 @@ class WindowHandler {
         bool running = true;
 
         double fps = 60;
-    
-        double frameTime = 1000/fps;   
+
+        double frameTime = 1000/fps;
+
+        float fpsCounter_ = 60.f;   
     
         ContextMenu* ctxMenu;
 

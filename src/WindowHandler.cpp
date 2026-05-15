@@ -1,11 +1,13 @@
 #include "WindowHandler.h"
 #include "SDL_Events.h"
+#include "Settings.h"
 #include "styles.h"
 #include "NodeEditor.h"
 #include "PreferencesWindow.h"
 #include "UndoTreeWindow.h"
 #include "Node.h"
 #include <algorithm>
+#include <cstdio>
 #include <sstream>
 #include <iostream>
 #include <nlohmann/json.hpp>
@@ -152,13 +154,28 @@ bool WindowHandler::tick() {
 
     double timeSinceLastFrame = double(SDL_GetTicks())-double(lastTime);
     if(timeSinceLastFrame >= frameTime) {
+        {
+            float instant = (timeSinceLastFrame > 0.0) ? static_cast<float>(1000.0 / timeSinceLastFrame) : 60.f;
+            fpsCounter_ = fpsCounter_ * 0.9f + instant * 0.1f;
+        }
         lastTime = double(SDL_GetTicks())-frameTime;
 
         clearPendingTooltip();
 
         if (ctxMenu->active) { project->render(); renderEmbeddedWindows(); } // render behind ctxmenu first
+
+        // Find the host window for embedded windows once per frame
+        // (same logic as renderEmbeddedWindows).
+        SDL_Window* hostWin = nullptr;
+        for (auto* w : windows) {
+            if (w && w->window && !(SDL_GetWindowFlags(w->window) & SDL_WINDOW_HIDDEN)) {
+                hostWin = w->window;
+                break;
+            }
+        }
+
         bool eventHandled = false;
- 
+
         SDL_Event e;
         while(SDL_PollEvent(&e)) {
             eventHandled = true;
@@ -247,18 +264,6 @@ bool WindowHandler::tick() {
                 float mx, my;
                 SDL_GetMouseState(&mx, &my);
                 SDL_Window* eventWin = SDL_GetWindowFromID(getEventWindowID(e));
-                // Find the window that actually hosts embedded windows
-                // (same logic as renderEmbeddedWindows).
-                SDL_Window* hostWin = nullptr;
-                for (auto* w : windows) {
-                    if (w && w->window && !(SDL_GetWindowFlags(w->window) & SDL_WINDOW_HIDDEN)) {
-                        hostWin = w->window;
-                        break;
-                    }
-                }
-                // Route to embedded windows if the event targets the host window,
-                // or if no host window exists yet (nothing to conflict with),
-                // or if the event has no window (mouse motion for cursor updates).
                 bool tryEmbedded = !hostWin || !eventWin || eventWin == hostWin;
                 if (tryEmbedded && routeEmbeddedWindowEvent(e, mx, my))
                     continue;
@@ -281,6 +286,38 @@ bool WindowHandler::tick() {
             renderEmbeddedWindows();
         }
         drawPendingTooltip();
+        if (Settings::instance().showFps() && fonts.mainFont) {
+            SDL_Renderer* fpsR = nullptr;
+            SDL_Window* fpsW = nullptr;
+            for (auto* w : windows) {
+                if (w && w->renderer && w->window && !(SDL_GetWindowFlags(w->window) & SDL_WINDOW_HIDDEN)) {
+                    fpsR = w->renderer;
+                    fpsW = w->window;
+                    break;
+                }
+            }
+            if (!fpsR) {
+                fpsR = project ? project->renderer : nullptr;
+                fpsW = project ? project->window : nullptr;
+            }
+            if (fpsR) {
+                char buf[16];
+                snprintf(buf, sizeof(buf), "%.0f", fpsCounter_);
+                SDL_Surface* sf = TTF_RenderText_Blended(fonts.mainFont, buf, 0, SDL_Color{180, 220, 180, 220});
+                if (sf) {
+                    SDL_Texture* tex = SDL_CreateTextureFromSurface(fpsR, sf);
+                    if (tex) {
+                        float fw = static_cast<float>(sf->w), fh = static_cast<float>(sf->h);
+                        int winW = 800, winH = 0;
+                        if (fpsW) SDL_GetWindowSize(fpsW, &winW, &winH);
+                        SDL_FRect dst{static_cast<float>(winW) - fw - 8.f, 8.f, fw, fh};
+                        SDL_RenderTexture(fpsR, tex, nullptr, &dst);
+                        SDL_DestroyTexture(tex);
+                    }
+                    SDL_DestroySurface(sf);
+                }
+            }
+        }
         project->renderPresent();
     }
     // Compact nulled-out window pointers (deferred from removeWindow during iteration).

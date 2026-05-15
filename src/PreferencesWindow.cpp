@@ -1,4 +1,5 @@
 #include "PreferencesWindow.h"
+#include "SDL_Events.h"
 #include "styles.h"
 #include <cmath>
 #include <vector>
@@ -19,6 +20,7 @@ void PreferencesWindow::initSections() {
     sections_[0] = &audio_;
     sections_[1] = &gui_;
     sections_[2] = &controls_;
+    sections_[3] = &general_;
 }
 
 // --- Polygon: cog/gear shape with proper inner-circle gaps ---
@@ -279,6 +281,18 @@ void PreferencesWindow::render(SDL_Renderer* r) {
     {
         PrefSection* sec = sections_[activeSection_];
         if (sec && sec->hasContent()) {
+            if (!hostWindowID_) {
+                int count = 0;
+                SDL_Window** wins = SDL_GetWindows(&count);
+                for (int i = 0; i < count; ++i) {
+                    if (!(SDL_GetWindowFlags(wins[i]) & SDL_WINDOW_HIDDEN)) {
+                        hostWindowID_ = SDL_GetWindowID(wins[i]);
+                        break;
+                    }
+                }
+            }
+            sec->renderer_ = r;
+            sec->window_id_ = hostWindowID_;
             const float Ri2 = innerR();
             SDL_FRect innerBounds{cx - Ri2, cy - Ri2, Ri2 * 2.f, Ri2 * 2.f};
             sec->renderContent(r, innerBounds, scale);
@@ -329,6 +343,21 @@ bool PreferencesWindow::handleInput(SDL_Event& e) {
         if (tooth >= 0 && sections_[tooth]) {
             activeSection_ = tooth;
             return true;
+        }
+
+        // Inner-circle content click?
+        {
+            const float cx2 = centerX(), cy2 = centerY(), Ri2 = innerR();
+            float d2 = (mx - cx2) * (mx - cx2) + (my - cy2) * (my - cy2);
+            if (d2 <= Ri2 * Ri2) {
+                PrefSection* sec = sections_[activeSection_];
+                if (sec) {
+                    sec->window_id_ = getEventWindowID(e);
+                    SDL_FRect innerBounds{cx2 - Ri2, cy2 - Ri2, Ri2 * 2.f, Ri2 * 2.f};
+                    if (sec->handleContentInput(e, mx, my, innerBounds))
+                        return true;
+                }
+            }
         }
 
         // Start drag from anywhere on the cog.

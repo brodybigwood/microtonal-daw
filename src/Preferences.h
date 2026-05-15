@@ -1,13 +1,15 @@
 #pragma once
 
-#define DCT 256 // doubleclick time
-
 #include "Bus.h"
+#include "Settings.h"
 
-/** Edit these values to change app-wide defaults (no separate config file). */
+/** Double-click time window in milliseconds. */
+#define DCT (Settings::instance().doubleClickTimeMs())
+
 namespace Preferences {
 
-/** Initial NodeEditor port style when a patcher window is opened (square IDs vs rect+labels). */
-inline constexpr PortDisplayMode defaultPortDisplayMode = PortDisplayMode::RectLabels;
+inline PortDisplayMode defaultPortDisplayMode() {
+    return static_cast<PortDisplayMode>(Settings::instance().defaultPortDisplayMode());
+}
 
 } // namespace Preferences

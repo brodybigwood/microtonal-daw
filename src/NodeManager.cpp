@@ -11,7 +11,7 @@
 #include "nodes/nodetypes.h"
 
 NodeManager::NodeManager(Project* p, std::vector<int> managerPath) : project(p), managerPath(std::move(managerPath)) {
-    portDisplayMode = Preferences::defaultPortDisplayMode;
+    portDisplayMode = Preferences::defaultPortDisplayMode();
     outNode = new OutputNode(this);
     inNode = new InputNode(this);
     id_pool.reserveID(0); // id of outputnode
