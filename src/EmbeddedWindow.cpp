@@ -90,9 +90,9 @@ EmbeddedWindow::ResizeZone EmbeddedWindow::getResizeZone(float mx, float my) con
 
     const float s = kResizeHandleSz;
 
-    // Find the closest polygon edge to the mouse point.
-    float bestDist = s;
-    SDL_FPoint bestEdgeA{}, bestEdgeB{};
+    // Find the two closest polygon edges to the mouse point.
+    float bestDist = s, secondDist = s;
+    size_t bestI = 0, secondI = 0;
 
     for (size_t i = 0; i < poly.size(); ++i) {
         size_t j = (i + 1) % poly.size();
@@ -109,17 +109,44 @@ EmbeddedWindow::ResizeZone EmbeddedWindow::getResizeZone(float mx, float my) con
 
         float px = ax + t * edx;
         float py = ay + t * edy;
-        float d2 = (mx - px) * (mx - px) + (my - py) * (my - py);
-        if (d2 < bestDist * bestDist) {
-            bestDist = std::sqrt(d2);
-            bestEdgeA = {ax, ay};
-            bestEdgeB = {bx, by};
+        float d = std::sqrt((mx - px) * (mx - px) + (my - py) * (my - py));
+        if (d < bestDist) {
+            secondDist = bestDist;
+            secondI = bestI;
+            bestDist = d;
+            bestI = i;
+        } else if (d < secondDist) {
+            secondDist = d;
+            secondI = i;
         }
     }
 
     if (bestDist >= s) return ResizeZone::None;
 
-    // Direction: vector from polygon centroid toward the mouse.
+    if (hasRectResize()) {
+        // Edge normal direction for rectangular windows.
+        size_t bestJ = (bestI + 1) % poly.size();
+        float edx = poly[bestJ].x - poly[bestI].x;
+        float edy = poly[bestJ].y - poly[bestI].y;
+        float rnx = edy, rny = -edx;  // outward normal for clockwise polygon
+
+        // If a second edge is also within threshold, combine normals (corner).
+        if (secondDist < s) {
+            size_t sj = (secondI + 1) % poly.size();
+            float sdx = poly[sj].x - poly[secondI].x;
+            float sdy = poly[sj].y - poly[secondI].y;
+            rnx += sdy;
+            rny += -sdx;
+            return (rnx > 0) ? ((rny > 0) ? ResizeZone::SE : ResizeZone::NE)
+                            : ((rny > 0) ? ResizeZone::SW : ResizeZone::NW);
+        }
+
+        // Map normal to cardinal direction.
+        if (std::abs(rnx) > std::abs(rny)) return rnx > 0 ? ResizeZone::E : ResizeZone::W;
+        return rny > 0 ? ResizeZone::S : ResizeZone::N;
+    }
+
+    // Direction from polygon centroid for complex shapes.
     float cx = 0.f, cy = 0.f;
     for (auto& v : poly) { cx += v.x; cy += v.y; }
     cx /= static_cast<float>(poly.size());
@@ -222,82 +249,137 @@ bool EmbeddedWindow::startResize(float worldMx, float worldMy) {
 
 void EmbeddedWindow::applyResizeDelta(float dx, float dy) {
     float nx = resizeStartX_, ny = resizeStartY_, nw = resizeStartW_, nh = resizeStartH_;
-    switch (resizeZone_) {
-        case ResizeZone::N:
-            nh = resizeStartH_ - dy;
-            ny = resizeStartY_ + dy;
-            nw = resizeStartW_ - dy;           // keep uniform
-            nx = resizeStartX_ + dy * 0.5f;    // keep center x stable
-            if (nh < kMinH) { float adj = kMinH - nh; nh = kMinH; nw += adj; nx -= adj * 0.5f; ny -= adj; }
-            if (nw < kMinW) { float adj = kMinW - nw; nw = kMinW; nh += adj; ny -= adj * 0.5f; nx += adj * 0.5f; }
-            break;
-        case ResizeZone::S:
-            nh = resizeStartH_ + dy;
-            nw = resizeStartW_ + dy;            // keep uniform
-            nx = resizeStartX_ - dy * 0.5f;     // keep center x stable
-            if (nh < kMinH) { float adj = kMinH - nh; nh = kMinH; nw += adj; nx -= adj * 0.5f; }
-            if (nw < kMinW) { float adj = kMinW - nw; nw = kMinW; nh += adj; ny -= adj * 0.5f; nx += adj * 0.5f; }
-            break;
-        case ResizeZone::E:
-            nw = resizeStartW_ + dx;
-            nh = resizeStartH_ + dx;            // keep uniform
-            ny = resizeStartY_ - dx * 0.5f;     // keep center y stable
-            if (nw < kMinW) { float adj = kMinW - nw; nw = kMinW; nh += adj; ny -= adj * 0.5f; }
-            if (nh < kMinH) { float adj = kMinH - nh; nh = kMinH; nw += adj; nx -= adj * 0.5f; ny += adj * 0.5f; }
-            break;
-        case ResizeZone::W:
-            nw = resizeStartW_ - dx;
-            nx = resizeStartX_ + dx;
-            nh = resizeStartH_ - dx;            // keep uniform
-            ny = resizeStartY_ + dx * 0.5f;     // keep center y stable
-            if (nw < kMinW) { float adj = kMinW - nw; nw = kMinW; nh += adj; ny -= adj * 0.5f; nx -= adj; }
-            if (nh < kMinH) { float adj = kMinH - nh; nh = kMinH; nw += adj; nx -= adj * 0.5f; ny += adj * 0.5f; }
-            break;
-        case ResizeZone::NE: {
-            // anchor bottom+left; top-right corner follows larger axis delta
-            float d = (dx > -dy) ? dx : -dy;
-            nw = resizeStartW_ + d;
-            nx = resizeStartX_;
-            nh = resizeStartH_ + d;
-            ny = resizeStartY_ - d;
-            if (nw < kMinW) { float adj = kMinW - nw; nw = kMinW; nh += adj; ny -= adj * 0.5f; }
-            if (nh < kMinH) { float adj = kMinH - nh; nh = kMinH; nw += adj; nx -= adj * 0.5f; ny += adj; }
-            break;
+
+    if (hasRectResize()) {
+        // Free per-axis resize for rectangular windows.
+        switch (resizeZone_) {
+            case ResizeZone::N:
+                nh = resizeStartH_ - dy;
+                ny = resizeStartY_ + dy;
+                if (nh < minH()) { ny -= minH() - nh; nh = minH(); }
+                if (nw < minW()) nw = minW();
+                break;
+            case ResizeZone::S:
+                nh = resizeStartH_ + dy;
+                if (nh < minH()) nh = minH();
+                if (nw < minW()) nw = minW();
+                break;
+            case ResizeZone::E:
+                nw = resizeStartW_ + dx;
+                if (nw < minW()) nw = minW();
+                if (nh < minH()) nh = minH();
+                break;
+            case ResizeZone::W:
+                nw = resizeStartW_ - dx;
+                nx = resizeStartX_ + dx;
+                if (nw < minW()) { nx -= minW() - nw; nw = minW(); }
+                if (nh < minH()) nh = minH();
+                break;
+            case ResizeZone::NE:
+                nw = resizeStartW_ + dx;
+                nh = resizeStartH_ - dy;
+                ny = resizeStartY_ + dy;
+                if (nw < minW()) nw = minW();
+                if (nh < minH()) { ny -= minH() - nh; nh = minH(); }
+                break;
+            case ResizeZone::NW:
+                nw = resizeStartW_ - dx;
+                nx = resizeStartX_ + dx;
+                nh = resizeStartH_ - dy;
+                ny = resizeStartY_ + dy;
+                if (nw < minW()) { nx -= minW() - nw; nw = minW(); }
+                if (nh < minH()) { ny -= minH() - nh; nh = minH(); }
+                break;
+            case ResizeZone::SE:
+                nw = resizeStartW_ + dx;
+                nh = resizeStartH_ + dy;
+                if (nw < minW()) nw = minW();
+                if (nh < minH()) nh = minH();
+                break;
+            case ResizeZone::SW:
+                nw = resizeStartW_ - dx;
+                nx = resizeStartX_ + dx;
+                nh = resizeStartH_ + dy;
+                if (nw < minW()) { nx -= minW() - nw; nw = minW(); }
+                if (nh < minH()) nh = minH();
+                break;
+            default: return;
         }
-        case ResizeZone::NW: {
-            // anchor bottom+right; top-left corner follows larger axis delta
-            float d = (-dx > -dy) ? -dx : -dy;
-            nw = resizeStartW_ + d;
-            nx = resizeStartX_ - d;
-            nh = resizeStartH_ + d;
-            ny = resizeStartY_ - d;
-            if (nw < kMinW) { float adj = kMinW - nw; nw = kMinW; nh += adj; ny -= adj * 0.5f; nx -= adj; }
-            if (nh < kMinH) { float adj = kMinH - nh; nh = kMinH; nw += adj; nx -= adj * 0.5f; ny += adj; }
-            break;
+    } else {
+        // Uniform resize for complex/circular shapes.
+        switch (resizeZone_) {
+            case ResizeZone::N:
+                nh = resizeStartH_ - dy;
+                ny = resizeStartY_ + dy;
+                nw = resizeStartW_ - dy;           // keep uniform
+                nx = resizeStartX_ + dy * 0.5f;    // keep center x stable
+                if (nh < minH()) { float adj = minH() - nh; nh = minH(); nw += adj; nx -= adj * 0.5f; ny -= adj; }
+                if (nw < minW()) { float adj = minW() - nw; nw = minW(); nh += adj; ny -= adj * 0.5f; nx += adj * 0.5f; }
+                break;
+            case ResizeZone::S:
+                nh = resizeStartH_ + dy;
+                nw = resizeStartW_ + dy;            // keep uniform
+                nx = resizeStartX_ - dy * 0.5f;     // keep center x stable
+                if (nh < minH()) { float adj = minH() - nh; nh = minH(); nw += adj; nx -= adj * 0.5f; }
+                if (nw < minW()) { float adj = minW() - nw; nw = minW(); nh += adj; ny -= adj * 0.5f; nx += adj * 0.5f; }
+                break;
+            case ResizeZone::E:
+                nw = resizeStartW_ + dx;
+                nh = resizeStartH_ + dx;            // keep uniform
+                ny = resizeStartY_ - dx * 0.5f;     // keep center y stable
+                if (nw < minW()) { float adj = minW() - nw; nw = minW(); nh += adj; ny -= adj * 0.5f; }
+                if (nh < minH()) { float adj = minH() - nh; nh = minH(); nw += adj; nx -= adj * 0.5f; ny += adj * 0.5f; }
+                break;
+            case ResizeZone::W:
+                nw = resizeStartW_ - dx;
+                nx = resizeStartX_ + dx;
+                nh = resizeStartH_ - dx;            // keep uniform
+                ny = resizeStartY_ + dx * 0.5f;     // keep center y stable
+                if (nw < minW()) { float adj = minW() - nw; nw = minW(); nh += adj; ny -= adj * 0.5f; nx -= adj; }
+                if (nh < minH()) { float adj = minH() - nh; nh = minH(); nw += adj; nx -= adj * 0.5f; ny += adj * 0.5f; }
+                break;
+            case ResizeZone::NE: {
+                float d = (dx > -dy) ? dx : -dy;
+                nw = resizeStartW_ + d;
+                nx = resizeStartX_;
+                nh = resizeStartH_ + d;
+                ny = resizeStartY_ - d;
+                if (nw < minW()) { float adj = minW() - nw; nw = minW(); nh += adj; ny -= adj * 0.5f; }
+                if (nh < minH()) { float adj = minH() - nh; nh = minH(); nw += adj; nx -= adj * 0.5f; ny += adj; }
+                break;
+            }
+            case ResizeZone::NW: {
+                float d = (-dx > -dy) ? -dx : -dy;
+                nw = resizeStartW_ + d;
+                nx = resizeStartX_ - d;
+                nh = resizeStartH_ + d;
+                ny = resizeStartY_ - d;
+                if (nw < minW()) { float adj = minW() - nw; nw = minW(); nh += adj; ny -= adj * 0.5f; nx -= adj; }
+                if (nh < minH()) { float adj = minH() - nh; nh = minH(); nw += adj; nx -= adj * 0.5f; ny += adj; }
+                break;
+            }
+            case ResizeZone::SE: {
+                float d = (dx > dy) ? dx : dy;
+                nw = resizeStartW_ + d;
+                nx = resizeStartX_;
+                nh = resizeStartH_ + d;
+                ny = resizeStartY_;
+                if (nw < minW()) { float adj = minW() - nw; nw = minW(); nh += adj; ny -= adj * 0.5f; }
+                if (nh < minH()) { float adj = minH() - nh; nh = minH(); nw += adj; nx -= adj * 0.5f; }
+                break;
+            }
+            case ResizeZone::SW: {
+                float d = (-dx > dy) ? -dx : dy;
+                nw = resizeStartW_ + d;
+                nx = resizeStartX_ - d;
+                nh = resizeStartH_ + d;
+                ny = resizeStartY_;
+                if (nw < minW()) { float adj = minW() - nw; nw = minW(); nh += adj; ny -= adj * 0.5f; nx -= adj; }
+                if (nh < minH()) { float adj = minH() - nh; nh = minH(); nw += adj; nx -= adj * 0.5f; }
+                break;
+            }
+            default: return;
         }
-        case ResizeZone::SE: {
-            // anchor top+left; bottom-right corner follows larger axis delta
-            float d = (dx > dy) ? dx : dy;
-            nw = resizeStartW_ + d;
-            nx = resizeStartX_;
-            nh = resizeStartH_ + d;
-            ny = resizeStartY_;
-            if (nw < kMinW) { float adj = kMinW - nw; nw = kMinW; nh += adj; ny -= adj * 0.5f; }
-            if (nh < kMinH) { float adj = kMinH - nh; nh = kMinH; nw += adj; nx -= adj * 0.5f; }
-            break;
-        }
-        case ResizeZone::SW: {
-            // anchor top+right; bottom-left corner follows larger axis delta
-            float d = (-dx > dy) ? -dx : dy;
-            nw = resizeStartW_ + d;
-            nx = resizeStartX_ - d;
-            nh = resizeStartH_ + d;
-            ny = resizeStartY_;
-            if (nw < kMinW) { float adj = kMinW - nw; nw = kMinW; nh += adj; ny -= adj * 0.5f; nx -= adj; }
-            if (nh < kMinH) { float adj = kMinH - nh; nh = kMinH; nw += adj; nx -= adj * 0.5f; }
-            break;
-        }
-        default: return;
     }
     x = nx; y = ny; w = nw; h = nh;
     markPolygonDirty();

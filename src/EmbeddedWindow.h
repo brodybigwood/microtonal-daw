@@ -69,6 +69,13 @@ protected:
     /** Apply a resize delta; enforces kMinW/kMinH. Call during motion. */
     void applyResizeDelta(float dx, float dy);
 
+    /** True for rectangular windows that get free per-axis resize. */
+    virtual bool hasRectResize() const { return true; }
+
+    /** Minimum size; rect subclasses can override per-axis. */
+    virtual float minW() const { return kMinW; }
+    virtual float minH() const { return kMinH; }
+
     bool dragging_ = false;
     float dragOffX_ = 0.f, dragOffY_ = 0.f;
 

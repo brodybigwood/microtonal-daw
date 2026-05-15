@@ -13,6 +13,7 @@ private:
     int activeSection_ = 0;
 
     void buildHitPolygon(std::vector<SDL_FPoint>& out) const override;
+    bool hasRectResize() const override { return false; }
 
     float centerX() const { return x + w * 0.5f; }
     float centerY() const { return y + h * 0.5f; }
