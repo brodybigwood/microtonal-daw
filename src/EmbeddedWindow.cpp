@@ -244,6 +244,7 @@ bool EmbeddedWindow::startResize(float worldMx, float worldMy) {
     resizeStartY_ = y;
     resizeStartW_ = w;
     resizeStartH_ = h;
+    resizeStartZoom_ = zoom_;
     return true;
 }
 
@@ -275,21 +276,35 @@ void EmbeddedWindow::applyResizeDelta(float dx, float dy) {
                 if (nw < minW()) { nx -= minW() - nw; nw = minW(); }
                 if (nh < minH()) nh = minH();
                 break;
-            case ResizeZone::NE:
-                nw = resizeStartW_ + dx;
-                nh = resizeStartH_ - dy;
-                ny = resizeStartY_ + dy;
+            case ResizeZone::NE: {
+                // Uniform scale anchored at bottom-left corner, top-right tracks mouse.
+                float ax = resizeStartX_, ay = resizeStartY_ + resizeStartH_;
+                float mx = resizeStartMouseX_ + dx, my = resizeStartMouseY_ + dy;
+                float trgW = mx - ax, trgH = ay - my;
+                float s = std::max(trgW / resizeStartW_, trgH / resizeStartH_);
+                nw = resizeStartW_ * s;
+                nh = resizeStartH_ * s;
+                ny = ay - nh;
                 if (nw < minW()) nw = minW();
                 if (nh < minH()) { ny -= minH() - nh; nh = minH(); }
+                zoom_ = resizeStartZoom_ * (nw / resizeStartW_);
                 break;
-            case ResizeZone::NW:
-                nw = resizeStartW_ - dx;
-                nx = resizeStartX_ + dx;
-                nh = resizeStartH_ - dy;
-                ny = resizeStartY_ + dy;
+            }
+            case ResizeZone::NW: {
+                // Uniform scale anchored at bottom-right corner, top-left tracks mouse.
+                float ax = resizeStartX_ + resizeStartW_, ay = resizeStartY_ + resizeStartH_;
+                float mx = resizeStartMouseX_ + dx, my = resizeStartMouseY_ + dy;
+                float trgW = ax - mx, trgH = ay - my;
+                float s = std::max(trgW / resizeStartW_, trgH / resizeStartH_);
+                nw = resizeStartW_ * s;
+                nh = resizeStartH_ * s;
+                nx = ax - nw;
+                ny = ay - nh;
                 if (nw < minW()) { nx -= minW() - nw; nw = minW(); }
                 if (nh < minH()) { ny -= minH() - nh; nh = minH(); }
+                zoom_ = resizeStartZoom_ * (nw / resizeStartW_);
                 break;
+            }
             case ResizeZone::SE:
                 nw = resizeStartW_ + dx;
                 nh = resizeStartH_ + dy;

@@ -76,6 +76,9 @@ protected:
     virtual float minW() const { return kMinW; }
     virtual float minH() const { return kMinH; }
 
+    /** Content scale set by uniform-scale top-corner resize. */
+    float zoom_ = 1.0f;
+
     bool dragging_ = false;
     float dragOffX_ = 0.f, dragOffY_ = 0.f;
 
@@ -83,6 +86,7 @@ protected:
     ResizeZone resizeZone_ = ResizeZone::None;
     float resizeStartMouseX_ = 0.f, resizeStartMouseY_ = 0.f;
     float resizeStartX_ = 0.f, resizeStartY_ = 0.f, resizeStartW_ = 0.f, resizeStartH_ = 0.f;
+    float resizeStartZoom_ = 1.0f;
 
     mutable std::vector<SDL_FPoint> cachedPolygon_;
     mutable bool polygonDirty_ = true;

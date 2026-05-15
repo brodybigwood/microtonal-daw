@@ -22,11 +22,10 @@ void UndoTreeWindow::renderContent(SDL_Renderer* r) {
     const float contentY = y + kTitleBarH;
     const float contentW = w - kBorderW * 2.f;
     const float contentH = h - kTitleBarH - kBorderW;
-    const float usableW = contentW - margin * 2.f;
-    const float colW = std::clamp(usableW, 96.f, 320.f);
-    constexpr float kRowPx = 20.f;
-    project->um->undoTreeRowH = kRowPx;
-    rootCell = {contentX + margin, contentY + margin, colW, kRowPx};
+    const float colW = 160.f * zoom_;
+    const float rowPx = 20.f * zoom_;
+    project->um->undoTreeRowH = rowPx;
+    rootCell = {contentX + margin, contentY + margin, colW, rowPx};
 
     SDL_FRect bg{contentX, contentY, contentW, contentH};
     SDL_SetRenderDrawColor(r, 248, 248, 248, 255);
@@ -47,12 +46,10 @@ bool UndoTreeWindow::handleInput(SDL_Event& e) {
         constexpr float margin = 8.f;
         const float contentX = x + kBorderW;
         const float contentY = y + kTitleBarH;
-        const float contentW = w - kBorderW * 2.f;
-        const float usableW = contentW - margin * 2.f;
-        const float colW = std::clamp(usableW, 96.f, 320.f);
-        constexpr float kRowPx = 20.f;
-        SDL_FRect anchor{contentX + margin, contentY + margin, colW, kRowPx};
-        project->um->undoTreeHandleWheel(anchor, kRowPx, e.wheel.mouse_x, e.wheel.mouse_y, e.wheel.y);
+        const float colW = 160.f * zoom_;
+        const float rowPx = 20.f * zoom_;
+        SDL_FRect anchor{contentX + margin, contentY + margin, colW, rowPx};
+        project->um->undoTreeHandleWheel(anchor, rowPx, e.wheel.mouse_x, e.wheel.mouse_y, e.wheel.y);
         return true;
     }
 
