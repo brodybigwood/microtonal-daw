@@ -436,18 +436,27 @@ void WindowHandler::renderEmbeddedWindows() {
 }
 
 bool WindowHandler::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mouseY) {
-    // Release capture on mouse up.
-    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT)
-        capturedEmbeddedWindow_ = nullptr;
-
     // Captured window gets all mouse events until mouse up, else topmost hit.
     EmbeddedWindow* target = capturedEmbeddedWindow_;
+
+    // Release capture on mouse up (after saving target for this event).
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT)
+        capturedEmbeddedWindow_ = nullptr;
     if (!target) {
         int topZ = -1;
         for (auto& ew : embeddedWindows_) {
             if (ew->visible && ew->zOrder > topZ && ew->hitTest(mouseX, mouseY)) {
                 target = ew.get();
                 topZ = ew->zOrder;
+            }
+        }
+        // On mousedown, also consider edge proximity for resize start.
+        if (!target && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+            for (auto& ew : embeddedWindows_) {
+                if (ew->visible && ew->zOrder > topZ && ew->getResizeZone(mouseX, mouseY) != EmbeddedWindow::ResizeZone::None) {
+                    target = ew.get();
+                    topZ = ew->zOrder;
+                }
             }
         }
     }
@@ -490,6 +499,9 @@ bool WindowHandler::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float m
             if (ew->zOrder > maxZ) maxZ = ew->zOrder;
         target->zOrder = maxZ + 1;
     }
+
+    if (target->handleResizeInput(e, mouseX, mouseY))
+        return true;
 
     if (target->handleInput(e))
         return true;

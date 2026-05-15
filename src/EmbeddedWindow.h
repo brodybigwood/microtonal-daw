@@ -32,6 +32,9 @@ public:
     /** Handle input; returns true if consumed. Virtual for subclasses. */
     virtual bool handleInput(SDL_Event& e);
 
+    /** Handle resize motion / release / mousedown-start. Called by WindowHandler. */
+    bool handleResizeInput(SDL_Event& e, float mouseX, float mouseY);
+
     /** World-space bounding rect. */
     SDL_FRect worldRect() const;
 
@@ -51,11 +54,28 @@ protected:
     /** Subclass fills polygon vertices for custom hit-test shape (world coords). */
     virtual void buildHitPolygon(std::vector<SDL_FPoint>& out) const;
 
+    /** Call when position or size changes so polygon cache is invalidated. */
+    void markPolygonDirty() const { polygonDirty_ = true; }
+
     /** Override to customize window body shape. */
     virtual void renderChrome(SDL_Renderer* r);
 
     SDL_FRect closeButtonRect() const;
 
+    /** Start a resize drag; returns true if the point is near a resize edge. */
+    bool startResize(float worldMx, float worldMy);
+
+    /** Apply a resize delta; enforces kMinW/kMinH. Call during motion. */
+    void applyResizeDelta(float dx, float dy);
+
     bool dragging_ = false;
     float dragOffX_ = 0.f, dragOffY_ = 0.f;
+
+    bool resizing_ = false;
+    ResizeZone resizeZone_ = ResizeZone::None;
+    float resizeStartMouseX_ = 0.f, resizeStartMouseY_ = 0.f;
+    float resizeStartX_ = 0.f, resizeStartY_ = 0.f, resizeStartW_ = 0.f, resizeStartH_ = 0.f;
+
+    mutable std::vector<SDL_FPoint> cachedPolygon_;
+    mutable bool polygonDirty_ = true;
 };

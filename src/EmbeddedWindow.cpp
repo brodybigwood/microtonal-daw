@@ -3,6 +3,7 @@
 #include "SDL_Events.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 EmbeddedWindow::EmbeddedWindow() = default;
 
@@ -67,11 +68,17 @@ bool EmbeddedWindow::hitTest(float worldMx, float worldMy) const {
 }
 
 void EmbeddedWindow::buildHitPolygon(std::vector<SDL_FPoint>& out) const {
+    if (!polygonDirty_) {
+        out = cachedPolygon_;
+        return;
+    }
     out.resize(4);
     out[0] = {x, y};
     out[1] = {x + w, y};
     out[2] = {x + w, y + h};
     out[3] = {x, y + h};
+    cachedPolygon_ = out;
+    polygonDirty_ = false;
 }
 
 EmbeddedWindow::ResizeZone EmbeddedWindow::getResizeZone(float mx, float my) const {
@@ -197,6 +204,123 @@ void EmbeddedWindow::render(SDL_Renderer* r) {
     }
 }
 
+// --- Resize ---
+
+bool EmbeddedWindow::startResize(float worldMx, float worldMy) {
+    resizeZone_ = getResizeZone(worldMx, worldMy);
+    if (resizeZone_ == ResizeZone::None) return false;
+    resizing_ = true;
+    resizeStartMouseX_ = worldMx;
+    resizeStartMouseY_ = worldMy;
+    resizeStartX_ = x;
+    resizeStartY_ = y;
+    resizeStartW_ = w;
+    resizeStartH_ = h;
+    return true;
+}
+
+void EmbeddedWindow::applyResizeDelta(float dx, float dy) {
+    float nx = resizeStartX_, ny = resizeStartY_, nw = resizeStartW_, nh = resizeStartH_;
+    switch (resizeZone_) {
+        case ResizeZone::N:
+            nh = resizeStartH_ - dy;
+            ny = resizeStartY_ + dy;
+            nw = resizeStartW_ - dy;           // keep uniform
+            nx = resizeStartX_ + dy * 0.5f;    // keep center x stable
+            if (nh < kMinH) { float adj = kMinH - nh; nh = kMinH; nw += adj; nx -= adj * 0.5f; ny -= adj; }
+            if (nw < kMinW) { float adj = kMinW - nw; nw = kMinW; nh += adj; ny -= adj * 0.5f; nx += adj * 0.5f; }
+            break;
+        case ResizeZone::S:
+            nh = resizeStartH_ + dy;
+            nw = resizeStartW_ + dy;            // keep uniform
+            nx = resizeStartX_ - dy * 0.5f;     // keep center x stable
+            if (nh < kMinH) { float adj = kMinH - nh; nh = kMinH; nw += adj; nx -= adj * 0.5f; }
+            if (nw < kMinW) { float adj = kMinW - nw; nw = kMinW; nh += adj; ny -= adj * 0.5f; nx += adj * 0.5f; }
+            break;
+        case ResizeZone::E:
+            nw = resizeStartW_ + dx;
+            nh = resizeStartH_ + dx;            // keep uniform
+            ny = resizeStartY_ - dx * 0.5f;     // keep center y stable
+            if (nw < kMinW) { float adj = kMinW - nw; nw = kMinW; nh += adj; ny -= adj * 0.5f; }
+            if (nh < kMinH) { float adj = kMinH - nh; nh = kMinH; nw += adj; nx -= adj * 0.5f; ny += adj * 0.5f; }
+            break;
+        case ResizeZone::W:
+            nw = resizeStartW_ - dx;
+            nx = resizeStartX_ + dx;
+            nh = resizeStartH_ - dx;            // keep uniform
+            ny = resizeStartY_ + dx * 0.5f;     // keep center y stable
+            if (nw < kMinW) { float adj = kMinW - nw; nw = kMinW; nh += adj; ny -= adj * 0.5f; nx -= adj; }
+            if (nh < kMinH) { float adj = kMinH - nh; nh = kMinH; nw += adj; nx -= adj * 0.5f; ny += adj * 0.5f; }
+            break;
+        case ResizeZone::NE: {
+            // anchor bottom+left; top-right corner follows larger axis delta
+            float d = (dx > -dy) ? dx : -dy;
+            nw = resizeStartW_ + d;
+            nx = resizeStartX_;
+            nh = resizeStartH_ + d;
+            ny = resizeStartY_ - d;
+            if (nw < kMinW) { float adj = kMinW - nw; nw = kMinW; nh += adj; ny -= adj * 0.5f; }
+            if (nh < kMinH) { float adj = kMinH - nh; nh = kMinH; nw += adj; nx -= adj * 0.5f; ny += adj; }
+            break;
+        }
+        case ResizeZone::NW: {
+            // anchor bottom+right; top-left corner follows larger axis delta
+            float d = (-dx > -dy) ? -dx : -dy;
+            nw = resizeStartW_ + d;
+            nx = resizeStartX_ - d;
+            nh = resizeStartH_ + d;
+            ny = resizeStartY_ - d;
+            if (nw < kMinW) { float adj = kMinW - nw; nw = kMinW; nh += adj; ny -= adj * 0.5f; nx -= adj; }
+            if (nh < kMinH) { float adj = kMinH - nh; nh = kMinH; nw += adj; nx -= adj * 0.5f; ny += adj; }
+            break;
+        }
+        case ResizeZone::SE: {
+            // anchor top+left; bottom-right corner follows larger axis delta
+            float d = (dx > dy) ? dx : dy;
+            nw = resizeStartW_ + d;
+            nx = resizeStartX_;
+            nh = resizeStartH_ + d;
+            ny = resizeStartY_;
+            if (nw < kMinW) { float adj = kMinW - nw; nw = kMinW; nh += adj; ny -= adj * 0.5f; }
+            if (nh < kMinH) { float adj = kMinH - nh; nh = kMinH; nw += adj; nx -= adj * 0.5f; }
+            break;
+        }
+        case ResizeZone::SW: {
+            // anchor top+right; bottom-left corner follows larger axis delta
+            float d = (-dx > dy) ? -dx : dy;
+            nw = resizeStartW_ + d;
+            nx = resizeStartX_ - d;
+            nh = resizeStartH_ + d;
+            ny = resizeStartY_;
+            if (nw < kMinW) { float adj = kMinW - nw; nw = kMinW; nh += adj; ny -= adj * 0.5f; nx -= adj; }
+            if (nh < kMinH) { float adj = kMinH - nh; nh = kMinH; nw += adj; nx -= adj * 0.5f; }
+            break;
+        }
+        default: return;
+    }
+    x = nx; y = ny; w = nw; h = nh;
+    markPolygonDirty();
+}
+
+bool EmbeddedWindow::handleResizeInput(SDL_Event& e, float mx, float my) {
+    if (resizing_) {
+        if (e.type == SDL_EVENT_MOUSE_MOTION) {
+            applyResizeDelta(mx - resizeStartMouseX_, my - resizeStartMouseY_);
+            return true;
+        }
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+            resizing_ = false;
+            resizeZone_ = ResizeZone::None;
+            return true;
+        }
+        return true; // consume all events while resizing, don't restart
+    }
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+        if (startResize(mx, my)) return true;
+    }
+    return false;
+}
+
 // --- Input ---
 
 bool EmbeddedWindow::handleInput(SDL_Event& e) {
@@ -237,6 +361,7 @@ bool EmbeddedWindow::handleInput(SDL_Event& e) {
     if (e.type == SDL_EVENT_MOUSE_MOTION && dragging_) {
         x = mx - dragOffX_;
         y = my - dragOffY_;
+        markPolygonDirty();
         return true;
     }
 
