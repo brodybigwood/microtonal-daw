@@ -190,8 +190,9 @@ void EmbeddedWindow::render(SDL_Renderer* r) {
     if (contentClip.w > 0 && contentClip.h > 0) {
         SDL_Rect prevClip;
         SDL_GetRenderClipRect(r, &prevClip);
+        const bool hadClip = !SDL_RectEmpty(&prevClip);
         SDL_Rect useClip = contentClip;
-        if (!SDL_RectEmpty(&prevClip)) {
+        if (hadClip) {
             SDL_Rect inter;
             if (SDL_GetRectIntersection(&prevClip, &contentClip, &inter))
                 useClip = inter;
@@ -200,7 +201,7 @@ void EmbeddedWindow::render(SDL_Renderer* r) {
         }
         SDL_SetRenderClipRect(r, &useClip);
         renderContent(r);
-        SDL_SetRenderClipRect(r, &prevClip);
+        SDL_SetRenderClipRect(r, hadClip ? &prevClip : nullptr);
     }
 }
 

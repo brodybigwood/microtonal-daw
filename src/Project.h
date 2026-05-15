@@ -18,8 +18,6 @@ namespace DAW {
 class TrackManager;
 class ElementManager;
 class NodeProcessor;
-class UndoTreeWindow;
-
 class Project : public Window {
     public:
     Project();
@@ -81,8 +79,6 @@ class Project : public Window {
         UndoManager* um;
         void undo() { um->undo(); }
         void redo() { um->redo(); }
-
-        UndoTreeWindow* undoTreeWindow = nullptr;
 
     private:
 

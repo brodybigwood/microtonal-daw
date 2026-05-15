@@ -7,6 +7,7 @@
 #include <iostream>
 #include "Preferences.h"
 #include "PreferencesWindow.h"
+#include "UndoTreeWindow.h"
 #include "styles.h"
 #include <algorithm>
 #include <array>
@@ -272,19 +273,36 @@ std::shared_ptr<TreeEntry> NodeEditor::buildMenuTree(int menuIndex) {
     switch (menuIndex) {
         case 1: { // Edit
             root->label = "Edit";
-            auto item = uTreeEntry();
-            item->label = "Preferences...";
-            item->click = [w = canvasW_, h = canvasH_]() {
-                auto existing = WindowHandler::instance()->existingPreferencesWindow();
-                if (!existing) {
-                    auto pw = std::make_unique<PreferencesWindow>();
-                    existing = pw.get();
-                    WindowHandler::instance()->addEmbeddedWindow(std::move(pw));
-                }
-                existing->moveTo((w - existing->w) * 0.5f, (h - existing->h) * 0.4f);
-                existing->open();
-            };
-            root->addChild(item);
+            {
+                auto item = uTreeEntry();
+                item->label = "Preferences...";
+                item->click = [w = canvasW_, h = canvasH_]() {
+                    auto existing = WindowHandler::instance()->existingPreferencesWindow();
+                    if (!existing) {
+                        auto pw = std::make_unique<PreferencesWindow>();
+                        existing = pw.get();
+                        WindowHandler::instance()->addEmbeddedWindow(std::move(pw));
+                    }
+                    existing->moveTo((w - existing->w) * 0.5f, (h - existing->h) * 0.4f);
+                    existing->open();
+                };
+                root->addChild(item);
+            }
+            {
+                auto item = uTreeEntry();
+                item->label = "Undo Tree";
+                item->click = [w = canvasW_, h = canvasH_]() {
+                    auto existing = WindowHandler::instance()->existingUndoTreeWindow();
+                    if (!existing) {
+                        auto uw = std::make_unique<UndoTreeWindow>(WindowHandler::instance()->project);
+                        existing = uw.get();
+                        WindowHandler::instance()->addEmbeddedWindow(std::move(uw));
+                    }
+                    existing->moveTo((w - existing->w) * 0.5f, (h - existing->h) * 0.4f);
+                    existing->open();
+                };
+                root->addChild(item);
+            }
             break;
         }
         default: break;

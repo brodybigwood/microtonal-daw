@@ -1,17 +1,18 @@
 #pragma once
 
-#include "Window.h"
+#include "EmbeddedWindow.h"
 
 class Project;
 
-/** Utility window that draws `UndoManager::render` for the undo graph. */
-class UndoTreeWindow : public Window {
+class UndoTreeWindow : public EmbeddedWindow {
 public:
     explicit UndoTreeWindow(Project* project);
-    ~UndoTreeWindow();
 
-    void renderFrame();
-    void handleWindowInput(SDL_Event& e) override;
+    bool handleInput(SDL_Event& e) override;
+
+protected:
+    void renderContent(SDL_Renderer* r) override;
+    bool handleContentInput(SDL_Event& e) override;
 
 private:
     Project* project = nullptr;

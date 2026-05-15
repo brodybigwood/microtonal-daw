@@ -12,6 +12,7 @@
 #include "EmbeddedWindow.h"
 
 class PreferencesWindow;
+class UndoTreeWindow;
 
 class WindowHandler {
     public:
@@ -66,6 +67,9 @@ class WindowHandler {
 
         /** Return existing PreferencesWindow if one is open, else nullptr. */
         PreferencesWindow* existingPreferencesWindow();
+
+        /** Return existing UndoTreeWindow if one is open, else nullptr. */
+        UndoTreeWindow* existingUndoTreeWindow();
 
         /** Window that receives keyboard events (last clicked pseudo-window). */
         EmbeddedWindow* focusedEmbeddedWindow() const { return focusedEmbeddedWindow_; }

@@ -9,7 +9,6 @@
 #include "NodeProcessor.h"
 #include "WindowHandler.h"
 #include "ContextMenu.h"
-#include "UndoTreeWindow.h"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
@@ -43,8 +42,6 @@ void Project::handleWindowInput(SDL_Event& e) {
 }
 
 Project::~Project() {
-    delete undoTreeWindow;
-    undoTreeWindow = nullptr;
     delete um;
     delete processor;
 }
@@ -166,6 +163,4 @@ void Project::tick() {
 }
 
 void Project::setup() {
-    if (!undoTreeWindow)
-        undoTreeWindow = new UndoTreeWindow(this);
 }

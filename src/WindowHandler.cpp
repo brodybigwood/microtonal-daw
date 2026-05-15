@@ -264,10 +264,6 @@ bool WindowHandler::tick() {
             project->render();
             renderEmbeddedWindows();
         }
-        for (auto* w : windows) {
-            if (auto* uw = dynamic_cast<UndoTreeWindow*>(w))
-                uw->renderFrame();
-        }
         project->renderPresent();
     }
     // Compact nulled-out window pointers (deferred from removeWindow during iteration).
@@ -417,6 +413,14 @@ PreferencesWindow* WindowHandler::existingPreferencesWindow() {
     for (auto& ew : embeddedWindows_) {
         if (auto* pw = dynamic_cast<PreferencesWindow*>(ew.get()))
             return pw;
+    }
+    return nullptr;
+}
+
+UndoTreeWindow* WindowHandler::existingUndoTreeWindow() {
+    for (auto& ew : embeddedWindows_) {
+        if (auto* uw = dynamic_cast<UndoTreeWindow*>(ew.get()))
+            return uw;
     }
     return nullptr;
 }
