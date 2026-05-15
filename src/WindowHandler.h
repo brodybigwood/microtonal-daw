@@ -11,6 +11,8 @@
 #include "Window.h"
 #include "EmbeddedWindow.h"
 
+class PreferencesWindow;
+
 class WindowHandler {
     public:
     std::vector<Window*> windows;
@@ -61,6 +63,9 @@ class WindowHandler {
         /** Route an event to pseudo-windows (resize check first, then window input).
          *  Returns true if a pseudo-window consumed the event. */
         bool routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mouseY);
+
+        /** Return existing PreferencesWindow if one is open, else nullptr. */
+        PreferencesWindow* existingPreferencesWindow();
 
         /** Window that receives keyboard events (last clicked pseudo-window). */
         EmbeddedWindow* focusedEmbeddedWindow() const { return focusedEmbeddedWindow_; }

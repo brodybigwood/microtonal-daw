@@ -17,6 +17,7 @@ public:
 
     void close() { visible = false; }
     void open() { visible = true; }
+    void moveTo(float nx, float ny) { x = nx; y = ny; markPolygonDirty(); }
 
     enum class ResizeZone : uint8_t { None, N, S, E, W, NE, NW, SE, SW };
 

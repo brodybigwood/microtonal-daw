@@ -1,6 +1,7 @@
 #include "WindowHandler.h"
 #include "SDL_Events.h"
 #include "NodeEditor.h"
+#include "PreferencesWindow.h"
 #include "UndoTreeWindow.h"
 #include "Node.h"
 #include <algorithm>
@@ -410,6 +411,14 @@ EmbeddedWindow* WindowHandler::addEmbeddedWindow(std::unique_ptr<EmbeddedWindow>
     EmbeddedWindow* ptr = w.get();
     embeddedWindows_.push_back(std::move(w));
     return ptr;
+}
+
+PreferencesWindow* WindowHandler::existingPreferencesWindow() {
+    for (auto& ew : embeddedWindows_) {
+        if (auto* pw = dynamic_cast<PreferencesWindow*>(ew.get()))
+            return pw;
+    }
+    return nullptr;
 }
 
 void WindowHandler::renderEmbeddedWindows() {

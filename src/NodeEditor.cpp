@@ -275,10 +275,14 @@ std::shared_ptr<TreeEntry> NodeEditor::buildMenuTree(int menuIndex) {
             auto item = uTreeEntry();
             item->label = "Preferences...";
             item->click = [w = canvasW_, h = canvasH_]() {
-                auto pw = std::make_unique<PreferencesWindow>();
-                pw->x = (w - pw->w) * 0.5f;
-                pw->y = (h - pw->h) * 0.4f;
-                WindowHandler::instance()->addEmbeddedWindow(std::move(pw));
+                auto existing = WindowHandler::instance()->existingPreferencesWindow();
+                if (!existing) {
+                    auto pw = std::make_unique<PreferencesWindow>();
+                    existing = pw.get();
+                    WindowHandler::instance()->addEmbeddedWindow(std::move(pw));
+                }
+                existing->moveTo((w - existing->w) * 0.5f, (h - existing->h) * 0.4f);
+                existing->open();
             };
             root->addChild(item);
             break;

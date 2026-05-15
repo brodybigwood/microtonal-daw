@@ -359,9 +359,7 @@ bool EmbeddedWindow::handleInput(SDL_Event& e) {
     }
 
     if (e.type == SDL_EVENT_MOUSE_MOTION && dragging_) {
-        x = mx - dragOffX_;
-        y = my - dragOffY_;
-        markPolygonDirty();
+        moveTo(mx - dragOffX_, my - dragOffY_);
         return true;
     }
 
