@@ -73,9 +73,10 @@ void Settings::loadDefaults() {
         defaults_["portDisplayMode"] = 1;
         defaults_["audioOutputDevice"] = -1;
         defaults_["audioInputDevice"] = -1;
-        defaults_["audioBufferSize"] = 512;
+        defaults_["audioBufferSize"] = 3;
         defaults_["audioSampleRate"] = 0;
         defaults_["audioTripleBuffer"] = false;
+        defaults_["audioEngine"] = 0;
     }
     json old = data_;           // snapshot current settings
     old.erase("backup");        // remove nested backup if present

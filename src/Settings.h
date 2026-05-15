@@ -23,12 +23,14 @@ public:
     void setAudioOutputDevice(int v) { setInt("audioOutputDevice", v); }
     int audioInputDevice() const { return getInt("audioInputDevice", -1); }
     void setAudioInputDevice(int v) { setInt("audioInputDevice", v); }
-    int audioBufferSize() const { return getInt("audioBufferSize", 512); }
+    int audioBufferSize() const { return getInt("audioBufferSize", 3); }
     void setAudioBufferSize(int v) { setInt("audioBufferSize", v); }
     int audioSampleRate() const { return getInt("audioSampleRate", 0); }
     void setAudioSampleRate(int v) { setInt("audioSampleRate", v); }
     bool audioTripleBuffer() const { return getBool("audioTripleBuffer", false); }
     void setAudioTripleBuffer(bool v) { setBool("audioTripleBuffer", v); }
+    int audioEngine() const { return getInt("audioEngine", 0); }
+    void setAudioEngine(int v) { setInt("audioEngine", v); }
 
     // Load defaults from settings.json.default, saving current values to "backup".
     void loadDefaults();

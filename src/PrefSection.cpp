@@ -457,7 +457,9 @@ static bool hitTestDeviceRow(float mx, float my, const char* label,
 
 const std::vector<SettingDesc>& AudioSection::settings() const {
     static const std::vector<SettingDesc> s = {
-        {SettingType::Int, "audioBufferSize", "Buffer size", 64, 4096, 0, nullptr,
+        {SettingType::Int, "audioEngine", "Audio engine", 0, 1, 1, "SDL|RtAudio",
+         []{ AudioManager::instance()->restart(); }},
+        {SettingType::Int, "audioBufferSize", "Buffer size", 0, 6, 1, "64|128|256|512|1024|2048|4096",
          []{ AudioManager::instance()->restart(); }},
         {SettingType::Int, "audioSampleRate", "Sample rate", 0, 4, 1, "Auto|44100|48000|96000|192000",
          []{ AudioManager::instance()->restart(); }},
@@ -467,13 +469,20 @@ const std::vector<SettingDesc>& AudioSection::settings() const {
     return s;
 }
 
+// Shared title-bottom calculation so render and hit-test are always aligned.
+static float audioTitleBottom(const SDL_FRect& b, float s) {
+    int th = 0;
+    TTF_GetStringSize(fonts.mainFont, "Audio Settings", 0, nullptr, &th);
+    return b.y + 16.f * s + static_cast<float>(th) * s + 8.f * s;
+}
+
 void AudioSection::renderContent(SDL_Renderer* r, const SDL_FRect& b, float s) {
-    float afterTitle = renderSectionTitle(r, "Audio Settings", b, s);
+    renderSectionTitle(r, "Audio Settings", b, s);
+    float afterTitle = audioTitleBottom(b, s);
 
     const SDL_Color col{180, 180, 195, 255};
     auto* am = AudioManager::instance();
 
-    // Device rows take 2 slots; standard settings are below
     static constexpr int kDeviceRows = 2;
     float y = settingsStartY(afterTitle, b, s, settings().size() + kDeviceRows, kRowH);
 
@@ -505,10 +514,8 @@ bool AudioSection::handleContentInput(SDL_Event& e, float mx, float my,
         return false;
 
     const float s = 1.f;
-    int th = 0;
-    TTF_GetStringSize(fonts.mainFont, "Audio Settings", 0, nullptr, &th);
-    float titleBottom = b.y + 16.f + static_cast<float>(th) + 8.f;
-    float y = settingsStartY(titleBottom, b, s, settings().size() + 2, kRowH);
+    float afterTitle = audioTitleBottom(b, s);
+    float y = settingsStartY(afterTitle, b, s, settings().size() + 2, kRowH);
 
     // Output device row
     if (hitTestDeviceRow(mx, my, "Output device", y, b, s, renderer_, window_id_,
@@ -516,7 +523,7 @@ bool AudioSection::handleContentInput(SDL_Event& e, float mx, float my,
                          AudioManager::instance()->getOutputDevices(),
                          -1, "Default Output"))
         return true;
-    y += kRowH;
+    y += kRowH * s;
 
     // Input device row
     if (hitTestDeviceRow(mx, my, "Input device", y, b, s, renderer_, window_id_,
@@ -524,13 +531,13 @@ bool AudioSection::handleContentInput(SDL_Event& e, float mx, float my,
                          AudioManager::instance()->getInputDevices(),
                          -1, "None"))
         return true;
-    y += kRowH;
+    y += kRowH * s;
 
     // Standard settings
     for (auto& d : settings()) {
         if (hitTestSetting(d, mx, my, b, y, s, renderer_, window_id_))
             return true;
-        y += kRowH;
+        y += kRowH * s;
     }
     return false;
 }

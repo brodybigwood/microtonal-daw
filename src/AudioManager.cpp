@@ -19,6 +19,83 @@ void AudioManager::setProject(Project* project) {
     this->project = project;
 }
 
+void SDLCALL AudioManager::sdlCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int /*total_amount*/) {
+    AudioManager* am = static_cast<AudioManager*>(userdata);
+    Project* project = am->project;
+    int outCh = static_cast<int>(am->outputChannels);
+    int sr = static_cast<int>(am->sampleRate);
+    int fixedBS = static_cast<int>(am->bufferSize); // fixed chunk size matching RtAudio path
+
+    if (fixedBS <= 0) fixedBS = 512;
+
+    // additional_amount is in BYTES (SDL3 doc). Convert to frames.
+    int bytesPerFrame = outCh * static_cast<int>(sizeof(float));
+    int additionalFrames = additional_amount / bytesPerFrame;
+    if (additionalFrames <= 0) return;
+
+    // Process in fixed-size chunks so the DSP sees consistent buffer sizes.
+    int remaining = additionalFrames;
+    size_t maxChunk = static_cast<size_t>(fixedBS) * static_cast<size_t>(outCh);
+    if (am->sdlScratch_.size() < maxChunk) am->sdlScratch_.resize(maxChunk);
+    if (am->sdlInterleaved_.size() < maxChunk) am->sdlInterleaved_.resize(maxChunk);
+
+    while (remaining > 0) {
+        int frames = (remaining >= fixedBS) ? fixedBS : remaining;
+        remaining -= frames;
+
+        if (project->loading.load()) {
+            // Still push silence if loading
+            size_t byteCount = static_cast<size_t>(frames) * static_cast<size_t>(outCh) * sizeof(float);
+            am->sdlInterleaved_.assign(frames * outCh, 0.0f);
+            SDL_PutAudioStreamData(stream, am->sdlInterleaved_.data(), static_cast<int>(byteCount));
+            continue;
+        }
+
+        project->sampleTime += frames;
+
+        if (project->isPlaying.load()) {
+            const double dt = static_cast<double>(frames) / sr;
+            project->timeSeconds.store(project->timeSeconds.load() + dt);
+        }
+
+        am->streamTimeSeconds += static_cast<double>(frames) / sr;
+
+        size_t bufSize = static_cast<size_t>(frames) * static_cast<size_t>(outCh);
+        memset(am->sdlScratch_.data(), 0, bufSize * sizeof(float));
+
+        // Apply queued actions before DSP
+        if (project->um) {
+            project->processor->setThreadActiveRoot(project->processor->audioManager);
+            project->um->flushAudioSync();
+        }
+
+        int ic = 0;
+        int bs = frames;
+        project->process(nullptr, am->sdlScratch_.data(), bs, ic, outCh, sr);
+
+        // Interleave
+        float* dst = am->sdlInterleaved_.data();
+        for (int f = 0; f < frames; ++f) {
+            for (int ch = 0; ch < outCh; ++ch) {
+                dst[f * outCh + ch] = am->sdlScratch_[ch * frames + f];
+            }
+        }
+
+        SDL_PutAudioStreamData(stream, am->sdlInterleaved_.data(),
+                               frames * outCh * static_cast<int>(sizeof(float)));
+    }
+
+    if (!project->loading.load()) {
+        if (project->isPlaying.load()) {
+            project->effectiveTime.store(
+                project->timeSeconds.load() - static_cast<double>(am->latency) / sr
+            );
+        } else {
+            project->effectiveTime.store(project->timeSeconds.load());
+        }
+    }
+}
+
 int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int bufferSize, double streamTimeSeconds, RtAudioStreamStatus status, void* userData) {
 
     (void)status;
@@ -84,7 +161,13 @@ static unsigned int decodeSampleRate(int index, unsigned int preferred) {
     }
 }
 
-bool AudioManager::start() {
+static unsigned int decodeBufferSize(int value) {
+    static const unsigned int sizes[] = {64, 128, 256, 512, 1024, 2048, 4096};
+    if (value >= 0 && value <= 6) return sizes[value];
+    return static_cast<unsigned int>(value); // tolerate old direct-size values
+}
+
+bool AudioManager::startRtAudio() {
     auto& s = Settings::instance();
 
     // --- output device ---
@@ -97,13 +180,13 @@ bool AudioManager::start() {
     outputParams.nChannels = outputChannels;
     outputParams.firstChannel = 0;
 
-    std::cout << "[Audio] output device: " << info.name << " (id=" << outDev << ")" << std::endl;
+    std::cout << "[Audio:RtAudio] output device: " << info.name << " (id=" << outDev << ")" << std::endl;
 
     // --- sample rate ---
     sampleRate = decodeSampleRate(s.audioSampleRate(), info.preferredSampleRate);
 
     // --- buffer size ---
-    bufferSize = static_cast<unsigned int>(s.audioBufferSize());
+    bufferSize = decodeBufferSize(s.audioBufferSize());
 
     // --- input device ---
     int inDevId = s.audioInputDevice();
@@ -119,7 +202,7 @@ bool AudioManager::start() {
         inputParams.firstChannel = 0;
         inParams = &inputParams;
         hasInput_ = true;
-        std::cout << "[Audio] input device: " << inInfo.name << " (id=" << inDev << ")" << std::endl;
+        std::cout << "[Audio:RtAudio] input device: " << inInfo.name << " (id=" << inDev << ")" << std::endl;
     } else {
         inputChannels = 0;
     }
@@ -129,7 +212,7 @@ bool AudioManager::start() {
     options.streamName = "DAW";
     options.numberOfBuffers = s.audioTripleBuffer() ? 3 : 0;
 
-    std::cout << "[Audio] sampleRate=" << sampleRate << " bufferSize=" << bufferSize
+    std::cout << "[Audio:RtAudio] sampleRate=" << sampleRate << " bufferSize=" << bufferSize
               << " outCh=" << outputChannels << " inCh=" << inputChannels
               << " tripleBuf=" << (s.audioTripleBuffer() ? "yes" : "no") << std::endl;
 
@@ -145,17 +228,65 @@ bool AudioManager::start() {
             &options
         );
     } catch (RtAudioErrorType& e) {
-        std::cerr << "[Audio] openStream failed: " << e << std::endl;
+        std::cerr << "[Audio:RtAudio] openStream failed: " << e << std::endl;
         return false;
     }
 
     audioThreadHandle = std::thread(&AudioManager::audioThread, this);
 
     latency = rtaudio.getStreamLatency();
-    std::cout << "[Audio] stream started, latency=" << latency << std::endl;
+    std::cout << "[Audio:RtAudio] stream started, latency=" << latency << std::endl;
 
+    usingSDL_ = false;
     if (project) project->processing = true;
     return true;
+}
+
+bool AudioManager::startSDL() {
+    auto& s = Settings::instance();
+
+    sampleRate = decodeSampleRate(s.audioSampleRate(), 48000);
+    bufferSize = decodeBufferSize(s.audioBufferSize());
+    outputChannels = 2;
+    inputChannels = 0;
+    hasInput_ = false;
+
+    std::cout << "[Audio:SDL] sampleRate=" << sampleRate << " bufferSize=" << bufferSize
+              << " outCh=" << outputChannels << std::endl;
+
+    SDL_AudioSpec spec;
+    spec.format = SDL_AUDIO_F32;
+    spec.channels = static_cast<int>(outputChannels);
+    spec.freq = static_cast<int>(sampleRate);
+
+    sdlStream_ = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec,
+                                           AudioManager::sdlCallback, this);
+    if (!sdlStream_) {
+        std::cerr << "[Audio:SDL] SDL_OpenAudioDeviceStream failed: " << SDL_GetError() << std::endl;
+        return false;
+    }
+
+    SDL_ResumeAudioStreamDevice(sdlStream_);
+
+    float streamGain = SDL_GetAudioStreamGain(sdlStream_);
+    SDL_AudioDeviceID devId = SDL_GetAudioStreamDevice(sdlStream_);
+    float deviceGain = devId ? SDL_GetAudioDeviceGain(devId) : -1.f;
+    std::cout << "[Audio:SDL] streamGain=" << streamGain << " deviceGain=" << deviceGain << std::endl;
+
+    latency = 0; // SDL doesn't expose latency the same way
+    std::cout << "[Audio:SDL] stream started" << std::endl;
+
+    usingSDL_ = true;
+    if (project) project->processing = true;
+    return true;
+}
+
+bool AudioManager::start() {
+    auto& s = Settings::instance();
+    if (s.audioEngine() == 0)
+        return startSDL();
+    else
+        return startRtAudio();
 }
 
 bool AudioManager::restart() {
@@ -190,23 +321,39 @@ std::string AudioManager::getDeviceName(int deviceId) {
     }
 }
 
-bool AudioManager::stop() {
+bool AudioManager::stopRtAudio() {
     try {
-
         if (rtaudio.isStreamOpen()) {
             rtaudio.stopStream();
             rtaudio.closeStream();
-            std::cout << "Audio stream stopped successfully!" << std::endl;
+            std::cout << "[Audio:RtAudio] stream stopped" << std::endl;
         }
     } catch (RtAudioErrorType& e) {
-        std::cerr << "Error in RtAudio stop: " << e << std::endl;
+        std::cerr << "[Audio:RtAudio] stop error: " << e << std::endl;
         return false;
     }
     if (audioThreadHandle.joinable()) {
-        audioThreadHandle.join(); 
+        audioThreadHandle.join();
     }
-
     return true;
+}
+
+bool AudioManager::stopSDL() {
+    if (sdlStream_) {
+        SDL_DestroyAudioStream(sdlStream_);
+        sdlStream_ = nullptr;
+        std::cout << "[Audio:SDL] stream destroyed" << std::endl;
+    }
+    return true;
+}
+
+bool AudioManager::stop() {
+    if (usingSDL_) {
+        usingSDL_ = false;
+        return stopSDL();
+    } else {
+        return stopRtAudio();
+    }
 }
 
 

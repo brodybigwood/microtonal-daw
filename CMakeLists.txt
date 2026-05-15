@@ -94,6 +94,8 @@ target_include_directories(DAW PRIVATE
     ${SNDFILE_INCLUDE_DIRS}
 )
 
+link_directories(${RTAUDIO_LIBRARY_DIRS})
+
 target_link_libraries(DAW PRIVATE
     SDL3::SDL3
     SDL3_ttf::SDL3_ttf

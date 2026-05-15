@@ -151,8 +151,8 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    if(!SDL_Init(SDL_INIT_VIDEO)) {
-        std::cerr << "sdl init failed failed" << std::endl;
+    if(!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
+        std::cerr << "SDL_Init failed: " << SDL_GetError() << std::endl;
         return -1;
     }
 
