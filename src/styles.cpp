@@ -55,11 +55,36 @@ bool initFonts() {
 
 }
 
+// --- Deferred tooltip (single, drawn at end of frame) ---
+
+static bool g_tooltipPending = false;
+static std::string g_tooltipText;
+static float g_tooltipAnchorX = 0.f;
+static float g_tooltipAnchorY = 0.f;
+static SDL_FRect g_tooltipBounds{};
+static SDL_Renderer* g_tooltipRenderer = nullptr;
+
 void renderTooltip(SDL_Renderer* r, const std::string& text, float anchorX, float anchorY,
                    const SDL_FRect& bounds) {
-    if (!fonts.mainFont || text.empty()) return;
+    if (text.empty()) return;
+    g_tooltipPending = true;
+    g_tooltipText = text;
+    g_tooltipAnchorX = anchorX;
+    g_tooltipAnchorY = anchorY;
+    g_tooltipBounds = bounds;
+    g_tooltipRenderer = r;
+}
 
-    SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, text.c_str(), text.size(),
+void clearPendingTooltip() {
+    g_tooltipPending = false;
+}
+
+void drawPendingTooltip() {
+    if (!g_tooltipPending || !fonts.mainFont || !g_tooltipRenderer) return;
+    SDL_Renderer* r = g_tooltipRenderer;
+    g_tooltipPending = false;
+
+    SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, g_tooltipText.c_str(), g_tooltipText.size(),
                                                 SDL_Color{150, 165, 180, 200});
     if (!surf) return;
     SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
@@ -72,12 +97,12 @@ void renderTooltip(SDL_Renderer* r, const std::string& text, float anchorX, floa
     constexpr float inset = 3.f;
     const float bw = static_cast<float>(surf->w) + pad * 2.f;
     const float bh = static_cast<float>(surf->h) + pad * 2.f;
-    float bx = anchorX + 14.f;
-    float by = anchorY - bh - 10.f;
-    if (bx + bw > bounds.x + bounds.w - inset) bx = bounds.x + bounds.w - bw - inset;
-    if (bx < bounds.x + inset) bx = bounds.x + inset;
-    if (by < bounds.y + inset) by = bounds.y + inset;
-    if (by + bh > bounds.y + bounds.h - inset) by = bounds.y + bounds.h - bh - inset;
+    float bx = g_tooltipAnchorX + 14.f;
+    float by = g_tooltipAnchorY - bh - 10.f;
+    if (bx + bw > g_tooltipBounds.x + g_tooltipBounds.w - inset) bx = g_tooltipBounds.x + g_tooltipBounds.w - bw - inset;
+    if (bx < g_tooltipBounds.x + inset) bx = g_tooltipBounds.x + inset;
+    if (by < g_tooltipBounds.y + inset) by = g_tooltipBounds.y + inset;
+    if (by + bh > g_tooltipBounds.y + g_tooltipBounds.h - inset) by = g_tooltipBounds.y + g_tooltipBounds.h - bh - inset;
 
     SDL_BlendMode prevBm;
     SDL_GetRenderDrawBlendMode(r, &prevBm);

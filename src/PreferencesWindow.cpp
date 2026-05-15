@@ -7,18 +7,18 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-static constexpr int kSections = 8;
-static const char* kSectionNames[] = {
-    "Audio", "", "", "", "", "", "", ""
-};
-static const char* kSectionSymbols[] = {
-    "\xe2\x99\xaa", "", "", "", "", "", "", ""  // ♪ for Audio
-};
-
 PreferencesWindow::PreferencesWindow() {
     title = "Preferences";
     w = 420.f;
     h = 420.f;
+    initSections();
+}
+
+void PreferencesWindow::initSections() {
+    sections_ = {};
+    sections_[0] = &audio_;
+    sections_[1] = &gui_;
+    sections_[2] = &controls_;
 }
 
 // --- Polygon: cog/gear shape with proper inner-circle gaps ---
@@ -32,7 +32,7 @@ void PreferencesWindow::buildHitPolygon(std::vector<SDL_FPoint>& out) const {
     const float cy = centerY();
     const float Ro = outerR();
     const float Ri = innerR();
-    const int N = kSections;
+    const int N = kTeeth;
     const int kArcSteps = 4; // sub-steps along outer/inner circle arcs
 
     const float sector = 2.f * static_cast<float>(M_PI) / static_cast<float>(N);
@@ -80,10 +80,10 @@ int PreferencesWindow::hitTooth(float worldMx, float worldMy) const {
     const float Ro = outerR();
     const float Rtb = toothBaseR();
 
-    const float sector = 2.f * static_cast<float>(M_PI) / static_cast<float>(kSections);
+    const float sector = 2.f * static_cast<float>(M_PI) / static_cast<float>(kTeeth);
     const float toothHalf = sector * 0.35f;
 
-    for (int i = 0; i < kSections; ++i) {
+    for (int i = 0; i < kTeeth; ++i) {
         float mid = static_cast<float>(i) * sector;
 
         // Project onto tooth's radial direction; compare against chord (matches visual quad).
@@ -113,7 +113,7 @@ void PreferencesWindow::render(SDL_Renderer* r) {
     const float Ro = outerR();
     const float Ri = innerR();
     const float Rtb = toothBaseR();
-    const int N = kSections;
+    const int N = kTeeth;
     const float sector = 2.f * static_cast<float>(M_PI) / static_cast<float>(N);
     const float toothHalf = sector * 0.35f;
     const int kArcSteps = 4;
@@ -159,8 +159,9 @@ void PreferencesWindow::render(SDL_Renderer* r) {
         const float a0 = mid - toothHalf;
         const float a1 = mid + toothHalf;
 
+        PrefSection* sec = sections_[i];
         const bool isActive = (i == activeSection_);
-        const bool hasSection = (kSectionNames[i][0] != '\0');
+        const bool hasSection = (sec != nullptr);
         const bool hovered = (i == hoveredTooth);
 
         // Tooth button fill.
@@ -230,29 +231,17 @@ void PreferencesWindow::render(SDL_Renderer* r) {
         }
 
         // Symbol (always shown if has section).
-        if (hasSection && fonts.mainFont && kSectionSymbols[i][0] != '\0') {
-            SDL_Surface* s = TTF_RenderText_Blended(fonts.mainFont, kSectionSymbols[i], 0, SDL_Color{220, 220, 230, 255});
-            if (s) {
-                SDL_Texture* tex = SDL_CreateTextureFromSurface(r, s);
-                if (tex) {
-                    const float Rmid = (Ro + Rtb) * 0.5f;
-                    const float sw = static_cast<float>(s->w) * scale;
-                    const float sh = static_cast<float>(s->h) * scale;
-                    const float lx = cx + Rmid * std::cos(mid) - sw * 0.5f;
-                    const float ly = cy + Rmid * std::sin(mid) - sh * 0.5f;
-                    SDL_FRect tr{lx, ly, sw, sh};
-                    SDL_RenderTexture(r, tex, nullptr, &tr);
-                    SDL_DestroyTexture(tex);
-                }
-                SDL_DestroySurface(s);
-            }
+        if (hasSection) {
+            const float symR = Rtb + (Ro - Rtb) * 0.30f; // near tooth base
+            const float symSz = (Ro - Rtb) * 0.85f;
+            sec->drawSymbol(r, cx + symR * std::cos(mid), cy + symR * std::sin(mid), symSz);
         }
 
         // Hover text label (shown only when hovering, using shared tooltip style).
         if (hovered && hasSection) {
             const float tipX = cx + (Ro + 4.f) * std::cos(mid);
             const float tipY = cy + (Ro + 4.f) * std::sin(mid);
-            renderTooltip(r, kSectionNames[i], tipX, tipY, worldRect());
+            renderTooltip(r, sec->title(), tipX, tipY, worldRect());
         }
     }
 
@@ -287,31 +276,12 @@ void PreferencesWindow::render(SDL_Renderer* r) {
     }
 
     // --- Center content ---
-    if (fonts.mainFont) {
-        const char* title = (activeSection_ == 0) ? "Audio Settings" : "Preferences";
-        SDL_Surface* st = TTF_RenderText_Blended(fonts.mainFont, title, 0, SDL_Color{230, 230, 240, 255});
-        if (st) {
-            SDL_Texture* tex = SDL_CreateTextureFromSurface(r, st);
-            if (tex) {
-                SDL_FRect tr{cx - static_cast<float>(st->w) * scale * 0.5f, cy - static_cast<float>(st->h) * scale - 6.f * scale,
-                             static_cast<float>(st->w) * scale, static_cast<float>(st->h) * scale};
-                SDL_RenderTexture(r, tex, nullptr, &tr);
-                SDL_DestroyTexture(tex);
-            }
-            SDL_DestroySurface(st);
-        }
-
-        const char* sub = (activeSection_ == 0) ? "settings coming soon" : "select a section";
-        SDL_Surface* sp = TTF_RenderText_Blended(fonts.mainFont, sub, 0, SDL_Color{120, 120, 130, 255});
-        if (sp) {
-            SDL_Texture* tex = SDL_CreateTextureFromSurface(r, sp);
-            if (tex) {
-                SDL_FRect tr{cx - static_cast<float>(sp->w) * scale * 0.5f, cy + 10.f * scale,
-                             static_cast<float>(sp->w) * scale, static_cast<float>(sp->h) * scale};
-                SDL_RenderTexture(r, tex, nullptr, &tr);
-                SDL_DestroyTexture(tex);
-            }
-            SDL_DestroySurface(sp);
+    {
+        PrefSection* sec = sections_[activeSection_];
+        if (sec && sec->hasContent()) {
+            const float Ri2 = innerR();
+            SDL_FRect innerBounds{cx - Ri2, cy - Ri2, Ri2 * 2.f, Ri2 * 2.f};
+            sec->renderContent(r, innerBounds, scale);
         }
     }
 
@@ -356,9 +326,8 @@ bool PreferencesWindow::handleInput(SDL_Event& e) {
 
         // Tooth click?
         int tooth = hitTooth(mx, my);
-        if (tooth >= 0) {
-            if (tooth == 0)
-                activeSection_ = tooth;
+        if (tooth >= 0 && sections_[tooth]) {
+            activeSection_ = tooth;
             return true;
         }
 

@@ -55,10 +55,14 @@ bool initFonts();
 
 void createCursors();
 
-/** Render a tooltip label near (anchorX, anchorY), clamped inside bounds.
- *  Matches the piano-roll pitch-factors tooltip style:
- *  dark semi-transparent background, muted border, blended. */
+/** Store a tooltip to be drawn later on top of everything. Only one at a time. */
 void renderTooltip(SDL_Renderer* r, const std::string& text, float anchorX, float anchorY,
                    const SDL_FRect& bounds);
+
+/** Draw the pending tooltip and clear it. Call at end of frame. */
+void drawPendingTooltip();
+
+/** Discard any pending tooltip. Call at start of frame. */
+void clearPendingTooltip();
 
 #endif // STYLES_H

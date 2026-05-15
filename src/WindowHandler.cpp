@@ -1,5 +1,6 @@
 #include "WindowHandler.h"
 #include "SDL_Events.h"
+#include "styles.h"
 #include "NodeEditor.h"
 #include "PreferencesWindow.h"
 #include "UndoTreeWindow.h"
@@ -153,6 +154,8 @@ bool WindowHandler::tick() {
     if(timeSinceLastFrame >= frameTime) {
         lastTime = double(SDL_GetTicks())-frameTime;
 
+        clearPendingTooltip();
+
         if (ctxMenu->active) { project->render(); renderEmbeddedWindows(); } // render behind ctxmenu first
         bool eventHandled = false;
  
@@ -241,16 +244,29 @@ bool WindowHandler::tick() {
             if (ctxMenu->active) {
                 ctxMenu->tick(e);
             } else {
-                // Pseudo-windows get first crack at events (with resize-zone detection).
                 float mx, my;
                 SDL_GetMouseState(&mx, &my);
-                if (!routeEmbeddedWindowEvent(e, mx, my)) {
-                    for (auto w : windows)
-                        if (w && SDL_GetWindowFromID(getEventWindowID(e)) == w->window) {
-                            w->handleWindowInput(e);
-                            break;
-                        }
+                SDL_Window* eventWin = SDL_GetWindowFromID(getEventWindowID(e));
+                // Find the window that actually hosts embedded windows
+                // (same logic as renderEmbeddedWindows).
+                SDL_Window* hostWin = nullptr;
+                for (auto* w : windows) {
+                    if (w && w->window && !(SDL_GetWindowFlags(w->window) & SDL_WINDOW_HIDDEN)) {
+                        hostWin = w->window;
+                        break;
+                    }
                 }
+                // Route to embedded windows if the event targets the host window,
+                // or if no host window exists yet (nothing to conflict with),
+                // or if the event has no window (mouse motion for cursor updates).
+                bool tryEmbedded = !hostWin || !eventWin || eventWin == hostWin;
+                if (tryEmbedded && routeEmbeddedWindowEvent(e, mx, my))
+                    continue;
+                for (auto w : windows)
+                    if (w && eventWin == w->window) {
+                        w->handleWindowInput(e);
+                        break;
+                    }
             }
         }
 
@@ -264,6 +280,7 @@ bool WindowHandler::tick() {
             project->render();
             renderEmbeddedWindows();
         }
+        drawPendingTooltip();
         project->renderPresent();
     }
     // Compact nulled-out window pointers (deferred from removeWindow during iteration).
