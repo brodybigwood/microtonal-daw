@@ -1,5 +1,6 @@
 #include "AudioManager.h"
 #include "NodeProcessor.h"
+#include "Settings.h"
 
 AudioManager::AudioManager() {
 
@@ -72,78 +73,121 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
     return 0;
 }
 
+static unsigned int decodeSampleRate(int index, unsigned int preferred) {
+    switch (index) {
+        case 0:  return preferred;
+        case 1:  return 44100;
+        case 2:  return 48000;
+        case 3:  return 96000;
+        case 4:  return 192000;
+        default: return preferred;
+    }
+}
+
 bool AudioManager::start() {
+    auto& s = Settings::instance();
 
-    std::vector<unsigned int> deviceIds = rtaudio.getDeviceIds();
-    if (deviceIds.empty()) {
-        std::cerr << "No audio output devices found." << std::endl;
-        return false;
-    }
-
-    for (unsigned int i = 0; i < deviceIds.size(); ++i) {
-       // RtAudio::DeviceInfo info = rtaudio.getDeviceInfo(deviceIds[i]);
-       // std::cout << "Device " << i << ": " << info.name << std::endl;
-       // std::cout << "  Input channels: " << info.inputChannels << ", Output channels: " << info.outputChannels << std::endl;
-        //std::cout << "  Default rate: " << info.preferredSampleRate << std::endl;
-    }
-
-    auto defaultDevice = rtaudio.getDefaultOutputDevice();
-    RtAudio::DeviceInfo info = rtaudio.getDeviceInfo(defaultDevice);
-    sampleRate = info.preferredSampleRate;
+    // --- output device ---
+    int outDevId = s.audioOutputDevice();
+    unsigned int outDev = (outDevId < 0) ? rtaudio.getDefaultOutputDevice() : static_cast<unsigned int>(outDevId);
+    RtAudio::DeviceInfo info = rtaudio.getDeviceInfo(outDev);
     outputChannels = info.outputChannels > 0 ? info.outputChannels : 2;
-
-    outputParams.deviceId = defaultDevice;
+    if (outputChannels > 8) outputChannels = 8;
+    outputParams.deviceId = outDev;
     outputParams.nChannels = outputChannels;
-    outputParams.firstChannel = 0; 
+    outputParams.firstChannel = 0;
 
-    bufferSize = 512;
+    std::cout << "[Audio] output device: " << info.name << " (id=" << outDev << ")" << std::endl;
 
-    //std::cout << "Using default sample rate: " << sampleRate << std::endl;
-    //std::cout << "Using buffer size: " << bufferSize << std::endl;
-    //std::cout << "Using output channels: " << outputChannels << std::endl;
+    // --- sample rate ---
+    sampleRate = decodeSampleRate(s.audioSampleRate(), info.preferredSampleRate);
 
+    // --- buffer size ---
+    bufferSize = static_cast<unsigned int>(s.audioBufferSize());
 
-    RtAudio::StreamOptions options;
+    // --- input device ---
+    int inDevId = s.audioInputDevice();
+    RtAudio::StreamParameters* inParams = nullptr;
+    hasInput_ = false;
+    if (inDevId >= 0) {
+        unsigned int inDev = static_cast<unsigned int>(inDevId);
+        RtAudio::DeviceInfo inInfo = rtaudio.getDeviceInfo(inDev);
+        inputChannels = inInfo.inputChannels > 0 ? inInfo.inputChannels : 2;
+        if (inputChannels > 8) inputChannels = 8;
+        inputParams.deviceId = inDev;
+        inputParams.nChannels = inputChannels;
+        inputParams.firstChannel = 0;
+        inParams = &inputParams;
+        hasInput_ = true;
+        std::cout << "[Audio] input device: " << inInfo.name << " (id=" << inDev << ")" << std::endl;
+    } else {
+        inputChannels = 0;
+    }
+
+    // --- stream options ---
     options.flags = RTAUDIO_NONINTERLEAVED;
     options.streamName = "DAW";
+    options.numberOfBuffers = s.audioTripleBuffer() ? 3 : 0;
+
+    std::cout << "[Audio] sampleRate=" << sampleRate << " bufferSize=" << bufferSize
+              << " outCh=" << outputChannels << " inCh=" << inputChannels
+              << " tripleBuf=" << (s.audioTripleBuffer() ? "yes" : "no") << std::endl;
 
     try {
-
         rtaudio.openStream(
-            &outputParams, 
-            NULL, 
-            RTAUDIO_FLOAT32, 
-            sampleRate, 
-            &bufferSize, 
-            &AudioManager::callback, 
+            &outputParams,
+            inParams,
+            RTAUDIO_FLOAT32,
+            sampleRate,
+            &bufferSize,
+            &AudioManager::callback,
             this,
             &options
         );
-
     } catch (RtAudioErrorType& e) {
-        std::cerr << "Error in RtAudio start: " << e<< std::endl;
+        std::cerr << "[Audio] openStream failed: " << e << std::endl;
         return false;
     }
 
-
     audioThreadHandle = std::thread(&AudioManager::audioThread, this);
 
-    std::cout << "Audio stream started successfully!" << std::endl;
-
-    std::cout << "AudioManager data: samplerate: " <<sampleRate << ", buff size: " <<bufferSize << ", nchannelsout: " << outputChannels << std::endl;
-
     latency = rtaudio.getStreamLatency();
+    std::cout << "[Audio] stream started, latency=" << latency << std::endl;
 
-    int bufferedFrames = 0;
-
-    latency += bufferSize * bufferedFrames;
-
-    std::cout<<"audio stream latency: "<<latency<<std::endl;
-
-    this->project->processing = true;
-
+    if (project) project->processing = true;
     return true;
+}
 
+bool AudioManager::restart() {
+    stop();
+    return start();
+}
+
+std::vector<RtAudio::DeviceInfo> AudioManager::getOutputDevices() {
+    std::vector<RtAudio::DeviceInfo> out;
+    for (auto id : rtaudio.getDeviceIds()) {
+        auto info = rtaudio.getDeviceInfo(id);
+        if (info.outputChannels > 0) out.push_back(info);
+    }
+    return out;
+}
+
+std::vector<RtAudio::DeviceInfo> AudioManager::getInputDevices() {
+    std::vector<RtAudio::DeviceInfo> in;
+    for (auto id : rtaudio.getDeviceIds()) {
+        auto info = rtaudio.getDeviceInfo(id);
+        if (info.inputChannels > 0) in.push_back(info);
+    }
+    return in;
+}
+
+std::string AudioManager::getDeviceName(int deviceId) {
+    if (deviceId < 0) return "Default";
+    try {
+        return rtaudio.getDeviceInfo(static_cast<unsigned int>(deviceId)).name;
+    } catch (...) {
+        return "Unknown";
+    }
 }
 
 bool AudioManager::stop() {

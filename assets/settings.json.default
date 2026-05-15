@@ -1,5 +1,10 @@
 {
   "showFps": false,
   "doubleClickTimeMs": 256,
-  "portDisplayMode": 1
+  "portDisplayMode": 1,
+  "audioOutputDevice": -1,
+  "audioInputDevice": -1,
+  "audioBufferSize": 512,
+  "audioSampleRate": 0,
+  "audioTripleBuffer": false
 }

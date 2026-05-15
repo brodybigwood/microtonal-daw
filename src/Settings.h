@@ -19,6 +19,16 @@ public:
     int doubleClickTimeMs() const { return getInt("doubleClickTimeMs", 256); }
     int portDisplayMode() const { return getInt("portDisplayMode", 1); }
     void setPortDisplayMode(int v) { setInt("portDisplayMode", v); }
+    int audioOutputDevice() const { return getInt("audioOutputDevice", -1); }
+    void setAudioOutputDevice(int v) { setInt("audioOutputDevice", v); }
+    int audioInputDevice() const { return getInt("audioInputDevice", -1); }
+    void setAudioInputDevice(int v) { setInt("audioInputDevice", v); }
+    int audioBufferSize() const { return getInt("audioBufferSize", 512); }
+    void setAudioBufferSize(int v) { setInt("audioBufferSize", v); }
+    int audioSampleRate() const { return getInt("audioSampleRate", 0); }
+    void setAudioSampleRate(int v) { setInt("audioSampleRate", v); }
+    bool audioTripleBuffer() const { return getBool("audioTripleBuffer", false); }
+    void setAudioTripleBuffer(bool v) { setBool("audioTripleBuffer", v); }
 
     // Load defaults from settings.json.default, saving current values to "backup".
     void loadDefaults();

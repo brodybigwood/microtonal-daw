@@ -1,6 +1,7 @@
 #include "PrefSection.h"
 #include "ContextMenu.h"
 #include "Settings.h"
+#include "AudioManager.h"
 #include "styles.h"
 #include <cmath>
 #include <algorithm>
@@ -301,6 +302,7 @@ static bool hitTestSetting(const SettingDesc& d, float mx, float my, const SDL_F
         if (mx >= left - 4.f * s && mx <= left + groupW + 4.f * s &&
             my >= y && my <= y + kRowH * s) {
             Settings::instance().setBool(d.key, !Settings::instance().getBool(d.key, false));
+            if (d.onChange) d.onChange();
             return true;
         }
     } else if (d.type == SettingType::Int) {
@@ -328,6 +330,7 @@ static bool hitTestSetting(const SettingDesc& d, float mx, float my, const SDL_F
                 int next = val + d.step;
                 if (next > d.maxVal) next = d.minVal;
                 Settings::instance().setInt(d.key, next);
+                if (d.onChange) d.onChange();
                 return true;
             }
             auto* ctxMenu = ContextMenu::get();
@@ -339,12 +342,13 @@ static bool hitTestSetting(const SettingDesc& d, float mx, float my, const SDL_F
             if (SDL_Window* win = SDL_GetWindowFromID(window_id))
                 SDL_StartTextInput(win);
             ctxMenu->dynamicTick = getTextInputTicker(
-                [key = d.key, minV = d.minVal, maxV = d.maxVal](std::string text) {
+                [key = d.key, minV = d.minVal, maxV = d.maxVal, onChange = d.onChange](std::string text) {
                     try {
                         int v = std::stoi(text);
                         if (v < minV) v = minV;
                         if (v > maxV) v = maxV;
                         Settings::instance().setInt(key, v);
+                        if (onChange) onChange();
                     } catch (...) {}
                 },
                 nullptr,
@@ -369,9 +373,166 @@ static float settingsStartY(float titleBottom, const SDL_FRect& b, float s,
     return titleBottom + (avail - totalH) * 0.5f;
 }
 
+// --- Device selector helpers ---
+
+static void renderDeviceRow(SDL_Renderer* r, const char* label, const char* valueName,
+                            float y, const SDL_FRect& b, float s, const SDL_Color& col) {
+    const float cx = b.x + b.w * 0.5f;
+
+    int lw = 0, lh = 0;
+    TTF_GetStringSize(fonts.mainFont, label, 0, &lw, &lh);
+    const float lblW = static_cast<float>(lw) * s;
+    const float lblY = y + (kRowH * s - static_cast<float>(lh) * s) * 0.5f;
+    renderTextLeft(r, label, cx - (lblW + 8.f * s + 130.f * s) * 0.5f, lblY, s, col);
+
+    // Value box
+    const float pad = 8.f * s;
+    const float boxX = cx - (lblW + 8.f * s + 130.f * s) * 0.5f + lblW + 8.f * s;
+    const float boxW = 130.f * s;
+    const float boxH = kRowH * s;
+    SDL_FRect valBox{boxX, y, boxW, boxH};
+    SDL_SetRenderDrawColor(r, 50, 50, 58, 255);
+    SDL_RenderFillRect(r, &valBox);
+    SDL_SetRenderDrawColor(r, 90, 90, 100, 255);
+    SDL_RenderRect(r, &valBox);
+
+    // Device name (truncated)
+    char nameBuf[32];
+    snprintf(nameBuf, sizeof(nameBuf), "%.25s", valueName);
+    int nw = 0, nh = 0;
+    TTF_GetStringSize(fonts.mainFont, nameBuf, 0, &nw, &nh);
+    const float scale = std::min(1.f, (boxW - pad * 2.f) / static_cast<float>(nw));
+    const float tw = static_cast<float>(nw) * scale;
+    const float th = static_cast<float>(nh) * scale;
+    SDL_Color tc{200, 200, 210, 255};
+    renderTextLeft(r, nameBuf, boxX + pad, y + (boxH - th) * 0.5f, s * scale, tc);
+}
+
+static bool hitTestDeviceRow(float mx, float my, const char* label,
+                             float y, const SDL_FRect& b, float s,
+                             SDL_Renderer* renderer, uint32_t window_id,
+                             const char* settingsKey,
+                             std::vector<RtAudio::DeviceInfo> devices,
+                             int noneId, const char* noneLabel) {
+    const float cx = b.x + b.w * 0.5f;
+    int lw = 0, lh = 0;
+    TTF_GetStringSize(fonts.mainFont, label, 0, &lw, &lh);
+    const float lblW = static_cast<float>(lw) * s;
+    const float boxX = cx - (lblW + 8.f * s + 130.f * s) * 0.5f + lblW + 8.f * s;
+    const float boxW = 130.f * s;
+    if (mx < boxX || mx > boxX + boxW || my < y || my > y + kRowH * s)
+        return false;
+
+    // Build device popup tree
+    auto tree = uTreeEntry();
+    auto noneEntry = uTreeEntry();
+    noneEntry->label = noneLabel;
+    noneEntry->click = [key = settingsKey, noneId] {
+        Settings::instance().setInt(key, noneId);
+        AudioManager::instance()->restart();
+    };
+    tree->addChild(noneEntry);
+    for (auto& dev : devices) {
+        auto entry = uTreeEntry();
+        entry->label = dev.name;
+        int devId = static_cast<int>(dev.ID);
+        entry->click = [key = settingsKey, devId] {
+            Settings::instance().setInt(key, devId);
+            AudioManager::instance()->restart();
+        };
+        tree->addChild(entry);
+    }
+
+    auto* ctx = ContextMenu::get();
+    ctx->active = true;
+    ctx->window_id = window_id;
+    ctx->renderer = renderer;
+    ctx->locX = boxX;
+    ctx->locY = y + kRowH * s;
+    ctx->dynamicTick = getTreeMenuTicker(tree);
+    return true;
+}
+
+// --- AudioSection ---
+
+const std::vector<SettingDesc>& AudioSection::settings() const {
+    static const std::vector<SettingDesc> s = {
+        {SettingType::Int, "audioBufferSize", "Buffer size", 64, 4096, 0, nullptr,
+         []{ AudioManager::instance()->restart(); }},
+        {SettingType::Int, "audioSampleRate", "Sample rate", 0, 4, 1, "Auto|44100|48000|96000|192000",
+         []{ AudioManager::instance()->restart(); }},
+        {SettingType::Bool, "audioTripleBuffer", "Triple buffer", 0, 0, 0, nullptr,
+         []{ AudioManager::instance()->restart(); }},
+    };
+    return s;
+}
+
 void AudioSection::renderContent(SDL_Renderer* r, const SDL_FRect& b, float s) {
-    renderSectionTitle(r, "Audio Settings", b, s);
-    // No settings yet.
+    float afterTitle = renderSectionTitle(r, "Audio Settings", b, s);
+
+    const SDL_Color col{180, 180, 195, 255};
+    auto* am = AudioManager::instance();
+
+    // Device rows take 2 slots; standard settings are below
+    static constexpr int kDeviceRows = 2;
+    float y = settingsStartY(afterTitle, b, s, settings().size() + kDeviceRows, kRowH);
+
+    // Output device
+    int outDev = Settings::instance().audioOutputDevice();
+    std::string outName = outDev < 0 ? "Default Output" : am->getDeviceName(outDev);
+    renderDeviceRow(r, "Output device", outName.c_str(), y, b, s, col);
+    y += kRowH * s;
+
+    // Input device
+    int inDev = Settings::instance().audioInputDevice();
+    std::string inName = inDev < 0 ? "None" : am->getDeviceName(inDev);
+    renderDeviceRow(r, "Input device", inName.c_str(), y, b, s, col);
+    y += kRowH * s;
+
+    // Standard settings
+    for (auto& d : settings()) {
+        if (d.type == SettingType::Bool)
+            renderSettingBool(r, d, b, y, s, col);
+        else if (d.type == SettingType::Int)
+            renderSettingInt(r, d, b, y, s, col);
+        y += kRowH * s;
+    }
+}
+
+bool AudioSection::handleContentInput(SDL_Event& e, float mx, float my,
+                                      const SDL_FRect& b) {
+    if (e.type != SDL_EVENT_MOUSE_BUTTON_DOWN || e.button.button != SDL_BUTTON_LEFT)
+        return false;
+
+    const float s = 1.f;
+    int th = 0;
+    TTF_GetStringSize(fonts.mainFont, "Audio Settings", 0, nullptr, &th);
+    float titleBottom = b.y + 16.f + static_cast<float>(th) + 8.f;
+    float y = settingsStartY(titleBottom, b, s, settings().size() + 2, kRowH);
+
+    // Output device row
+    if (hitTestDeviceRow(mx, my, "Output device", y, b, s, renderer_, window_id_,
+                         "audioOutputDevice",
+                         AudioManager::instance()->getOutputDevices(),
+                         -1, "Default Output"))
+        return true;
+    y += kRowH;
+
+    // Input device row
+    if (hitTestDeviceRow(mx, my, "Input device", y, b, s, renderer_, window_id_,
+                         "audioInputDevice",
+                         AudioManager::instance()->getInputDevices(),
+                         -1, "None"))
+        return true;
+    y += kRowH;
+
+    // Standard settings
+    for (auto& d : settings()) {
+        if (hitTestSetting(d, mx, my, b, y, s, renderer_, window_id_))
+            return true;
+        y += kRowH;
+    }
+    return false;
 }
 
 const std::vector<SettingDesc>& GUISection::settings() const {

@@ -1,5 +1,7 @@
 #include <RtAudio.h>
 #include <thread>
+#include <vector>
+#include <string>
 #include "Project.h"
 
 #ifndef AUDIOMANAGER_H
@@ -19,8 +21,12 @@ class AudioManager {
         double streamTimeSeconds;
 
         bool start();
-
         bool stop();
+        bool restart();
+
+        std::vector<RtAudio::DeviceInfo> getOutputDevices();
+        std::vector<RtAudio::DeviceInfo> getInputDevices();
+        std::string getDeviceName(int deviceId);
 
         static int callback(void *outputBuffer, void *inputBuffer, unsigned int bufferSize, double streamTimeSeconds, RtAudioStreamStatus status, void* userData);
 
@@ -38,6 +44,8 @@ class AudioManager {
 
         RtAudio rtaudio;
         RtAudio::StreamParameters outputParams;
+        RtAudio::StreamParameters inputParams;
         RtAudio::StreamOptions options;
+        bool hasInput_ = false;
 };
 #endif

@@ -3,6 +3,7 @@
 #include <SDL3/SDL.h>
 #include <string>
 #include <vector>
+#include <functional>
 
 enum class SettingType { Bool, Int };
 
@@ -14,6 +15,7 @@ struct SettingDesc {
     int maxVal = 1000;      // Int only
     int step = 1;           // Int only
     const char* cycleLabels = nullptr; // if set on Int, render as cycle toggle (labels separated by |)
+    std::function<void()> onChange;     // called after value change (e.g. to restart audio)
 };
 
 class PrefSection {
@@ -47,6 +49,9 @@ public:
     bool hasContent() const override { return true; }
     void drawSymbol(SDL_Renderer* r, float cx, float cy, float sz) const override;
     void renderContent(SDL_Renderer* r, const SDL_FRect& b, float s) override;
+    bool handleContentInput(SDL_Event& e, float mx, float my,
+                            const SDL_FRect& innerBounds) override;
+    const std::vector<SettingDesc>& settings() const override;
 };
 
 class GUISection : public PrefSection {
