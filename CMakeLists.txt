@@ -84,17 +84,18 @@ find_package(SDL3_ttf REQUIRED)
 find_package(SDL3_image REQUIRED)
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(RTAUDIO REQUIRED rtaudio)
 pkg_check_modules(SNDFILE REQUIRED sndfile)
+
+# Build RtAudio statically from source
+set(RTAUDIO_BUILD_STATIC_LIBS ON CACHE BOOL "Build static library" FORCE)
+set(RTAUDIO_BUILD_TESTING OFF CACHE BOOL "Skip tests" FORCE)
+add_subdirectory(${CMAKE_SOURCE_DIR}/../lib/rtaudio ${CMAKE_BINARY_DIR}/rtaudio)
 
 target_include_directories(DAW PRIVATE
     ${TINYFILEDIALOGS_DIR}
     ${SDL2_INCLUDE_DIRS}
-    ${RTAUDIO_INCLUDE_DIRS}
     ${SNDFILE_INCLUDE_DIRS}
 )
-
-link_directories(${RTAUDIO_LIBRARY_DIRS})
 
 target_link_libraries(DAW PRIVATE
     SDL3::SDL3
@@ -102,7 +103,7 @@ target_link_libraries(DAW PRIVATE
     SDL3_image::SDL3_image
     /usr/local/lib/SDL3_gfx/libSDL3_gfx.a
     ${SDL2_LIBRARIES}
-    ${RTAUDIO_LIBRARIES}
+    rtaudio
     ${SNDFILE_LIBRARIES}
 )
 
