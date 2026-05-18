@@ -870,7 +870,10 @@ void PianoRoll::Scroll() {
     xOffset = (std::ceil(numCellsRight) * dW) - scrollX;
 
         refreshGrid = true;
-        handleMouse();
+        getStretchingNote();
+        getExistingNote();
+        refreshHoveredPitchLineIndex();
+        refreshPitchFactorsHoverTiming();
 }
 
 bool PianoRoll::customTick() {
@@ -1647,7 +1650,7 @@ void PianoRoll::handleMouse() {
         SDL_SetCursor(cursors.pencil);
         if(hoveredElement != nullptr && !ContextMenu::get()->active) {
             deleteElement();
-        } 
+        }
     } else {
         if (stretchingNote != nullptr) {
             SDL_SetCursor(cursors.resize);

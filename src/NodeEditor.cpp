@@ -637,56 +637,47 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
         capturedEmbeddedWindow_ = nullptr;
 
     if (!target) {
-        int topZ = -1;
-        // Hit-test: highest-z window containing the mouse.
-        for (auto& ew : embeddedWindows_) {
-            if (ew->visible && ew->zOrder > topZ && ew->hitTest(mouseX, mouseY)) {
-                target = ew.get();
-                topZ = ew->zOrder;
+        // Collect visible windows sorted by z descending.
+        std::vector<EmbeddedWindow*> sorted;
+        for (auto& ew : embeddedWindows_)
+            if (ew->visible) sorted.push_back(ew.get());
+        std::sort(sorted.begin(), sorted.end(),
+                  [](EmbeddedWindow* a, EmbeddedWindow* b) { return a->zOrder > b->zOrder; });
+
+        // First pass: highest-z window whose edge is within resize distance.
+        for (auto* ew : sorted) {
+            if (ew->getResizeZone(mouseX, mouseY) != EmbeddedWindow::ResizeZone::None) {
+                target = ew;
+                break;
             }
         }
-        // On mousedown: also check resize zones. If a higher-z window has a resize zone
-        // at the cursor (even if the mouse is technically inside a lower-z window's hit area),
-        // prefer the higher-z window so resize/drag can start.
-        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-            int bestResizeZ = topZ;
-            EmbeddedWindow* resizeTarget = target;
-            for (auto& ew : embeddedWindows_) {
-                if (!ew->visible || ew->zOrder <= bestResizeZ) continue;
-                if (ew->getResizeZone(mouseX, mouseY) != EmbeddedWindow::ResizeZone::None) {
-                    resizeTarget = ew.get();
-                    bestResizeZ = ew->zOrder;
+
+        // Second pass: if no resize match, highest-z window containing the mouse.
+        if (!target) {
+            for (auto* ew : sorted) {
+                if (ew->hitTest(mouseX, mouseY)) {
+                    target = ew;
+                    break;
                 }
-            }
-            if (resizeTarget && bestResizeZ > topZ) {
-                target = resizeTarget;
-                topZ = bestResizeZ;
             }
         }
     }
 
     {
         SDL_SystemCursor cur = SDL_SYSTEM_CURSOR_DEFAULT;
-        EmbeddedWindow::ResizeZone bestZone = EmbeddedWindow::ResizeZone::None;
-        int bestZ = -1;
-        for (auto& ew : embeddedWindows_) {
-            if (!ew->visible || ew->zOrder <= bestZ) continue;
-            auto zone = ew->getResizeZone(mouseX, mouseY);
-            if (zone != EmbeddedWindow::ResizeZone::None) {
-                bestZone = zone;
-                bestZ = ew->zOrder;
+        if (target) {
+            auto zone = target->getResizeZone(mouseX, mouseY);
+            switch (zone) {
+                case EmbeddedWindow::ResizeZone::N:  cur = SDL_SYSTEM_CURSOR_N_RESIZE;  break;
+                case EmbeddedWindow::ResizeZone::S:  cur = SDL_SYSTEM_CURSOR_S_RESIZE;  break;
+                case EmbeddedWindow::ResizeZone::E:  cur = SDL_SYSTEM_CURSOR_E_RESIZE;  break;
+                case EmbeddedWindow::ResizeZone::W:  cur = SDL_SYSTEM_CURSOR_W_RESIZE;  break;
+                case EmbeddedWindow::ResizeZone::NE: cur = SDL_SYSTEM_CURSOR_NE_RESIZE; break;
+                case EmbeddedWindow::ResizeZone::NW: cur = SDL_SYSTEM_CURSOR_NW_RESIZE; break;
+                case EmbeddedWindow::ResizeZone::SE: cur = SDL_SYSTEM_CURSOR_SE_RESIZE; break;
+                case EmbeddedWindow::ResizeZone::SW: cur = SDL_SYSTEM_CURSOR_SW_RESIZE; break;
+                default: break;
             }
-        }
-        switch (bestZone) {
-            case EmbeddedWindow::ResizeZone::N:  cur = SDL_SYSTEM_CURSOR_N_RESIZE;  break;
-            case EmbeddedWindow::ResizeZone::S:  cur = SDL_SYSTEM_CURSOR_S_RESIZE;  break;
-            case EmbeddedWindow::ResizeZone::E:  cur = SDL_SYSTEM_CURSOR_E_RESIZE;  break;
-            case EmbeddedWindow::ResizeZone::W:  cur = SDL_SYSTEM_CURSOR_W_RESIZE;  break;
-            case EmbeddedWindow::ResizeZone::NE: cur = SDL_SYSTEM_CURSOR_NE_RESIZE; break;
-            case EmbeddedWindow::ResizeZone::NW: cur = SDL_SYSTEM_CURSOR_NW_RESIZE; break;
-            case EmbeddedWindow::ResizeZone::SE: cur = SDL_SYSTEM_CURSOR_SE_RESIZE; break;
-            case EmbeddedWindow::ResizeZone::SW: cur = SDL_SYSTEM_CURSOR_SW_RESIZE; break;
-            default: break;
         }
         SDL_SetCursor(SDL_CreateSystemCursor(cur));
     }
