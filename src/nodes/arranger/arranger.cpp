@@ -83,7 +83,6 @@ void ArrangerNode::clearCustomTextures() {
     sl->generateTextures();
 }
 
-void ArrangerNode::renderPresent() {}
 
 json ArrangerNode::extraSerialize() {
     json j;
@@ -152,7 +151,7 @@ void ArrangerNode::extraDeSerialize(json j) {
 
 void ArrangerNode::ensureSongRoll() {
     if (sl || !ne || !ne->window || !ne->renderer) return;
-    sl = new SongRoll(slRect, &slDetached, ne, project, this);
+    sl = new SongRoll(slRect, ne, project, this);
     std::cout << "[DBG_DESER] ArrangerNode::ensureSongRoll node=" << id << " created" << std::endl;
 }
 

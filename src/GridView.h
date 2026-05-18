@@ -11,7 +11,7 @@ class Home;
 
 class GridView : public Window {
     public:
-        GridView(bool*, SDL_FRect*, float leftMargin, Window*, Project*);
+        GridView(SDL_FRect*, float leftMargin, Window*, Project*);
 
         virtual ~GridView();
 
@@ -28,8 +28,6 @@ class GridView : public Window {
 
         Transport* transport;
         SDL_FRect* tRect;
-
-        bool* detached;
 
         bool refreshGrid = false;
         virtual void UpdateGrid() {};

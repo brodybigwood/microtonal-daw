@@ -4,16 +4,15 @@
 #include "Transport.h"
 #include "WindowHandler.h"
 
-GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin, Window* w, Project* p) : 
-    detached(detached), 
-    leftMargin(leftMargin), 
-    isShiftPressed(WindowHandler::instance()->isShiftPressed), 
-    isAltPressed(WindowHandler::instance()->isAltPressed), 
+GridView::GridView(SDL_FRect* rect, float leftMargin, Window* w, Project* p) :
+    leftMargin(leftMargin),
+    isShiftPressed(WindowHandler::instance()->isShiftPressed),
+    isAltPressed(WindowHandler::instance()->isAltPressed),
     isCtrlPressed(WindowHandler::instance()->isCtrlPressed),
     project(p)
 {
 
-    if(rect != nullptr && !*detached) {
+    if(rect != nullptr) {
         dstRect = rect;
     } else {
         dstRect = new SDL_FRect{
@@ -29,17 +28,10 @@ GridView::GridView(bool* detached, SDL_FRect* rect, float leftMargin, Window* w,
     this->x = dstRect->x;
     this->y = dstRect->y;
 
-    if(*detached) {
-        window = SDL_CreateWindow("Piano Roll", width, height, SDL_WINDOW_RESIZABLE | SDL_WINDOW_UTILITY);
-        SDL_SetWindowParent(window, w->window);
-        renderer = SDL_CreateRenderer(window, NULL);
-    } else {
-        window = w->window;
-        renderer = w->renderer;
-    }
+    window = w->window;
+    renderer = w->renderer;
 
-
-    this->playHead = new Playhead(&gridRect, dstRect, detached, startTime, project);
+    this->playHead = new Playhead(&gridRect, dstRect, startTime, project);
     this->transport = new Transport(this);
 }
 
@@ -53,13 +45,6 @@ void GridView::createGridRect() {
 }
 
 GridView::~GridView() {
-    
-    if (*detached) {
-        if (renderer) SDL_DestroyRenderer(renderer);
-        if (window) SDL_DestroyWindow(window);
-        if (dstRect) delete dstRect;
-    }
-
     delete playHead;
     delete transport;
     delete startTime;
@@ -148,14 +133,7 @@ bool GridView::handleInput(SDL_Event& e) {
 
     handleCustomInput(e);
 
-    if(*detached) {
-        if(!running) {
-            return false;
-        }
-    }
     return true;
-
-
 }
 
 void GridView::moveMouse() {

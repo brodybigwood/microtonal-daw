@@ -457,22 +457,6 @@ Node::Node(uint16_t id, NodeManager* nm, NodeType nt) :
 }
 
 Node::~Node() {
-    if (detached) {
-        if (renderer) {
-            SDL_DestroyRenderer(renderer);
-            renderer = nullptr;
-        }
-        if (window) {
-            SDL_DestroyWindow(window);
-            window = nullptr;
-        }
-        WindowHandler::instance()->removeWindow(this);
-        detached = false;
-    }
-    if (texture_detached) {
-        SDL_DestroyTexture(texture_detached);
-        texture_detached = nullptr;
-    }
     if (texture) SDL_DestroyTexture(texture);
     if (vx) delete[] vx;
     if (vy) delete[] vy;
@@ -497,55 +481,6 @@ connectionSet::~connectionSet() {
 bool Node::handleInput(SDL_Event& e) {
     // Ctrl+wheel is editor-level; nodes must not consume it.
     if (e.type == SDL_EVENT_MOUSE_WHEEL && isCtrlPressed) {
-        return false;
-    }
-
-    // Detached embedded preview: editor-side interactions only.
-    if (detached) {
-        msX = (*mouseX - dstRect.x) / zoomRatio;
-        msY = (*mouseY - dstRect.y) / zoomRatio;
-        const bool insideNode = inPolygon(vx, vy, vCount, msX, msY);
-        bool hoverFound = false;
-        for (auto conn : inputs.connections) {
-            if (MouseOn(&conn->rect)) {
-                hoverFound = true;
-                hoveredConnection = conn->id;
-                hoveredDirection = Direction::input;
-                break;
-            }
-        }
-        if (!hoverFound) {
-            for (auto conn : outputs.connections) {
-                if (MouseOn(&conn->rect)) {
-                    hoverFound = true;
-                    hoveredConnection = conn->id;
-                    hoveredDirection = Direction::output;
-                    break;
-                }
-            }
-        }
-        if (!hoverFound) hoveredConnection = -1;
-
-        if (!insideNode && !hoverFound) return false;
-        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-            clickMouse(e);
-            return true;
-        }
-        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_RIGHT && insideNode) {
-            clickMouse(e);
-            return true;
-        }
-        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_RIGHT && hoverFound) {
-            if (!connectionUiOnPatcherCanvas(this, e))
-                return false;
-            clickMouse(e);
-            return true;
-        }
-        if (e.type == SDL_EVENT_MOUSE_WHEEL && isAltPressed) {
-            zoom(std::pow(1.1, e.wheel.y));
-            return true;
-        }
-        // Do not swallow wheel/other events over embedded preview; editor shortcuts must win.
         return false;
     }
 
@@ -610,11 +545,9 @@ bool Node::handleInput(SDL_Event& e) {
 }
 
 void Node::clickMouse(SDL_Event& e) {
-    SDL_Window* eventWindow = SDL_GetWindowFromID(getEventWindowID(e));
-    const bool clickFromDetachedWindow = detached && eventWindow == window;
 
     if (e.button.button == SDL_BUTTON_LEFT) {
-        if (ne && (!detached || !clickFromDetachedWindow)) ne->setMovingNode(this);
+        if (ne) ne->setMovingNode(this);
         if (hoveredConnection != -1 && connectionUiOnPatcherCanvas(this, e)) {
             switch (hoveredDirection) {
                 case Direction::input:
@@ -629,22 +562,8 @@ void Node::clickMouse(SDL_Event& e) {
         auto time = SDL_GetTicks();
         auto interval = time - lastLeftClick;
         lastLeftClick = time;
-        bool overParam = false;
-        for (auto* p : params) {
-            if (inPolygon(p->vx.data(), p->vy.data(), p->vx.size(), msX, msY)) {
-                overParam = true;
-                break;
-            }
-        }
-        if(interval < DCT && !overParam && !blocksDoubleClick(msX, msY) && !clickFromDetachedWindow) {
-            if (detached) attach();
-            else detach();
-            if (ne) ne->releaseMovingNode();
-            return;
-        }
+
     } else if (e.button.button == SDL_BUTTON_RIGHT) {
-        SDL_Window* eventWindow = SDL_GetWindowFromID(getEventWindowID(e));
-        const bool clickFromDetachedWindow = detached && eventWindow == window;
         auto* ctxMenu = ContextMenu::get();
 
         Parameter* hoveredParam = nullptr;
@@ -684,10 +603,6 @@ void Node::clickMouse(SDL_Event& e) {
 
             ctxMenu->dynamicTick = getTreeMenuTicker(t);
         } else {
-            if (clickFromDetachedWindow) {
-                ctxMenu->active = false;
-                return;
-            }
             ctxMenu->activate();
 
             auto t = getNodeMenu();
@@ -1073,50 +988,23 @@ void Node::renderContentHelper(SDL_Renderer* renderer) {
     if (!ne || !ne->renderer) return;
     SDL_FRect tRect{0,0,TEX_W,TEX_H};
 
-    if (!detached) {
-        if (!texture) return;
-        auto target = SDL_GetRenderTarget(renderer);
-        SDL_SetRenderTarget(renderer, texture);
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-        SDL_RenderClear(renderer);
-        renderContent(renderer);
-        SDL_SetRenderTarget(renderer, target);
-        SDL_RenderTexture(ne->renderer, texture, &tRect, &dstRect);
-        return;
-    }
-
-    // Detached mode: render live content to detached texture/window.
-    if (texture_detached) {
-        auto target = SDL_GetRenderTarget(renderer);
-        SDL_SetRenderTarget(renderer, texture_detached);
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-        SDL_RenderClear(renderer);
-        renderContent(renderer);
-        SDL_SetRenderTarget(renderer, target);
-        SDL_RenderTexture(renderer, texture_detached, &tRect, NULL);
-    }
-
-    // Embedded view: keep drawing frozen snapshot from the last attached frame.
-    if (texture) {
-        SDL_RenderTexture(ne->renderer, texture, &tRect, &dstRect);
-    } else {
-        SDL_SetRenderDrawColor(ne->renderer, 80, 80, 80, 255);
-        SDL_RenderFillRect(ne->renderer, &dstRect);
-    }
+    if (!texture) return;
+    auto target = SDL_GetRenderTarget(renderer);
+    SDL_SetRenderTarget(renderer, texture);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+    SDL_RenderClear(renderer);
+    renderContent(renderer);
+    SDL_SetRenderTarget(renderer, target);
+    SDL_RenderTexture(ne->renderer, texture, &tRect, &dstRect);
 }
 
 void Node::render() {
-    // RTT/content: prefer the node's renderer (owns textures with the embedding context); fallback to editor.
-    SDL_Renderer* texR = detached ? renderer : (renderer ? renderer : ((ne && ne->renderer) ? ne->renderer : nullptr));
+    SDL_Renderer* texR = renderer ? renderer : ((ne && ne->renderer) ? ne->renderer : nullptr);
     if (!texR)
         return;
 
-    if (!detached && !texture) {
+    if (!texture)
         texture = SDL_CreateTexture(texR, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, TEX_W, TEX_H);
-    } else if (detached && !texture_detached) {
-        if (!renderer) return;
-        texture_detached = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, TEX_W, TEX_H);
-    }
 
     renderContentHelper(texR);
 
@@ -1403,131 +1291,49 @@ void Node::resetProcessTree() {
     isProcessed = false;
 }
 
-void Node::detach() {
-    if (!detached) {
-        window = SDL_CreateWindow(name.c_str(), TEX_W, TEX_H, SDL_WINDOW_RESIZABLE | SDL_WINDOW_UTILITY);
-        if (ne && ne->window) {
-            const SDL_WindowFlags hostFlags = SDL_GetWindowFlags(ne->window);
-            if ((hostFlags & SDL_WINDOW_HIDDEN) == 0) {
-                SDL_SetWindowParent(window, ne->window);
-            }
-        }
-        renderer = SDL_CreateRenderer(window, NULL);
-        WindowHandler::instance()->addWindow(this);
-    }
-    detached = true;
-
-    clearParamTextures();
-    clearCustomTextures();
-
-    detachFinal();
-}
-
 void Node::clearTextures() {
-    if (texture_detached) SDL_DestroyTexture(texture_detached);
     if (texture) SDL_DestroyTexture(texture);
-    texture_detached = nullptr;
     texture = nullptr;
     clearParamTextures();
     clearCustomTextures();
 }
 
 void Node::attach() {
-    if (detached) {
-        if (renderer) SDL_DestroyRenderer(renderer);
-        if (window) SDL_DestroyWindow(window);
-        WindowHandler::instance()->removeWindow(this);
-    }
-    if (texture_detached) SDL_DestroyTexture(texture_detached);
-
     window = ne->window;
     renderer = ne->renderer;
-    texture_detached = nullptr;
     clearParamTextures();
     clearCustomTextures();
 
-    detached = false;
-
     mouseX = &(ne->mouseX);
     mouseY = &(ne->mouseY);
-
-    attachFinal();
 }
 
 void Node::handleWindowInput(SDL_Event& e) {
-    if (!detached) {
-        for (size_t pi = 0; pi < params.size(); ++pi) {
-            auto p = params[pi];
-            if (inPolygon(p->vx.data(), p->vy.data(), p->vx.size(), msX, msY)) {
-                float oldValue = p->value;
-                p->handleInput(e);
-                if (p->value != oldValue && project && project->um) {
-                    std::vector<int> mgrPath = nm ? nm->managerPath : std::vector<int>{};
-                    // Coalesce rapid wheel events into a single undo action.
-                    bool merged = false;
-                    if (project->um->current->type == SetParamValue) {
-                        auto* prev = static_cast<SetParamValueUndoAction*>(project->um->current);
-                        if (prev->nodeID == static_cast<int>(id) && prev->paramPath == std::vector<size_t>{pi} && prev->managerPath == mgrPath) {
-                            prev->newValue = p->value;
-                            merged = true;
-                        }
+    for (size_t pi = 0; pi < params.size(); ++pi) {
+        auto p = params[pi];
+        if (inPolygon(p->vx.data(), p->vy.data(), p->vx.size(), msX, msY)) {
+            float oldValue = p->value;
+            p->handleInput(e);
+            if (p->value != oldValue && project && project->um) {
+                std::vector<int> mgrPath = nm ? nm->managerPath : std::vector<int>{};
+                // Coalesce rapid wheel events into a single undo action.
+                bool merged = false;
+                if (project->um->current->type == SetParamValue) {
+                    auto* prev = static_cast<SetParamValueUndoAction*>(project->um->current);
+                    if (prev->nodeID == static_cast<int>(id) && prev->paramPath == std::vector<size_t>{pi} && prev->managerPath == mgrPath) {
+                        prev->newValue = p->value;
+                        merged = true;
                     }
-                    if (!merged) {
-                        auto* pa = new SetParamValueUndoAction(project, std::move(mgrPath), static_cast<int>(id), {pi},
-                            oldValue, p->value, "Knob Change");
-                        project->um->newAction(pa);
-                    }
+                }
+                if (!merged) {
+                    auto* pa = new SetParamValueUndoAction(project, std::move(mgrPath), static_cast<int>(id), {pi},
+                        oldValue, p->value, "Knob Change");
+                    project->um->newAction(pa);
                 }
             }
         }
-        handleCustomInput(e);
-        return;
     }
-
-    if (detached && SDL_GetWindowFromID(getEventWindowID(e)) == window) {
-        float gx, gy;
-        SDL_GetGlobalMouseState(&gx, &gy);
-        int wx, wy;
-        SDL_GetWindowPosition(window, &wx, &wy);
-        msX = gx - wx;
-        msY = gy - wy;
-
-        hoveredConnection = -1;
-        bool handled = inPolygon(vx, vy, vCount, msX, msY);
-
-        for (size_t pi = 0; pi < params.size(); ++pi) {
-            auto p = params[pi];
-            if (inPolygon(p->vx.data(), p->vy.data(), p->vx.size(), msX, msY)) {
-                float oldValue = p->value;
-                p->handleInput(e);
-                if (p->value != oldValue && project && project->um) {
-                    std::vector<int> mgrPath = nm ? nm->managerPath : std::vector<int>{};
-                    // Coalesce rapid wheel events into a single undo action.
-                    bool merged = false;
-                    if (project->um->current->type == SetParamValue) {
-                        auto* prev = static_cast<SetParamValueUndoAction*>(project->um->current);
-                        if (prev->nodeID == static_cast<int>(id) && prev->paramPath == std::vector<size_t>{pi} && prev->managerPath == mgrPath) {
-                            prev->newValue = p->value;
-                            merged = true;
-                        }
-                    }
-                    if (!merged) {
-                        auto* pa = new SetParamValueUndoAction(project, std::move(mgrPath), static_cast<int>(id), {pi},
-                            oldValue, p->value, "Knob Change");
-                        project->um->newAction(pa);
-                    }
-                }
-                handled = true;
-            }
-        }
-
-        if (handled && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-            clickMouse(e);
-        }
-
-        handleCustomInput(e);
-    }
-
+    handleCustomInput(e);
 }
 
 void Node::clearParamTextures() {
@@ -1545,21 +1351,6 @@ void Node::setNE(NodeEditor* ne) {
 }
 
 void Node::resetNE() {
-    if (detached) {
-        if (renderer) {
-            SDL_DestroyRenderer(renderer);
-            renderer = nullptr;
-        }
-        if (window) {
-            SDL_DestroyWindow(window);
-            window = nullptr;
-        }
-        WindowHandler::instance()->removeWindow(this);
-    }
-    if (texture_detached) {
-        SDL_DestroyTexture(texture_detached);
-        texture_detached = nullptr;
-    }
     clearParamTextures();
     clearCustomTextures();
     if (texture) {
@@ -1568,11 +1359,8 @@ void Node::resetNE() {
     }
 
     ne = nullptr;
-    // Borrowed from NodeEditor while attached; once ne is cleared they must not be used for rendering.
-    if (!detached) {
-        window = nullptr;
-        renderer = nullptr;
-    }
+    window = nullptr;
+    renderer = nullptr;
 
     resetNEFinal();
 }

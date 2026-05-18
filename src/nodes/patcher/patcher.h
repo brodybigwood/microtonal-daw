@@ -26,8 +26,6 @@ public:
     void setLinkedEventInputCount(size_t count);
 
     void renderContent(SDL_Renderer*) override;
-    void renderPresent() override;
-
     bool handleCustomInput(SDL_Event&) override;
 
     SDL_Texture* neTex = nullptr;
@@ -40,10 +38,6 @@ public:
 
     json extraSerialize() override;
     void extraDeSerialize(json) override;
-
-    void detach() override {}
-    void attachFinal() override;
-    void detachFinal() override;
 
 private:
     size_t leadingWaveformOutputCount() const;

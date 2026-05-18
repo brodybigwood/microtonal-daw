@@ -10,10 +10,8 @@
 class WindowHandler;
 class Playhead {
     public:
-        Playhead(SDL_FRect*, SDL_FRect*, bool*, fract* startTime, Project*);
+        Playhead(SDL_FRect*, SDL_FRect*, fract* startTime, Project*);
         ~Playhead();
-
-        bool* detached;
 
         Project* project;
         WindowHandler* windowHandler;

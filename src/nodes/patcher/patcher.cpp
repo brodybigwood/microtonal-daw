@@ -17,7 +17,13 @@ PatcherNode::PatcherNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::
 }
 
 PatcherNode::~PatcherNode() {
-    attachFinal();
+    if (mainEditor) {
+        mainEditor->setTopMenuBarHostNode(nullptr);
+        mainEditor->clearWireDragState();
+        mainEditor->window = nullptr;
+        mainEditor->renderer = nullptr;
+        mainEditor->retach();
+    }
     if (mainEditor) {
         mainManager->resetNE();
         delete mainEditor;
@@ -349,12 +355,6 @@ void PatcherNode::process() {
     }
 }
 
-void PatcherNode::renderPresent() {
-    if (detached) {
-        if (mainEditor) mainEditor->renderPresent();
-    }
-}
-
 void PatcherNode::renderContent(SDL_Renderer* renderer) {
     if (!vCount) {
         vCount = 4;
@@ -385,28 +385,6 @@ void PatcherNode::renderContent(SDL_Renderer* renderer) {
     mainEditor->tick();
 
     renderParams(renderer);
-}
-
-void PatcherNode::attachFinal() {
-    if (mainEditor) {
-        mainEditor->setTopMenuBarHostNode(nullptr);
-        mainEditor->clearWireDragState();
-        mainEditor->window = nullptr;
-        mainEditor->renderer = nullptr;
-        mainEditor->retach();
-    }
-}
-
-void PatcherNode::detachFinal() {
-    if (!mainEditor) {
-        mainEditor = new NodeEditor;
-        mainEditor->setEmbeddedCanvasSize(static_cast<float>(TEX_W), static_cast<float>(TEX_H));
-        mainEditor->setTopMenuBarHostNode(this);
-        mainManager->setNE(mainEditor);
-    }
-    mainEditor->window = window;
-    mainEditor->renderer = renderer;
-    mainEditor->retach();
 }
 
 bool PatcherNode::handleCustomInput(SDL_Event& e) {

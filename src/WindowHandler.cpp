@@ -178,11 +178,7 @@ bool WindowHandler::tick() {
                 if (closingWindow) {
                     for (auto* w : windows) {
                         if (!w || w->window != closingWindow) continue;
-                        if (auto* n = dynamic_cast<Node*>(w)) {
-                            if (n->detached) {
-                                n->attach();
-                                handledClose = true;
-                            }
+                        if (dynamic_cast<Node*>(w)) {
                         } else if (project && project->window && closingWindow != project->window) {
                             // Non-host utility windows should close themselves, not quit the app.
                             SDL_HideWindow(closingWindow);

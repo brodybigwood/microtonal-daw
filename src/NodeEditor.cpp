@@ -77,15 +77,12 @@ void NodeEditor::renderPatchCable(SDL_Renderer* r, float x1, float y1, float x2,
 
 void NodeEditor::retach() {
     for (auto n : nm->getNodes()) {
-        if (n->detached) n->detach();
-        else n->attach();
+        n->attach();
         n->clearTextures();
     }
-    if (nm->inNode->detached) nm->inNode->detach();
-    else nm->inNode->attach();
+    nm->inNode->attach();
     nm->inNode->clearTextures();
-    if (nm->outNode->detached) nm->outNode->detach();
-    else nm->outNode->attach();
+    nm->outNode->attach();
     nm->outNode->clearTextures();
 }
 

@@ -23,7 +23,7 @@ class PianoRoll;
 class SongRoll : public GridView{
 
     public:
-    SongRoll(SDL_FRect* rect, bool* detached, Window*, Project*, ArrangerNode*);
+    SongRoll(SDL_FRect* rect, Window*, Project*, ArrangerNode*);
         ~SongRoll() override;
 
         ArrangerNode* parentNode;

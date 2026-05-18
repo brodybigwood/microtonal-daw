@@ -1,7 +1,5 @@
 #include "PianoRoll.h"
 
-static bool kNeverDetached = false;
-
 #include <SDL3/SDL_scancode.h>
 #include <SDL3/SDL_stdinc.h>
 #include <algorithm>
@@ -637,7 +635,7 @@ int PianoRoll::structuralEdoKNearNote(const std::shared_ptr<Note>& n) {
 PianoRoll::PianoRoll(Region* region_, Window* parent)
     : EmbeddedWindow(),
       region(region_),
-      GridView(&kNeverDetached, nullptr, 40, parent, region_->project)
+      GridView(nullptr, 40, parent, region_->project)
 {
     leftMargin = 80.0f;
 

@@ -111,7 +111,7 @@ void SongRoll::validateTimelinePointers() {
     }
 }
 
-SongRoll::SongRoll(SDL_FRect* rect, bool* detached, Window* w, Project* p, ArrangerNode* n) : GridView(detached, rect, 200, w, p), parentNode(n) {
+SongRoll::SongRoll(SDL_FRect* rect, Window* w, Project* p, ArrangerNode* n) : GridView(rect, 200, w, p), parentNode(n) {
     this->windowHandler = WindowHandler::instance();
 
     generateTextures(); 

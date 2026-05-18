@@ -86,7 +86,7 @@ class Node : public Window {
         virtual void renderContent(SDL_Renderer*);
 
         void render();
-        virtual void renderPresent() { if (detached) SDL_RenderPresent(renderer); }
+        virtual void renderPresent() {}
 
         std::vector<Parameter*> params;
         void renderParams(SDL_Renderer*);
@@ -145,13 +145,7 @@ class Node : public Window {
         void clearParamTextures();
         virtual void clearCustomTextures() {}
 
-        SDL_Texture* texture_detached;
-        bool detached = false;
-        virtual void detach();
         void attach();
-
-        virtual void attachFinal() {}
-        virtual void detachFinal() {}
 
         void handleWindowInput(SDL_Event&) override;
 
