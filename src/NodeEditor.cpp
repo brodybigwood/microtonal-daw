@@ -277,12 +277,12 @@ std::shared_ptr<TreeEntry> NodeEditor::buildMenuTree(int menuIndex) {
             {
                 auto item = uTreeEntry();
                 item->label = "Preferences...";
-                item->click = [w = canvasW_, h = canvasH_]() {
-                    auto existing = WindowHandler::instance()->existingPreferencesWindow();
+                item->click = [this, w = canvasW_, h = canvasH_]() {
+                    auto existing = existingPreferencesWindow();
                     if (!existing) {
                         auto pw = std::make_unique<PreferencesWindow>();
                         existing = pw.get();
-                        WindowHandler::instance()->addEmbeddedWindow(std::move(pw));
+                        addEmbeddedWindow(std::move(pw));
                     }
                     existing->moveTo((w - existing->w) * 0.5f, (h - existing->h) * 0.4f);
                     existing->open();
@@ -292,12 +292,12 @@ std::shared_ptr<TreeEntry> NodeEditor::buildMenuTree(int menuIndex) {
             {
                 auto item = uTreeEntry();
                 item->label = "Undo Tree";
-                item->click = [w = canvasW_, h = canvasH_]() {
-                    auto existing = WindowHandler::instance()->existingUndoTreeWindow();
+                item->click = [this, w = canvasW_, h = canvasH_]() {
+                    auto existing = existingUndoTreeWindow();
                     if (!existing) {
-                        auto uw = std::make_unique<UndoTreeWindow>(WindowHandler::instance()->project);
+                        auto uw = std::make_unique<UndoTreeWindow>(nm->project);
                         existing = uw.get();
-                        WindowHandler::instance()->addEmbeddedWindow(std::move(uw));
+                        addEmbeddedWindow(std::move(uw));
                     }
                     existing->moveTo((w - existing->w) * 0.5f, (h - existing->h) * 0.4f);
                     existing->open();
@@ -405,6 +405,9 @@ void NodeEditor::handleInput(SDL_Event& e) {
         releaseMovingNode();
         leftClick = false;
     }
+
+    if (routeEmbeddedWindowEvent(e, mouseX, mouseY))
+        return;
 
     if (topMargin > 0.f) {
         // Sync: detect when ContextMenu closed the dropdown (click outside, leaf click, etc.).
@@ -575,6 +578,127 @@ void NodeEditor::keydown(SDL_Event& e) {
 
 }
 
+// --- Embedded window management ---
+
+EmbeddedWindow* NodeEditor::addEmbeddedWindow(std::unique_ptr<EmbeddedWindow> w) {
+    if (!w) return nullptr;
+    int maxZ = 0;
+    for (auto& ew : embeddedWindows_)
+        if (ew->zOrder > maxZ) maxZ = ew->zOrder;
+    w->zOrder = maxZ + 1;
+    EmbeddedWindow* ptr = w.get();
+    embeddedWindows_.push_back(std::move(w));
+    return ptr;
+}
+
+PreferencesWindow* NodeEditor::existingPreferencesWindow() {
+    for (auto& ew : embeddedWindows_) {
+        if (auto* pw = dynamic_cast<PreferencesWindow*>(ew.get()))
+            return pw;
+    }
+    return nullptr;
+}
+
+UndoTreeWindow* NodeEditor::existingUndoTreeWindow() {
+    for (auto& ew : embeddedWindows_) {
+        if (auto* uw = dynamic_cast<UndoTreeWindow*>(ew.get()))
+            return uw;
+    }
+    return nullptr;
+}
+
+void NodeEditor::renderEmbeddedWindows(SDL_Renderer* r) {
+    std::vector<EmbeddedWindow*> sorted;
+    sorted.reserve(embeddedWindows_.size());
+    for (auto& ew : embeddedWindows_)
+        if (ew->visible) sorted.push_back(ew.get());
+    std::sort(sorted.begin(), sorted.end(),
+              [](EmbeddedWindow* a, EmbeddedWindow* b) { return a->zOrder < b->zOrder; });
+    for (auto* ew : sorted)
+        ew->render(r);
+}
+
+bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mouseY) {
+    EmbeddedWindow* target = capturedEmbeddedWindow_;
+
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT)
+        capturedEmbeddedWindow_ = nullptr;
+
+    if (!target) {
+        int topZ = -1;
+        for (auto& ew : embeddedWindows_) {
+            if (ew->visible && ew->zOrder > topZ && ew->hitTest(mouseX, mouseY)) {
+                target = ew.get();
+                topZ = ew->zOrder;
+            }
+        }
+        if (!target && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+            for (auto& ew : embeddedWindows_) {
+                if (ew->visible && ew->zOrder > topZ &&
+                    ew->getResizeZone(mouseX, mouseY) != EmbeddedWindow::ResizeZone::None) {
+                    target = ew.get();
+                    topZ = ew->zOrder;
+                }
+            }
+        }
+    }
+
+    {
+        SDL_SystemCursor cur = SDL_SYSTEM_CURSOR_DEFAULT;
+        EmbeddedWindow::ResizeZone bestZone = EmbeddedWindow::ResizeZone::None;
+        int bestZ = -1;
+        for (auto& ew : embeddedWindows_) {
+            if (!ew->visible || ew->zOrder <= bestZ) continue;
+            auto zone = ew->getResizeZone(mouseX, mouseY);
+            if (zone != EmbeddedWindow::ResizeZone::None) {
+                bestZone = zone;
+                bestZ = ew->zOrder;
+            }
+        }
+        switch (bestZone) {
+            case EmbeddedWindow::ResizeZone::N:  cur = SDL_SYSTEM_CURSOR_N_RESIZE;  break;
+            case EmbeddedWindow::ResizeZone::S:  cur = SDL_SYSTEM_CURSOR_S_RESIZE;  break;
+            case EmbeddedWindow::ResizeZone::E:  cur = SDL_SYSTEM_CURSOR_E_RESIZE;  break;
+            case EmbeddedWindow::ResizeZone::W:  cur = SDL_SYSTEM_CURSOR_W_RESIZE;  break;
+            case EmbeddedWindow::ResizeZone::NE: cur = SDL_SYSTEM_CURSOR_NE_RESIZE; break;
+            case EmbeddedWindow::ResizeZone::NW: cur = SDL_SYSTEM_CURSOR_NW_RESIZE; break;
+            case EmbeddedWindow::ResizeZone::SE: cur = SDL_SYSTEM_CURSOR_SE_RESIZE; break;
+            case EmbeddedWindow::ResizeZone::SW: cur = SDL_SYSTEM_CURSOR_SW_RESIZE; break;
+            default: break;
+        }
+        SDL_SetCursor(SDL_CreateSystemCursor(cur));
+    }
+
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT && target) {
+        capturedEmbeddedWindow_ = target;
+        focusedEmbeddedWindow_ = target;
+        int maxZ = 0;
+        for (auto& ew : embeddedWindows_)
+            if (ew->zOrder > maxZ) maxZ = ew->zOrder;
+        target->zOrder = maxZ + 1;
+    }
+
+    if (target && target->handleResizeInput(e, mouseX, mouseY))
+        return true;
+
+    if (target && target->handleInput(e))
+        return true;
+
+    if (capturedEmbeddedWindow_ && !capturedEmbeddedWindow_->visible)
+        capturedEmbeddedWindow_ = nullptr;
+    if (focusedEmbeddedWindow_ && !focusedEmbeddedWindow_->visible)
+        focusedEmbeddedWindow_ = nullptr;
+
+    if (e.type == SDL_EVENT_KEY_DOWN && focusedEmbeddedWindow_) {
+        if (!focusedEmbeddedWindow_->visible)
+            focusedEmbeddedWindow_ = nullptr;
+        else if (focusedEmbeddedWindow_->handleKeyboard(e))
+            return true;
+    }
+
+    return false;
+}
+
 void NodeEditor::render(SDL_Renderer* renderer, SDL_FRect* surfaceRect) {
     if (topMargin > 0.f)
         renderRootMenuBarSkeleton(renderer, surfaceRect);
@@ -602,6 +726,8 @@ void NodeEditor::render(SDL_Renderer* renderer, SDL_FRect* surfaceRect) {
     nm->outNode->render();
 
     renderConnector(this->renderer);
+
+    renderEmbeddedWindows(renderer);
 
     SDL_SetRenderClipRect(renderer, nullptr);
 }

@@ -1,15 +1,20 @@
 #pragma once
 
 #include <SDL3/SDL.h>
+#include <vector>
+#include <memory>
+#include <array>
 #include "TreeEntry.h"
 #include "nodes/nodetypes.h"
 #include "Window.h"
 #include "Bus.h"
-
+#include "EmbeddedWindow.h"
 
 #define SINE_SIZE 2000
 
 class Node;
+class PreferencesWindow;
+class UndoTreeWindow;
 
 class NodeEditor : public Window {
     public:
@@ -70,7 +75,19 @@ class NodeEditor : public Window {
         /** Clear all in-progress connection / drag state (e.g. before destroying this editor). */
         void clearWireDragState();
 
+        // --- Embedded window management ---
 
+        EmbeddedWindow* addEmbeddedWindow(std::unique_ptr<EmbeddedWindow> w);
+
+        void renderEmbeddedWindows(SDL_Renderer* r);
+
+        bool routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mouseY);
+
+        PreferencesWindow* existingPreferencesWindow();
+
+        UndoTreeWindow* existingUndoTreeWindow();
+
+        EmbeddedWindow* focusedEmbeddedWindow() const { return focusedEmbeddedWindow_; }
 
     private:
 
@@ -134,6 +151,10 @@ class NodeEditor : public Window {
 
         /** Build the tree for a top-menu dropdown (delegates to ContextMenu for display). */
         std::shared_ptr<TreeEntry> buildMenuTree(int menuIndex);
+
+        std::vector<std::unique_ptr<EmbeddedWindow>> embeddedWindows_;
+        EmbeddedWindow* capturedEmbeddedWindow_ = nullptr;
+        EmbeddedWindow* focusedEmbeddedWindow_ = nullptr;
 
         float canvasW_ = 1920.f;
         float canvasH_ = 1080.f;
