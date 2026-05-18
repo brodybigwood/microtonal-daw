@@ -1129,15 +1129,10 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                 if(mouseX > leftMargin && stretchingNote == nullptr) {
                     if(isShiftPressed && hoveredElement != nullptr) {
                         auto ctxMenu = ContextMenu::get();
-                        ctxMenu->active = true;
                         ctxMenu->skipNextEvent = true;
-                        ctxMenu->window_id = project && project->window ? SDL_GetWindowID(project->window) : 0;
-                        ctxMenu->renderer = project ? project->renderer : nullptr;
                         if (project && project->window)
                             SDL_StartTextInput(project->window);
-
-                        ctxMenu->locX = mouseX + dstRect->x;
-                        ctxMenu->locY = mouseY + dstRect->y;
+                        ctxMenu->activate();
 
                         ctxMenu->dynamicTick = getTextInputTicker([this](std::string text) {
                             try {
@@ -1259,14 +1254,10 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                         }
                     }
                     auto ctxMenu = ContextMenu::get();
-                    ctxMenu->active = true;
                     ctxMenu->skipNextEvent = true;
-                    ctxMenu->window_id = project && project->window ? SDL_GetWindowID(project->window) : 0;
-                    ctxMenu->renderer = project ? project->renderer : nullptr;
                     if (project && project->window)
                         SDL_StartTextInput(project->window);
-                    ctxMenu->locX = mouseX + dstRect->x;
-                    ctxMenu->locY = mouseY + dstRect->y;
+                    ctxMenu->activate();
                     const float a = intervalDialogFrozenStartLine;
                     const float b = intervalDialogFrozenEndLine;
                     const std::shared_ptr<Note> capIntervalStartNote = intervalStartNote;

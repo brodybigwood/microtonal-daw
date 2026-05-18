@@ -2,10 +2,21 @@
 #include "SDL_Events.h"
 #include <iostream>
 #include "styles.h"
+#include "WindowHandler.h"
 
 ContextMenu* ContextMenu::get() {
     static ContextMenu c;
     return &c;
+}
+
+void ContextMenu::activate() {
+    auto* wh = WindowHandler::instance();
+    if (wh && wh->project && wh->project->window) {
+        window_id = SDL_GetWindowID(wh->project->window);
+        renderer = wh->project->renderer;
+    }
+    SDL_GetMouseState(&locX, &locY);
+    active = true;
 }
 
 void ContextMenu::tick(SDL_Event& e) {

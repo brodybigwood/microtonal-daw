@@ -101,20 +101,10 @@ void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {
 
     if (filepath.empty()) {
         auto ctxMenu = ContextMenu::get();
-
-        ctxMenu->active = true;
-        SDL_Window* dialogWindow = this->window;
-        if (triggerWindowID != 0) {
-            if (SDL_Window* eventWindow = SDL_GetWindowFromID(triggerWindowID)) {
-                dialogWindow = eventWindow;
-            }
-        }
-        SDL_Renderer* dialogRenderer = triggerRenderer ? triggerRenderer : this->renderer;
-        ctxMenu->window_id = dialogWindow ? SDL_GetWindowID(dialogWindow) : 0;
-        ctxMenu->renderer = dialogRenderer;
-        if (dialogWindow) SDL_StartTextInput(dialogWindow);
+        ctxMenu->activate();
+        if (this->window) SDL_StartTextInput(this->window);
         int w = 0, h = 0;
-        if (dialogWindow) SDL_GetWindowSize(dialogWindow, &w, &h);
+        if (this->window) SDL_GetWindowSize(this->window, &w, &h);
         ctxMenu->locX = w * 0.5f;
         ctxMenu->locY = h * 0.5f;
 

@@ -372,6 +372,7 @@ void PatcherNode::renderContent(SDL_Renderer* renderer) {
 
     if (!mainEditor) {
         mainEditor = new NodeEditor;
+        mainEditor->embedded_ = true;
         mainEditor->renderer = nullptr;
         mainEditor->window = nullptr;
         mainEditor->setEmbeddedCanvasSize(static_cast<float>(TEX_W), static_cast<float>(TEX_H));
@@ -380,6 +381,7 @@ void PatcherNode::renderContent(SDL_Renderer* renderer) {
     }
 
     mainEditor->renderer = renderer;
+    mainEditor->window = ne ? ne->window : nullptr;
     mainEditor->tick();
 
     renderParams(renderer);
@@ -408,7 +410,11 @@ void PatcherNode::detachFinal() {
 }
 
 bool PatcherNode::handleCustomInput(SDL_Event& e) {
-    if (mainEditor) mainEditor->handleWindowInput(e);
+    if (mainEditor) {
+        mainEditor->mouseX = msX;
+        mainEditor->mouseY = msY;
+        mainEditor->handleInput(e);
+    }
     return false;
 }
 

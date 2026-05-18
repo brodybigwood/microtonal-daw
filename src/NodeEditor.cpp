@@ -432,10 +432,8 @@ void NodeEditor::handleInput(SDL_Event& e) {
                     auto tree = buildMenuTree(clickedLabel);
                     if (tree && !tree->children.empty()) {
                         auto* ctx = ContextMenu::get();
-                        ctx->active = true;
+                        ctx->activate();
                         ctx->skipNextEvent = true;
-                        ctx->window_id = SDL_GetWindowID(window);
-                        ctx->renderer = renderer;
                         ctx->locX = menuLabelRects_[static_cast<size_t>(clickedLabel)].x;
                         ctx->locY = topMargin;
                         ctx->dynamicTick = getTreeMenuTicker(tree);
@@ -494,8 +492,9 @@ void NodeEditor::handleInput(SDL_Event& e) {
 }
 
 void NodeEditor::moveMouse() {
-    SDL_GetMouseState(&mouseX, &mouseY);
-    
+    if (!embedded_)
+        SDL_GetMouseState(&mouseX, &mouseY);
+
     if (movingNode) movingNode->move(mouseX - moveOffX, mouseY - moveOffY);
     hover();
 }
@@ -531,13 +530,7 @@ void NodeEditor::clickMouse(SDL_Event& e) {
 
     } else if (e.button.button == SDL_BUTTON_RIGHT) {
         auto* ctxMenu = ContextMenu::get();
-        ctxMenu->active = true;
-
-        ctxMenu->window_id = SDL_GetWindowID(window);
-        ctxMenu->renderer = renderer;
-
-        ctxMenu->locX = mouseX;
-        ctxMenu->locY = mouseY;
+        ctxMenu->activate();
 
         auto t = getClickMenu();
 

@@ -516,11 +516,7 @@ void SongRoll::clickMouse(SDL_Event& e) {
                     GridElement* ge = em->getElement(static_cast<uint16_t>(em->hoveredElement));
                     if (ge->type == ElementType::region) {
                         auto* ctxMenu = ContextMenu::get();
-                        ctxMenu->active = true;
-                        ctxMenu->window_id = SDL_GetWindowID(window);
-                        ctxMenu->renderer = renderer;
-                        ctxMenu->locX = mouseX;
-                        ctxMenu->locY = mouseY;
+                        ctxMenu->activate();
                         const uint16_t rid = ge->id;
                         auto root = uTreeEntry();
                         auto del = uTreeEntry();

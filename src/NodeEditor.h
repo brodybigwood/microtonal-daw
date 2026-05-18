@@ -61,6 +61,9 @@ class NodeEditor : public Window {
         /** Enable the root menu bar directly (for the top-level editor, not hosted by a patcher). */
         void enableRootMenuBar() { rootMenuBar_ = true; }
 
+        /** When embedded, moveMouse() skips SDL_GetMouseState; caller sets mouseX/mouseY directly. */
+        bool embedded_ = false;
+
         /** Called from `NodeManager::setNE` / `resetNE` only (menu bar layout for hosted patch editor). */
         void updateRootMenuBarLayout();
         void resetRootMenuBarLayout();

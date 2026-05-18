@@ -334,9 +334,7 @@ static bool hitTestSetting(const SettingDesc& d, float mx, float my, const SDL_F
             }
             auto* proj = WindowHandler::instance()->project;
             auto* ctxMenu = ContextMenu::get();
-            ctxMenu->active = true;
-            ctxMenu->window_id = (proj && proj->window) ? SDL_GetWindowID(proj->window) : 0;
-            ctxMenu->renderer = proj ? proj->renderer : nullptr;
+            ctxMenu->activate();
             ctxMenu->locX = boxX;
             ctxMenu->locY = y;
             if (proj && proj->window)
@@ -441,11 +439,8 @@ static bool hitTestDeviceRow(float mx, float my, const char* label,
         tree->addChild(entry);
     }
 
-    auto* proj = WindowHandler::instance()->project;
     auto* ctx = ContextMenu::get();
-    ctx->active = true;
-    ctx->window_id = (proj && proj->window) ? SDL_GetWindowID(proj->window) : 0;
-    ctx->renderer = proj ? proj->renderer : nullptr;
+    ctx->activate();
     ctx->locX = boxX;
     ctx->locY = y + kRowH * s;
     ctx->dynamicTick = getTreeMenuTicker(tree);

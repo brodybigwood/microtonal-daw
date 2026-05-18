@@ -216,11 +216,7 @@ void FilterNode::openModeMenu() {
     addEntry("BP", FilterMode::BandPass);
 
     auto* ctxMenu = ContextMenu::get();
-    ctxMenu->active = true;
-    ctxMenu->window_id = SDL_GetWindowID(window);
-    ctxMenu->renderer = renderer;
-    ctxMenu->locX = detached ? msX : *mouseX;
-    ctxMenu->locY = detached ? msY : *mouseY;
+    ctxMenu->activate();
     ctxMenu->dynamicTick = getTreeMenuTicker(root);
 }
 
@@ -239,11 +235,7 @@ void FilterNode::openSlopeMenu() {
     }
 
     auto* ctxMenu = ContextMenu::get();
-    ctxMenu->active = true;
-    ctxMenu->window_id = SDL_GetWindowID(window);
-    ctxMenu->renderer = renderer;
-    ctxMenu->locX = detached ? msX : *mouseX;
-    ctxMenu->locY = detached ? msY : *mouseY;
+    ctxMenu->activate();
     ctxMenu->dynamicTick = getTreeMenuTicker(root);
 }
 

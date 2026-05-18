@@ -15,6 +15,7 @@ class ArrangerNode : public Node {
         bool handleCustomInput(SDL_Event&) override;
         void renderContent(SDL_Renderer*) override;
 
+        void detach() override {}
         void renderPresent() override;
         void clearCustomTextures() override;
 

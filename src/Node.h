@@ -147,7 +147,7 @@ class Node : public Window {
 
         SDL_Texture* texture_detached;
         bool detached = false;
-        void detach();
+        virtual void detach();
         void attach();
 
         virtual void attachFinal() {}

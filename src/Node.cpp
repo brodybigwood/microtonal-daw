@@ -646,14 +646,6 @@ void Node::clickMouse(SDL_Event& e) {
         SDL_Window* eventWindow = SDL_GetWindowFromID(getEventWindowID(e));
         const bool clickFromDetachedWindow = detached && eventWindow == window;
         auto* ctxMenu = ContextMenu::get();
-        ctxMenu->active = true;
-        if (clickFromDetachedWindow) {
-            ctxMenu->window_id = SDL_GetWindowID(window);
-            ctxMenu->renderer = renderer;
-        } else {
-            ctxMenu->window_id = SDL_GetWindowID(ne->getWindow());
-            ctxMenu->renderer = ne->getRenderer();
-        }
 
         Parameter* hoveredParam = nullptr;
         for (auto* p : params) {
@@ -664,8 +656,7 @@ void Node::clickMouse(SDL_Event& e) {
         }
 
         if (hoveredParam) {
-            ctxMenu->locX = clickFromDetachedWindow ? msX : *mouseX;
-            ctxMenu->locY = clickFromDetachedWindow ? msY : *mouseY;
+            ctxMenu->activate();
             size_t paramIndex = 0;
             for (size_t i = 0; i < params.size(); ++i) {
                 if (params[i] == hoveredParam) { paramIndex = i; break; }
@@ -677,8 +668,7 @@ void Node::clickMouse(SDL_Event& e) {
                 ctxMenu->active = false;
                 return;
             }
-            ctxMenu->locX = clickFromDetachedWindow ? msX : *mouseX;
-            ctxMenu->locY = clickFromDetachedWindow ? msY : *mouseY;
+            ctxMenu->activate();
 
             Connection* c;
             switch (hoveredDirection) {
@@ -698,8 +688,7 @@ void Node::clickMouse(SDL_Event& e) {
                 ctxMenu->active = false;
                 return;
             }
-            ctxMenu->locX = *mouseX;
-            ctxMenu->locY = *mouseY;
+            ctxMenu->activate();
 
             auto t = getNodeMenu();
             ctxMenu->dynamicTick = getTreeMenuTicker(t);
@@ -874,9 +863,7 @@ std::shared_ptr<TreeEntry> Node::getParameterMenu(Parameter* p, const std::vecto
     setValue->label = "Set Value";
     setValue->click = [this, p, path]() {
         auto* ctxMenu = ContextMenu::get();
-        ctxMenu->active = true;
-        ctxMenu->window_id = SDL_GetWindowID(detached ? window : ne->getWindow());
-        ctxMenu->renderer = detached ? renderer : ne->getRenderer();
+        ctxMenu->activate();
         ctxMenu->dynamicTick = getTextInputTicker([this, p, path](std::string text) {
             try {
                 const float v = std::clamp(std::stof(text), 0.0f, 1.0f);

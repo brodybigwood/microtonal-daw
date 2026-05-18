@@ -16,9 +16,11 @@ class ContextMenu {
         bool active = false;
 
         static ContextMenu* get();
-        
-        SDL_Renderer* renderer;        
-       
+
+        void activate();
+
+        SDL_Renderer* renderer;
+
         uint32_t window_id;
     
         void tick(SDL_Event& e);

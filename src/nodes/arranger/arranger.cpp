@@ -83,10 +83,7 @@ void ArrangerNode::clearCustomTextures() {
     sl->generateTextures();
 }
 
-void ArrangerNode::renderPresent() {
-    if (!sl) return;
-    if (detached) SDL_RenderPresent(renderer);
-}
+void ArrangerNode::renderPresent() {}
 
 json ArrangerNode::extraSerialize() {
     json j;

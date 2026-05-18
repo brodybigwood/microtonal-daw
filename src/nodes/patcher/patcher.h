@@ -41,6 +41,7 @@ public:
     json extraSerialize() override;
     void extraDeSerialize(json) override;
 
+    void detach() override {}
     void attachFinal() override;
     void detachFinal() override;
 
