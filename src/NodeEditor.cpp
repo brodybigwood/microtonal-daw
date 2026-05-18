@@ -636,6 +636,8 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
     if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT)
         capturedEmbeddedWindow_ = nullptr;
 
+    bool targetIsResize = false;
+
     if (!target) {
         // Collect visible windows sorted by z descending.
         std::vector<EmbeddedWindow*> sorted;
@@ -648,6 +650,7 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
         for (auto* ew : sorted) {
             if (ew->getResizeZone(mouseX, mouseY) != EmbeddedWindow::ResizeZone::None) {
                 target = ew;
+                targetIsResize = true;
                 break;
             }
         }
@@ -665,7 +668,7 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
 
     {
         SDL_SystemCursor cur = SDL_SYSTEM_CURSOR_DEFAULT;
-        if (target) {
+        if (targetIsResize) {
             auto zone = target->getResizeZone(mouseX, mouseY);
             switch (zone) {
                 case EmbeddedWindow::ResizeZone::N:  cur = SDL_SYSTEM_CURSOR_N_RESIZE;  break;
@@ -694,7 +697,7 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
     if (target && target->handleResizeInput(e, mouseX, mouseY))
         return true;
 
-    if (target && target->handleInput(e))
+    if (target && !targetIsResize && target->handleInput(e))
         return true;
 
     if (capturedEmbeddedWindow_ && !capturedEmbeddedWindow_->visible)
