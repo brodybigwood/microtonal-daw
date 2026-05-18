@@ -1,17 +1,17 @@
 #pragma once
 
-#include "Node.h"
+#include <SDL3/SDL.h>
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
+
 class Project;
 class NodeManager;
-class PatcherNode;
 
 class NodeProcessor {
 public:
     explicit NodeProcessor(Project*);
     ~NodeProcessor();
 
-    void setNode(Node* n) { node = n; }
-    Node* getNode() const { return node; }
     NodeManager* getManager() const { return guiManager; }
 
     /** GUI-owned project copy (rendering, editing). */
@@ -22,7 +22,6 @@ public:
     /** Set the thread-local active manager. Call once per thread before any action. */
     static void setThreadActiveRoot(NodeManager* r);
 
-    PatcherNode* getRootPatcher() const;
     SDL_Window* getHostWindow() const;
     SDL_Renderer* getHostRenderer() const;
 
@@ -36,6 +35,5 @@ public:
 
 private:
     Project* project = nullptr;
-    Node* node = nullptr;
     class NodeEditor* editor = nullptr;
 };

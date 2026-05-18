@@ -1,7 +1,6 @@
 #include "NodeProcessor.h"
 #include "NodeManager.h"
 #include "NodeEditor.h"
-#include "nodes/patcher/patcher.h"
 #include <cstring>
 
 NodeProcessor::NodeProcessor(Project* p) : project(p) {
@@ -13,26 +12,10 @@ NodeProcessor::NodeProcessor(Project* p) : project(p) {
     // GUI copy: owns SDL resources, used for rendering/editing.
     guiManager = new NodeManager(project);
     guiManager->setNE(editor);
-    auto* root = dynamic_cast<PatcherNode*>(guiManager->addNodeNow(NodeType::Patcher, 140.0f, 140.0f));
-    setNode(root);
     setThreadActiveRoot(guiManager);
 
     // Audio copy: separate project graph, no SDL resources.
     audioManager = new NodeManager(project);
-    {
-        // Clone via serialize/deserialize so audio copy starts identical.
-        json snapshot = guiManager->serialize();
-        audioManager->deSerialize(snapshot);
-    }
-
-    // Patch up root node pointer to point at GUI copy's root (for getRootPatcher, etc.).
-    for (auto* n : guiManager->getNodes()) {
-        auto* pn = dynamic_cast<PatcherNode*>(n);
-        if (pn) {
-            setNode(pn);
-            break;
-        }
-    }
 }
 
 NodeProcessor::~NodeProcessor() {
@@ -56,11 +39,6 @@ NodeProcessor::~NodeProcessor() {
     }
     delete editor;
     editor = nullptr;
-    node = nullptr;
-}
-
-PatcherNode* NodeProcessor::getRootPatcher() const {
-    return dynamic_cast<PatcherNode*>(node);
 }
 
 SDL_Window* NodeProcessor::getHostWindow() const {
@@ -79,6 +57,21 @@ json NodeProcessor::serialize() const {
 void NodeProcessor::deSerialize(const json& j) {
     if (!editor) return;
 
+    // Backward compat: old format wrapped the real graph inside a root PatcherNode's mainManager.
+    json transformed = j;
+    if (j.contains("nodes") && j["nodes"].is_array() && j["nodes"].size() == 1) {
+        const auto& n = j["nodes"][0];
+        if (n.value("nodeType", -1) == static_cast<int>(NodeType::Patcher) &&
+            n.contains("extra") && n["extra"].contains("mainManager")) {
+            const auto& inner = n["extra"]["mainManager"];
+            transformed = j;
+            transformed["nodes"] = inner["nodes"];
+            transformed["connections"] = inner["connections"];
+            transformed["idManager"] = inner["idManager"];
+            // Keep top-level outNode/inNode (they have 2 channels vs inner's 0).
+        }
+    }
+
     // Wipe and rebuild GUI copy.
     if (guiManager) {
         guiManager->resetNE();
@@ -87,7 +80,7 @@ void NodeProcessor::deSerialize(const json& j) {
     }
     guiManager = new NodeManager(project);
     guiManager->setNE(editor);
-    guiManager->deSerialize(j);
+    guiManager->deSerialize(transformed);
 
     // Wipe and rebuild audio copy from the same JSON.
     if (audioManager) {
@@ -96,29 +89,9 @@ void NodeProcessor::deSerialize(const json& j) {
         audioManager = nullptr;
     }
     audioManager = new NodeManager(project);
-    audioManager->deSerialize(j);
+    audioManager->deSerialize(transformed);
 
-    // Active root defaults to GUI.
     setThreadActiveRoot(guiManager);
-
-    // Find root patcher in GUI copy.
-    node = nullptr;
-    for (auto* n : guiManager->getNodes()) {
-        auto* p = dynamic_cast<PatcherNode*>(n);
-        if (p) {
-            setNode(p);
-            break;
-        }
-    }
-    if (!node) {
-        auto* root = dynamic_cast<PatcherNode*>(guiManager->addNodeNow(NodeType::Patcher, 140.0f, 140.0f));
-        setNode(root);
-        // Clone to audio.
-        if (audioManager) {
-            json snap = guiManager->serialize();
-            audioManager->deSerialize(snap);
-        }
-    }
 }
 
 void NodeProcessor::render() {
