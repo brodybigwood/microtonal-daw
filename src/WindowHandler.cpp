@@ -272,6 +272,8 @@ bool WindowHandler::tick() {
                         w->handleWindowInput(e);
                         break;
                     }
+                if (project && eventWin == project->window)
+                    project->handleWindowInput(e);
             }
         }
 

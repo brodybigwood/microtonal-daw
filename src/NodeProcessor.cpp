@@ -6,7 +6,7 @@
 
 NodeProcessor::NodeProcessor(Project* p) : project(p) {
     editor = new NodeEditor;
-    editor->window = SDL_CreateWindow("NodeProcessorHost", 64, 64, SDL_WINDOW_HIDDEN | SDL_WINDOW_UTILITY);
+    editor->window = SDL_CreateWindow("NodeProcessorHost", 1920, 1080, SDL_WINDOW_RESIZABLE);
     editor->renderer = SDL_CreateRenderer(editor->window, NULL);
 
     // GUI copy: owns SDL resources, used for rendering/editing.
@@ -14,7 +14,6 @@ NodeProcessor::NodeProcessor(Project* p) : project(p) {
     guiManager->setNE(editor);
     auto* root = dynamic_cast<PatcherNode*>(guiManager->addNodeNow(NodeType::Patcher, 140.0f, 140.0f));
     setNode(root);
-    if (root && !root->detached) root->detach();
     setThreadActiveRoot(guiManager);
 
     // Audio copy: separate project graph, no SDL resources.
@@ -119,10 +118,6 @@ void NodeProcessor::deSerialize(const json& j) {
             audioManager->deSerialize(snap);
         }
     }
-    auto* rootPatcher = dynamic_cast<PatcherNode*>(node);
-    if (rootPatcher && rootPatcher->ne && rootPatcher->renderer && !rootPatcher->detached) {
-        rootPatcher->detach();
-    }
 }
 
 void NodeProcessor::render() {
@@ -140,63 +135,17 @@ void NodeProcessor::handleWindowInput(SDL_Event& e) {
 void NodeProcessor::process(float* in, float* out, int numIn, int numOut, int bufferSize, int sampleRate) {
     if (!out || bufferSize <= 0 || numOut <= 0) return;
 
-    // Use audio copy for DSP.
     NodeManager* mgr = audioManager;
     if (!mgr) {
         std::memset(out, 0, static_cast<size_t>(bufferSize) * static_cast<size_t>(numOut) * sizeof(float));
         return;
     }
 
-    // Resolve audio copy root patcher.
-    PatcherNode* root = nullptr;
-    for (auto* n : mgr->getNodes()) {
-        root = dynamic_cast<PatcherNode*>(n);
-        if (root) break;
-    }
-    if (!root) {
-        std::memset(out, 0, static_cast<size_t>(bufferSize) * static_cast<size_t>(numOut) * sizeof(float));
-        return;
-    }
+    mgr->inNode->input = in;
+    mgr->inNode->numChannels = numIn;
 
-    root->update(bufferSize, sampleRate);
-    int inCh = 0;
-    for (auto* c : root->inputs.connections) {
-        if (!c || c->type != DataType::Waveform) continue;
-        if (in && inCh < numIn) {
-            c->is_connected = true;
-            c->buffer = in + static_cast<size_t>(inCh) * static_cast<size_t>(bufferSize);
-            c->bufferSize = bufferSize;
-            c->input_node = -1;
-            c->input_connection = -1;
-            c->events = nullptr;
-            ++inCh;
-        } else {
-            c->is_connected = false;
-            c->buffer = nullptr;
-            c->bufferSize = 0;
-            c->input_node = -1;
-            c->input_connection = -1;
-            c->events = nullptr;
-        }
-    }
-
-    root->process();
-
-    int outCh = 0;
-    for (auto* c : root->outputs.connections) {
-        if (!c || c->type != DataType::Waveform) continue;
-        if (outCh >= numOut) break;
-        float* dst = out + static_cast<size_t>(outCh) * static_cast<size_t>(bufferSize);
-        if (c->buffer) {
-            std::memcpy(dst, c->buffer, static_cast<size_t>(bufferSize) * sizeof(float));
-        } else {
-            std::memset(dst, 0, static_cast<size_t>(bufferSize) * sizeof(float));
-        }
-        ++outCh;
-    }
-    while (outCh < numOut) {
-        float* dst = out + static_cast<size_t>(outCh) * static_cast<size_t>(bufferSize);
-        std::memset(dst, 0, static_cast<size_t>(bufferSize) * sizeof(float));
-        ++outCh;
-    }
+    int bs = bufferSize;
+    int nc = numOut;
+    int sr = sampleRate;
+    mgr->process(out, bs, nc, sr);
 }
