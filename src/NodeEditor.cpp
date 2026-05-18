@@ -591,6 +591,18 @@ EmbeddedWindow* NodeEditor::addEmbeddedWindow(std::unique_ptr<EmbeddedWindow> w)
     return ptr;
 }
 
+void NodeEditor::removeEmbeddedWindow(EmbeddedWindow* w) {
+    if (!w) return;
+    if (capturedEmbeddedWindow_ == w) capturedEmbeddedWindow_ = nullptr;
+    if (focusedEmbeddedWindow_ == w) focusedEmbeddedWindow_ = nullptr;
+    for (auto it = embeddedWindows_.begin(); it != embeddedWindows_.end(); ++it) {
+        if (it->get() == w) {
+            embeddedWindows_.erase(it);
+            return;
+        }
+    }
+}
+
 PreferencesWindow* NodeEditor::existingPreferencesWindow() {
     for (auto& ew : embeddedWindows_) {
         if (auto* pw = dynamic_cast<PreferencesWindow*>(ew.get()))
@@ -626,19 +638,29 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
 
     if (!target) {
         int topZ = -1;
+        // Hit-test: highest-z window containing the mouse.
         for (auto& ew : embeddedWindows_) {
             if (ew->visible && ew->zOrder > topZ && ew->hitTest(mouseX, mouseY)) {
                 target = ew.get();
                 topZ = ew->zOrder;
             }
         }
-        if (!target && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+        // On mousedown: also check resize zones. If a higher-z window has a resize zone
+        // at the cursor (even if the mouse is technically inside a lower-z window's hit area),
+        // prefer the higher-z window so resize/drag can start.
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+            int bestResizeZ = topZ;
+            EmbeddedWindow* resizeTarget = target;
             for (auto& ew : embeddedWindows_) {
-                if (ew->visible && ew->zOrder > topZ &&
-                    ew->getResizeZone(mouseX, mouseY) != EmbeddedWindow::ResizeZone::None) {
-                    target = ew.get();
-                    topZ = ew->zOrder;
+                if (!ew->visible || ew->zOrder <= bestResizeZ) continue;
+                if (ew->getResizeZone(mouseX, mouseY) != EmbeddedWindow::ResizeZone::None) {
+                    resizeTarget = ew.get();
+                    bestResizeZ = ew->zOrder;
                 }
+            }
+            if (resizeTarget && bestResizeZ > topZ) {
+                target = resizeTarget;
+                topZ = bestResizeZ;
             }
         }
     }

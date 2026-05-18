@@ -24,6 +24,7 @@ public:
 
     SDL_Window* getHostWindow() const;
     SDL_Renderer* getHostRenderer() const;
+    class NodeEditor* getEditor() const;
 
     json serialize() const;
     void deSerialize(const json&);

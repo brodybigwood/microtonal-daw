@@ -1,5 +1,7 @@
 #include "PianoRoll.h"
 
+static bool kNeverDetached = false;
+
 #include <SDL3/SDL_scancode.h>
 #include <SDL3/SDL_stdinc.h>
 #include <algorithm>
@@ -274,7 +276,7 @@ void PianoRoll::renderPitchFactorsHoverTooltip() {
 
     const std::string text = formatPrimePowerVector(note->pitchIntegerPairs);
     const SDL_FRect bounds{0.f, 0.f, static_cast<float>(width), static_cast<float>(height - bottomMargin)};
-    renderTooltip(renderer, text, mouseX, mouseY, bounds);
+    renderTooltip(renderer, text, mouseX + dstRect->x, mouseY + dstRect->y, bounds);
 }
 
 float PianoRoll::harmonicToMidi(int harmonic) const {
@@ -632,11 +634,13 @@ int PianoRoll::structuralEdoKNearNote(const std::shared_ptr<Note>& n) {
     return hoveredEdoKFromGrid();
 }
 
-PianoRoll::PianoRoll(bool* detached, SDL_FRect* rect, Region* region, Window* w) : region(region), GridView(detached, rect, 40, w, region->project) {
-   
-    if (*detached) WindowHandler::instance()->addWindow(this);
+PianoRoll::PianoRoll(Region* region_, Window* parent)
+    : EmbeddedWindow(),
+      region(region_),
+      GridView(&kNeverDetached, nullptr, 40, parent, region_->project)
+{
     leftMargin = 80.0f;
- 
+
     updateLines();
 
     SDL_SetCursor(cursors.grabber);
@@ -663,14 +667,68 @@ PianoRoll::PianoRoll(bool* detached, SDL_FRect* rect, Region* region, Window* w)
     }
 
     createGridRect();
+
+    // Sync EmbeddedWindow dimensions with GridView.
+    EmbeddedWindow::w = width;
+    EmbeddedWindow::h = height;
+    title = "Piano Roll";
 }
 
 PianoRoll::~PianoRoll() {
     for(int i = 0; i<4; i++) {
         SDL_DestroyTexture(layers[i]);
     }
-    
-    WindowHandler::instance()->removeWindow(this);
+}
+
+static void pianoRollSyncCoords(PianoRoll* pr) {
+    // Sync dstRect/gridRect to current embedded window position and size.
+    float newW = pr->EmbeddedWindow::w - EmbeddedWindow::kBorderW * 2.f;
+    float newH = pr->EmbeddedWindow::h - EmbeddedWindow::kTitleBarH - EmbeddedWindow::kBorderW;
+    if (newW < 100.f) newW = 100.f;
+    if (newH < 80.f) newH = 80.f;
+
+    bool sizeChanged = (pr->width != newW || pr->height != newH);
+    pr->width = newW;
+    pr->height = newH;
+    pr->dstRect->w = newW;
+    pr->dstRect->h = newH;
+
+    pr->dstRect->x = pr->EmbeddedWindow::x + EmbeddedWindow::kBorderW;
+    pr->dstRect->y = pr->EmbeddedWindow::y + EmbeddedWindow::kTitleBarH;
+    pr->gridRect.x = pr->leftMargin;
+    pr->gridRect.y = pr->topMargin;
+    pr->gridRect.w = newW - pr->leftMargin;
+    pr->gridRect.h = newH - pr->topMargin - pr->bottomMargin;
+
+    if (sizeChanged && pr->renderer)
+        pr->initWindow();
+
+    // Always start from global mouse pos, then subtract content origin.
+    float gx, gy;
+    SDL_GetMouseState(&gx, &gy);
+    pr->mouseX = gx - pr->dstRect->x;
+    pr->mouseY = gy - pr->dstRect->y;
+    pr->transport->moveMouse(pr->mouseX, pr->mouseY);
+}
+
+bool PianoRoll::handleContentInput(SDL_Event& e) {
+    pianoRollSyncCoords(this);
+    return GridView::handleInput(e);
+}
+
+bool PianoRoll::handleInput(SDL_Event& e) {
+    bool consumed = EmbeddedWindow::handleInput(e);
+    pianoRollSyncCoords(this);
+    return GridView::handleInput(e) || consumed;
+}
+
+void PianoRoll::renderContent(SDL_Renderer* r) {
+    if (renderer != r) {
+        renderer = r;
+        initWindow();
+    }
+    pianoRollSyncCoords(this);
+    customTick();
 }
 
 
@@ -837,8 +895,7 @@ bool PianoRoll::customTick() {
         const float yEnd = getY(visIntervalEndLine);
         const float yTop = std::min(yStart, yEnd);
         const float yBot = std::max(yStart, yEnd);
-        SDL_FRect band{leftMargin, yTop, width - leftMargin, std::max(1.0f, yBot - yTop)};
-        // Layered between grey background and grid/notes.
+        SDL_FRect band{dstRect->x + leftMargin, dstRect->y + yTop, width - leftMargin, std::max(1.0f, yBot - yTop)};
         SDL_SetRenderDrawColor(renderer, 45, 110, 210, 32);
         SDL_RenderFillRect(renderer, &band);
         SDL_SetRenderDrawColor(renderer, 70, 150, 235, 78);
@@ -859,24 +916,23 @@ bool PianoRoll::customTick() {
     if (showIntervalPreview) {
         const float yEnd = getY(visIntervalEndLine);
         SDL_SetRenderDrawColor(renderer, 65, 190, 240, 128);
-        SDL_RenderLine(renderer, mouseX, yEnd, leftMargin, yEnd);
+        SDL_RenderLine(renderer, dstRect->x + mouseX, dstRect->y + yEnd, dstRect->x + leftMargin, dstRect->y + yEnd);
     }
 
     transport->render();
 
     SDL_FRect bottomRect{
-        0,
-        height-bottomMargin,
+        dstRect->x,
+        dstRect->y + height - bottomMargin,
         width,
         bottomMargin
     };
-
     SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
     SDL_RenderFillRect(renderer, &bottomRect);
 
     modeButtonRect = SDL_FRect{
-        8.0f,
-        height - bottomMargin + 3.0f,
+        dstRect->x + 8.0f,
+        dstRect->y + height - bottomMargin + 3.0f,
         220.0f,
         std::max(12.0f, bottomMargin - 6.0f)
     };
@@ -978,10 +1034,10 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     return;
                 }
                 if(mouseY > height - bottomMargin) {
-                    if (mouseX >= modeButtonRect.x &&
-                        mouseX <= modeButtonRect.x + modeButtonRect.w &&
-                        mouseY >= modeButtonRect.y &&
-                        mouseY <= modeButtonRect.y + modeButtonRect.h) {
+                    if (mouseX + dstRect->x >= modeButtonRect.x &&
+                        mouseX + dstRect->x <= modeButtonRect.x + modeButtonRect.w &&
+                        mouseY + dstRect->y >= modeButtonRect.y &&
+                        mouseY + dstRect->y <= modeButtonRect.y + modeButtonRect.h) {
                         const bool canSwitchToEdo =
                             tuningMode != TuningMode::Harmonic || regionHasDragDefinedEdoLattice(region);
                         if (canSwitchToEdo)
@@ -1071,12 +1127,14 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     if(isShiftPressed && hoveredElement != nullptr) {
                         auto ctxMenu = ContextMenu::get();
                         ctxMenu->active = true;
-                        ctxMenu->window_id = SDL_GetWindowID(window);
-                        ctxMenu->renderer = renderer;
-                        SDL_StartTextInput(window);
+                        ctxMenu->skipNextEvent = true;
+                        ctxMenu->window_id = project && project->window ? SDL_GetWindowID(project->window) : 0;
+                        ctxMenu->renderer = project ? project->renderer : nullptr;
+                        if (project && project->window)
+                            SDL_StartTextInput(project->window);
 
-                        ctxMenu->locX = mouseX;
-                        ctxMenu->locY = mouseY;
+                        ctxMenu->locX = mouseX + dstRect->x;
+                        ctxMenu->locY = mouseY + dstRect->y;
 
                         ctxMenu->dynamicTick = getTextInputTicker([this](std::string text) {
                             try {
@@ -1199,11 +1257,13 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     }
                     auto ctxMenu = ContextMenu::get();
                     ctxMenu->active = true;
-                    ctxMenu->window_id = SDL_GetWindowID(window);
-                    ctxMenu->renderer = renderer;
-                    SDL_StartTextInput(window);
-                    ctxMenu->locX = mouseX;
-                    ctxMenu->locY = mouseY;
+                    ctxMenu->skipNextEvent = true;
+                    ctxMenu->window_id = project && project->window ? SDL_GetWindowID(project->window) : 0;
+                    ctxMenu->renderer = project ? project->renderer : nullptr;
+                    if (project && project->window)
+                        SDL_StartTextInput(project->window);
+                    ctxMenu->locX = mouseX + dstRect->x;
+                    ctxMenu->locY = mouseY + dstRect->y;
                     const float a = intervalDialogFrozenStartLine;
                     const float b = intervalDialogFrozenEndLine;
                     const std::shared_ptr<Note> capIntervalStartNote = intervalStartNote;
@@ -1689,9 +1749,14 @@ void PianoRoll::notifyTuningUndoApplied(Project* p, const std::vector<int>& mana
     ArrangerNode* arr = undoResolveArrangerNode(p, managerPath, arrangerNodeId);
     if (!arr || !arr->sl)
         return;
-    PianoRoll* pr = arr->sl->pianoRoll;
-    if (!pr || !pr->region || pr->region->id != regionId)
-        return;
+    PianoRoll* pr = nullptr;
+    for (auto* candidate : arr->sl->pianoRolls) {
+        if (candidate->region && static_cast<int>(candidate->region->id) == regionId) {
+            pr = candidate;
+            break;
+        }
+    }
+    if (!pr) return;
     pr->updateLines();
     pr->refreshGrid = true;
     if (noteIdToStamp < 0)
@@ -1710,12 +1775,3 @@ void PianoRoll::notifyTuningUndoApplied(Project* p, const std::vector<int>& mana
         pr->stampNoteTuning(note);
 }
 
-void PianoRoll::handleWindowInput(SDL_Event& e) {
-    float gx, gy;
-    SDL_GetGlobalMouseState(&gx, &gy);
-    int wx, wy;
-    SDL_GetWindowPosition(window, &wx, &wy);
-    mouseX = gx - wx;
-    mouseY = gy - wy;
-    handleInput(e);
-}

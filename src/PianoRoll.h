@@ -4,9 +4,10 @@
 #include <utility>
 #include <vector>
 #include "GridView.h"
+#include "EmbeddedWindow.h"
 #include "Region.h"
 #include "Note.h"
-#include "fract.h" 
+#include "fract.h"
 #include "styles.h"
 #include "Project.h"
 #include <optional>
@@ -21,7 +22,7 @@ struct PianoRollPitchLine {
     explicit PianoRollPitchLine(float m) : midi(m), integerPairs{{1, 1}} {}
 };
 
-class PianoRoll : public GridView {
+class PianoRoll : public GridView, public EmbeddedWindow {
 
     public:
     enum class TuningMode {
@@ -31,11 +32,16 @@ class PianoRoll : public GridView {
 
     void newTuning();
     void updateLines();
-    
 
-    PianoRoll(bool* detached, SDL_FRect*, Region*, Window*);
+
+    PianoRoll(Region*, Window* parent);
     ~PianoRoll() override;
-    
+
+        // EmbeddedWindow interface
+        void renderContent(SDL_Renderer* r) override;
+        bool handleInput(SDL_Event& e) override;
+        bool handleContentInput(SDL_Event& e) override;
+
         SDL_Texture* backgroundTexture;
         SDL_Texture* PianoTexture;
         SDL_Texture* NotesTexture;
@@ -64,7 +70,6 @@ class PianoRoll : public GridView {
         json movingNoteUndoBefore;
         bool movingNoteHasUndoSnapshot = false;
         bool movingNoteDragDirty = false;
-        /** Snapped pitch line MIDI for draw only; model pitch commits on mouse up. */
         std::optional<float> movingNotePitchPreviewLineMidi;
         json stretchingNoteUndoBefore;
         bool stretchingNoteHasUndoSnapshot = false;
@@ -73,7 +78,7 @@ class PianoRoll : public GridView {
         bool customTick() override;
 
         void UpdateGrid() override;
-        
+
 
         void createKeys();
         void RenderRoll();
@@ -97,26 +102,22 @@ class PianoRoll : public GridView {
         double getNoteName(double);
         float getY(float) override;
 
-        
+
         fract lastLength = fract(1, 1);
 
-        SDL_Texture* layers[4]; 
+        SDL_Texture* layers[4];
 
         float getHoveredLine();
         void handleMouse();
         std::vector<std::string> lineLabels;
-        // Parallel index: harmonic number (harmonic mode) or EDO line index k (EDO mode).
         std::vector<int> lineStructural;
 
         float getNotePosX(std::shared_ptr<Note>);
         float getNoteEnd(std::shared_ptr<Note>);
         float noteHeight = 5;
 
-        /** Sync open piano roll UI after region tuning undo/redo; pass noteIdToStamp >= 0 to run stampNoteTuning. */
         static void notifyTuningUndoApplied(Project* p, const std::vector<int>& managerPath, int arrangerNodeId, int regionId,
                                             int noteIdToStamp);
-
-        void handleWindowInput(SDL_Event&) override;
         
     private:
         TuningMode tuningMode = TuningMode::Harmonic;

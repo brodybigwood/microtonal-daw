@@ -10,6 +10,8 @@
 #include "ElementManager.h"
 #include "SDL_Events.h"
 #include "PianoRoll.h"
+#include "NodeProcessor.h"
+#include "NodeEditor.h"
 #include "Preferences.h"
 #include "UndoManager.h"
 #include "ContextMenu.h"
@@ -31,17 +33,31 @@ fract nearestBeatFromScreenX(float screenX, float scrollX, float leftMargin, dou
 }
 } // namespace
 
-void SongRoll::clearPianoRoll() {
-    delete pianoRoll;
-    pianoRoll = nullptr;
-    pianoRollTrackedRegionId = -1;
+void SongRoll::clearPianoRoll(int regionId) {
+    for (auto it = pianoRolls.begin(); it != pianoRolls.end(); ) {
+        if ((*it)->region && static_cast<int>((*it)->region->id) == regionId) {
+            if (project && project->processor) {
+                auto* editor = project->processor->getEditor();
+                if (editor) editor->removeEmbeddedWindow(*it);
+            }
+            it = pianoRolls.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 void SongRoll::validateTimelinePointers() {
-    if (pianoRoll) {
-        if (pianoRollTrackedRegionId < 0 ||
-            !em->ids.count(static_cast<uint16_t>(pianoRollTrackedRegionId))) {
-            clearPianoRoll();
+    for (auto it = pianoRolls.begin(); it != pianoRolls.end(); ) {
+        PianoRoll* pr = *it;
+        if (!pr->region || !em->ids.count(pr->region->id)) {
+            if (project && project->processor) {
+                auto* editor = project->processor->getEditor();
+                if (editor) editor->removeEmbeddedWindow(pr);
+            }
+            it = pianoRolls.erase(it);
+        } else {
+            ++it;
         }
     }
 
@@ -160,9 +176,6 @@ bool SongRoll::customTick() {
     }
 
     renderMargins();
-   
-    if (pianoRoll) pianoRoll->tick();
- 
     return true;
 }
 
@@ -190,7 +203,14 @@ void SongRoll::renderMargins() {
 
 
 SongRoll::~SongRoll() {
-    clearPianoRoll();
+    while (!pianoRolls.empty()) {
+        PianoRoll* pr = pianoRolls.back();
+        pianoRolls.pop_back();
+        if (project && project->processor) {
+            auto* editor = project->processor->getEditor();
+            if (editor) editor->removeEmbeddedWindow(pr);
+        }
+    }
 }
 
 void SongRoll::movePosition() {
@@ -486,8 +506,8 @@ void SongRoll::clickMouse(SDL_Event& e) {
                     const int posId = hoveredPosition->id;
                     if (el->type == ElementType::region) {
                         auto* reg = static_cast<Region*>(el);
-                        if (pianoRoll && pianoRoll->region == reg && reg->positions.size() == 1u)
-                            clearPianoRoll();
+                        if (reg->positions.size() == 1u)
+                            clearPianoRoll(static_cast<int>(reg->id));
                     }
                     project->um->newAction(new DeletePositionAction(project, parentNode->nm->managerPath,
                         static_cast<int>(parentNode->id), elemId, posId));
@@ -507,8 +527,7 @@ void SongRoll::clickMouse(SDL_Event& e) {
                         del->label = "Delete Region";
                         del->click = [this, rid]() {
                             auto* reg = static_cast<Region*>(em->getElement(rid));
-                            if (pianoRoll && pianoRoll->region == reg)
-                                clearPianoRoll();
+                            clearPianoRoll(static_cast<int>(rid));
                             project->um->newAction(new DeleteRegionAction(project, parentNode->nm->managerPath,
                                 static_cast<int>(parentNode->id), static_cast<int>(rid)));
                             refreshGrid = true;
@@ -615,7 +634,11 @@ void SongRoll::generateTextures() {
 }
 
 void SongRoll::createPianoRoll(Region* region) {
-    clearPianoRoll();
-    pianoRoll = new PianoRoll(&pianoRollDetached, &pianoRollRect, region, this);
-    pianoRollTrackedRegionId = static_cast<int>(region->id);
+    auto pr = std::make_unique<PianoRoll>(region, this);
+    pianoRolls.push_back(pr.get());
+    if (project && project->processor) {
+        auto* editor = project->processor->getEditor();
+        if (editor)
+            editor->addEmbeddedWindow(std::move(pr));
+    }
 }

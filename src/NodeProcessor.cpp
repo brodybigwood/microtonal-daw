@@ -49,6 +49,10 @@ SDL_Renderer* NodeProcessor::getHostRenderer() const {
     return editor ? editor->renderer : nullptr;
 }
 
+NodeEditor* NodeProcessor::getEditor() const {
+    return editor;
+}
+
 json NodeProcessor::serialize() const {
     if (!guiManager) return json::object();
     return guiManager->serialize();

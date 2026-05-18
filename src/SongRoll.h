@@ -1,6 +1,7 @@
 #include <SDL3/SDL.h>
 #include <SDL_ttf.h>
 #include <cmath>
+#include <vector>
 #include "GridElement.h"
 #include "GridView.h"
 #include "styles.h"
@@ -80,21 +81,17 @@ class SongRoll : public GridView{
         void renderDrop(SDL_Renderer*) override;
         void dropFile(SDL_DropEvent&) override;        
         
-        SDL_FRect pianoRollRect = {200,200,800,600};
-        bool pianoRollDetached = true;
-        PianoRoll* pianoRoll = nullptr;
+        std::vector<PianoRoll*> pianoRolls;
         void createPianoRoll(Region*);
 
     private:
-        /** When a piano roll is open, the region id it belongs to (for undo safety after the region is removed). */
-        int pianoRollTrackedRegionId = -1;
         int timelineHoverElementId = -1;
         int timelineHoverPositionId = -1;
         int timelineDragElementId = -1;
         int timelineDragPositionId = -1;
 
         void validateTimelinePointers();
-        void clearPianoRoll();
+        void clearPianoRoll(int regionId);
 };
 
 #endif

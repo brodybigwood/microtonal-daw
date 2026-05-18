@@ -86,7 +86,6 @@ void ArrangerNode::clearCustomTextures() {
 void ArrangerNode::renderPresent() {
     if (!sl) return;
     if (detached) SDL_RenderPresent(renderer);
-    if (sl->pianoRoll && sl->pianoRollDetached) SDL_RenderPresent(sl->pianoRoll->renderer);
 }
 
 json ArrangerNode::extraSerialize() {

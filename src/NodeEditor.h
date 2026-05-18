@@ -78,6 +78,7 @@ class NodeEditor : public Window {
         // --- Embedded window management ---
 
         EmbeddedWindow* addEmbeddedWindow(std::unique_ptr<EmbeddedWindow> w);
+        void removeEmbeddedWindow(EmbeddedWindow* w);
 
         void renderEmbeddedWindows(SDL_Renderer* r);
 
