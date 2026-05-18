@@ -164,15 +164,7 @@ bool WindowHandler::tick() {
 
         if (ctxMenu->active) { project->render(); renderEmbeddedWindows(); } // render behind ctxmenu first
 
-        // Find the host window for embedded windows once per frame
-        // (same logic as renderEmbeddedWindows).
-        SDL_Window* hostWin = nullptr;
-        for (auto* w : windows) {
-            if (w && w->window && !(SDL_GetWindowFlags(w->window) & SDL_WINDOW_HIDDEN)) {
-                hostWin = w->window;
-                break;
-            }
-        }
+        SDL_Window* hostWin = project ? project->window : nullptr;
 
         bool eventHandled = false;
 
@@ -289,19 +281,8 @@ bool WindowHandler::tick() {
         }
         drawPendingTooltip();
         if (Settings::instance().showFps() && fonts.mainFont) {
-            SDL_Renderer* fpsR = nullptr;
-            SDL_Window* fpsW = nullptr;
-            for (auto* w : windows) {
-                if (w && w->renderer && w->window && !(SDL_GetWindowFlags(w->window) & SDL_WINDOW_HIDDEN)) {
-                    fpsR = w->renderer;
-                    fpsW = w->window;
-                    break;
-                }
-            }
-            if (!fpsR) {
-                fpsR = project ? project->renderer : nullptr;
-                fpsW = project ? project->window : nullptr;
-            }
+            SDL_Renderer* fpsR = project ? project->renderer : nullptr;
+            SDL_Window* fpsW = project ? project->window : nullptr;
             if (fpsR) {
                 char buf[16];
                 snprintf(buf, sizeof(buf), "%.0f", fpsCounter_);
@@ -488,17 +469,7 @@ void WindowHandler::renderEmbeddedWindows() {
         if (ew->visible) sorted.push_back(ew.get());
     std::sort(sorted.begin(), sorted.end(),
               [](EmbeddedWindow* a, EmbeddedWindow* b) { return a->zOrder < b->zOrder; });
-    // project->renderer may be a hidden utility window; prefer a visible window's renderer.
-    SDL_Renderer* r = nullptr;
-    for (auto* w : windows) {
-        if (w && w->renderer && w->window) {
-            if (!(SDL_GetWindowFlags(w->window) & SDL_WINDOW_HIDDEN)) {
-                r = w->renderer;
-                break;
-            }
-        }
-    }
-    if (!r) r = project ? project->renderer : nullptr;
+    SDL_Renderer* r = project ? project->renderer : nullptr;
     if (!r) return;
     for (auto* ew : sorted)
         ew->render(r);

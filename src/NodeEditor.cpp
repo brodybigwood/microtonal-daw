@@ -198,8 +198,12 @@ void NodeEditor::resetRootMenuBarLayout() {
 
 void NodeEditor::updateRootMenuBarLayout() {
     resetRootMenuBarLayout();
+    if (rootMenuBar_) {
+        topMargin = kRootMenuBarStripH;
+        nodeRect = SDL_FRect{0.f, topMargin, canvasW_, std::max(1.f, canvasH_ - topMargin)};
+        return;
+    }
     if (!nm || !menuBarHostNode_) return;
-    /* Top-level patcher: the patcher node lives on the processor canvas (`nm` has empty `managerPath`). */
     if (!menuBarHostNode_->nm || !menuBarHostNode_->nm->managerPath.empty()) return;
     topMargin = kRootMenuBarStripH;
     nodeRect = SDL_FRect{0.f, topMargin, canvasW_, std::max(1.f, canvasH_ - topMargin)};

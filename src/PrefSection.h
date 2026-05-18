@@ -33,14 +33,15 @@ public:
     virtual bool handleContentInput(SDL_Event&, float /*mx*/, float /*my*/,
                                     const SDL_FRect& /*innerBounds*/) { return false; }
 
+    float contentScale_ = 1.f;
+    float afterTitle_ = 0.f;
+
     /** Setting descriptors for this section. */
     virtual const std::vector<SettingDesc>& settings() const {
         static const std::vector<SettingDesc> empty;
         return empty;
     }
 
-    SDL_Renderer* renderer_ = nullptr;
-    uint32_t window_id_ = 0;
 };
 
 class AudioSection : public PrefSection {

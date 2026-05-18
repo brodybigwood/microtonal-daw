@@ -281,20 +281,9 @@ void PreferencesWindow::render(SDL_Renderer* r) {
     {
         PrefSection* sec = sections_[activeSection_];
         if (sec && sec->hasContent()) {
-            if (!hostWindowID_) {
-                int count = 0;
-                SDL_Window** wins = SDL_GetWindows(&count);
-                for (int i = 0; i < count; ++i) {
-                    if (!(SDL_GetWindowFlags(wins[i]) & SDL_WINDOW_HIDDEN)) {
-                        hostWindowID_ = SDL_GetWindowID(wins[i]);
-                        break;
-                    }
-                }
-            }
-            sec->renderer_ = r;
-            sec->window_id_ = hostWindowID_;
             const float Ri2 = innerR();
             SDL_FRect innerBounds{cx - Ri2, cy - Ri2, Ri2 * 2.f, Ri2 * 2.f};
+            sec->contentScale_ = scale;
             sec->renderContent(r, innerBounds, scale);
         }
     }
@@ -352,7 +341,6 @@ bool PreferencesWindow::handleInput(SDL_Event& e) {
             if (d2 <= Ri2 * Ri2) {
                 PrefSection* sec = sections_[activeSection_];
                 if (sec) {
-                    sec->window_id_ = getEventWindowID(e);
                     SDL_FRect innerBounds{cx2 - Ri2, cy2 - Ri2, Ri2 * 2.f, Ri2 * 2.f};
                     if (sec->handleContentInput(e, mx, my, innerBounds))
                         return true;

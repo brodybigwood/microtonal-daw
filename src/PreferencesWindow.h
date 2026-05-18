@@ -15,7 +15,6 @@ public:
 
 private:
     int activeSection_ = 0;
-    uint32_t hostWindowID_ = 0;
 
     AudioSection audio_;
     GUISection gui_;

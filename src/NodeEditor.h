@@ -53,6 +53,9 @@ class NodeEditor : public Window {
         /** Only `PatcherNode::detachFinal` sets this on `mainEditor` (top-level patcher = host lives on canvas with empty `managerPath`). */
         void setTopMenuBarHostNode(Node* hostPatchNode) { menuBarHostNode_ = hostPatchNode; }
 
+        /** Enable the root menu bar directly (for the top-level editor, not hosted by a patcher). */
+        void enableRootMenuBar() { rootMenuBar_ = true; }
+
         /** Called from `NodeManager::setNE` / `resetNE` only (menu bar layout for hosted patch editor). */
         void updateRootMenuBarLayout();
         void resetRootMenuBarLayout();
@@ -120,6 +123,9 @@ class NodeEditor : public Window {
 
         /** Patcher node that owns this editor when embedded; null for processor host / other editors. */
         Node* menuBarHostNode_ = nullptr;
+
+        /** True when this is the top-level processor editor (not embedded in any patcher). */
+        bool rootMenuBar_ = false;
 
         /** Which top-level menu label has its dropdown open (-1 = none). Index into kLabels (File=0, Edit=1, View=2, Window=3). */
         int menuOpenIndex_ = -1;

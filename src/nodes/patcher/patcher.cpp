@@ -375,7 +375,6 @@ void PatcherNode::renderContent(SDL_Renderer* renderer) {
         mainEditor->renderer = nullptr;
         mainEditor->window = nullptr;
         mainEditor->setEmbeddedCanvasSize(static_cast<float>(TEX_W), static_cast<float>(TEX_H));
-        mainEditor->setTopMenuBarHostNode(this);
         mainManager->setNE(mainEditor);
         mainEditor->retach();
     }

@@ -6,6 +6,7 @@
 
 NodeProcessor::NodeProcessor(Project* p) : project(p) {
     editor = new NodeEditor;
+    editor->enableRootMenuBar();
     editor->window = SDL_CreateWindow("NodeProcessorHost", 1920, 1080, SDL_WINDOW_RESIZABLE);
     editor->renderer = SDL_CreateRenderer(editor->window, NULL);
 

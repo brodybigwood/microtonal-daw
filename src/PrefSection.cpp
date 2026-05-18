@@ -1,4 +1,5 @@
 #include "PrefSection.h"
+#include "WindowHandler.h"
 #include "ContextMenu.h"
 #include "Settings.h"
 #include "AudioManager.h"
@@ -288,7 +289,7 @@ static SDL_FRect renderSettingInt(SDL_Renderer* r, const SettingDesc& d, const S
 }
 
 static bool hitTestSetting(const SettingDesc& d, float mx, float my, const SDL_FRect& b,
-                           float y, float s, SDL_Renderer* renderer, uint32_t window_id) {
+                           float y, float s) {
     const float cx = b.x + b.w * 0.5f;
 
     if (d.type == SettingType::Bool) {
@@ -323,24 +324,23 @@ static bool hitTestSetting(const SettingDesc& d, float mx, float my, const SDL_F
         const float gap = 8.f * s;
         const float boxX = cx - (lblW + gap + valW) * 0.5f + lblW + gap;
 
-        // Click on value box?
         if (mx >= boxX && mx < boxX + valW && my >= y && my <= y + kRowH * s) {
             if (d.cycleLabels) {
-                // Cycle to next value within range.
                 int next = val + d.step;
                 if (next > d.maxVal) next = d.minVal;
                 Settings::instance().setInt(d.key, next);
                 if (d.onChange) d.onChange();
                 return true;
             }
+            auto* proj = WindowHandler::instance()->project;
             auto* ctxMenu = ContextMenu::get();
             ctxMenu->active = true;
-            ctxMenu->window_id = window_id;
-            ctxMenu->renderer = renderer;
+            ctxMenu->window_id = (proj && proj->window) ? SDL_GetWindowID(proj->window) : 0;
+            ctxMenu->renderer = proj ? proj->renderer : nullptr;
             ctxMenu->locX = boxX;
             ctxMenu->locY = y;
-            if (SDL_Window* win = SDL_GetWindowFromID(window_id))
-                SDL_StartTextInput(win);
+            if (proj && proj->window)
+                SDL_StartTextInput(proj->window);
             ctxMenu->dynamicTick = getTextInputTicker(
                 [key = d.key, minV = d.minVal, maxV = d.maxVal, onChange = d.onChange](std::string text) {
                     try {
@@ -401,16 +401,15 @@ static void renderDeviceRow(SDL_Renderer* r, const char* label, const char* valu
     snprintf(nameBuf, sizeof(nameBuf), "%.25s", valueName);
     int nw = 0, nh = 0;
     TTF_GetStringSize(fonts.mainFont, nameBuf, 0, &nw, &nh);
-    const float scale = std::min(1.f, (boxW - pad * 2.f) / static_cast<float>(nw));
+    const float scale = std::min(s, (boxW - pad * 2.f) / static_cast<float>(nw));
     const float tw = static_cast<float>(nw) * scale;
     const float th = static_cast<float>(nh) * scale;
     SDL_Color tc{200, 200, 210, 255};
-    renderTextLeft(r, nameBuf, boxX + pad, y + (boxH - th) * 0.5f, s * scale, tc);
+    renderTextLeft(r, nameBuf, boxX + pad, y + (boxH - th) * 0.5f, scale, tc);
 }
 
 static bool hitTestDeviceRow(float mx, float my, const char* label,
                              float y, const SDL_FRect& b, float s,
-                             SDL_Renderer* renderer, uint32_t window_id,
                              const char* settingsKey,
                              std::vector<RtAudio::DeviceInfo> devices,
                              int noneId, const char* noneLabel) {
@@ -423,7 +422,6 @@ static bool hitTestDeviceRow(float mx, float my, const char* label,
     if (mx < boxX || mx > boxX + boxW || my < y || my > y + kRowH * s)
         return false;
 
-    // Build device popup tree
     auto tree = uTreeEntry();
     auto noneEntry = uTreeEntry();
     noneEntry->label = noneLabel;
@@ -443,10 +441,11 @@ static bool hitTestDeviceRow(float mx, float my, const char* label,
         tree->addChild(entry);
     }
 
+    auto* proj = WindowHandler::instance()->project;
     auto* ctx = ContextMenu::get();
     ctx->active = true;
-    ctx->window_id = window_id;
-    ctx->renderer = renderer;
+    ctx->window_id = (proj && proj->window) ? SDL_GetWindowID(proj->window) : 0;
+    ctx->renderer = proj ? proj->renderer : nullptr;
     ctx->locX = boxX;
     ctx->locY = y + kRowH * s;
     ctx->dynamicTick = getTreeMenuTicker(tree);
@@ -477,8 +476,8 @@ static float audioTitleBottom(const SDL_FRect& b, float s) {
 }
 
 void AudioSection::renderContent(SDL_Renderer* r, const SDL_FRect& b, float s) {
-    renderSectionTitle(r, "Audio Settings", b, s);
-    float afterTitle = audioTitleBottom(b, s);
+    float afterTitle = renderSectionTitle(r, "Audio Settings", b, s);
+    afterTitle_ = afterTitle;
 
     const SDL_Color col{180, 180, 195, 255};
     auto* am = AudioManager::instance();
@@ -513,12 +512,11 @@ bool AudioSection::handleContentInput(SDL_Event& e, float mx, float my,
     if (e.type != SDL_EVENT_MOUSE_BUTTON_DOWN || e.button.button != SDL_BUTTON_LEFT)
         return false;
 
-    const float s = 1.f;
-    float afterTitle = audioTitleBottom(b, s);
-    float y = settingsStartY(afterTitle, b, s, settings().size() + 2, kRowH);
+    const float s = contentScale_;
+    float y = settingsStartY(afterTitle_, b, s, settings().size() + 2, kRowH);
 
     // Output device row
-    if (hitTestDeviceRow(mx, my, "Output device", y, b, s, renderer_, window_id_,
+    if (hitTestDeviceRow(mx, my, "Output device", y, b, s,
                          "audioOutputDevice",
                          AudioManager::instance()->getOutputDevices(),
                          -1, "Default Output"))
@@ -526,7 +524,7 @@ bool AudioSection::handleContentInput(SDL_Event& e, float mx, float my,
     y += kRowH * s;
 
     // Input device row
-    if (hitTestDeviceRow(mx, my, "Input device", y, b, s, renderer_, window_id_,
+    if (hitTestDeviceRow(mx, my, "Input device", y, b, s,
                          "audioInputDevice",
                          AudioManager::instance()->getInputDevices(),
                          -1, "None"))
@@ -535,7 +533,7 @@ bool AudioSection::handleContentInput(SDL_Event& e, float mx, float my,
 
     // Standard settings
     for (auto& d : settings()) {
-        if (hitTestSetting(d, mx, my, b, y, s, renderer_, window_id_))
+        if (hitTestSetting(d, mx, my, b, y, s))
             return true;
         y += kRowH * s;
     }
@@ -552,6 +550,7 @@ const std::vector<SettingDesc>& GUISection::settings() const {
 
 void GUISection::renderContent(SDL_Renderer* r, const SDL_FRect& b, float s) {
     float afterTitle = renderSectionTitle(r, "GUI Settings", b, s);
+    afterTitle_ = afterTitle;
     auto& descs = settings();
     float y = settingsStartY(afterTitle, b, s, descs.size(), kRowH);
 
@@ -570,15 +569,12 @@ bool GUISection::handleContentInput(SDL_Event& e, float mx, float my,
     if (e.type != SDL_EVENT_MOUSE_BUTTON_DOWN || e.button.button != SDL_BUTTON_LEFT)
         return false;
 
-    const float s = 1.f;
-    int th = 0;
-    TTF_GetStringSize(fonts.mainFont, "GUI Settings", 0, nullptr, &th);
-    float titleBottom = b.y + 16.f + static_cast<float>(th) + 8.f;
-    float y = settingsStartY(titleBottom, b, s, settings().size(), kRowH);
+    const float s = contentScale_;
+    float y = settingsStartY(afterTitle_, b, s, settings().size(), kRowH);
     for (auto& d : settings()) {
-        if (hitTestSetting(d, mx, my, b, y, s, renderer_, window_id_))
+        if (hitTestSetting(d, mx, my, b, y, s))
             return true;
-        y += kRowH;
+        y += kRowH * s;
     }
     return false;
 }
@@ -592,6 +588,7 @@ const std::vector<SettingDesc>& ControlsSection::settings() const {
 
 void ControlsSection::renderContent(SDL_Renderer* r, const SDL_FRect& b, float s) {
     float afterTitle = renderSectionTitle(r, "Controls Settings", b, s);
+    afterTitle_ = afterTitle;
     auto& descs = settings();
     float y = settingsStartY(afterTitle, b, s, descs.size(), kRowH);
 
@@ -608,15 +605,12 @@ bool ControlsSection::handleContentInput(SDL_Event& e, float mx, float my,
     if (e.type != SDL_EVENT_MOUSE_BUTTON_DOWN || e.button.button != SDL_BUTTON_LEFT)
         return false;
 
-    const float s = 1.f;
-    int th = 0;
-    TTF_GetStringSize(fonts.mainFont, "Controls Settings", 0, nullptr, &th);
-    float titleBottom = b.y + 16.f + static_cast<float>(th) + 8.f;
-    float y = settingsStartY(titleBottom, b, s, settings().size(), kRowH);
+    const float s = contentScale_;
+    float y = settingsStartY(afterTitle_, b, s, settings().size(), kRowH);
     for (auto& d : settings()) {
-        if (hitTestSetting(d, mx, my, b, y, s, renderer_, window_id_))
+        if (hitTestSetting(d, mx, my, b, y, s))
             return true;
-        y += kRowH;
+        y += kRowH * s;
     }
     return false;
 }
