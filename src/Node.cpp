@@ -1145,6 +1145,42 @@ void Node::render() {
     if (!portR)
         return;
 
+    // Polygon outline on the canvas (not the texture), transformed to screen space.
+    if (vCount >= 3 && vx && vy) {
+        const float s = zoomRatio;
+        std::vector<float> svx(vCount);
+        std::vector<float> svy(vCount);
+        for (size_t i = 0; i < vCount; ++i) {
+            svx[i] = dstRect.x + vx[i] * s;
+            svy[i] = dstRect.y + vy[i] * s;
+        }
+
+        // Glow pass — expand outward, low alpha.
+        float cx = 0.f, cy = 0.f;
+        for (size_t i = 0; i < vCount; ++i) { cx += svx[i]; cy += svy[i]; }
+        cx /= static_cast<float>(vCount);
+        cy /= static_cast<float>(vCount);
+        constexpr float kGlow = 3.f;
+        std::vector<float> gvx(vCount);
+        std::vector<float> gvy(vCount);
+        for (size_t i = 0; i < vCount; ++i) {
+            float dx = svx[i] - cx;
+            float dy = svy[i] - cy;
+            float len = sqrtf(dx * dx + dy * dy);
+            if (len > 0.001f) {
+                gvx[i] = svx[i] + dx / len * kGlow;
+                gvy[i] = svy[i] + dy / len * kGlow;
+            } else {
+                gvx[i] = svx[i];
+                gvy[i] = svy[i];
+            }
+        }
+        aapolygonRGBA(portR, gvx.data(), gvy.data(), static_cast<int>(vCount), 0, 0, 0, 60);
+
+        // Crisp outline at exact polygon edge.
+        aapolygonRGBA(portR, svx.data(), svy.data(), static_cast<int>(vCount), 0, 0, 0, 220);
+    }
+
     for (auto* conn : inputs.connections) {
         if (conn) conn->render(portR, conn->id == hoveredConnection && hoveredDirection == Direction::input);
     }
