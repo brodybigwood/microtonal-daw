@@ -42,10 +42,10 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         bool handleInput(SDL_Event& e) override;
         bool handleContentInput(SDL_Event& e) override;
 
-        SDL_Texture* backgroundTexture;
-        SDL_Texture* PianoTexture;
-        SDL_Texture* NotesTexture;
-        SDL_Texture* KeyTexture;
+        SDL_Texture* backgroundTexture = nullptr;
+        SDL_Texture* PianoTexture = nullptr;
+        SDL_Texture* NotesTexture = nullptr;
+        SDL_Texture* KeyTexture = nullptr;
 
         SDL_FRect textRect;
 
@@ -75,21 +75,21 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         bool stretchingNoteHasUndoSnapshot = false;
         bool stretchingNoteDragDirty = false;
 
-        bool customTick() override;
+        bool customTick(SDL_Renderer* renderer) override;
 
         void UpdateGrid() override;
 
 
         void createKeys();
         void RenderRoll();
-        void RenderDestinations();
-        void RenderNotes();
+        void RenderDestinations(SDL_Renderer* renderer);
+        void RenderNotes(SDL_Renderer* renderer);
         double getMidiNum();
         void handleCustomInput(SDL_Event&) override;
 
         void clickMouse(SDL_Event&) override;
 
-        void initWindow();
+        void initWindow(SDL_Renderer* renderer);
 
         void Scroll();
 
@@ -191,7 +191,10 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         size_t hoveredPitchLineIndex = SIZE_MAX;
 
         std::vector<PianoRollPitchLine> pitchLines;
-        void renderPianoRollGridTexture();
+        void renderPianoRollGridTexture(SDL_Renderer* renderer);
+
+    public:
+        bool needsInit_ = false;
 };
 
 #endif

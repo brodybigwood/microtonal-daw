@@ -24,7 +24,6 @@ void NodeManager::setNE(NodeEditor* ne) {
     inNode->setNE(ne);
     int ww = ne->windowWidth;
     int wh = ne->windowHeight;
-    if (ne->window) SDL_GetWindowSize(ne->window, &ww, &wh);
     ne->updateRootMenuBarLayout();
     outNode->placeDefaultByWindowSize(static_cast<float>(ww), static_cast<float>(wh));
     inNode->placeDefaultByWindowSize(static_cast<float>(ww), static_cast<float>(wh));
@@ -148,6 +147,7 @@ Node* NodeManager::getNode(uint16_t id) {
 }
 
 NodeManager::~NodeManager() {
+    resetNE();
     for(auto n : nodes) {
         delete n;
     }
@@ -279,13 +279,7 @@ Node* NodeManager::addNodeNow(NodeType t, float x, float y, int forcedID) {
     ids[id] = nodes.size() - 1;
 
     n->update(bufferSize, sampleRate);
-    if (ne) {
-        n->ne = ne;
-        n->mouseX = &ne->mouseX;
-        n->mouseY = &ne->mouseY;
-        n->window = ne->window;
-        n->renderer = ne->renderer;
-    }
+    if (ne) n->setNE(ne);
     topologyDirty = true;
     return n;
 }
@@ -298,13 +292,7 @@ Node* NodeManager::addNodeNow(json j) {
     nodes.push_back(node);
     ids[id] = nodes.size() - 1;
     node->update(bufferSize, sampleRate);
-    if (ne) {
-        node->ne = ne;
-        node->mouseX = &ne->mouseX;
-        node->mouseY = &ne->mouseY;
-        node->window = ne->window;
-        node->renderer = ne->renderer;
-    }
+    if (ne) node->setNE(ne);
     topologyDirty = true;
     return node;
 }

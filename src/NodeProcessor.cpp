@@ -6,8 +6,8 @@
 NodeProcessor::NodeProcessor(Project* p) : project(p) {
     editor = new NodeEditor;
     editor->enableRootMenuBar();
-    editor->window = SDL_CreateWindow("NodeProcessorHost", 1920, 1080, SDL_WINDOW_RESIZABLE);
-    editor->renderer = SDL_CreateRenderer(editor->window, NULL);
+    hostWindow = SDL_CreateWindow("NodeProcessorHost", 1920, 1080, SDL_WINDOW_RESIZABLE);
+    hostRenderer = SDL_CreateRenderer(hostWindow, NULL);
 
     // GUI copy: owns SDL resources, used for rendering/editing.
     guiManager = new NodeManager(project);
@@ -29,28 +29,16 @@ NodeProcessor::~NodeProcessor() {
         delete audioManager;
         audioManager = nullptr;
     }
-    if (editor && editor->renderer) {
-        SDL_DestroyRenderer(editor->renderer);
-        editor->renderer = nullptr;
+    if (hostRenderer) {
+        SDL_DestroyRenderer(hostRenderer);
+        hostRenderer = nullptr;
     }
-    if (editor && editor->window) {
-        SDL_DestroyWindow(editor->window);
-        editor->window = nullptr;
+    if (hostWindow) {
+        SDL_DestroyWindow(hostWindow);
+        hostWindow = nullptr;
     }
     delete editor;
     editor = nullptr;
-}
-
-SDL_Window* NodeProcessor::getHostWindow() const {
-    return editor ? editor->window : nullptr;
-}
-
-SDL_Renderer* NodeProcessor::getHostRenderer() const {
-    return editor ? editor->renderer : nullptr;
-}
-
-NodeEditor* NodeProcessor::getEditor() const {
-    return editor;
 }
 
 json NodeProcessor::serialize() const {
@@ -99,11 +87,11 @@ void NodeProcessor::deSerialize(const json& j) {
 }
 
 void NodeProcessor::render() {
-    if (editor) editor->tick();
+    if (editor) editor->tick(project->renderer);
 }
 
 void NodeProcessor::renderPresent() {
-    if (editor) editor->renderPresent();
+    if (editor) editor->renderPresent(hostRenderer);
 }
 
 void NodeProcessor::handleWindowInput(SDL_Event& e) {

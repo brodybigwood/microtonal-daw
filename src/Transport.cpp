@@ -4,46 +4,7 @@
 #include "Button.h"
 #include <functional>
 
-Transport::Transport(GridView* view) : view(view), renderer(view->renderer), dstRect(view->dstRect) {
-
-    togglePlay = new Button(renderer);
-    togglePlay->activated = [project = view->project] {
-        return project->isPlaying.load();
-    };
-    togglePlay->dstRect = new SDL_FRect {
-    view->dstRect->x + 50,view->dstRect->y + 15,25,25
-    };
-    togglePlay->hover = [this] {
-        return (
-            this->mouseX + dstRect->x >= togglePlay->dstRect->x && this->mouseX + dstRect->x <= togglePlay->dstRect->x + togglePlay->dstRect->w &&
-            this->mouseY + dstRect->y >= togglePlay->dstRect->y && this->mouseY + dstRect->y <= togglePlay->dstRect->y + togglePlay->dstRect->h
-        );
-    };
-    togglePlay->onClick = [project = view->project] {
-        project->togglePlaying();
-    };
-
-
-
-    stop = new Button(renderer);
-    stop->activated = [project = view->project] {
-        return !project->processing;
-    };
-    stop->dstRect = new SDL_FRect {
-        view->dstRect->x + 100 ,view->dstRect->y + 15,25,25
-    };
-    stop->hover = [this] {
-        return (
-            this->mouseX + dstRect->x >= stop->dstRect->x && this->mouseX + dstRect->x <= stop->dstRect->x + stop->dstRect->w &&
-            this->mouseY + dstRect->y >= stop->dstRect->y && this->mouseY + dstRect->y <= stop->dstRect->y + stop->dstRect->h
-        );
-    };
-    stop->onClick = [project = view->project] {
-        project->stop();
-    };
-
-
-
+Transport::Transport(GridView* view) : view(view), dstRect(view->dstRect) {
 }
 
 void Transport::moveMouse(float mouseX, float mouseY) {
@@ -52,28 +13,14 @@ void Transport::moveMouse(float mouseX, float mouseY) {
 }
 
 void Transport::clickMouse() {
-    if(togglePlay->hover()) {
-        togglePlay->onClick();
-    }
-    if(stop->hover()) {
-        stop->onClick();
-    }
 }
 
 Transport::~Transport() {
-    delete togglePlay->dstRect;
-    delete stop->dstRect;
-
-    delete togglePlay;
-    delete stop;
 }
 
-void Transport::render() {
+void Transport::render(SDL_Renderer* renderer) {
     uint8_t color[4] = {50, 50, 50, 255};
-    view->setRenderColor(color);
+    SDL_SetRenderDrawColor(renderer, color[0], color[1], color[2], color[3]);
     SDL_FRect rect{view->dstRect->x,view->dstRect->y,view->dstRect->w, view->topMargin};
-    SDL_RenderFillRect(view->renderer, &rect);
-
-    togglePlay->render();
-    stop->render();
+    SDL_RenderFillRect(renderer, &rect);
 }

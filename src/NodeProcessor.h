@@ -22,9 +22,9 @@ public:
     /** Set the thread-local active manager. Call once per thread before any action. */
     static void setThreadActiveRoot(NodeManager* r);
 
-    SDL_Window* getHostWindow() const;
-    SDL_Renderer* getHostRenderer() const;
-    class NodeEditor* getEditor() const;
+    SDL_Window* getHostWindow() const { return hostWindow; }
+    SDL_Renderer* getHostRenderer() const { return hostRenderer; }
+    class NodeEditor* getEditor() const { return editor; }
 
     json serialize() const;
     void deSerialize(const json&);
@@ -37,4 +37,6 @@ public:
 private:
     Project* project = nullptr;
     class NodeEditor* editor = nullptr;
+    SDL_Window* hostWindow = nullptr;
+    SDL_Renderer* hostRenderer = nullptr;
 };

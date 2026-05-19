@@ -150,8 +150,6 @@ NodeEditor::NodeEditor() :
 }
 
 NodeEditor::~NodeEditor() {
-    renderer = nullptr;
-    window = nullptr;
 }
 
 void NodeEditor::setEmbeddedCanvasSize(float w, float h) {
@@ -315,29 +313,25 @@ void NodeEditor::renderConnector(SDL_Renderer* renderer) {
     SDL_FColor color;
     if (conn->type == DataType::Events) color = {0.5f, 1.0f, 0.5f, 1.0f}; 
     else color = {1.0f, 0.5f, 0.5f, 1.0f};
-    renderSine(mouseX, mouseY, x, y, color);
+    renderSine(renderer, mouseX, mouseY, x, y, color);
 }
 
-void NodeEditor::renderSine(float x1, float y1, float x2, float y2, SDL_FColor color) {
+void NodeEditor::renderSine(SDL_Renderer* renderer, float x1, float y1, float x2, float y2, SDL_FColor color) {
     renderPatchCable(renderer, x1, y1, x2, y2, color);
 }
 
-void NodeEditor::tick() {
-    if (!nm || !renderer) return;
+void NodeEditor::tick(SDL_Renderer* r) {
+    if (!nm || !r) return;
     SDL_FRect surface{0.f, 0.f, canvasW_, canvasH_};
-    render(renderer, &surface);
+    render(r, &surface);
 }
 
-void NodeEditor::renderPresent() {
+void NodeEditor::renderPresent(SDL_Renderer* renderer) {
     for (auto n : nm->getNodes()) {
         n->renderPresent();
     }
     nm->inNode->renderPresent();
-    SDL_RenderPresent(renderer);
-}
-
-uint32_t NodeEditor::getWindowID() {
-    return SDL_GetWindowID(window);
+    if (renderer) SDL_RenderPresent(renderer);
 }
 
 void NodeEditor::move() {
@@ -555,10 +549,15 @@ EmbeddedWindow* NodeEditor::addEmbeddedWindow(std::unique_ptr<EmbeddedWindow> w)
     return ptr;
 }
 
-void NodeEditor::removeEmbeddedWindow(EmbeddedWindow* w) {
+void NodeEditor::clearPointersToEmbeddedWindow(EmbeddedWindow* w) {
     if (!w) return;
     if (capturedEmbeddedWindow_ == w) capturedEmbeddedWindow_ = nullptr;
     if (focusedEmbeddedWindow_ == w) focusedEmbeddedWindow_ = nullptr;
+}
+
+void NodeEditor::removeEmbeddedWindow(EmbeddedWindow* w) {
+    if (!w) return;
+    clearPointersToEmbeddedWindow(w);
     unregisterEmbeddedWindow(w);
     for (auto it = embeddedWindows_.begin(); it != embeddedWindows_.end(); ++it) {
         if (it->get() == w) {
@@ -706,7 +705,8 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
     }
 
     // Chrome + content (drag, close, content delegation).
-    if (target && target->EmbeddedWindow::handleInput(e))
+    // Skip content input when hovering a resize edge so the cursor isn't overridden.
+    if (target && !targetIsResize && target->EmbeddedWindow::handleInput(e))
         return true;
 
     if (capturedEmbeddedWindow_ && !capturedEmbeddedWindow_->visible)
@@ -742,15 +742,15 @@ void NodeEditor::render(SDL_Renderer* renderer, SDL_FRect* surfaceRect) {
 
     for (auto node : nm->getNodes()) {
         node->makeConnectionRects();
-        node->render();
+        node->render(renderer);
     }
 
     nm->inNode->makeConnectionRects();
-    nm->inNode->render();
+    nm->inNode->render(renderer);
     nm->outNode->makeConnectionRects();
-    nm->outNode->render();
+    nm->outNode->render(renderer);
 
-    renderConnector(this->renderer);
+    renderConnector(renderer);
 
     renderEmbeddedWindows(renderer);
 

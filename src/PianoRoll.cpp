@@ -641,8 +641,6 @@ PianoRoll::PianoRoll(Region* region_, Window* parent)
 
     updateLines();
 
-    SDL_SetCursor(cursors.grabber);
-
     scrollY = 800;
 
     divHeight = 200; //octaveheight
@@ -654,8 +652,6 @@ PianoRoll::PianoRoll(Region* region_, Window* parent)
     UpdateGrid();
 
     Scroll();
-
-    initWindow();
 
     float x = -1000; //for now only this many measures
     times.clear();
@@ -685,7 +681,9 @@ static void pianoRollSyncCoords(PianoRoll* pr) {
     if (newW < 100.f) newW = 100.f;
     if (newH < 80.f) newH = 80.f;
 
-    bool sizeChanged = (pr->width != newW || pr->height != newH);
+    if (pr->width != newW || pr->height != newH) {
+        pr->needsInit_ = true;
+    }
     pr->width = newW;
     pr->height = newH;
     pr->dstRect->w = newW;
@@ -697,9 +695,6 @@ static void pianoRollSyncCoords(PianoRoll* pr) {
     pr->gridRect.y = pr->topMargin;
     pr->gridRect.w = newW - pr->leftMargin;
     pr->gridRect.h = newH - pr->topMargin - pr->bottomMargin;
-
-    if (sizeChanged && pr->renderer)
-        pr->initWindow();
 
     // Always start from global mouse pos, then subtract content origin.
     float gx, gy;
@@ -721,12 +716,8 @@ bool PianoRoll::handleInput(SDL_Event& e) {
 }
 
 void PianoRoll::renderContent(SDL_Renderer* r) {
-    if (renderer != r) {
-        renderer = r;
-        initWindow();
-    }
     pianoRollSyncCoords(this);
-    customTick();
+    customTick(r);
 }
 
 
@@ -755,13 +746,13 @@ float PianoRoll::getY(float noteMidiNum) {
     return -cellHeight12*((noteMidiNum-129)+(scrollY/cellHeight12)) - lineWidth;
 }
 
-void PianoRoll::renderPianoRollGridTexture() {
+void PianoRoll::renderPianoRollGridTexture(SDL_Renderer* renderer) {
     auto target = SDL_GetRenderTarget(renderer);
     SDL_SetRenderTarget(renderer, gridTexture);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
     SDL_RenderClear(renderer);
 
-    setRenderColor(colors.grid);
+    setRenderColor(renderer, colors.grid);
 
     for (auto line : times) {
         float val = getX(line);
@@ -792,7 +783,7 @@ float PianoRoll::getHoveredLine() {
 }
 
 
-void PianoRoll::RenderDestinations() {
+void PianoRoll::RenderDestinations(SDL_Renderer* renderer) {
 
     if (fonts.mainFont) {
     } else {
@@ -810,7 +801,7 @@ void PianoRoll::RenderDestinations() {
 
     SDL_FRect backgroundRect = {0, topMargin, leftMargin, height - topMargin - bottomMargin};
 
-    setRenderColor(colors.keyWhite);
+    setRenderColor(renderer, colors.keyWhite);
     SDL_RenderFillRect(renderer, &backgroundRect);
     SDL_SetRenderDrawColor(renderer,0,0,0,255);
     SDL_RenderLine(renderer, leftMargin+1,topMargin,leftMargin+1,height - topMargin - bottomMargin);
@@ -874,15 +865,19 @@ void PianoRoll::Scroll() {
         refreshPitchFactorsHoverTiming();
 }
 
-bool PianoRoll::customTick() {
-    
-    if(refreshGrid) {
-        refreshGrid = false;
-        renderPianoRollGridTexture();
-        RenderDestinations();
+bool PianoRoll::customTick(SDL_Renderer* renderer) {
+    if (!backgroundTexture || needsInit_) {
+        needsInit_ = false;
+        initWindow(renderer);
     }
 
-    RenderNotes();
+    if(refreshGrid) {
+        refreshGrid = false;
+        renderPianoRollGridTexture(renderer);
+        RenderDestinations(renderer);
+    }
+
+    RenderNotes(renderer);
 
     SDL_RenderTexture(renderer, backgroundTexture, nullptr, dstRect);
 
@@ -920,7 +915,7 @@ bool PianoRoll::customTick() {
         SDL_RenderLine(renderer, dstRect->x + mouseX, dstRect->y + yEnd, dstRect->x + leftMargin, dstRect->y + yEnd);
     }
 
-    transport->render();
+    transport->render(renderer);
 
     SDL_FRect bottomRect{
         dstRect->x,
@@ -972,7 +967,7 @@ bool PianoRoll::customTick() {
     return true;
 }
 
-void PianoRoll::initWindow() {
+void PianoRoll::initWindow(SDL_Renderer* renderer) {
 
     dstRect->w = width;
     dstRect->h = height;
@@ -990,7 +985,6 @@ void PianoRoll::initWindow() {
     SDL_DestroyTexture(KeyTexture);
     SDL_DestroyTexture(NotesTexture);
 
-
     backgroundTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
     gridTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
     PianoTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
@@ -1004,7 +998,7 @@ void PianoRoll::initWindow() {
 
     auto target = SDL_GetRenderTarget(renderer);
     SDL_SetRenderTarget(renderer, backgroundTexture);
-    setRenderColor(colors.background);
+    setRenderColor(renderer, colors.background);
 
     SDL_RenderClear(renderer); // Clear backgroundTexture with the background color
 
@@ -1017,11 +1011,11 @@ void PianoRoll::initWindow() {
     }
     
     Scroll();
-    renderPianoRollGridTexture();
+    renderPianoRollGridTexture(renderer);
 
-    RenderDestinations();
-    
-    RenderNotes();
+    RenderDestinations(renderer);
+
+    RenderNotes(renderer);
 
 }
 
@@ -1387,15 +1381,13 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
             width = e.window.data1;  // New width
             height = e.window.data2; // New height
-
-            initWindow();
+            needsInit_ = true;
             break;
 
         case SDL_EVENT_WINDOW_RESIZED:
             width = e.window.data1;  // New width
             height = e.window.data2; // New height
-
-            initWindow();
+            needsInit_ = true;
             break;
 
         case SDL_EVENT_KEY_DOWN:
@@ -1543,7 +1535,7 @@ void PianoRoll::createElement() {
     refreshGrid = true;
 }
 
-void PianoRoll::RenderNotes() {
+void PianoRoll::RenderNotes(SDL_Renderer* renderer) {
     auto target = SDL_GetRenderTarget(renderer);
     SDL_SetRenderTarget(renderer, NotesTexture);
     SDL_SetRenderDrawColor(renderer,0,0,0,0);
@@ -1558,7 +1550,7 @@ void PianoRoll::RenderNotes() {
         float noteTop = noteY + noteHeight;
 
 
-        setRenderColor(colors.noteBackground);
+        setRenderColor(renderer, colors.noteBackground);
         SDL_FRect noteBGRect = { noteX, noteY, noteEnd - noteX, noteTop-noteY};
         SDL_RenderFillRect(renderer, &noteBGRect);
     }
@@ -1570,11 +1562,11 @@ void PianoRoll::RenderNotes() {
 
             //noteRadius = (noteTop - noteY)/2;
 
-            setRenderColor(colors.note);
+            setRenderColor(renderer, colors.note);
             SDL_FRect noteRect = { noteX, noteY - noteRadius, noteEnd - noteX, 2*noteRadius};
             SDL_RenderFillRect(renderer, &noteRect);
 
-            setRenderColor(colors.noteBorder);
+            setRenderColor(renderer, colors.noteBorder);
 
             SDL_RenderRect(renderer, &noteRect);
 

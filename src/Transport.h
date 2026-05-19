@@ -11,17 +11,13 @@ class Transport {
         ~Transport();
 
         GridView* view;
-        SDL_Renderer*& renderer;
         SDL_FRect* dstRect;
 
         int mouseX;
         int mouseY;
 
-        void render();
+        void render(SDL_Renderer*);
 
         void moveMouse(float, float);
         void clickMouse();
-
-        Button* togglePlay;
-        Button* stop;
 };

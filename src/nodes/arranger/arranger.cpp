@@ -71,16 +71,13 @@ void ArrangerNode::renderContent(SDL_Renderer* renderer) {
         vy[3] = slRect->y + slRect->h;
     }
 
-    sl->tick();
+    sl->tick(renderer);
     renderParams(renderer);
 }
 
 void ArrangerNode::clearCustomTextures() {
     if (!sl) return;
     sl->clearTextures();
-    sl->renderer = renderer;
-    sl->window = window;
-    sl->generateTextures();
 }
 
 
@@ -150,8 +147,8 @@ void ArrangerNode::extraDeSerialize(json j) {
 }
 
 void ArrangerNode::ensureSongRoll() {
-    if (sl || !ne || !ne->window || !ne->renderer) return;
-    sl = new SongRoll(slRect, ne, project, this);
+    if (sl || !ne) return;
+    sl = new SongRoll(slRect, project, project, this);
     std::cout << "[DBG_DESER] ArrangerNode::ensureSongRoll node=" << id << " created" << std::endl;
 }
 
@@ -172,9 +169,4 @@ void ArrangerNode::rebuildState(json j) {
 
 void ArrangerNode::syncSongRollContext() {
     if (!sl) return;
-    if (sl->renderer == renderer && sl->window == window) return;
-    sl->clearTextures();
-    sl->renderer = renderer;
-    sl->window = window;
-    sl->generateTextures();
 }

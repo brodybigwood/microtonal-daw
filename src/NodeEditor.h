@@ -7,7 +7,6 @@
 #include <array>
 #include "TreeEntry.h"
 #include "nodes/nodetypes.h"
-#include "Window.h"
 #include "Bus.h"
 #include <unordered_map>
 #include "EmbeddedWindow.h"
@@ -18,24 +17,23 @@ class Node;
 class PreferencesWindow;
 class UndoTreeWindow;
 
-class NodeEditor : public Window {
+class NodeEditor {
     public:
         NodeEditor();
         ~NodeEditor();
 
         NodeManager* nm;
 
-        void tick();
+        void tick(SDL_Renderer* r);
         void handleInput(SDL_Event&);
-        void handleWindowInput(SDL_Event& e) override { handleInput(e); }
+        void handleWindowInput(SDL_Event& e) { handleInput(e); }
 
-        uint32_t getWindowID();
-        void renderPresent();
+        void renderPresent(SDL_Renderer* renderer);
 
         float mouseX = 0;
         float mouseY = 0;
         bool leftClick = false;
-    
+
         void setDstConn(Node*, int);
         void setSrcConn(Node*, int);
 
@@ -43,8 +41,6 @@ class NodeEditor : public Window {
         bool& isCtrlPressed;
         bool& isShiftPressed;
 
-        SDL_Window* getWindow() { return window; };
-        SDL_Renderer* getRenderer() { return renderer; };
 
         void retach();
 
@@ -71,7 +67,7 @@ class NodeEditor : public Window {
         /** Draw curved patch cable preview; uses `r` so it matches the same render target as socket drawing. */
         static void renderPatchCable(SDL_Renderer* r, float x1, float y1, float x2, float y2, SDL_FColor color);
 
-        void renderSine(float x1, float y1, float x2, float y2, SDL_FColor);
+        void renderSine(SDL_Renderer*, float x1, float y1, float x2, float y2, SDL_FColor);
         /** Invalidate wire/drag pointers before `n` is deferred-deleted or replaced by undo. */
         void clearPointersToNode(Node* n);
 
@@ -82,6 +78,7 @@ class NodeEditor : public Window {
 
         EmbeddedWindow* addEmbeddedWindow(std::unique_ptr<EmbeddedWindow> w);
         void removeEmbeddedWindow(EmbeddedWindow* w);
+        void clearPointersToEmbeddedWindow(EmbeddedWindow* w);
 
         void renderEmbeddedWindows(SDL_Renderer* r);
 
@@ -94,7 +91,10 @@ class NodeEditor : public Window {
         EmbeddedWindow* focusedEmbeddedWindow() const { return focusedEmbeddedWindow_; }
 
         void registerEmbeddedWindow(EmbeddedWindow* ew) {
-            if (ew->id < 0) {
+            if (ew->id >= 0) {
+                ewIdPool_.reserveID(static_cast<uint16_t>(ew->id));
+                embeddedWindowById_[ew->id] = ew;
+            } else {
                 ew->id = static_cast<int>(ewIdPool_.newID());
                 embeddedWindowById_[ew->id] = ew;
             }

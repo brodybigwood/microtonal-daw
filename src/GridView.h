@@ -17,21 +17,21 @@ class GridView : public Window {
 
         float yMin = 0;
 
-        SDL_Texture* gridTexture;
+        SDL_Texture* gridTexture = nullptr;
 
         virtual void clearTextures() {}
-        virtual void generateTextures() {}
+        virtual void generateTextures(SDL_Renderer* renderer) {}
 
-        void setRenderColor(uint8_t*);
-        bool tick();
-        virtual bool customTick() { return true; };
+        void setRenderColor(SDL_Renderer*, uint8_t*);
+        bool tick(SDL_Renderer* renderer);
+        virtual bool customTick(SDL_Renderer* renderer) { return true; }
 
         Transport* transport;
         SDL_FRect* tRect;
 
         bool refreshGrid = false;
         virtual void UpdateGrid() {};
-        void RenderGridTexture();
+        void RenderGridTexture(SDL_Renderer* renderer);
 
         std::vector<float> lines;
         std::vector<float> times;

@@ -44,7 +44,7 @@ class Node : public EmbeddedWindow {
 
         Project* project;
         NodeManager* nm;
-        NodeEditor* ne;
+        NodeEditor* ne = nullptr;
 
         Node(uint16_t, NodeManager* nm, NodeType);
         virtual ~Node();
@@ -88,7 +88,7 @@ class Node : public EmbeddedWindow {
         void renderContentHelper(SDL_Renderer*);
         virtual void renderContent(SDL_Renderer*);
 
-        void render();
+        void render(SDL_Renderer* renderer);
         virtual void renderPresent() {}
 
         std::vector<Parameter*> params;

@@ -114,8 +114,6 @@ void SongRoll::validateTimelinePointers() {
 SongRoll::SongRoll(SDL_FRect* rect, Window* w, Project* p, ArrangerNode* n) : GridView(rect, 200, w, p), parentNode(n) {
     this->windowHandler = WindowHandler::instance();
 
-    generateTextures(); 
-   
     divHeight = 50;
     minHeight = 1.0f/20;
 
@@ -152,14 +150,16 @@ SongRoll::SongRoll(SDL_FRect* rect, Window* w, Project* p, ArrangerNode* n) : Gr
     tracks->scrollY = &scrollY;
 }
 
-bool SongRoll::customTick() {
+bool SongRoll::customTick(SDL_Renderer* renderer) {
+    if (!texture) generateTextures(renderer);
+
     syncLayout();
     validateTimelinePointers();
 
     auto target = SDL_GetRenderTarget(renderer);
 
-    RenderGridTexture();
-    renderElements();
+    RenderGridTexture(renderer);
+    renderElements(renderer);
 
 
     SDL_SetRenderTarget(renderer,texture);
@@ -175,7 +175,7 @@ bool SongRoll::customTick() {
         playHead->render(renderer, dW, scrollX);
     }
 
-    renderMargins();
+    renderMargins(renderer);
     return true;
 }
 
@@ -195,9 +195,9 @@ void SongRoll::syncLayout() {
     };
 }
 
-void SongRoll::renderMargins() {
+void SongRoll::renderMargins(SDL_Renderer* renderer) {
     tracks->render(renderer);
-    transport->render();
+    transport->render(renderer);
     em->render(renderer);
 }
 
@@ -318,20 +318,20 @@ void SongRoll::handleCustomInput(SDL_Event& e) {
 
 }
 
-void SongRoll::renderElements() {
+void SongRoll::renderElements(SDL_Renderer* renderer) {
     SDL_SetRenderTarget(renderer, regionTexture);
     SDL_SetRenderDrawColor(renderer, 0,0,0,0);
     SDL_RenderClear(renderer);
     for (auto element : em->elements) {
-        renderElement(element);
+        renderElement(renderer, element);
     }
 
     renderDrop(renderer);
 }
 
-void SongRoll::renderElement(GridElement* element) {
+void SongRoll::renderElement(SDL_Renderer* renderer, GridElement* element) {
     float tempo = project->tempo; // notes per minute
-    float barsPerSecond = tempo / (60 * notesPerBar);   
+    float barsPerSecond = tempo / (60 * notesPerBar);
     float pixelsPerSecond = dW * barsPerSecond;
     element->draw(renderer, pixelsPerSecond, (int)divHeight);
     SDL_SetRenderTarget(renderer, regionTexture);
@@ -622,7 +622,7 @@ void SongRoll::clearTextures() {
     em->clearTextures();
 }
 
-void SongRoll::generateTextures() {
+void SongRoll::generateTextures(SDL_Renderer* renderer) {
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
     gridTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
     regionTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);

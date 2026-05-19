@@ -311,13 +311,6 @@ std::function<bool(SDL_Event&, float, float, SDL_Renderer*, std::shared_ptr<Tree
 }
 
 namespace {
-/** Ports / sever / wire start only on the patcher canvas, never on detached node or child utility windows. */
-bool connectionUiOnPatcherCanvas(const Node* n, const SDL_Event& e) {
-    if (!n || !n->ne)
-        return false;
-    const uint32_t wid = getEventWindowID(e);
-    return wid != 0 && wid == n->ne->getWindowID();
-}
 } // namespace
 
 static void serializeModulators(const std::vector<Modulator*>& modulators, json& arr) {
@@ -348,6 +341,7 @@ json Node::serialize() {
     j["nodeType"] = nodeType;
     j["x"] = dstRect.x;
     j["y"] = dstRect.y;
+    j["ewid"] = EmbeddedWindow::id;
     j["extra"] = extraSerialize();
     j["params"] = json::array();
     for (auto* p : params) {
@@ -413,6 +407,7 @@ Node* Node::deSerialize(json j, NodeManager* nm) {
     n->zoom(j["zoomRatio"].get<float>()/n->zoomRatio);
 
     n->move(j["x"], j["y"]);
+    if (j.contains("ewid")) n->EmbeddedWindow::id = j["ewid"];
 
     n->extraDeSerialize(j["extra"]);
 
@@ -460,6 +455,10 @@ Node::Node(uint16_t id, NodeManager* nm, NodeType nt) :
 }
 
 Node::~Node() {
+    if (ne) {
+        ne->unregisterEmbeddedWindow(this);
+        ne->clearPointersToEmbeddedWindow(this);
+    }
     if (texture) SDL_DestroyTexture(texture);
     if (vx) delete[] vx;
     if (vy) delete[] vy;
@@ -543,7 +542,7 @@ bool Node::handleContentInput(SDL_Event& e) {
 void Node::clickMouse(SDL_Event& e) {
 
     if (e.button.button == SDL_BUTTON_LEFT) {
-        if (hoveredConnection != -1 && connectionUiOnPatcherCanvas(this, e)) {
+        if (hoveredConnection != -1 && ne) {
             switch (hoveredDirection) {
                 case Direction::input:
                     if (ne) ne->setDstConn(this, hoveredConnection);
@@ -578,7 +577,7 @@ void Node::clickMouse(SDL_Event& e) {
             auto t = getParameterMenu(hoveredParam, {paramIndex});
             ctxMenu->dynamicTick = getTreeMenuTicker(t);
         } else if (hoveredConnection != -1) {
-            if (!connectionUiOnPatcherCanvas(this, e)) {
+            if (!ne) {
                 ctxMenu->active = false;
                 return;
             }
@@ -984,40 +983,28 @@ void Node::renderContent(SDL_Renderer* renderer) {
 }
 
 void Node::renderContentHelper(SDL_Renderer* renderer) {
-    if (!ne || !ne->renderer) return;
     SDL_FRect tRect{0,0,TEX_W,TEX_H};
 
-    if (!texture) return;
     auto target = SDL_GetRenderTarget(renderer);
     SDL_SetRenderTarget(renderer, texture);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
     SDL_RenderClear(renderer);
     renderContent(renderer);
     SDL_SetRenderTarget(renderer, target);
-    SDL_RenderTexture(ne->renderer, texture, &tRect, &dstRect);
+    SDL_RenderTexture(renderer, texture, &tRect, &dstRect);
 }
 
-void Node::render() {
-    SDL_Renderer* texR = renderer ? renderer : ((ne && ne->renderer) ? ne->renderer : nullptr);
-    if (!texR)
+void Node::render(SDL_Renderer* renderer) {
+    if (!renderer)
         return;
 
     if (!texture)
-        texture = SDL_CreateTexture(texR, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, TEX_W, TEX_H);
+        texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, TEX_W, TEX_H);
 
-    renderContentHelper(texR);
+    renderContentHelper(renderer);
 
-    // Ports and connected-socket cable previews always use the NodeEditor for this node's graph — e.g. a patcher's
-    // mainEditor window for inner nodes, root editor for top-level nodes — never the node's own detached window/renderer.
-    SDL_Renderer* portR = nullptr;
-    if (nm && nm->ne && nm->ne->renderer)
-        portR = nm->ne->renderer;
-    else if (ne && ne->renderer)
-        portR = ne->renderer;
-    else
-        portR = texR;
-    if (!portR)
-        return;
+    // Polygon outline, ports, and tooltip all render onto the same renderer.
+    SDL_Renderer* portR = renderer;
 
     // Polygon outline on the canvas (not the texture), transformed to screen space.
     if (vCount >= 3 && vx && vy) {
@@ -1298,8 +1285,6 @@ void Node::clearTextures() {
 }
 
 void Node::attach() {
-    window = ne->window;
-    renderer = ne->renderer;
     x = dstRect.x;
     y = dstRect.y;
     w = dstRect.w;

@@ -50,10 +50,9 @@ GridView::~GridView() {
     delete startTime;
 }
 
-bool GridView::tick() {
-
+bool GridView::tick(SDL_Renderer* renderer) {
     moveMouse();
-    customTick();
+    customTick(renderer);
     return true;
 }
 
@@ -141,13 +140,13 @@ void GridView::moveMouse() {
 }
 
 
-void GridView::RenderGridTexture() {
+void GridView::RenderGridTexture(SDL_Renderer* renderer) {
     auto target = SDL_GetRenderTarget(renderer);
     SDL_SetRenderTarget(renderer, gridTexture);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0); // Transparent
     SDL_RenderClear(renderer);
 
-    setRenderColor(colors.grid);
+    setRenderColor(renderer, colors.grid);
 
     for(auto line : times) {
         float val = getX(line);
@@ -161,7 +160,7 @@ void GridView::RenderGridTexture() {
     SDL_SetRenderTarget(renderer, target);
 }
 
-void GridView::setRenderColor(uint8_t code[4]) {
+void GridView::setRenderColor(SDL_Renderer* renderer, uint8_t code[4]) {
     SDL_SetRenderDrawColor(renderer,
                            code[0],
                            code[1],

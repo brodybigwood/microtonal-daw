@@ -14,14 +14,18 @@ PatcherNode::PatcherNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::
     mainManager = new NodeManager(project, path);
     mainManager->inNode->setCoupledPatcher(this);
     mainManager->outNode->setCoupledPatcher(this);
+
+    mainEditor = new NodeEditor;
+    mainEditor->embedded_ = true;
+    mainEditor->setEmbeddedCanvasSize(static_cast<float>(TEX_W), static_cast<float>(TEX_H));
+    mainManager->setNE(mainEditor);
+    mainEditor->retach();
 }
 
 PatcherNode::~PatcherNode() {
     if (mainEditor) {
         mainEditor->setTopMenuBarHostNode(nullptr);
         mainEditor->clearWireDragState();
-        mainEditor->window = nullptr;
-        mainEditor->renderer = nullptr;
         mainEditor->retach();
     }
     if (mainEditor) {
@@ -370,19 +374,7 @@ void PatcherNode::renderContent(SDL_Renderer* renderer) {
         vy[3] = TEX_H;
     }
 
-    if (!mainEditor) {
-        mainEditor = new NodeEditor;
-        mainEditor->embedded_ = true;
-        mainEditor->renderer = nullptr;
-        mainEditor->window = nullptr;
-        mainEditor->setEmbeddedCanvasSize(static_cast<float>(TEX_W), static_cast<float>(TEX_H));
-        mainManager->setNE(mainEditor);
-        mainEditor->retach();
-    }
-
-    mainEditor->renderer = renderer;
-    mainEditor->window = ne ? ne->window : nullptr;
-    mainEditor->tick();
+    mainEditor->tick(renderer);
 
     renderParams(renderer);
 }

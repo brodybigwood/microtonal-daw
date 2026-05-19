@@ -33,20 +33,20 @@ class SongRoll : public GridView{
         
         WindowHandler* windowHandler;
 
-        void renderMargins();
+        void renderMargins(SDL_Renderer* renderer);
         void createElement() override;
 
         float getY(float) override;
 
-        bool customTick() override;
+        bool customTick(SDL_Renderer* renderer) override;
         void syncLayout();
 
-        SDL_Texture* texture;
-        SDL_Texture* regionTexture;
-        SDL_Texture* playHeadTexture;
+        SDL_Texture* texture = nullptr;
+        SDL_Texture* regionTexture = nullptr;
+        SDL_Texture* playHeadTexture = nullptr;
 
         void clearTextures() override;
-        void generateTextures() override;
+        void generateTextures(SDL_Renderer* renderer) override;
 
         SDL_FRect regionRect;
         SDL_FRect rightRect;
@@ -57,8 +57,8 @@ class SongRoll : public GridView{
         Uint32 lastLmbTime;
         void doubleClick();
 
-        void renderElements();
-        void renderElement(GridElement*);
+        void renderElements(SDL_Renderer* renderer);
+        void renderElement(SDL_Renderer* renderer, GridElement*);
 
         GridElement::Position* hoveredPosition = nullptr;
         void getHoveredPosition();
@@ -91,6 +91,8 @@ class SongRoll : public GridView{
         int timelineDragPositionId = -1;
 
         void validateTimelinePointers();
+
+    public:
         void clearPianoRoll(int regionId);
 };
 

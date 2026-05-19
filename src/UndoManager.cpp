@@ -1052,6 +1052,9 @@ void wireCreateRegionDoUndo(CreateRegionAction* t) {
         ElementManager* em = undoResolveArrangerElementManager(t->p, t->managerPath, t->nodeID);
         if (!em)
             throw std::runtime_error("CreateRegionAction::undoAction: element manager missing");
+        ArrangerNode* arr = undoResolveArrangerNode(t->p, t->managerPath, t->nodeID);
+        if (arr && arr->sl)
+            arr->sl->clearPianoRoll(t->regionID);
         em->removeElementById(static_cast<uint16_t>(t->regionID));
     };
 }
@@ -1081,6 +1084,9 @@ void DeleteRegionAction::wireDeleteRegionLambdas() {
         ElementManager* em = undoResolveArrangerElementManager(this->p, this->managerPath, this->nodeID);
         if (!em)
             throw std::runtime_error("DeleteRegionAction::doAction: element manager missing");
+        ArrangerNode* arr = undoResolveArrangerNode(this->p, this->managerPath, this->nodeID);
+        if (arr && arr->sl)
+            arr->sl->clearPianoRoll(this->regionID);
         em->removeElementById(static_cast<uint16_t>(this->regionID));
     };
     undoAction = [this]() {
@@ -1262,17 +1268,15 @@ MoveEmbeddedWindowAction::MoveEmbeddedWindowAction(Project* p, std::vector<int> 
     name = "Move Embedded Window";
     doAction = [this] () {
         NodeManager& nm = requireManager(this->p, this->managerPath);
-        if (nm.ne) {
-            EmbeddedWindow* ew = nm.ne->getEmbeddedWindowById(this->ewID);
-            if (ew) ew->moveTo(this->toX, this->toY);
-        }
+        if (!nm.ne) return; // audio thread: GUI-only action
+        EmbeddedWindow* ew = nm.ne->getEmbeddedWindowById(this->ewID);
+        ew->moveTo(this->toX, this->toY);
     };
     undoAction = [this] () {
         NodeManager& nm = requireManager(this->p, this->managerPath);
-        if (nm.ne) {
-            EmbeddedWindow* ew = nm.ne->getEmbeddedWindowById(this->ewID);
-            if (ew) ew->moveTo(this->fromX, this->fromY);
-        }
+        if (!nm.ne) return;
+        EmbeddedWindow* ew = nm.ne->getEmbeddedWindowById(this->ewID);
+        ew->moveTo(this->fromX, this->fromY);
     };
 }
 
@@ -1287,17 +1291,15 @@ ResizeEmbeddedWindowAction::ResizeEmbeddedWindowAction(Project* p, std::vector<i
     name = "Resize Embedded Window";
     doAction = [this] () {
         NodeManager& nm = requireManager(this->p, this->managerPath);
-        if (nm.ne) {
-            EmbeddedWindow* ew = nm.ne->getEmbeddedWindowById(this->ewID);
-            if (ew) ew->applyGeometry(this->toX, this->toY, this->toW, this->toH);
-        }
+        if (!nm.ne) return; // audio thread: GUI-only action
+        EmbeddedWindow* ew = nm.ne->getEmbeddedWindowById(this->ewID);
+        ew->applyGeometry(this->toX, this->toY, this->toW, this->toH);
     };
     undoAction = [this] () {
         NodeManager& nm = requireManager(this->p, this->managerPath);
-        if (nm.ne) {
-            EmbeddedWindow* ew = nm.ne->getEmbeddedWindowById(this->ewID);
-            if (ew) ew->applyGeometry(this->fromX, this->fromY, this->fromW, this->fromH);
-        }
+        if (!nm.ne) return;
+        EmbeddedWindow* ew = nm.ne->getEmbeddedWindowById(this->ewID);
+        ew->applyGeometry(this->fromX, this->fromY, this->fromW, this->fromH);
     };
 }
 
