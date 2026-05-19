@@ -450,6 +450,9 @@ Node::Node(uint16_t id, NodeManager* nm, NodeType nt) :
     nodeType(nt),
     isAltPressed(WindowHandler::instance()->isAltPressed),
     isCtrlPressed(WindowHandler::instance()->isCtrlPressed) {
+    dstRect = {0, 0, TEX_W * zoomRatio, TEX_H * zoomRatio};
+    w = dstRect.w;
+    h = dstRect.h;
     outputs.nodeID = id;
     inputs.nodeID = id;
     outputs.nm = nm;
@@ -478,11 +481,10 @@ connectionSet::~connectionSet() {
     }
 }
 
-bool Node::handleInput(SDL_Event& e) {
+bool Node::handleContentInput(SDL_Event& e) {
     // Ctrl+wheel is editor-level; nodes must not consume it.
-    if (e.type == SDL_EVENT_MOUSE_WHEEL && isCtrlPressed) {
+    if (e.type == SDL_EVENT_MOUSE_WHEEL && isCtrlPressed)
         return false;
-    }
 
     bool handled = false;
 
@@ -494,8 +496,6 @@ bool Node::handleInput(SDL_Event& e) {
         hoveredConnection = -1;
     } else {
         bool hoverFound = false;
-
-        // check if the mouse is hovering over any of the connectors
 
         for (auto conn : inputs.connections) {
             if (MouseOn(&conn->rect)) {
@@ -530,10 +530,6 @@ bool Node::handleInput(SDL_Event& e) {
                 clickMouse(e);
                 break;
             case SDL_EVENT_MOUSE_WHEEL:
-                if (isAltPressed) {
-                    zoom(std::pow(1.1, e.wheel.y));
-                    return true;
-                }
                 break;
             default:
                 break;
@@ -547,7 +543,6 @@ bool Node::handleInput(SDL_Event& e) {
 void Node::clickMouse(SDL_Event& e) {
 
     if (e.button.button == SDL_BUTTON_LEFT) {
-        if (ne) ne->setMovingNode(this);
         if (hoveredConnection != -1 && connectionUiOnPatcherCanvas(this, e)) {
             switch (hoveredDirection) {
                 case Direction::input:
@@ -945,9 +940,13 @@ void Node::makeConnectionRects() {
     }
 }
 
-void Node::move(float x, float y) {
-    dstRect.x = x;
-    dstRect.y = y;
+void Node::move(float mx, float my) {
+    dstRect.x = mx;
+    dstRect.y = my;
+    x = mx;
+    y = my;
+    w = dstRect.w;
+    h = dstRect.h;
     resize(0, 0);
 }
 
@@ -1301,6 +1300,11 @@ void Node::clearTextures() {
 void Node::attach() {
     window = ne->window;
     renderer = ne->renderer;
+    x = dstRect.x;
+    y = dstRect.y;
+    w = dstRect.w;
+    h = dstRect.h;
+    ne->registerEmbeddedWindow(this);
     clearParamTextures();
     clearCustomTextures();
 
@@ -1351,6 +1355,7 @@ void Node::setNE(NodeEditor* ne) {
 }
 
 void Node::resetNE() {
+    if (ne) ne->unregisterEmbeddedWindow(this);
     clearParamTextures();
     clearCustomTextures();
     if (texture) {
@@ -1364,3 +1369,25 @@ void Node::resetNE() {
 
     resetNEFinal();
 }
+
+void Node::buildHitPolygon(std::vector<SDL_FPoint>& out) const {
+    if (!vCount || !vx || !vy) {
+        EmbeddedWindow::buildHitPolygon(out);
+        return;
+    }
+    out.resize(vCount);
+    for (size_t i = 0; i < vCount; ++i)
+        out[i] = {dstRect.x + vx[i] * zoomRatio, dstRect.y + vy[i] * zoomRatio};
+}
+
+void Node::applyResizeDelta(float dx, float dy) {
+    EmbeddedWindow::applyResizeDelta(dx, dy);
+    dstRect.x = x;
+    dstRect.y = y;
+    dstRect.w = w;
+    dstRect.h = h;
+    resize(0, 0);
+    w = dstRect.w;
+    h = dstRect.h;
+}
+

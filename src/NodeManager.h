@@ -40,7 +40,6 @@ class NodeManager {
         void removeNodeNow(uint16_t);
         void makeNodeConnectionNow(uint16_t, uint16_t, uint16_t, uint16_t);
         void severConnectionNow(uint16_t, uint16_t, uint16_t, uint16_t);
-        void moveNodeNow(uint16_t, float, float);
         bool snapshotNode(uint16_t, json&, json&);
 
         bool peekRemovableInputWaveform(uint16_t* outId, size_t* outIndex);

@@ -400,7 +400,7 @@ void EmbeddedWindow::applyResizeDelta(float dx, float dy) {
     markPolygonDirty();
 }
 
-bool EmbeddedWindow::handleResizeInput(SDL_Event& e, float mx, float my) {
+bool EmbeddedWindow::handleResizeInput(SDL_Event& e, float mx, float my, bool shiftHeld) {
     if (resizing_) {
         if (e.type == SDL_EVENT_MOUSE_MOTION) {
             applyResizeDelta(mx - resizeStartMouseX_, my - resizeStartMouseY_);
@@ -411,9 +411,27 @@ bool EmbeddedWindow::handleResizeInput(SDL_Event& e, float mx, float my) {
             resizeZone_ = ResizeZone::None;
             return true;
         }
-        return true; // consume all events while resizing, don't restart
+        return true;
+    }
+    // Shift+drag motion/up — started here, must end here.
+    if (dragging_) {
+        if (e.type == SDL_EVENT_MOUSE_MOTION) {
+            moveTo(mx - dragOffX_, my - dragOffY_);
+            return true;
+        }
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+            dragging_ = false;
+            return true;
+        }
+        return true;
     }
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+        if (shiftHeld) {
+            dragging_ = true;
+            dragOffX_ = mx - x;
+            dragOffY_ = my - y;
+            return true;
+        }
         if (startResize(mx, my)) return true;
     }
     return false;
@@ -427,22 +445,20 @@ bool EmbeddedWindow::handleInput(SDL_Event& e) {
     float mx, my;
     SDL_GetMouseState(&mx, &my);
 
-    const bool onChrome = hitTest(mx, my);
-
-    // Close button.
-    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+    // Close button (rect windows only).
+    if (hasRectResize() && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_FRect cb = closeButtonRect();
-        if (mx >= cb.x && mx < cb.x + cb.w && my >= cb.y && my < cb.y + cb.h && onChrome) {
+        if (mx >= cb.x && mx < cb.x + cb.w && my >= cb.y && my < cb.y + cb.h) {
             close();
             return true;
         }
     }
 
-    // Drag (title bar).
-    {
-        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+    // Drag: title bar for rect windows only.
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+        if (hasRectResize()) {
             SDL_FRect tb{x, y, w, kTitleBarH};
-            if (mx >= tb.x && mx < tb.x + tb.w && my >= tb.y && my < tb.y + tb.h && onChrome) {
+            if (mx >= tb.x && mx < tb.x + tb.w && my >= tb.y && my < tb.y + tb.h) {
                 dragging_ = true;
                 dragOffX_ = mx - x;
                 dragOffY_ = my - y;
@@ -451,9 +467,9 @@ bool EmbeddedWindow::handleInput(SDL_Event& e) {
         }
     }
 
-    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT && dragging_) {
         dragging_ = false;
-        if (onChrome) return true;
+        return true;
     }
 
     if (e.type == SDL_EVENT_MOUSE_MOTION && dragging_) {
@@ -461,14 +477,6 @@ bool EmbeddedWindow::handleInput(SDL_Event& e) {
         return true;
     }
 
-    // Delegate content input if mouse is inside; always consume.
-    if (onChrome && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-        handleContentInput(e);
-        return true;
-    }
-
-    if (onChrome)
-        return true;
-
-    return false;
+    handleContentInput(e);
+    return true;
 }

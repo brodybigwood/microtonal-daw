@@ -14,10 +14,17 @@ public:
     int zOrder = 0;
     bool visible = true;
     std::string title;
+    int id = -1;
 
     void close() { visible = false; }
     void open() { visible = true; }
-    void moveTo(float nx, float ny) { x = nx; y = ny; markPolygonDirty(); }
+    virtual void moveTo(float nx, float ny) { x = nx; y = ny; markPolygonDirty(); }
+
+    /** Restore full geometry (for undo). Override to sync derived state. */
+    virtual void applyGeometry(float nx, float ny, float nw, float nh) {
+        x = nx; y = ny; w = nw; h = nh;
+        markPolygonDirty();
+    }
 
     enum class ResizeZone : uint8_t { None, N, S, E, W, NE, NW, SE, SW };
 
@@ -34,7 +41,7 @@ public:
     virtual bool handleInput(SDL_Event& e);
 
     /** Handle resize motion / release / mousedown-start. Called by WindowHandler. */
-    bool handleResizeInput(SDL_Event& e, float mouseX, float mouseY);
+    virtual bool handleResizeInput(SDL_Event& e, float mouseX, float mouseY, bool shiftHeld = false);
 
     /** World-space bounding rect. */
     SDL_FRect worldRect() const;
@@ -67,7 +74,7 @@ protected:
     bool startResize(float worldMx, float worldMy);
 
     /** Apply a resize delta; enforces kMinW/kMinH. Call during motion. */
-    void applyResizeDelta(float dx, float dy);
+    virtual void applyResizeDelta(float dx, float dy);
 
     /** True for rectangular windows that get free per-axis resize. */
     virtual bool hasRectResize() const { return true; }

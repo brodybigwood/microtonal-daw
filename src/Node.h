@@ -11,7 +11,7 @@
 #include "Parameter.h"
 #include "Geometry.h"
 #include "Project.h"
-#include "Window.h"
+#include "EmbeddedWindow.h"
 
 #define TEX_W 1280
 #define TEX_H 720
@@ -35,9 +35,12 @@ struct connectionSet{
     int bufferSize = 0;
 };
 
-class Node : public Window {
+class Node : public EmbeddedWindow {
     public:
         NodeType nodeType = NodeType::Count;
+
+        SDL_Window* window = nullptr;
+        SDL_Renderer* renderer = nullptr;
 
         Project* project;
         NodeManager* nm;
@@ -74,7 +77,7 @@ class Node : public Window {
         void makeConnectionRects();
 
         // bounding polygon (for gui)
-        float* vx = nullptr; 
+        float* vx = nullptr;
         float* vy = nullptr;
         // fixed size, no position
         size_t vCount = 0;
@@ -112,7 +115,7 @@ class Node : public Window {
         Direction hoveredDirection;
 
         uint32_t lastLeftClick;
-        bool handleInput(SDL_Event&);
+        bool handleContentInput(SDL_Event&) override;
         virtual bool handleCustomInput(SDL_Event&) { return false; }
         virtual bool blocksDoubleClick(float, float) const { return false; }
         void clickMouse(SDL_Event&);
@@ -147,11 +150,32 @@ class Node : public Window {
 
         void attach();
 
-        void handleWindowInput(SDL_Event&) override;
+        void moveTo(float nx, float ny) override {
+            EmbeddedWindow::moveTo(nx, ny);
+            dstRect.x = nx;
+            dstRect.y = ny;
+        }
+
+        void applyGeometry(float nx, float ny, float nw, float nh) override {
+            x = nx; y = ny; w = nw; h = nh;
+            zoomRatio = nw / TEX_W;
+            dstRect = {nx, ny, nw, nh};
+            markPolygonDirty();
+            makeConnectionRects();
+        }
+
+        virtual void handleWindowInput(SDL_Event&);
 
         void setNE(NodeEditor*);
         void resetNE();
 
         virtual void setNEFinal() {}
         virtual void resetNEFinal() {}
+
+        // EmbeddedWindow polygon: use the node's existing shape.
+        bool hasRectResize() const override { return false; }
+        float minW() const override { return 40.f; }
+        float minH() const override { return 22.5f; } // 40 * TEX_H/TEX_W
+        void buildHitPolygon(std::vector<SDL_FPoint>& out) const override;
+        void applyResizeDelta(float dx, float dy) override;
 }; 

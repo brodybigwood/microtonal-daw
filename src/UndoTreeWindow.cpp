@@ -36,13 +36,8 @@ void UndoTreeWindow::renderContent(SDL_Renderer* r) {
     project->um->baseRect = nullptr;
 }
 
-bool UndoTreeWindow::handleInput(SDL_Event& e) {
-    if (!visible) return false;
-
-    float mx, my;
-    SDL_GetMouseState(&mx, &my);
-
-    if (hitTest(mx, my) && e.type == SDL_EVENT_MOUSE_WHEEL && project && project->um) {
+bool UndoTreeWindow::handleContentInput(SDL_Event& e) {
+    if (e.type == SDL_EVENT_MOUSE_WHEEL && project && project->um) {
         constexpr float margin = 8.f;
         const float contentX = x + kBorderW;
         const float contentY = y + kTitleBarH;
@@ -53,10 +48,6 @@ bool UndoTreeWindow::handleInput(SDL_Event& e) {
         return true;
     }
 
-    return EmbeddedWindow::handleInput(e);
-}
-
-bool UndoTreeWindow::handleContentInput(SDL_Event& e) {
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && project && project->um) {
         if (e.button.button == SDL_BUTTON_LEFT)
             project->um->undoTreePendingLeft = true;

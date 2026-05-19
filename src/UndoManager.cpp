@@ -6,6 +6,7 @@
 #include <functional>
 #include "Project.h"
 #include "NodeProcessor.h"
+#include "NodeEditor.h"
 #include "nodes/nodetypes.h"
 #include "NodeManager.h"
 #include "InputNode.h"
@@ -110,7 +111,6 @@ const std::unordered_map<std::string, ActionType>& UndoManager::actionRegistry()
     static const std::unordered_map<std::string, ActionType> reg = {
         {"create_note", CreateNote},
         {"add_arranger_track", AddArrangerTrack},
-        {"move_node", MoveNode},
         {"add_node", AddNode},
         {"remove_node", RemoveNode},
         {"make_node_connection", MakeNodeConnection},
@@ -120,6 +120,8 @@ const std::unordered_map<std::string, ActionType>& UndoManager::actionRegistry()
         {"create_position", CreatePosition},
         {"delete_position", DeletePosition},
         {"move_element_position", MoveElementPosition},
+        {"move_embedded_window", MoveEmbeddedWindow},
+        {"resize_embedded_window", ResizeEmbeddedWindow},
     };
     return reg;
 }
@@ -136,6 +138,12 @@ std::string UndoManager::actionSchema(const std::string& actionName) {
     }
     if (actionName == "move_node") {
         return R"({"managerPath":[int,...],"nodeID":int,"toX":float,"toY":float})";
+    }
+    if (actionName == "move_embedded_window") {
+        return R"({"managerPath":[int,...],"ewID":int,"toX":float,"toY":float})";
+    }
+    if (actionName == "resize_embedded_window") {
+        return R"({"managerPath":[int,...],"ewID":int,"toX":float,"toY":float,"toW":float,"toH":float})";
     }
     if (actionName == "add_arranger_track") {
         return R"({"managerPath":[int,...],"nodeID":int,"trackType":int})";
@@ -187,16 +195,30 @@ bool UndoManager::runRegisteredAction(const std::string& actionName, const json&
             pa = new SeverNodeConnectionAction(head->p, params.at("managerPath").get<std::vector<int>>(), params.at("srcNodeID").get<int>(),
                 params.at("srcConID").get<int>(), params.at("dstNodeID").get<int>(), params.at("dstConID").get<int>());
             break;
-        case MoveNode: {
+        case MoveEmbeddedWindow: {
             auto managerPath = params.at("managerPath").get<std::vector<int>>();
             NodeManager& nm = requireManager(head->p, managerPath);
-            auto nodeID = params.at("nodeID").get<int>();
-            Node* node = (nodeID == 0) ? nm.outNode : nm.getNode(static_cast<uint16_t>(nodeID));
-            if (!node)
-                throw std::runtime_error("runRegisteredAction move_node: node not found");
-            float fromX = node->dstRect.x;
-            float fromY = node->dstRect.y;
-            pa = new MoveNodeAction(head->p, managerPath, nodeID, fromX, fromY, params.at("toX").get<float>(), params.at("toY").get<float>());
+            EmbeddedWindow* ew = nullptr;
+            if (params.contains("ewID") && nm.ne)
+                ew = nm.ne->getEmbeddedWindowById(params.at("ewID").get<int>());
+            if (!ew)
+                throw std::runtime_error("runRegisteredAction move_embedded_window: window not found");
+            pa = new MoveEmbeddedWindowAction(head->p, managerPath, params.at("ewID").get<int>(),
+                ew->x, ew->y, params.at("toX").get<float>(), params.at("toY").get<float>());
+            break;
+        }
+        case ResizeEmbeddedWindow: {
+            auto managerPath = params.at("managerPath").get<std::vector<int>>();
+            NodeManager& nm = requireManager(head->p, managerPath);
+            EmbeddedWindow* ew = nullptr;
+            if (params.contains("ewID") && nm.ne)
+                ew = nm.ne->getEmbeddedWindowById(params.at("ewID").get<int>());
+            if (!ew)
+                throw std::runtime_error("runRegisteredAction resize_embedded_window: window not found");
+            pa = new ResizeEmbeddedWindowAction(head->p, managerPath, params.at("ewID").get<int>(),
+                ew->x, ew->y, ew->w, ew->h,
+                params.at("toX").get<float>(), params.at("toY").get<float>(),
+                params.at("toW").get<float>(), params.at("toH").get<float>());
             break;
         }
         case AddArrangerTrack:
@@ -265,11 +287,6 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
             pa = at;
             break;
         }
-        case MoveNode: {
-            pa = new MoveNodeAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(), j.at("fromX").get<float>(), j.at("fromY").get<float>(),
-                j.at("toX").get<float>(), j.at("toY").get<float>());
-            break;
-        }
         case AddNode: {
             auto an = new AddNodeAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeType").get<int>(), j.at("x").get<float>(), j.at("y").get<float>());
             an->nodeID = j.at("nodeID").get<int>();
@@ -279,6 +296,20 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
                 an->redoConnectionsSnapshot = j.value("redoConnectionsSnapshot", json::array());
             }
             pa = an;
+            break;
+        }
+        case MoveEmbeddedWindow: {
+            pa = new MoveEmbeddedWindowAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("ewID").get<int>(),
+                j.at("fromX").get<float>(), j.at("fromY").get<float>(),
+                j.at("toX").get<float>(), j.at("toY").get<float>());
+            break;
+        }
+        case ResizeEmbeddedWindow: {
+            pa = new ResizeEmbeddedWindowAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("ewID").get<int>(),
+                j.at("fromX").get<float>(), j.at("fromY").get<float>(),
+                j.at("fromW").get<float>(), j.at("fromH").get<float>(),
+                j.at("toX").get<float>(), j.at("toY").get<float>(),
+                j.at("toW").get<float>(), j.at("toH").get<float>());
             break;
         }
         case RemoveNode: {
@@ -425,14 +456,28 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["connectionID"] = at->connectionID;
             break;
         }
-        case MoveNode: {
-            auto mn = static_cast<MoveNodeAction*>(pa);
-            j["managerPath"] = mn->managerPath;
-            j["nodeID"] = mn->nodeID;
-            j["fromX"] = mn->fromX;
-            j["fromY"] = mn->fromY;
-            j["toX"] = mn->toX;
-            j["toY"] = mn->toY;
+        case MoveEmbeddedWindow: {
+            auto mw = static_cast<MoveEmbeddedWindowAction*>(pa);
+            j["managerPath"] = mw->managerPath;
+            j["ewID"] = mw->ewID;
+            j["fromX"] = mw->fromX;
+            j["fromY"] = mw->fromY;
+            j["toX"] = mw->toX;
+            j["toY"] = mw->toY;
+            break;
+        }
+        case ResizeEmbeddedWindow: {
+            auto rw = static_cast<ResizeEmbeddedWindowAction*>(pa);
+            j["managerPath"] = rw->managerPath;
+            j["ewID"] = rw->ewID;
+            j["fromX"] = rw->fromX;
+            j["fromY"] = rw->fromY;
+            j["fromW"] = rw->fromW;
+            j["fromH"] = rw->fromH;
+            j["toX"] = rw->toX;
+            j["toY"] = rw->toY;
+            j["toW"] = rw->toW;
+            j["toH"] = rw->toH;
             break;
         }
         case AddNode: {
@@ -1208,22 +1253,51 @@ AddArrangerTrackAction::AddArrangerTrackAction(Project* p, std::vector<int> mana
     };
 }
 
-MoveNodeAction::MoveNodeAction(Project* p, std::vector<int> managerPath, int nodeID, float fromX, float fromY, float toX, float toY) :
-        ProjectAction(p, MoveNode),
+MoveEmbeddedWindowAction::MoveEmbeddedWindowAction(Project* p, std::vector<int> managerPath, int ewID, float fromX, float fromY, float toX, float toY) :
+        ProjectAction(p, MoveEmbeddedWindow),
         managerPath(std::move(managerPath)),
-        nodeID(nodeID),
-        fromX(fromX),
-        fromY(fromY),
-        toX(toX),
-        toY(toY) {
-    name = "Move Node";
+        ewID(ewID),
+        fromX(fromX), fromY(fromY),
+        toX(toX), toY(toY) {
+    name = "Move Embedded Window";
     doAction = [this] () {
         NodeManager& nm = requireManager(this->p, this->managerPath);
-        nm.moveNodeNow(this->nodeID, this->toX, this->toY);
+        if (nm.ne) {
+            EmbeddedWindow* ew = nm.ne->getEmbeddedWindowById(this->ewID);
+            if (ew) ew->moveTo(this->toX, this->toY);
+        }
     };
     undoAction = [this] () {
         NodeManager& nm = requireManager(this->p, this->managerPath);
-        nm.moveNodeNow(this->nodeID, this->fromX, this->fromY);
+        if (nm.ne) {
+            EmbeddedWindow* ew = nm.ne->getEmbeddedWindowById(this->ewID);
+            if (ew) ew->moveTo(this->fromX, this->fromY);
+        }
+    };
+}
+
+ResizeEmbeddedWindowAction::ResizeEmbeddedWindowAction(Project* p, std::vector<int> managerPath, int ewID,
+        float fromX, float fromY, float fromW, float fromH,
+        float toX, float toY, float toW, float toH) :
+        ProjectAction(p, ResizeEmbeddedWindow),
+        managerPath(std::move(managerPath)),
+        ewID(ewID),
+        fromX(fromX), fromY(fromY), fromW(fromW), fromH(fromH),
+        toX(toX), toY(toY), toW(toW), toH(toH) {
+    name = "Resize Embedded Window";
+    doAction = [this] () {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        if (nm.ne) {
+            EmbeddedWindow* ew = nm.ne->getEmbeddedWindowById(this->ewID);
+            if (ew) ew->applyGeometry(this->toX, this->toY, this->toW, this->toH);
+        }
+    };
+    undoAction = [this] () {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        if (nm.ne) {
+            EmbeddedWindow* ew = nm.ne->getEmbeddedWindowById(this->ewID);
+            if (ew) ew->applyGeometry(this->fromX, this->fromY, this->fromW, this->fromH);
+        }
     };
 }
 

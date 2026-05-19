@@ -9,7 +9,7 @@ public:
     PreferencesWindow();
 
     void render(SDL_Renderer* r) override;
-    bool handleInput(SDL_Event& e) override;
+    bool handleContentInput(SDL_Event& e) override;
 
     static constexpr int kTeeth = 8;
 

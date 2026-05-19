@@ -38,7 +38,9 @@ enum ActionType {
     MoveElementPosition = 18,
     IoPortChannel = 19,
     SetParamValue = 20,
-    ToggleModulatorCentered = 21
+    ToggleModulatorCentered = 21,
+    MoveEmbeddedWindow = 22,
+    ResizeEmbeddedWindow = 23
 };
 
 
@@ -385,15 +387,24 @@ struct AddArrangerTrackAction : ProjectAction {
     AddArrangerTrackAction(Project* p, std::vector<int> managerPath, int nodeID, int trackType);
 };
 
-struct MoveNodeAction : ProjectAction {
+struct MoveEmbeddedWindowAction : ProjectAction {
     std::vector<int> managerPath;
-    int nodeID;
-    float fromX;
-    float fromY;
-    float toX;
-    float toY;
+    int ewID;
+    float fromX, fromY;
+    float toX, toY;
 
-    MoveNodeAction(Project* p, std::vector<int> managerPath, int nodeID, float fromX, float fromY, float toX, float toY);
+    MoveEmbeddedWindowAction(Project* p, std::vector<int> managerPath, int ewID, float fromX, float fromY, float toX, float toY);
+};
+
+struct ResizeEmbeddedWindowAction : ProjectAction {
+    std::vector<int> managerPath;
+    int ewID;
+    float fromX, fromY, fromW, fromH;
+    float toX, toY, toW, toH;
+
+    ResizeEmbeddedWindowAction(Project* p, std::vector<int> managerPath, int ewID,
+        float fromX, float fromY, float fromW, float fromH,
+        float toX, float toY, float toW, float toH);
 };
 
 struct AddNodeAction : ProjectAction {

@@ -8,8 +8,6 @@ class UndoTreeWindow : public EmbeddedWindow {
 public:
     explicit UndoTreeWindow(Project* project);
 
-    bool handleInput(SDL_Event& e) override;
-
 protected:
     void renderContent(SDL_Renderer* r) override;
     bool handleContentInput(SDL_Event& e) override;

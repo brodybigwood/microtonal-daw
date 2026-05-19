@@ -3,11 +3,13 @@
 #include <SDL3/SDL.h>
 #include <vector>
 #include <memory>
+#include "idManager.h"
 #include <array>
 #include "TreeEntry.h"
 #include "nodes/nodetypes.h"
 #include "Window.h"
 #include "Bus.h"
+#include <unordered_map>
 #include "EmbeddedWindow.h"
 
 #define SINE_SIZE 2000
@@ -36,12 +38,10 @@ class NodeEditor : public Window {
     
         void setDstConn(Node*, int);
         void setSrcConn(Node*, int);
-        void setMovingNode(Node*);
-        void releaseMovingNode(bool commitAction = true);
-        void cancelMovingNode();
 
         bool& isAltPressed;
         bool& isCtrlPressed;
+        bool& isShiftPressed;
 
         SDL_Window* getWindow() { return window; };
         SDL_Renderer* getRenderer() { return renderer; };
@@ -92,6 +92,26 @@ class NodeEditor : public Window {
         UndoTreeWindow* existingUndoTreeWindow();
 
         EmbeddedWindow* focusedEmbeddedWindow() const { return focusedEmbeddedWindow_; }
+
+        void registerEmbeddedWindow(EmbeddedWindow* ew) {
+            if (ew->id < 0) {
+                ew->id = static_cast<int>(ewIdPool_.newID());
+                embeddedWindowById_[ew->id] = ew;
+            }
+        }
+        void unregisterEmbeddedWindow(EmbeddedWindow* ew) {
+            if (ew->id >= 0) {
+                embeddedWindowById_.erase(ew->id);
+                ewIdPool_.releaseID(static_cast<uint16_t>(ew->id));
+                ew->id = -1;
+            }
+        }
+        json ewIdPoolToJSON() { return ewIdPool_.toJSON(); }
+        void ewIdPoolFromJSON(const json& j) { ewIdPool_.fromJSON(j); }
+        EmbeddedWindow* getEmbeddedWindowById(int id) {
+            auto it = embeddedWindowById_.find(id);
+            return it != embeddedWindowById_.end() ? it->second : nullptr;
+        }
 
     private:
 
@@ -157,8 +177,15 @@ class NodeEditor : public Window {
         std::shared_ptr<TreeEntry> buildMenuTree(int menuIndex);
 
         std::vector<std::unique_ptr<EmbeddedWindow>> embeddedWindows_;
+        std::unordered_map<int, EmbeddedWindow*> embeddedWindowById_;
+        idManager ewIdPool_;
         EmbeddedWindow* capturedEmbeddedWindow_ = nullptr;
         EmbeddedWindow* focusedEmbeddedWindow_ = nullptr;
+
+        // Undo tracking for embedded window drag/resize.
+        float undoBeforeX_ = 0.f, undoBeforeY_ = 0.f, undoBeforeW_ = 0.f, undoBeforeH_ = 0.f;
+        bool undoIsResize_ = false;
+        bool undoCaptured_ = false;
 
         float canvasW_ = 1920.f;
         float canvasH_ = 1080.f;

@@ -86,35 +86,6 @@ void NodeEditor::retach() {
     nm->outNode->clearTextures();
 }
 
-void NodeEditor::setMovingNode(Node* node) {
-    releaseMovingNode();
-    movingNode = node;
-    node->moving = true;
-    movingNodeStartX = node->dstRect.x;
-    movingNodeStartY = node->dstRect.y;
-    moveOffX = mouseX - node->dstRect.x;
-    moveOffY = mouseY - node->dstRect.y;
-}
-
-void NodeEditor::releaseMovingNode(bool commitAction) {
-    if (!movingNode) return;
-    float endX = movingNode->dstRect.x;
-    float endY = movingNode->dstRect.y;
-    int movingID = movingNode->id;
-    movingNode->moving = false;
-    movingNode = nullptr;
-    if (commitAction && (endX != movingNodeStartX || endY != movingNodeStartY)) {
-        auto pa = new MoveNodeAction(nm->project, nm->managerPath, movingID, movingNodeStartX, movingNodeStartY, endX, endY);
-        nm->project->um->newAction(pa);
-    }
-}
-
-void NodeEditor::cancelMovingNode() {
-    if (!movingNode) return;
-    movingNode->move(movingNodeStartX, movingNodeStartY);
-    releaseMovingNode(false);
-}
-
 void NodeEditor::setDstConn(Node* node, int id) {
     dstNodeID = id;
     dstNode = node;
@@ -174,7 +145,8 @@ void NodeEditor::clearWireDragState() {
 
 NodeEditor::NodeEditor() :
     isAltPressed(WindowHandler::instance()->isAltPressed),
-    isCtrlPressed(WindowHandler::instance()->isCtrlPressed) {
+    isCtrlPressed(WindowHandler::instance()->isCtrlPressed),
+    isShiftPressed(WindowHandler::instance()->isShiftPressed) {
 }
 
 NodeEditor::~NodeEditor() {
@@ -280,8 +252,12 @@ std::shared_ptr<TreeEntry> NodeEditor::buildMenuTree(int menuIndex) {
                         auto pw = std::make_unique<PreferencesWindow>();
                         existing = pw.get();
                         addEmbeddedWindow(std::move(pw));
+                        existing->moveTo((w - existing->w) * 0.5f, (h - existing->h) * 0.4f);
                     }
-                    existing->moveTo((w - existing->w) * 0.5f, (h - existing->h) * 0.4f);
+                    int maxZ = 0;
+                    for (auto& ew : embeddedWindows_)
+                        if (ew->zOrder > maxZ) maxZ = ew->zOrder;
+                    existing->zOrder = maxZ + 1;
                     existing->open();
                 };
                 root->addChild(item);
@@ -295,8 +271,12 @@ std::shared_ptr<TreeEntry> NodeEditor::buildMenuTree(int menuIndex) {
                         auto uw = std::make_unique<UndoTreeWindow>(nm->project);
                         existing = uw.get();
                         addEmbeddedWindow(std::move(uw));
+                        existing->moveTo((w - existing->w) * 0.5f, (h - existing->h) * 0.4f);
                     }
-                    existing->moveTo((w - existing->w) * 0.5f, (h - existing->h) * 0.4f);
+                    int maxZ = 0;
+                    for (auto& ew : embeddedWindows_)
+                        if (ew->zOrder > maxZ) maxZ = ew->zOrder;
+                    existing->zOrder = maxZ + 1;
                     existing->open();
                 };
                 root->addChild(item);
@@ -398,10 +378,8 @@ void NodeEditor::zoom(float amount) {
 void NodeEditor::handleInput(SDL_Event& e) {
     moveMouse();
 
-    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-        releaseMovingNode();
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP)
         leftClick = false;
-    }
 
     if (routeEmbeddedWindowEvent(e, mouseX, mouseY))
         return;
@@ -469,11 +447,6 @@ void NodeEditor::handleInput(SDL_Event& e) {
             break;
         default:
             break;
-    }
-    if (nm->inNode->handleInput(e)) return;
-    if (nm->outNode->handleInput(e)) return;
-    for (auto n : nm->getNodes()) {
-        if (n->handleInput(e)) return;
     }
     switch(e.type) {
         case SDL_EVENT_MOUSE_MOTION:
@@ -576,6 +549,7 @@ EmbeddedWindow* NodeEditor::addEmbeddedWindow(std::unique_ptr<EmbeddedWindow> w)
     for (auto& ew : embeddedWindows_)
         if (ew->zOrder > maxZ) maxZ = ew->zOrder;
     w->zOrder = maxZ + 1;
+    registerEmbeddedWindow(w.get());
     EmbeddedWindow* ptr = w.get();
     embeddedWindows_.push_back(std::move(w));
     return ptr;
@@ -585,6 +559,7 @@ void NodeEditor::removeEmbeddedWindow(EmbeddedWindow* w) {
     if (!w) return;
     if (capturedEmbeddedWindow_ == w) capturedEmbeddedWindow_ = nullptr;
     if (focusedEmbeddedWindow_ == w) focusedEmbeddedWindow_ = nullptr;
+    unregisterEmbeddedWindow(w);
     for (auto it = embeddedWindows_.begin(); it != embeddedWindows_.end(); ++it) {
         if (it->get() == w) {
             embeddedWindows_.erase(it);
@@ -623,16 +598,25 @@ void NodeEditor::renderEmbeddedWindows(SDL_Renderer* r) {
 bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mouseY) {
     EmbeddedWindow* target = capturedEmbeddedWindow_;
 
+    // Remember captured window for undo on mouseup.
+    EmbeddedWindow* prevCapture = capturedEmbeddedWindow_;
+
     if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT)
         capturedEmbeddedWindow_ = nullptr;
 
     bool targetIsResize = false;
 
     if (!target) {
-        // Collect visible windows sorted by z descending.
+        // Collect visible windows and nodes sorted by z descending.
         std::vector<EmbeddedWindow*> sorted;
         for (auto& ew : embeddedWindows_)
             if (ew->visible) sorted.push_back(ew.get());
+        if (nm) {
+            for (auto n : nm->getNodes())
+                if (n->visible) sorted.push_back(n);
+            if (nm->inNode && nm->inNode->visible) sorted.push_back(nm->inNode);
+            if (nm->outNode && nm->outNode->visible) sorted.push_back(nm->outNode);
+        }
         std::sort(sorted.begin(), sorted.end(),
                   [](EmbeddedWindow* a, EmbeddedWindow* b) { return a->zOrder > b->zOrder; });
 
@@ -675,19 +659,54 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
         SDL_SetCursor(SDL_CreateSystemCursor(cur));
     }
 
-    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT && target) {
-        capturedEmbeddedWindow_ = target;
-        focusedEmbeddedWindow_ = target;
+    {
         int maxZ = 0;
         for (auto& ew : embeddedWindows_)
             if (ew->zOrder > maxZ) maxZ = ew->zOrder;
-        target->zOrder = maxZ + 1;
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT && target) {
+            capturedEmbeddedWindow_ = target;
+            focusedEmbeddedWindow_ = target;
+            target->zOrder = maxZ + 1;
+        }
     }
 
-    if (target && target->handleResizeInput(e, mouseX, mouseY))
+    if (target && target->handleResizeInput(e, mouseX, mouseY, isShiftPressed)) {
+        if (!undoCaptured_ && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+            undoBeforeX_ = target->x;
+            undoBeforeY_ = target->y;
+            undoBeforeW_ = target->w;
+            undoBeforeH_ = target->h;
+            undoIsResize_ = !isShiftPressed;
+            undoCaptured_ = true;
+        }
+        if (undoCaptured_ && e.type == SDL_EVENT_MOUSE_BUTTON_UP && prevCapture) {
+            float afterX = prevCapture->x, afterY = prevCapture->y;
+            float afterW = prevCapture->w, afterH = prevCapture->h;
+            int ewid = prevCapture->id;
+            std::vector<int> mgrPath = nm ? nm->managerPath : std::vector<int>{};
+            Project* proj = nm ? nm->project : nullptr;
+            if (undoIsResize_ && proj && proj->um) {
+                if (undoBeforeX_ != afterX || undoBeforeY_ != afterY ||
+                    undoBeforeW_ != afterW || undoBeforeH_ != afterH) {
+                    auto* action = new ResizeEmbeddedWindowAction(proj, mgrPath, ewid,
+                        undoBeforeX_, undoBeforeY_, undoBeforeW_, undoBeforeH_,
+                        afterX, afterY, afterW, afterH);
+                    proj->um->newAction(action);
+                }
+            } else if (!undoIsResize_ && proj && proj->um) {
+                if (undoBeforeX_ != afterX || undoBeforeY_ != afterY) {
+                    auto* action = new MoveEmbeddedWindowAction(proj, mgrPath, ewid,
+                        undoBeforeX_, undoBeforeY_, afterX, afterY);
+                    proj->um->newAction(action);
+                }
+            }
+            undoCaptured_ = false;
+        }
         return true;
+    }
 
-    if (target && !targetIsResize && target->handleInput(e))
+    // Chrome + content (drag, close, content delegation).
+    if (target && target->EmbeddedWindow::handleInput(e))
         return true;
 
     if (capturedEmbeddedWindow_ && !capturedEmbeddedWindow_->visible)

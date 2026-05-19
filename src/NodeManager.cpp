@@ -48,6 +48,7 @@ void NodeManager::resetNE() {
 json NodeManager::serialize() {
     json j;
     j["idManager"] = id_pool.toJSON();
+    if (ne) j["ewIdPool"] = ne->ewIdPoolToJSON();
 
     j["nodes"] = json::array();
     j["connections"] = json::array();
@@ -89,6 +90,7 @@ void NodeManager::deSerialize(json j) {
     if (managerPath.empty()) std::cout << "root";
     std::cout << std::endl;
     id_pool.fromJSON(j["idManager"]);
+    if (ne && j.contains("ewIdPool")) ne->ewIdPoolFromJSON(j["ewIdPool"]);
 
     for (auto n : j["nodes"]) {
         auto node = Node::deSerialize(n, this);
@@ -405,19 +407,6 @@ void NodeManager::severConnectionNow(uint16_t srcNodeID, uint16_t srcConID, uint
     dstCon->is_connected = false;
     dstCon->buffer = nullptr;
     dstCon->events = nullptr;
-}
-
-void NodeManager::moveNodeNow(uint16_t nodeID, float x, float y) {
-    Node* node = nullptr;
-    if (nodeID == 0) {
-        node = outNode;
-    } else if (nodeID == 1) {
-        node = inNode;
-    } else {
-        node = getNode(nodeID);
-    }
-    if (!node) return;
-    node->move(x, y);
 }
 
 bool NodeManager::snapshotNode(uint16_t nodeID, json& nodeData, json& connections) {

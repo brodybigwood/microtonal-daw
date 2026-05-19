@@ -305,14 +305,11 @@ void PreferencesWindow::render(SDL_Renderer* r) {
 
 // --- Input ---
 
-bool PreferencesWindow::handleInput(SDL_Event& e) {
-    if (!visible) return false;
-
+bool PreferencesWindow::handleContentInput(SDL_Event& e) {
     float mx, my;
     SDL_GetMouseState(&mx, &my);
 
-    // Only intercept mousedown for cog-specific controls; base handles everything else.
-    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT && hitTest(mx, my)) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         // Close button?
         const float scalex = std::min(w, h) / 420.f;
         const float cx = centerX();
