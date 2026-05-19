@@ -87,11 +87,26 @@ void NodeProcessor::deSerialize(const json& j) {
 }
 
 void NodeProcessor::render() {
+    flushProcessorActions();
     if (editor) editor->tick(project->renderer);
 }
 
 void NodeProcessor::renderPresent() {
     if (editor) editor->renderPresent(hostRenderer);
+}
+
+void NodeProcessor::enqueueProcessorAction(std::function<void()> fn) {
+    std::lock_guard<std::mutex> lock(processorActionMutex_);
+    pendingProcessorActions_.push_back(std::move(fn));
+}
+
+void NodeProcessor::flushProcessorActions() {
+    std::vector<std::function<void()>> actions;
+    {
+        std::lock_guard<std::mutex> lock(processorActionMutex_);
+        actions.swap(pendingProcessorActions_);
+    }
+    for (auto& fn : actions) fn();
 }
 
 void NodeProcessor::handleWindowInput(SDL_Event& e) {

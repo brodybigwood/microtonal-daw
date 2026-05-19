@@ -12,6 +12,8 @@ public:
     void setup() override;
 
 private:
+    void syncToGui();
+
     Connection* in = nullptr;
     Connection* out = nullptr;
 

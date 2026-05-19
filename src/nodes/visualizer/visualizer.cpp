@@ -1,4 +1,8 @@
 #include "visualizer.h"
+#include "../patcher/patcher.h"
+#include "NodeManager.h"
+#include "NodeProcessor.h"
+#include "Project.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -40,6 +44,7 @@ void VisualizerNode::process() {
         envLevel *= 0.96f;
         levelHistory[writePos] = std::clamp(envLevel, 0.0f, 1.0f);
         writePos = (writePos + 1) % levelHistory.size();
+        syncToGui();
         return;
     }
 
@@ -60,6 +65,32 @@ void VisualizerNode::process() {
 
     levelHistory[writePos] = std::clamp(envLevel, 0.0f, 1.0f);
     writePos = (writePos + 1) % levelHistory.size();
+    syncToGui();
+}
+
+void VisualizerNode::syncToGui() {
+    auto path = nm->managerPath;
+    auto nodeId = id;
+    auto history = levelHistory;
+    auto pos = writePos;
+    auto level = envLevel;
+    auto* proj = project;
+    if (!proj || !proj->processor) return;
+    proj->processor->enqueueProcessorAction([path, nodeId, history, pos, level, proj]() mutable {
+        NodeManager* mgr = proj->processor->guiManager;
+        for (int patcherId : path) {
+            auto* patcher = dynamic_cast<PatcherNode*>(mgr->getNode(static_cast<uint16_t>(patcherId)));
+            if (!patcher || !patcher->mainManager) return;
+            mgr = patcher->mainManager;
+        }
+        auto* node = mgr->getNode(static_cast<uint16_t>(nodeId));
+        auto* viz = dynamic_cast<VisualizerNode*>(node);
+        if (viz) {
+            viz->levelHistory = std::move(history);
+            viz->writePos = pos;
+            viz->envLevel = level;
+        }
+    });
 }
 
 void VisualizerNode::renderContent(SDL_Renderer* renderer) {

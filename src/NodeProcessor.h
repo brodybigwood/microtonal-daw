@@ -2,6 +2,9 @@
 
 #include <SDL3/SDL.h>
 #include <nlohmann/json.hpp>
+#include <mutex>
+#include <functional>
+#include <vector>
 using json = nlohmann::json;
 
 class Project;
@@ -34,9 +37,16 @@ public:
     void renderPresent();
     void handleWindowInput(SDL_Event& e);
 
+    /** Audio thread enqueues lambdas; GUI thread flushes them before each render frame. */
+    void enqueueProcessorAction(std::function<void()> fn);
+    void flushProcessorActions();
+
 private:
     Project* project = nullptr;
     class NodeEditor* editor = nullptr;
     SDL_Window* hostWindow = nullptr;
     SDL_Renderer* hostRenderer = nullptr;
+
+    std::mutex processorActionMutex_;
+    std::vector<std::function<void()>> pendingProcessorActions_;
 };
