@@ -637,6 +637,22 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
                 }
             }
         }
+
+        // Third pass: if still no match, check if the mouse is over a connection port.
+        if (!target) {
+            for (auto* ew : sorted) {
+                Node* node = dynamic_cast<Node*>(ew);
+                if (!node) continue;
+                for (auto* c : node->inputs.connections) {
+                    if (c && (mouseX >= c->rect.x && mouseX <= c->rect.x + c->rect.w && mouseY >= c->rect.y && mouseY <= c->rect.y + c->rect.h)) { target = node; break; }
+                }
+                if (target) break;
+                for (auto* c : node->outputs.connections) {
+                    if (c && (mouseX >= c->rect.x && mouseX <= c->rect.x + c->rect.w && mouseY >= c->rect.y && mouseY <= c->rect.y + c->rect.h)) { target = node; break; }
+                }
+                if (target) break;
+            }
+        }
     }
 
     {

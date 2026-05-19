@@ -374,6 +374,10 @@ void PatcherNode::renderContent(SDL_Renderer* renderer) {
         vy[3] = TEX_H;
     }
 
+    if (ne) {
+        mainEditor->mouseX = (ne->mouseX - dstRect.x) / zoomRatio;
+        mainEditor->mouseY = (ne->mouseY - dstRect.y) / zoomRatio;
+    }
     mainEditor->tick(renderer);
 
     renderParams(renderer);

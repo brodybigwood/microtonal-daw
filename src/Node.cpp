@@ -496,8 +496,10 @@ bool Node::handleContentInput(SDL_Event& e) {
     } else {
         bool hoverFound = false;
 
+        const float mx = *mouseX, my = *mouseY;
         for (auto conn : inputs.connections) {
-            if (MouseOn(&conn->rect)) {
+            if (mx >= conn->rect.x && mx <= conn->rect.x + conn->rect.w &&
+                my >= conn->rect.y && my <= conn->rect.y + conn->rect.h) {
                 hoverFound = true;
                 hoveredConnection = conn->id;
                 hoveredDirection = Direction::input;
@@ -507,7 +509,8 @@ bool Node::handleContentInput(SDL_Event& e) {
 
         if (!hoverFound) {
             for (auto conn : outputs.connections) {
-                if (MouseOn(&conn->rect)) {
+                if (mx >= conn->rect.x && mx <= conn->rect.x + conn->rect.w &&
+                    my >= conn->rect.y && my <= conn->rect.y + conn->rect.h) {
                     hoverFound = true;
                     hoveredConnection = conn->id;
                     hoveredDirection = Direction::output;
@@ -1060,12 +1063,17 @@ void Node::render(SDL_Renderer* renderer) {
                 if (conn && conn->id == hoveredConnection && hoveredDirection == Direction::output) { hovered = conn; break; }
             }
         }
+        if (hovered && ne) {
+            if (ne->mouseX < hovered->rect.x || ne->mouseX > hovered->rect.x + hovered->rect.w ||
+                ne->mouseY < hovered->rect.y || ne->mouseY > hovered->rect.y + hovered->rect.h)
+                hovered = nullptr;
+        }
         if (hovered) {
             const std::string tipText = hovered->label.empty()
                 ? (std::string(hovered->dir == Direction::input ? "Input " : "Output ") + std::to_string(hovered->id))
                 : hovered->label;
-            float mx, my;
-            SDL_GetMouseState(&mx, &my);
+            const float mx = ne ? ne->mouseX : 0.f;
+            const float my = ne ? ne->mouseY : 0.f;
             SDL_Surface* tipSurf = TTF_RenderText_Blended(fonts.mainFont, tipText.c_str(), 0, SDL_Color{255, 255, 255, 255});
             if (tipSurf) {
                 SDL_Texture* tipTex = SDL_CreateTextureFromSurface(portR, tipSurf);
