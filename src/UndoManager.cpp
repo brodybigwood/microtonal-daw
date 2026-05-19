@@ -1847,7 +1847,9 @@ SetParamValueUndoAction::SetParamValueUndoAction(Project* p, std::vector<int> ma
         if (!target) throw std::runtime_error("SetParamValueUndoAction::doAction: node not found");
         Parameter* param = target->resolveParameterPath(this->paramPath);
         if (!param) throw std::runtime_error("SetParamValueUndoAction::doAction: parameter not found");
+        std::cerr << "[UNDO] SetParamValue doAction node=" << this->nodeID << " newValue=" << this->newValue << " oldParamValue=" << param->value << std::endl;
         param->value = this->newValue;
+        std::cerr << "[UNDO] SetParamValue doAction after set=" << param->value << std::endl;
     };
     undoAction = [this]() {
         NodeManager& nm = requireManager(this->p, this->managerPath);

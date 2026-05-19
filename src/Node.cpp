@@ -1320,6 +1320,9 @@ void Node::handleWindowInput(SDL_Event& e) {
                     if (prev->nodeID == static_cast<int>(id) && prev->paramPath == std::vector<size_t>{pi} && prev->managerPath == mgrPath) {
                         prev->newValue = p->value;
                         merged = true;
+                        // Re-sync coalesced value to audio copy.
+                        ProjectAction* cap = prev;
+                        project->um->enqueueAudioSync([cap]() { cap->doAction(); });
                     }
                 }
                 if (!merged) {
