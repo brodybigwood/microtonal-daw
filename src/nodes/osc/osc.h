@@ -27,7 +27,6 @@ class OscillatorNode : public Node {
         Connection* output1;
         
         void process() override;
-        void renderContent(SDL_Renderer*) override;
 
         void setup() override;
         Voice voices[NUM_VOICES];

@@ -22,13 +22,9 @@ set(CMAKE_LINKER_FLAGS "${CMAKE_LINKER_FLAGS} -fsanitize=address")
 
 add_compile_definitions(_DEBUG)
 
-set(TINYFILEDIALOGS_DIR lib/tinyfiledialogs)
-
 file(GLOB SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 
 file(GLOB_RECURSE SRC_NODE CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/nodes/**/*.cpp")
-
-list(APPEND SOURCES ${TINYFILEDIALOGS_DIR}/tinyfiledialogs.c)
 
 if(UNIX)
     add_compile_definitions(SMTG_OS_LINUX LINUX)

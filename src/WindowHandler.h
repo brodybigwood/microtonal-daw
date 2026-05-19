@@ -3,8 +3,6 @@
 #ifndef WINDOWHANDLER_H
 #define WINDOWHANDLER_H
 #include <vector>
-#include <queue>
-#include <mutex>
 #include <string>
 #include "Project.h"
 #include "ContextMenu.h"
@@ -37,8 +35,8 @@ class WindowHandler {
 
         double frameTime = 1000/fps;
 
-        float fpsCounter_ = 60.f;   
-    
+        float fpsCounter_ = 60.f;
+
         ContextMenu* ctxMenu;
 
         //keyboard
@@ -47,13 +45,6 @@ class WindowHandler {
         bool isAltPressed = false;
 
         void toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar);
-
-        void enqueueCommand(const std::string& cmd);
-        void processCommands();
-
-    private:
-        std::mutex commandMutex;
-        std::queue<std::string> pendingCommands;
 };
 
 #endif

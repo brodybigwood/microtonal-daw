@@ -23,10 +23,6 @@ OscillatorNode::OscillatorNode(uint16_t id, NodeManager* nm) : Node(id, nm, Node
 }
 
 void OscillatorNode::process() {
-    static int callCount = 0;
-    if (callCount < 3 || callCount % 100 == 0)
-        std::cerr << "[OSC] process#" << callCount << " volume.value=" << volume.value << std::endl;
-    callCount++;
 // first process input
 
     if (!inputN->is_connected) { // just do zeroes
@@ -90,14 +86,6 @@ void OscillatorNode::process() {
         if (!voice.active) continue;
         voice.process(b0, b1, bufferSize, sampleRate, volume);
     }
-}
-
-void OscillatorNode::renderContent(SDL_Renderer* renderer) {
-    static int renderCallCount = 0;
-    if (renderCallCount < 3 || renderCallCount % 100 == 0)
-        std::cerr << "[OSC] render#" << renderCallCount << " volume.value=" << volume.value << std::endl;
-    renderCallCount++;
-    Node::renderContent(renderer);
 }
 
 void OscillatorNode::setup() {
