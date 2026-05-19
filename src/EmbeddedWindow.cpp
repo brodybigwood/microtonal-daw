@@ -413,8 +413,8 @@ bool EmbeddedWindow::handleResizeInput(SDL_Event& e, float mx, float my, bool sh
         }
         return true;
     }
-    // Shift+drag motion/up — started here, must end here.
-    if (dragging_) {
+    // Shift+drag motion/up — only when already dragging.
+    if (dragging_ && shiftHeld) {
         if (e.type == SDL_EVENT_MOUSE_MOTION) {
             moveTo(mx - dragOffX_, my - dragOffY_);
             return true;
@@ -426,7 +426,7 @@ bool EmbeddedWindow::handleResizeInput(SDL_Event& e, float mx, float my, bool sh
         return true;
     }
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        if (shiftHeld) {
+        if (shiftHeld && getResizeZone(mx, my) != ResizeZone::None) {
             dragging_ = true;
             dragOffX_ = mx - x;
             dragOffY_ = my - y;
@@ -452,29 +452,6 @@ bool EmbeddedWindow::handleInput(SDL_Event& e) {
             close();
             return true;
         }
-    }
-
-    // Drag: title bar for rect windows only.
-    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        if (hasRectResize()) {
-            SDL_FRect tb{x, y, w, kTitleBarH};
-            if (mx >= tb.x && mx < tb.x + tb.w && my >= tb.y && my < tb.y + tb.h) {
-                dragging_ = true;
-                dragOffX_ = mx - x;
-                dragOffY_ = my - y;
-                return true;
-            }
-        }
-    }
-
-    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT && dragging_) {
-        dragging_ = false;
-        return true;
-    }
-
-    if (e.type == SDL_EVENT_MOUSE_MOTION && dragging_) {
-        moveTo(mx - dragOffX_, my - dragOffY_);
-        return true;
     }
 
     handleContentInput(e);

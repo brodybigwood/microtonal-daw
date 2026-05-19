@@ -345,12 +345,7 @@ bool PreferencesWindow::handleContentInput(SDL_Event& e) {
             }
         }
 
-        // Start drag from anywhere on the cog.
-        dragging_ = true;
-        dragOffX_ = mx - x;
-        dragOffY_ = my - y;
-        return true;
     }
 
-    return EmbeddedWindow::handleInput(e);
+    return false;
 }

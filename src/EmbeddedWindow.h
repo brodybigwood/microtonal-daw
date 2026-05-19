@@ -20,6 +20,9 @@ public:
     void open() { visible = true; }
     virtual void moveTo(float nx, float ny) { x = nx; y = ny; markPolygonDirty(); }
 
+    bool isDragging() const { return dragging_; }
+    bool isResizing() const { return resizing_; }
+
     /** Restore full geometry (for undo). Override to sync derived state. */
     virtual void applyGeometry(float nx, float ny, float nw, float nh) {
         x = nx; y = ny; w = nw; h = nh;
