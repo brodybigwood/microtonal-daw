@@ -619,36 +619,29 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
         std::sort(sorted.begin(), sorted.end(),
                   [](EmbeddedWindow* a, EmbeddedWindow* b) { return a->zOrder > b->zOrder; });
 
-        // First pass: highest-z window whose edge is within resize distance.
+        // Single pass by z-order: resize zone > hitTest > connection port.
         for (auto* ew : sorted) {
             if (ew->getResizeZone(mouseX, mouseY) != EmbeddedWindow::ResizeZone::None) {
                 target = ew;
                 targetIsResize = true;
                 break;
             }
-        }
-
-        // Second pass: if no resize match, highest-z window containing the mouse.
-        if (!target) {
-            for (auto* ew : sorted) {
-                if (ew->hitTest(mouseX, mouseY)) {
-                    target = ew;
-                    break;
-                }
+            if (ew->hitTest(mouseX, mouseY)) {
+                target = ew;
+                break;
             }
-        }
-
-        // Third pass: if still no match, check if the mouse is over a connection port.
-        if (!target) {
-            for (auto* ew : sorted) {
-                Node* node = dynamic_cast<Node*>(ew);
-                if (!node) continue;
+            Node* node = dynamic_cast<Node*>(ew);
+            if (node) {
+                bool onPort = false;
                 for (auto* c : node->inputs.connections) {
-                    if (c && (mouseX >= c->rect.x && mouseX <= c->rect.x + c->rect.w && mouseY >= c->rect.y && mouseY <= c->rect.y + c->rect.h)) { target = node; break; }
+                    if (c && mouseX >= c->rect.x && mouseX <= c->rect.x + c->rect.w &&
+                        mouseY >= c->rect.y && mouseY <= c->rect.y + c->rect.h) { target = node; onPort = true; break; }
                 }
-                if (target) break;
-                for (auto* c : node->outputs.connections) {
-                    if (c && (mouseX >= c->rect.x && mouseX <= c->rect.x + c->rect.w && mouseY >= c->rect.y && mouseY <= c->rect.y + c->rect.h)) { target = node; break; }
+                if (!onPort) {
+                    for (auto* c : node->outputs.connections) {
+                        if (c && mouseX >= c->rect.x && mouseX <= c->rect.x + c->rect.w &&
+                            mouseY >= c->rect.y && mouseY <= c->rect.y + c->rect.h) { target = node; break; }
+                    }
                 }
                 if (target) break;
             }
@@ -676,9 +669,13 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
 
     {
         int maxZ = 0;
-        for (auto& ew : embeddedWindows_)
-            if (ew->zOrder > maxZ) maxZ = ew->zOrder;
-        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT && target) {
+        for (auto& ew : embeddedWindows_) if (ew->zOrder > maxZ) maxZ = ew->zOrder;
+        if (nm) {
+            for (auto n : nm->getNodes()) if (n->zOrder > maxZ) maxZ = n->zOrder;
+            if (nm->inNode && nm->inNode->zOrder > maxZ) maxZ = nm->inNode->zOrder;
+            if (nm->outNode && nm->outNode->zOrder > maxZ) maxZ = nm->outNode->zOrder;
+        }
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && target) {
             capturedEmbeddedWindow_ = target;
             focusedEmbeddedWindow_ = target;
             target->zOrder = maxZ + 1;
@@ -701,19 +698,21 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
             std::cerr << "[EWACT] create ewID=" << ewid << std::endl;
             std::vector<int> mgrPath = nm ? nm->managerPath : std::vector<int>{};
             Project* proj = nm ? nm->project : nullptr;
-            if (undoIsResize_ && proj && proj->um) {
-                if (undoBeforeX_ != afterX || undoBeforeY_ != afterY ||
-                    undoBeforeW_ != afterW || undoBeforeH_ != afterH) {
-                    auto* action = new ResizeEmbeddedWindowAction(proj, mgrPath, ewid,
-                        undoBeforeX_, undoBeforeY_, undoBeforeW_, undoBeforeH_,
-                        afterX, afterY, afterW, afterH);
-                    proj->um->newAction(action);
-                }
-            } else if (!undoIsResize_ && proj && proj->um) {
-                if (undoBeforeX_ != afterX || undoBeforeY_ != afterY) {
-                    auto* action = new MoveEmbeddedWindowAction(proj, mgrPath, ewid,
-                        undoBeforeX_, undoBeforeY_, afterX, afterY);
-                    proj->um->newAction(action);
+            if (proj && proj->um && prevCapture->trackMoveResizeInUndo()) {
+                if (undoIsResize_) {
+                    if (undoBeforeX_ != afterX || undoBeforeY_ != afterY ||
+                        undoBeforeW_ != afterW || undoBeforeH_ != afterH) {
+                        auto* action = new ResizeEmbeddedWindowAction(proj, mgrPath, ewid,
+                            undoBeforeX_, undoBeforeY_, undoBeforeW_, undoBeforeH_,
+                            afterX, afterY, afterW, afterH);
+                        proj->um->newAction(action);
+                    }
+                } else {
+                    if (undoBeforeX_ != afterX || undoBeforeY_ != afterY) {
+                        auto* action = new MoveEmbeddedWindowAction(proj, mgrPath, ewid,
+                            undoBeforeX_, undoBeforeY_, afterX, afterY);
+                        proj->um->newAction(action);
+                    }
                 }
             }
             undoCaptured_ = false;
@@ -757,15 +756,15 @@ void NodeEditor::render(SDL_Renderer* renderer, SDL_FRect* surfaceRect) {
     if (clip.w > 0 && clip.h > 0)
         SDL_SetRenderClipRect(renderer, &clip);
 
-    for (auto node : nm->getNodes()) {
+    std::vector<Node*> sortedNodes = nm->getNodes();
+    sortedNodes.push_back(nm->inNode);
+    sortedNodes.push_back(nm->outNode);
+    std::sort(sortedNodes.begin(), sortedNodes.end(),
+              [](Node* a, Node* b) { return a->zOrder < b->zOrder; });
+    for (auto node : sortedNodes) {
         node->makeConnectionRects();
         node->render(renderer);
     }
-
-    nm->inNode->makeConnectionRects();
-    nm->inNode->render(renderer);
-    nm->outNode->makeConnectionRects();
-    nm->outNode->render(renderer);
 
     renderConnector(renderer);
 

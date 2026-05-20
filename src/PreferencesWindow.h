@@ -8,6 +8,7 @@ class PreferencesWindow : public EmbeddedWindow {
 public:
     PreferencesWindow();
 
+    bool trackMoveResizeInUndo() const override { return false; }
     void render(SDL_Renderer* r) override;
     bool handleContentInput(SDL_Event& e) override;
 
