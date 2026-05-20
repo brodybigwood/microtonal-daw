@@ -1,8 +1,12 @@
 #include "Project.h"
 #include "WindowHandler.h"
 #include "AudioManager.h"
+#include "NodeProcessor.h"
 #include "styles.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 #include <thread>
 #include <iostream>
 #include <cstdlib>
@@ -41,9 +45,17 @@ int main(int argc, char* argv[]) {
 
     project->setup();
 
+#ifdef __EMSCRIPTEN__
+    static Project* g_project = project;
+    emscripten_set_main_loop([]() {
+        g_project->processor->setThreadActiveRoot(g_project->processor->guiManager);
+        WindowHandler::instance()->tick();
+    }, 0, 1);
+#else
     while (windowHandler->tick()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
+#endif
 
     project->save();
     audioManager->stop();

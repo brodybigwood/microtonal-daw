@@ -98,6 +98,7 @@ class NodeEditor {
                 ew->id = static_cast<int>(ewIdPool_.newID());
                 embeddedWindowById_[ew->id] = ew;
             }
+            std::cerr << "[EWREG] id=" << ew->id << " ptr=" << ew << std::endl;
         }
         void unregisterEmbeddedWindow(EmbeddedWindow* ew) {
             if (ew->id >= 0) {
@@ -106,6 +107,7 @@ class NodeEditor {
                 ew->id = -1;
             }
         }
+        void reserveEwID(uint16_t id) { ewIdPool_.reserveID(id); }
         json ewIdPoolToJSON() { return ewIdPool_.toJSON(); }
         void ewIdPoolFromJSON(const json& j) { ewIdPool_.fromJSON(j); }
         EmbeddedWindow* getEmbeddedWindowById(int id) {

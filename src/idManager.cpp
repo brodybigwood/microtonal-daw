@@ -19,8 +19,8 @@ bool idManager::reserveID(uint16_t id) {
     if(it != free_ids.end()) {
         free_ids.erase(it);
     }
-    next_id = id + 1;
-
+    if (id >= next_id)
+        next_id = id + 1;
     return true;
 }
 

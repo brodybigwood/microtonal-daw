@@ -87,7 +87,8 @@ void FilterNode::updateCoefficientsNormalized(float cutoffNorm, float resonanceN
 
     const float fc = std::clamp(mapCutoff(cutoffNorm), 20.0f, sampleRate * 0.45f);
     const float slopeFactor = std::max(1.0f, static_cast<float>(slopeDb()) / 12.0f);
-    const float g = std::tan(std::numbers::pi_v<float> * fc / static_cast<float>(sampleRate));
+    constexpr float kPi = 3.14159265358979323846f;
+    const float g = std::tan(kPi * fc / static_cast<float>(sampleRate));
 
     // Serum-like resonance feel: gentle early range, stronger late ramp.
     float res = std::pow(std::clamp(resonanceNorm, 0.0f, 1.0f), 0.62f);

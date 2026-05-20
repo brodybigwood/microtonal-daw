@@ -406,6 +406,7 @@ static void renderDeviceRow(SDL_Renderer* r, const char* label, const char* valu
     renderTextLeft(r, nameBuf, boxX + pad, y + (boxH - th) * 0.5f, scale, tc);
 }
 
+#ifndef __EMSCRIPTEN__
 static bool hitTestDeviceRow(float mx, float my, const char* label,
                              float y, const SDL_FRect& b, float s,
                              const char* settingsKey,
@@ -446,12 +447,18 @@ static bool hitTestDeviceRow(float mx, float my, const char* label,
     ctx->dynamicTick = getTreeMenuTicker(tree);
     return true;
 }
+#endif // __EMSCRIPTEN__
 
 // --- AudioSection ---
 
 const std::vector<SettingDesc>& AudioSection::settings() const {
     static const std::vector<SettingDesc> s = {
-        {SettingType::Int, "audioEngine", "Audio engine", 0, 1, 1, "SDL|RtAudio",
+        {SettingType::Int, "audioEngine", "Audio engine", 0, 1, 1,
+#ifndef __EMSCRIPTEN__
+         "SDL|RtAudio",
+#else
+         "SDL",
+#endif
          []{ AudioManager::instance()->restart(); }},
         {SettingType::Int, "audioBufferSize", "Buffer size", 0, 6, 1, "64|128|256|512|1024|2048|4096",
          []{ AudioManager::instance()->restart(); }},
@@ -475,8 +482,8 @@ void AudioSection::renderContent(SDL_Renderer* r, const SDL_FRect& b, float s) {
     afterTitle_ = afterTitle;
 
     const SDL_Color col{180, 180, 195, 255};
+#ifndef __EMSCRIPTEN__
     auto* am = AudioManager::instance();
-
     static constexpr int kDeviceRows = 2;
     float y = settingsStartY(afterTitle, b, s, settings().size() + kDeviceRows, kRowH);
 
@@ -491,6 +498,9 @@ void AudioSection::renderContent(SDL_Renderer* r, const SDL_FRect& b, float s) {
     std::string inName = inDev < 0 ? "None" : am->getDeviceName(inDev);
     renderDeviceRow(r, "Input device", inName.c_str(), y, b, s, col);
     y += kRowH * s;
+#else
+    float y = settingsStartY(afterTitle, b, s, settings().size(), kRowH);
+#endif
 
     // Standard settings
     for (auto& d : settings()) {
@@ -508,6 +518,7 @@ bool AudioSection::handleContentInput(SDL_Event& e, float mx, float my,
         return false;
 
     const float s = contentScale_;
+#ifndef __EMSCRIPTEN__
     float y = settingsStartY(afterTitle_, b, s, settings().size() + 2, kRowH);
 
     // Output device row
@@ -525,6 +536,9 @@ bool AudioSection::handleContentInput(SDL_Event& e, float mx, float my,
                          -1, "None"))
         return true;
     y += kRowH * s;
+#else
+    float y = settingsStartY(afterTitle_, b, s, settings().size(), kRowH);
+#endif
 
     // Standard settings
     for (auto& d : settings()) {

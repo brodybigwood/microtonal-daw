@@ -2,7 +2,9 @@
 #include <cmath>
 #include "SDL3_gfx/SDL3_gfxPrimitives.h"
 #include <iostream>
+#ifndef __EMSCRIPTEN__
 #include <sndfile.h>
+#endif
 
 AudioClip::AudioClip(Project* p, ArrangerNode* n) : GridElement(p, n) {
     type = ElementType::audioClip;
@@ -86,7 +88,7 @@ void AudioClip::draw(SDL_Renderer* renderer, float pixelsPerSecond, int h) {
 }
 
 void AudioClip::setFile(std::string file_path) {
-
+#ifndef __EMSCRIPTEN__
     SF_INFO sfinfo{};
     SNDFILE* sndfile = sf_open(file_path.c_str(), SFM_READ, &sfinfo);
     if (!sndfile) {
@@ -107,4 +109,7 @@ void AudioClip::setFile(std::string file_path) {
     filepath = file_path;
     sf_close(sndfile);
     delete[] interleaved;
+#else
+    filepath = file_path;
+#endif
 }

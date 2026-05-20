@@ -20,6 +20,8 @@ NodeManager::NodeManager(Project* p, std::vector<int> managerPath) : project(p),
 void NodeManager::setNE(NodeEditor* ne) {
     this->ne = ne;
     ne->nm = this;
+    ne->reserveEwID(0);
+    ne->reserveEwID(1);
     outNode->setNE(ne);
     inNode->setNE(ne);
     int ww = ne->windowWidth;

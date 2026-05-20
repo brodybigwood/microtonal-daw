@@ -1,4 +1,6 @@
+#ifndef __EMSCRIPTEN__
 #include <RtAudio.h>
+#endif
 #include <SDL3/SDL.h>
 #include <thread>
 #include <vector>
@@ -25,11 +27,13 @@ class AudioManager {
         bool stop();
         bool restart();
 
+#ifndef __EMSCRIPTEN__
         std::vector<RtAudio::DeviceInfo> getOutputDevices();
         std::vector<RtAudio::DeviceInfo> getInputDevices();
         std::string getDeviceName(int deviceId);
 
         static int callback(void *outputBuffer, void *inputBuffer, unsigned int bufferSize, double streamTimeSeconds, RtAudioStreamStatus status, void* userData);
+#endif
         static void SDLCALL sdlCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount);
 
         static AudioManager* instance();
@@ -40,18 +44,24 @@ class AudioManager {
 
     private:
         bool startSDL();
+#ifndef __EMSCRIPTEN__
         bool startRtAudio();
-        bool stopSDL();
         bool stopRtAudio();
+#endif
+        bool stopSDL();
 
+#ifndef __EMSCRIPTEN__
         void audioThread();
         std::thread audioThreadHandle;
+#endif
 
+#ifndef __EMSCRIPTEN__
         // RtAudio backend
         RtAudio rtaudio;
         RtAudio::StreamParameters outputParams;
         RtAudio::StreamParameters inputParams;
         RtAudio::StreamOptions options;
+#endif
 
         // SDL backend
         SDL_AudioStream* sdlStream_ = nullptr;

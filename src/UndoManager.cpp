@@ -26,10 +26,6 @@ static NodeManager& requireManager(Project* p, const std::vector<int>& path) {
     if (!p || !p->processor)
         throw std::runtime_error("requireManager: project or processor missing");
     NodeManager* nm = tls_activeManager;
-    if (!nm)
-        nm = p->processor->guiManager;  // fallback: first use on GUI thread before explicit set
-    if (!nm)
-        throw std::runtime_error("requireManager: root node manager missing");
     for (int patcherNodeID : path) {
         auto* patcher = dynamic_cast<PatcherNode*>(nm->getNode(static_cast<uint16_t>(patcherNodeID)));
         if (!patcher || !patcher->mainManager)

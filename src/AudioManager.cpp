@@ -96,6 +96,7 @@ void SDLCALL AudioManager::sdlCallback(void *userdata, SDL_AudioStream *stream, 
     }
 }
 
+#ifndef __EMSCRIPTEN__
 int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int bufferSize, double streamTimeSeconds, RtAudioStreamStatus status, void* userData) {
 
     (void)status;
@@ -149,15 +150,19 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
 
     return 0;
 }
+#endif // __EMSCRIPTEN__
 
 static unsigned int decodeSampleRate(int index, unsigned int preferred) {
     switch (index) {
         case 0:  return preferred;
-        case 1:  return 44100;
-        case 2:  return 48000;
-        case 3:  return 96000;
-        case 4:  return 192000;
-        default: return preferred;
+        case 1:  return 22050;
+        case 2:  return 44100;
+        case 3:  return 48000;
+        case 4:  return 88200;
+        case 5:  return 96000;
+        case 6:  return 176400;
+        case 7:  return 192000;
+        default: return 48000;
     }
 }
 
@@ -167,6 +172,7 @@ static unsigned int decodeBufferSize(int value) {
     return static_cast<unsigned int>(value); // tolerate old direct-size values
 }
 
+#ifndef __EMSCRIPTEN__
 bool AudioManager::startRtAudio() {
     auto& s = Settings::instance();
 
@@ -241,6 +247,7 @@ bool AudioManager::startRtAudio() {
     if (project) project->processing = true;
     return true;
 }
+#endif // __EMSCRIPTEN__
 
 bool AudioManager::startSDL() {
     auto& s = Settings::instance();
@@ -282,11 +289,12 @@ bool AudioManager::startSDL() {
 }
 
 bool AudioManager::start() {
+#ifndef __EMSCRIPTEN__
     auto& s = Settings::instance();
-    if (s.audioEngine() == 0)
-        return startSDL();
-    else
+    if (s.audioEngine() != 0)
         return startRtAudio();
+#endif
+    return startSDL();
 }
 
 bool AudioManager::restart() {
@@ -294,6 +302,7 @@ bool AudioManager::restart() {
     return start();
 }
 
+#ifndef __EMSCRIPTEN__
 std::vector<RtAudio::DeviceInfo> AudioManager::getOutputDevices() {
     std::vector<RtAudio::DeviceInfo> out;
     for (auto id : rtaudio.getDeviceIds()) {
@@ -337,6 +346,7 @@ bool AudioManager::stopRtAudio() {
     }
     return true;
 }
+#endif // __EMSCRIPTEN__
 
 bool AudioManager::stopSDL() {
     if (sdlStream_) {
@@ -351,12 +361,17 @@ bool AudioManager::stop() {
     if (usingSDL_) {
         usingSDL_ = false;
         return stopSDL();
-    } else {
+    }
+#ifndef __EMSCRIPTEN__
+    else {
         return stopRtAudio();
     }
+#endif
+    return false;
 }
 
 
+#ifndef __EMSCRIPTEN__
 void AudioManager::audioThread() {
     try {
         // Start the stream and keep it running
@@ -365,3 +380,4 @@ void AudioManager::audioThread() {
         std::cerr << "Error starting audio stream: " << e << std::endl;
     }
 }
+#endif // __EMSCRIPTEN__

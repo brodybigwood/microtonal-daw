@@ -698,6 +698,7 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
             float afterX = prevCapture->x, afterY = prevCapture->y;
             float afterW = prevCapture->w, afterH = prevCapture->h;
             int ewid = prevCapture->id;
+            std::cerr << "[EWACT] create ewID=" << ewid << std::endl;
             std::vector<int> mgrPath = nm ? nm->managerPath : std::vector<int>{};
             Project* proj = nm ? nm->project : nullptr;
             if (undoIsResize_ && proj && proj->um) {
