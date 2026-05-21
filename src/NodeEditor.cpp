@@ -248,6 +248,7 @@ std::shared_ptr<TreeEntry> NodeEditor::buildMenuTree(int menuIndex) {
                     auto existing = existingPreferencesWindow();
                     if (!existing) {
                         auto pw = std::make_unique<PreferencesWindow>();
+                        pw->id = 0;
                         existing = pw.get();
                         addEmbeddedWindow(std::move(pw));
                         existing->moveTo((w - existing->w) * 0.5f, (h - existing->h) * 0.4f);
@@ -267,6 +268,7 @@ std::shared_ptr<TreeEntry> NodeEditor::buildMenuTree(int menuIndex) {
                     auto existing = existingUndoTreeWindow();
                     if (!existing) {
                         auto uw = std::make_unique<UndoTreeWindow>(nm->project);
+                        uw->id = 1;
                         existing = uw.get();
                         addEmbeddedWindow(std::move(uw));
                         existing->moveTo((w - existing->w) * 0.5f, (h - existing->h) * 0.4f);
@@ -338,6 +340,9 @@ void NodeEditor::move() {
     auto x = mouseX - moveOffX;
     auto y = mouseY - moveOffY;
 
+    panOffsetX_ += x;
+    panOffsetY_ += y;
+
     auto moveNode = [x, y] (Node* n) {
         n->move(n->dstRect.x + x, n->dstRect.y + y);
     };
@@ -372,8 +377,18 @@ void NodeEditor::zoom(float amount) {
 void NodeEditor::handleInput(SDL_Event& e) {
     moveMouse();
 
-    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP)
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+        if (panning_ && !rootMenuBar_) {
+            float dx = mouseX - panStartX_;
+            float dy = mouseY - panStartY_;
+            if (dx != 0.f || dy != 0.f) {
+                nm->project->um->newAction(
+                    new PanNodesAction(nm->project, nm->managerPath, dx, dy));
+            }
+        }
+        panning_ = false;
         leftClick = false;
+    }
 
     if (routeEmbeddedWindowEvent(e, mouseX, mouseY))
         return;
@@ -433,6 +448,11 @@ void NodeEditor::handleInput(SDL_Event& e) {
             leftClick = true;
             moveOffX = mouseX;
             moveOffY = mouseY;
+            if (isCtrlPressed && !rootMenuBar_) {
+                panStartX_ = mouseX;
+                panStartY_ = mouseY;
+                panning_ = true;
+            }
             break;
         case SDL_EVENT_MOUSE_BUTTON_UP:
             break;
@@ -762,6 +782,7 @@ void NodeEditor::render(SDL_Renderer* renderer, SDL_FRect* surfaceRect) {
     std::sort(sortedNodes.begin(), sortedNodes.end(),
               [](Node* a, Node* b) { return a->zOrder < b->zOrder; });
     for (auto node : sortedNodes) {
+        if (!node->visible) continue;
         node->makeConnectionRects();
         node->render(renderer);
     }

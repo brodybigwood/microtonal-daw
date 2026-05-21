@@ -2,6 +2,8 @@
 
 #include "Node.h"
 
+class MultiplexerNode;
+
 class PatcherNode : public Node {
 public:
     PatcherNode(uint16_t, NodeManager*);
@@ -12,6 +14,7 @@ public:
 
     NodeEditor* mainEditor = nullptr;
     NodeManager* mainManager;
+    MultiplexerNode* multiplexer = nullptr;
 
     /// Leading waveform outputs [0..count) mirror inner OutputNode inputs (same channel index).
     void setLinkedWaveformChannelCount(size_t count);

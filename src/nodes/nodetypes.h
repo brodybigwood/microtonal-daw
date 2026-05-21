@@ -10,6 +10,7 @@
 #include "nodes/visualizer/visualizer.h"
 #include "nodes/arranger/arranger.h"
 #include "nodes/patcher/patcher.h"
+#include "nodes/multiplexer/multiplexer.h"
 
 inline std::string NodeTypeStr[] = {
     "Arranger",
@@ -21,7 +22,8 @@ inline std::string NodeTypeStr[] = {
     "Filter",
     "Envelope",
     "Visualizer",
-    "Patcher"
+    "Patcher",
+    "Multiplexer"
 };
 
 inline Node* byType(NodeType t, int id, NodeManager* nm) {
@@ -33,7 +35,7 @@ inline Node* byType(NodeType t, int id, NodeManager* nm) {
         case NodeType::Merger:
             return new MergerNode(id, nm);
         case NodeType::Splitter:
-            return new SplitterNode(id, nm); 
+            return new SplitterNode(id, nm);
         case NodeType::Delay:
             return new DelayNode(id, nm);
         case NodeType::Panner:
@@ -46,6 +48,8 @@ inline Node* byType(NodeType t, int id, NodeManager* nm) {
             return new VisualizerNode(id, nm);
         case NodeType::Patcher:
             return new PatcherNode(id, nm);
+        case NodeType::Multiplexer:
+            return new MultiplexerNode(id, nm);
         default:
             return nullptr;
     }

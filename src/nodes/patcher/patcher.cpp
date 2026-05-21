@@ -4,6 +4,7 @@
 #include "OutputNode.h"
 #include "InputNode.h"
 #include "Preferences.h"
+#include "nodes/multiplexer/multiplexer.h"
 #include <cstring>
 #include <iostream>
 #include <vector>
@@ -120,6 +121,7 @@ void PatcherNode::setLinkedWaveformChannelCount(size_t count) {
     while (leadingWaveformOutputCount() < count) {
         insertLinkedWaveformAtEndOfBlock();
     }
+    if (multiplexer) multiplexer->syncPortsFromPatchers();
 }
 
 size_t PatcherNode::trailingEventOutputCount() const {
@@ -169,6 +171,7 @@ void PatcherNode::setLinkedEventOutputCount(size_t count) {
     while (trailingEventOutputCount() < count) {
         appendEventOutput();
     }
+    if (multiplexer) multiplexer->syncPortsFromPatchers();
 }
 
 size_t PatcherNode::leadingWaveformInputCount() const {
@@ -260,6 +263,7 @@ void PatcherNode::setLinkedWaveformInputCount(size_t count) {
     while (leadingWaveformInputCount() < count) {
         insertWaveformInputAt(static_cast<int>(leadingWaveformInputCount()));
     }
+    if (multiplexer) multiplexer->syncPortsFromPatchers();
 }
 
 void PatcherNode::setLinkedEventInputCount(size_t count) {
@@ -272,6 +276,7 @@ void PatcherNode::setLinkedEventInputCount(size_t count) {
     while (trailingEventInputCount() < count) {
         appendEventInput();
     }
+    if (multiplexer) multiplexer->syncPortsFromPatchers();
 }
 
 void PatcherNode::process() {
@@ -399,6 +404,7 @@ void PatcherNode::clearCustomTextures() {
 
 json PatcherNode::extraSerialize() {
     json j;
+    j["_muxParent"] = (multiplexer != nullptr);
     j["mainManager"] = mainManager->serialize();
     j["outputs"] = json::array();
     for (auto* c : outputs.connections) {

@@ -9,5 +9,6 @@ enum NodeType {
     Envelope,
     Visualizer,
     Patcher,
+    Multiplexer,
     Count // for iteration
 };

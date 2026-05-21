@@ -192,5 +192,15 @@ class NodeEditor {
         float canvasW_ = 1920.f;
         float canvasH_ = 1080.f;
 
+        // Ctrl+pan undo tracking
+        float panStartX_ = 0.f;
+        float panStartY_ = 0.f;
+        bool panning_ = false;
+
+    public:
+        float panOffsetX_ = 0.f;
+        float panOffsetY_ = 0.f;
+
+    private:
 
 };

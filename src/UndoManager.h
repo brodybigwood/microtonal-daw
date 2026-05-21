@@ -40,7 +40,9 @@ enum ActionType {
     SetParamValue = 20,
     ToggleModulatorCentered = 21,
     MoveEmbeddedWindow = 22,
-    ResizeEmbeddedWindow = 23
+    ResizeEmbeddedWindow = 23,
+    ToggleNodeVisible = 24,
+    PanNodes = 25
 };
 
 
@@ -78,6 +80,8 @@ struct ProjectAction {
     static ProjectAction* deSerialize(json, Project*);
 
     Project* p;
+
+    virtual ~ProjectAction() = default;
 
     ProjectAction(Project* p, ActionType type) : p(p), type(type) {
         doAction = []() {};
@@ -407,12 +411,26 @@ struct ResizeEmbeddedWindowAction : ProjectAction {
         float toX, float toY, float toW, float toH);
 };
 
+struct ToggleNodeVisibleAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeId = 0;
+
+    ToggleNodeVisibleAction(Project* p, std::vector<int> managerPath, int nodeId);
+};
+
+struct PanNodesAction : ProjectAction {
+    std::vector<int> managerPath;
+    float dx = 0.f, dy = 0.f;
+    PanNodesAction(Project* p, std::vector<int> managerPath, float dx, float dy);
+};
+
 struct AddNodeAction : ProjectAction {
     std::vector<int> managerPath;
     int nodeType;
     float x;
     float y;
     int nodeID = -1;
+    float panOffX = 0.f, panOffY = 0.f;
     /** After undo(removal), redo must restore snapshot (ports, patcher internals, layout) — not a fresh empty node. */
     bool hasRedoRestore = false;
     json redoNodeSnapshot;
@@ -426,6 +444,7 @@ struct RemoveNodeAction : ProjectAction {
     int nodeID;
     json nodeData;
     json connectionsData;
+    float panOffX = 0.f, panOffY = 0.f;
 
     RemoveNodeAction(Project* p, std::vector<int> managerPath, int nodeID);
 };

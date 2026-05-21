@@ -11,6 +11,14 @@ uint16_t idManager::newID() {
 }
 
 void idManager::releaseID(uint16_t id) {
+    if (id + 1 == next_id) {
+        --next_id;
+        while (!free_ids.empty() && free_ids.back() + 1 == next_id) {
+            --next_id;
+            free_ids.pop_back();
+        }
+        return;
+    }
     free_ids.push_back(id);
 }
 

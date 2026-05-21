@@ -76,6 +76,9 @@ json NodeManager::serialize() {
     serializeConnections(outNode);
     serializeConnections(inNode);
     for (auto n : nodes) {
+        auto* patcher = dynamic_cast<PatcherNode*>(n);
+        if (patcher && patcher->multiplexer)
+            continue;
         serializeConnections(n);
         j["nodes"].push_back(n->serialize());
     }
@@ -94,6 +97,8 @@ void NodeManager::deSerialize(json j) {
     if (ne && j.contains("ewIdPool")) ne->ewIdPoolFromJSON(j["ewIdPool"]);
 
     for (auto n : j["nodes"]) {
+        if (n.value("_muxParent", false))
+            continue;
         auto node = Node::deSerialize(n, this);
         if (node) {
             nodes.push_back(node);
@@ -219,11 +224,13 @@ void NodeManager::severConnection(Connection* c) {
 
 void NodeManager::addNode(NodeType t, float x, float y) {
     auto pa = new AddNodeAction(project, managerPath, t, x, y);
+    if (ne) { pa->panOffX = ne->panOffsetX_; pa->panOffY = ne->panOffsetY_; }
     project->um->newAction(pa);
 }
 
 void NodeManager::removeNode(Node* n) {
     auto pa = new RemoveNodeAction(project, managerPath, n->id);
+    if (ne) { pa->panOffX = ne->panOffsetX_; pa->panOffY = ne->panOffsetY_; }
     project->um->newAction(pa);
 }
 

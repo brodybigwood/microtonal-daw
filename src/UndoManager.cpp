@@ -36,6 +36,76 @@ static NodeManager& requireManager(Project* p, const std::vector<int>& path) {
 }
 
 void UndoManager::newAction(ProjectAction* pa) {
+    // --- Multiplexer replication: if this action traverses through a patcher
+    //     with a multiplexer parent, fire the action for every sibling patcher
+    //     without adding separate entries to the undo tree. ---
+    json j = ProjectAction::serialize(pa);
+    if (j.contains("managerPath")) {
+        auto path = j["managerPath"].get<std::vector<int>>();
+        NodeManager* nm = tls_activeManager;
+        for (size_t pi = 0; pi < path.size() && nm; ++pi) {
+            int patcherId = path[pi];
+            auto* node = nm->getNode(static_cast<uint16_t>(patcherId));
+            auto* patcher = dynamic_cast<PatcherNode*>(node);
+            if (patcher && patcher->multiplexer) {
+                auto* mux = patcher->multiplexer;
+                std::vector<std::vector<int>> siblingPaths;
+                for (auto* sib : mux->patchers) {
+                    if (sib == patcher) continue;
+                    auto sp = path;
+                    sp[pi] = sib->id;
+                    siblingPaths.push_back(std::move(sp));
+                }
+
+                Project* proj = pa->p;
+                auto origDo = pa->doAction;
+                auto origUndo = pa->undoAction;
+
+                // Serialize AFTER origDo so assigned IDs (nodeID, connectionId, etc.) are captured.
+                std::shared_ptr<json> postDoJson = std::make_shared<json>();
+
+                pa->doAction = [origDo, proj, siblingPaths, postDoJson, pa]() {
+                    origDo();
+                    *postDoJson = ProjectAction::serialize(pa);
+                    for (auto& sp : siblingPaths) {
+                        json sj = *postDoJson;
+                        sj["managerPath"] = sp;
+                        auto* s = ProjectAction::deSerialize(sj, proj);
+                        s->doAction();
+                        delete s;
+                    }
+                };
+                pa->undoAction = [origUndo, proj, siblingPaths, postDoJson]() {
+                    for (int i = (int)siblingPaths.size() - 1; i >= 0; --i) {
+                        json sj = *postDoJson;
+                        sj["managerPath"] = siblingPaths[i];
+                        auto* s = ProjectAction::deSerialize(sj, proj);
+                        s->undoAction();
+                        delete s;
+                    }
+                    origUndo();
+                };
+
+                // If original skips initial do, siblings still need it on GUI.
+                if (pa->skipInitialDo) {
+                    for (auto& sp : siblingPaths) {
+                        json sj = j;
+                        sj["managerPath"] = sp;
+                        auto* s = ProjectAction::deSerialize(sj, proj);
+                        s->doAction();
+                        delete s;
+                    }
+                }
+                break;
+            }
+            if (patcher && patcher->mainManager)
+                nm = patcher->mainManager;
+            else
+                break;
+        }
+    }
+
+    // --- Normal newAction flow ---
     current->newAction(pa);
     current->last_index = pa->index;
     current = pa;
@@ -291,6 +361,8 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
                 an->redoNodeSnapshot = j.at("redoNodeSnapshot");
                 an->redoConnectionsSnapshot = j.value("redoConnectionsSnapshot", json::array());
             }
+            an->panOffX = j.value("panOffX", 0.f);
+            an->panOffY = j.value("panOffY", 0.f);
             pa = an;
             break;
         }
@@ -308,10 +380,20 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
                 j.at("toW").get<float>(), j.at("toH").get<float>());
             break;
         }
+        case ToggleNodeVisible: {
+            pa = new ToggleNodeVisibleAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeId").get<int>());
+            break;
+        }
+        case PanNodes: {
+            pa = new PanNodesAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("dx").get<float>(), j.at("dy").get<float>());
+            break;
+        }
         case RemoveNode: {
             auto rn = new RemoveNodeAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>());
             rn->nodeData = j.at("nodeData");
             rn->connectionsData = j.at("connectionsData");
+            rn->panOffX = j.value("panOffX", 0.f);
+            rn->panOffY = j.value("panOffY", 0.f);
             pa = rn;
             break;
         }
@@ -476,6 +558,19 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["toH"] = rw->toH;
             break;
         }
+        case ToggleNodeVisible: {
+            auto tv = static_cast<ToggleNodeVisibleAction*>(pa);
+            j["managerPath"] = tv->managerPath;
+            j["nodeId"] = tv->nodeId;
+            break;
+        }
+        case PanNodes: {
+            auto pn = static_cast<PanNodesAction*>(pa);
+            j["managerPath"] = pn->managerPath;
+            j["dx"] = pn->dx;
+            j["dy"] = pn->dy;
+            break;
+        }
         case AddNode: {
             auto an = static_cast<AddNodeAction*>(pa);
             j["managerPath"] = an->managerPath;
@@ -487,6 +582,8 @@ json ProjectAction::serialize(ProjectAction* pa) {
                 j["redoNodeSnapshot"] = an->redoNodeSnapshot;
                 j["redoConnectionsSnapshot"] = an->redoConnectionsSnapshot;
             }
+            j["panOffX"] = an->panOffX;
+            j["panOffY"] = an->panOffY;
             break;
         }
         case RemoveNode: {
@@ -499,6 +596,8 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["nodeID"] = rn->nodeID;
             j["nodeData"] = rn->nodeData;
             j["connectionsData"] = rn->connectionsData;
+            j["panOffX"] = rn->panOffX;
+            j["panOffY"] = rn->panOffY;
             break;
         }
         case MakeNodeConnection: {
@@ -1299,6 +1398,41 @@ ResizeEmbeddedWindowAction::ResizeEmbeddedWindowAction(Project* p, std::vector<i
     };
 }
 
+ToggleNodeVisibleAction::ToggleNodeVisibleAction(Project* p, std::vector<int> managerPath, int nodeId) :
+        ProjectAction(p, ToggleNodeVisible),
+        managerPath(std::move(managerPath)),
+        nodeId(nodeId) {
+    name = "Toggle Node Visible";
+    doAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        auto* n = nm.getNode(static_cast<uint16_t>(this->nodeId));
+        n->visible = !n->visible;
+    };
+    undoAction = doAction;
+}
+
+PanNodesAction::PanNodesAction(Project* p, std::vector<int> managerPath, float dx, float dy) :
+        ProjectAction(p, PanNodes),
+        managerPath(std::move(managerPath)),
+        dx(dx), dy(dy) {
+    name = "Pan View";
+    skipInitialDo = true;
+    doAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        for (auto n : nm.getNodes()) n->move(n->dstRect.x + this->dx, n->dstRect.y + this->dy);
+        nm.inNode->move(nm.inNode->dstRect.x + this->dx, nm.inNode->dstRect.y + this->dy);
+        nm.outNode->move(nm.outNode->dstRect.x + this->dx, nm.outNode->dstRect.y + this->dy);
+        if (nm.ne) { nm.ne->panOffsetX_ += this->dx; nm.ne->panOffsetY_ += this->dy; }
+    };
+    undoAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        for (auto n : nm.getNodes()) n->move(n->dstRect.x - this->dx, n->dstRect.y - this->dy);
+        nm.inNode->move(nm.inNode->dstRect.x - this->dx, nm.inNode->dstRect.y - this->dy);
+        nm.outNode->move(nm.outNode->dstRect.x - this->dx, nm.outNode->dstRect.y - this->dy);
+        if (nm.ne) { nm.ne->panOffsetX_ -= this->dx; nm.ne->panOffsetY_ -= this->dy; }
+    };
+}
+
 AddNodeAction::AddNodeAction(Project* p, std::vector<int> managerPath, int type, float x, float y) :
         ProjectAction(p, AddNode),
         managerPath(std::move(managerPath)),
@@ -1309,7 +1443,12 @@ AddNodeAction::AddNodeAction(Project* p, std::vector<int> managerPath, int type,
     doAction = [this] () {
         NodeManager& nm = requireManager(this->p, this->managerPath);
         if (hasRedoRestore) {
-            auto* restored = nm.addNodeNow(redoNodeSnapshot);
+            json snap = redoNodeSnapshot;
+            if (nm.ne) {
+                snap["x"] = snap["x"].get<float>() + nm.ne->panOffsetX_ - this->panOffX;
+                snap["y"] = snap["y"].get<float>() + nm.ne->panOffsetY_ - this->panOffY;
+            }
+            auto* restored = nm.addNodeNow(snap);
             if (!restored)
                 throw std::runtime_error("AddNodeAction::doAction: addNodeNow(json) failed");
             nodeID = restored->id;
@@ -1319,7 +1458,12 @@ AddNodeAction::AddNodeAction(Project* p, std::vector<int> managerPath, int type,
             }
             return;
         }
-        auto* node = nm.addNodeNow(static_cast<NodeType>(nodeType), this->x, this->y, nodeID);
+        float ax = this->x, ay = this->y;
+        if (nm.ne) {
+            ax += nm.ne->panOffsetX_ - this->panOffX;
+            ay += nm.ne->panOffsetY_ - this->panOffY;
+        }
+        auto* node = nm.addNodeNow(static_cast<NodeType>(nodeType), ax, ay, nodeID);
         if (!node)
             throw std::runtime_error("AddNodeAction::doAction: addNodeNow failed");
         nodeID = node->id;
@@ -1349,7 +1493,12 @@ RemoveNodeAction::RemoveNodeAction(Project* p, std::vector<int> managerPath, int
     };
     undoAction = [this] () {
         NodeManager& nm2 = requireManager(this->p, this->managerPath);
-        auto* restored = nm2.addNodeNow(nodeData);
+        json nd = nodeData;
+        if (nm2.ne) {
+            nd["x"] = nd["x"].get<float>() + nm2.ne->panOffsetX_ - this->panOffX;
+            nd["y"] = nd["y"].get<float>() + nm2.ne->panOffsetY_ - this->panOffY;
+        }
+        auto* restored = nm2.addNodeNow(nd);
         if (!restored)
             throw std::runtime_error("RemoveNodeAction::undoAction: addNodeNow failed");
         std::cout << "[DBG_DESER] RemoveNodeAction::undo restored node id=" << restored->id << " managerPath=";
