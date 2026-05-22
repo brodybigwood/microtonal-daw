@@ -394,7 +394,7 @@ bool PatcherNode::handleCustomInput(SDL_Event& e) {
         mainEditor->mouseY = msY;
         mainEditor->handleInput(e);
     }
-    return false;
+    return true;
 }
 
 void PatcherNode::clearCustomTextures() {

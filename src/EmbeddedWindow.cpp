@@ -454,6 +454,5 @@ bool EmbeddedWindow::handleInput(SDL_Event& e) {
         }
     }
 
-    handleContentInput(e);
-    return true;
+    return handleContentInput(e);
 }

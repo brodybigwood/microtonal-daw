@@ -481,9 +481,13 @@ connectionSet::~connectionSet() {
 }
 
 bool Node::handleContentInput(SDL_Event& e) {
-    // Ctrl+wheel is editor-level; nodes must not consume it.
-    if (e.type == SDL_EVENT_MOUSE_WHEEL && isCtrlPressed)
-        return false;
+    // Ctrl+wheel is editor zoom; forward to inner patcher editors.
+    // Return true if consumed by a patcher, false otherwise.
+    if (e.type == SDL_EVENT_MOUSE_WHEEL && isCtrlPressed) {
+        msX = (*mouseX - dstRect.x) / zoomRatio;
+        msY = (*mouseY - dstRect.y) / zoomRatio;
+        return handleCustomInput(e);
+    }
 
     bool handled = false;
 
@@ -1320,7 +1324,6 @@ void Node::handleWindowInput(SDL_Event& e) {
                     if (prev->nodeID == static_cast<int>(id) && prev->paramPath == std::vector<size_t>{pi} && prev->managerPath == mgrPath) {
                         prev->newValue = p->value;
                         merged = true;
-                        // Re-sync coalesced value to audio copy.
                         ProjectAction* cap = prev;
                         project->um->enqueueAudioSync([cap]() { cap->doAction(); });
                     }

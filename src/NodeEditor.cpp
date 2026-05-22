@@ -457,7 +457,25 @@ void NodeEditor::handleInput(SDL_Event& e) {
         case SDL_EVENT_MOUSE_BUTTON_UP:
             break;
         case SDL_EVENT_MOUSE_WHEEL:
-            if (isCtrlPressed) zoom(std::pow(1.1, e.wheel.y));
+            if (isCtrlPressed) {
+                float amt = std::pow(1.1f, e.wheel.y);
+                zoom(amt);
+                if (!rootMenuBar_) {
+                    auto* um = nm->project->um;
+                    if (um->current->type == ZoomNodes) {
+                        auto* prev = static_cast<ZoomNodesAction*>(um->current);
+                        if (prev->managerPath == nm->managerPath) {
+                            prev->addStep(amt, mouseX, mouseY);
+                            ProjectAction* cap = prev;
+                            um->enqueueAudioSync([cap]() { cap->doAction(); });
+                        } else {
+                            um->newAction(new ZoomNodesAction(nm->project, nm->managerPath, amt, mouseX, mouseY));
+                        }
+                    } else {
+                        um->newAction(new ZoomNodesAction(nm->project, nm->managerPath, amt, mouseX, mouseY));
+                    }
+                }
+            }
             break;
         default:
             break;

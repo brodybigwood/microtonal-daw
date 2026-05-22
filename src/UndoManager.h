@@ -42,7 +42,8 @@ enum ActionType {
     MoveEmbeddedWindow = 22,
     ResizeEmbeddedWindow = 23,
     ToggleNodeVisible = 24,
-    PanNodes = 25
+    PanNodes = 25,
+    ZoomNodes = 26
 };
 
 
@@ -422,6 +423,16 @@ struct PanNodesAction : ProjectAction {
     std::vector<int> managerPath;
     float dx = 0.f, dy = 0.f;
     PanNodesAction(Project* p, std::vector<int> managerPath, float dx, float dy);
+};
+
+struct ZoomNodesAction : ProjectAction {
+    std::vector<int> managerPath;
+    std::vector<float> amounts;
+    std::vector<float> mxs;
+    std::vector<float> mys;
+    std::function<void(float, float, float)> propagateCoalesced;
+    ZoomNodesAction(Project* p, std::vector<int> managerPath, float amount, float mx, float my);
+    void addStep(float amount, float mx, float my);
 };
 
 struct AddNodeAction : ProjectAction {

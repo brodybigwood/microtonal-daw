@@ -26,82 +26,159 @@ static NodeManager& requireManager(Project* p, const std::vector<int>& path) {
     if (!p || !p->processor)
         throw std::runtime_error("requireManager: project or processor missing");
     NodeManager* nm = tls_activeManager;
-    for (int patcherNodeID : path) {
-        auto* patcher = dynamic_cast<PatcherNode*>(nm->getNode(static_cast<uint16_t>(patcherNodeID)));
-        if (!patcher || !patcher->mainManager)
-            throw std::runtime_error("requireManager: invalid patcher in managerPath");
-        nm = patcher->mainManager;
+    for (size_t i = 0; i < path.size(); ++i) {
+        int nodeId = path[i];
+        auto* node = nm->getNode(static_cast<uint16_t>(nodeId));
+        auto* patcher = dynamic_cast<PatcherNode*>(node);
+        if (patcher && patcher->mainManager) {
+            nm = patcher->mainManager;
+            continue;
+        }
+        auto* mux = dynamic_cast<MultiplexerNode*>(node);
+        if (mux) {
+            ++i;
+            if (i >= path.size())
+                throw std::runtime_error("requireManager: multiplexer without patcher index");
+            int patcherId = path[i];
+            for (auto* mp : mux->patchers) {
+                if (mp->id == static_cast<uint16_t>(patcherId)) {
+                    nm = mp->mainManager;
+                    break;
+                }
+            }
+            continue;
+        }
+        throw std::runtime_error("requireManager: invalid node in managerPath");
     }
     return *nm;
 }
 
 void UndoManager::newAction(ProjectAction* pa) {
-    // --- Multiplexer replication: if this action traverses through a patcher
-    //     with a multiplexer parent, fire the action for every sibling patcher
-    //     without adding separate entries to the undo tree. ---
+    // --- Multiplexer replication: collect all mux levels in the path,
+    //     then generate the full cartesian product of sibling paths. ---
     json j = ProjectAction::serialize(pa);
     if (j.contains("managerPath")) {
         auto path = j["managerPath"].get<std::vector<int>>();
+
+        struct MuxLevel {
+            size_t pathPos;
+            std::vector<int> siblingIds;
+        };
+        std::vector<MuxLevel> levels;
+
         NodeManager* nm = tls_activeManager;
         for (size_t pi = 0; pi < path.size() && nm; ++pi) {
-            int patcherId = path[pi];
-            auto* node = nm->getNode(static_cast<uint16_t>(patcherId));
+            int nodeId = path[pi];
+            auto* node = nm->getNode(static_cast<uint16_t>(nodeId));
             auto* patcher = dynamic_cast<PatcherNode*>(node);
+            auto* mux2 = dynamic_cast<MultiplexerNode*>(node);
+            if (mux2) {
+                ++pi;
+                if (pi >= path.size()) break;
+                int innerPatcherId = path[pi];
+                patcher = nullptr;
+                for (auto* mp : mux2->patchers) {
+                    if (mp->id == static_cast<uint16_t>(innerPatcherId)) {
+                        patcher = mp; break;
+                    }
+                }
+            }
             if (patcher && patcher->multiplexer) {
-                auto* mux = patcher->multiplexer;
-                std::vector<std::vector<int>> siblingPaths;
-                for (auto* sib : mux->patchers) {
-                    if (sib == patcher) continue;
-                    auto sp = path;
-                    sp[pi] = sib->id;
-                    siblingPaths.push_back(std::move(sp));
-                }
-
-                Project* proj = pa->p;
-                auto origDo = pa->doAction;
-                auto origUndo = pa->undoAction;
-
-                // Serialize AFTER origDo so assigned IDs (nodeID, connectionId, etc.) are captured.
-                std::shared_ptr<json> postDoJson = std::make_shared<json>();
-
-                pa->doAction = [origDo, proj, siblingPaths, postDoJson, pa]() {
-                    origDo();
-                    *postDoJson = ProjectAction::serialize(pa);
-                    for (auto& sp : siblingPaths) {
-                        json sj = *postDoJson;
-                        sj["managerPath"] = sp;
-                        auto* s = ProjectAction::deSerialize(sj, proj);
-                        s->doAction();
-                        delete s;
-                    }
-                };
-                pa->undoAction = [origUndo, proj, siblingPaths, postDoJson]() {
-                    for (int i = (int)siblingPaths.size() - 1; i >= 0; --i) {
-                        json sj = *postDoJson;
-                        sj["managerPath"] = siblingPaths[i];
-                        auto* s = ProjectAction::deSerialize(sj, proj);
-                        s->undoAction();
-                        delete s;
-                    }
-                    origUndo();
-                };
-
-                // If original skips initial do, siblings still need it on GUI.
-                if (pa->skipInitialDo) {
-                    for (auto& sp : siblingPaths) {
-                        json sj = j;
-                        sj["managerPath"] = sp;
-                        auto* s = ProjectAction::deSerialize(sj, proj);
-                        s->doAction();
-                        delete s;
-                    }
-                }
-                break;
+                MuxLevel level;
+                level.pathPos = pi;
+                level.siblingIds.push_back(patcher->id); // index 0 = keep original
+                for (auto* sib : patcher->multiplexer->patchers)
+                    if (sib != patcher) level.siblingIds.push_back(sib->id);
+                levels.push_back(level);
             }
             if (patcher && patcher->mainManager)
                 nm = patcher->mainManager;
-            else
+            else if (!mux2)
                 break;
+        }
+
+        if (!levels.empty()) {
+            // Build the full cartesian product of replacement combinations.
+            std::vector<std::vector<int>> siblingPaths;
+            {
+                std::vector<size_t> indices(levels.size(), 0);
+                std::vector<size_t> maxIdx;
+                for (auto& lv : levels) maxIdx.push_back(lv.siblingIds.size());
+                while (true) {
+                    auto sp = path;
+                    for (size_t li = 0; li < levels.size(); ++li)
+                        sp[levels[li].pathPos] = levels[li].siblingIds[indices[li]];
+                    siblingPaths.push_back(sp);
+
+                    // Advance indices (mixed-radix counter, skip all-zeros = source).
+                    size_t li = 0;
+                    while (li < levels.size()) {
+                        ++indices[li];
+                        if (indices[li] < maxIdx[li]) break;
+                        indices[li] = 0;
+                        ++li;
+                    }
+                    if (li >= levels.size()) break;
+                }
+                // Remove the all-zeros entry (it's the source path, pushed first).
+                if (!siblingPaths.empty()) siblingPaths.erase(siblingPaths.begin());
+            }
+
+            Project* proj = pa->p;
+            auto origDo = pa->doAction;
+            auto origUndo = pa->undoAction;
+            std::shared_ptr<json> postDoJson = std::make_shared<json>();
+
+            pa->doAction = [origDo, proj, siblingPaths, postDoJson, pa]() {
+                origDo();
+                *postDoJson = ProjectAction::serialize(pa);
+                for (auto& sp : siblingPaths) {
+                    json sj = *postDoJson;
+                    sj["managerPath"] = sp;
+                    auto* s = ProjectAction::deSerialize(sj, proj);
+                    s->doAction();
+                    delete s;
+                }
+            };
+            pa->undoAction = [origUndo, proj, siblingPaths, postDoJson]() {
+                for (int i = (int)siblingPaths.size() - 1; i >= 0; --i) {
+                    json sj = *postDoJson;
+                    sj["managerPath"] = siblingPaths[i];
+                    auto* s = ProjectAction::deSerialize(sj, proj);
+                    s->undoAction();
+                    delete s;
+                }
+                origUndo();
+            };
+
+            if (pa->type == ZoomNodes) {
+                auto* zn = static_cast<ZoomNodesAction*>(pa);
+                zn->propagateCoalesced = [proj, siblingPaths](float amt, float mx, float my) {
+                    for (auto& sp : siblingPaths) {
+                        NodeManager& nm3 = requireManager(proj, sp);
+                        auto zoomOne = [&](Node* n) {
+                            if (!n->canZoom(amt)) return;
+                            float nx = mx + (n->dstRect.x - mx) * amt;
+                            float ny = my + (n->dstRect.y - my) * amt;
+                            n->zoom(amt);
+                            n->move(nx, ny);
+                        };
+                        for (auto n : nm3.getNodes()) zoomOne(n);
+                        zoomOne(nm3.inNode);
+                        zoomOne(nm3.outNode);
+                    }
+                };
+            }
+
+            if (pa->skipInitialDo) {
+                for (auto& sp : siblingPaths) {
+                    json sj = j;
+                    sj["managerPath"] = sp;
+                    auto* s = ProjectAction::deSerialize(sj, proj);
+                    s->doAction();
+                    delete s;
+                }
+            }
         }
     }
 
@@ -388,6 +465,14 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
             pa = new PanNodesAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("dx").get<float>(), j.at("dy").get<float>());
             break;
         }
+        case ZoomNodes: {
+            auto* zn = new ZoomNodesAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("amounts")[0].get<float>(), j.at("mxs")[0].get<float>(), j.at("mys")[0].get<float>());
+            for (size_t i = 1; i < j.at("amounts").size(); ++i)
+                zn->addStep(j.at("amounts")[i].get<float>(), j.at("mxs")[i].get<float>(), j.at("mys")[i].get<float>());
+            pa = zn;
+            break;
+        }
         case RemoveNode: {
             auto rn = new RemoveNodeAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>());
             rn->nodeData = j.at("nodeData");
@@ -569,6 +654,14 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["managerPath"] = pn->managerPath;
             j["dx"] = pn->dx;
             j["dy"] = pn->dy;
+            break;
+        }
+        case ZoomNodes: {
+            auto zn = static_cast<ZoomNodesAction*>(pa);
+            j["managerPath"] = zn->managerPath;
+            j["amounts"] = zn->amounts;
+            j["mxs"] = zn->mxs;
+            j["mys"] = zn->mys;
             break;
         }
         case AddNode: {
@@ -1431,6 +1524,58 @@ PanNodesAction::PanNodesAction(Project* p, std::vector<int> managerPath, float d
         nm.outNode->move(nm.outNode->dstRect.x - this->dx, nm.outNode->dstRect.y - this->dy);
         if (nm.ne) { nm.ne->panOffsetX_ -= this->dx; nm.ne->panOffsetY_ -= this->dy; }
     };
+}
+
+ZoomNodesAction::ZoomNodesAction(Project* p, std::vector<int> managerPath, float amount, float mx, float my) :
+        ProjectAction(p, ZoomNodes),
+        managerPath(std::move(managerPath)) {
+    name = "Zoom View";
+    skipInitialDo = true;
+    amounts.push_back(amount);
+    mxs.push_back(mx);
+    mys.push_back(my);
+
+    doAction = [this]() {
+        NodeManager& nm2 = requireManager(this->p, this->managerPath);
+        for (size_t i = 0; i < amounts.size(); ++i) {
+            float a = amounts[i], cx = mxs[i], cy = mys[i];
+            auto zoomOne = [&](Node* n) {
+                if (!n->canZoom(a)) return;
+                float nx = cx + (n->dstRect.x - cx) * a;
+                float ny = cy + (n->dstRect.y - cy) * a;
+                n->zoom(a);
+                n->move(nx, ny);
+            };
+            for (auto n : nm2.getNodes()) zoomOne(n);
+            zoomOne(nm2.inNode);
+            zoomOne(nm2.outNode);
+        }
+    };
+    undoAction = [this]() {
+        NodeManager& nm2 = requireManager(this->p, this->managerPath);
+        for (int i = (int)amounts.size() - 1; i >= 0; --i) {
+            float a = amounts[i], cx = mxs[i], cy = mys[i];
+            float inv = 1.f / a;
+            auto zoomOne = [&](Node* n) {
+                if (!n->canZoom(inv)) return;
+                float nx = cx + (n->dstRect.x - cx) * inv;
+                float ny = cy + (n->dstRect.y - cy) * inv;
+                n->zoom(inv);
+                n->move(nx, ny);
+            };
+            for (auto n : nm2.getNodes()) zoomOne(n);
+            zoomOne(nm2.inNode);
+            zoomOne(nm2.outNode);
+        }
+    };
+}
+
+void ZoomNodesAction::addStep(float amount, float mx, float my) {
+    amounts.push_back(amount);
+    mxs.push_back(mx);
+    mys.push_back(my);
+    if (propagateCoalesced)
+        propagateCoalesced(amount, mx, my);
 }
 
 AddNodeAction::AddNodeAction(Project* p, std::vector<int> managerPath, int type, float x, float y) :
