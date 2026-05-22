@@ -615,18 +615,26 @@ void NodeEditor::renderEmbeddedWindows(SDL_Renderer* r) {
 }
 
 bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mouseY) {
-    EmbeddedWindow* target = capturedEmbeddedWindow_;
-
-    // Remember captured window for undo on mouseup.
+    EmbeddedWindow* target = nullptr;
+    bool targetIsResize = false;
     EmbeddedWindow* prevCapture = capturedEmbeddedWindow_;
 
-    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT)
-        capturedEmbeddedWindow_ = nullptr;
+    // --- Mouseup: route to captured window, release after processing ---
+    bool releaseCaptureAfter = false;
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+        target = capturedEmbeddedWindow_;
+        targetIsResize = (captureKind_ == CaptureKind::Resize);
+        releaseCaptureAfter = (capturedEmbeddedWindow_ != nullptr);
+    }
 
-    bool targetIsResize = false;
+    // --- Motion / other events during capture: route to same window ---
+    if (!target && capturedEmbeddedWindow_) {
+        target = capturedEmbeddedWindow_;
+        targetIsResize = (captureKind_ == CaptureKind::Resize);
+    }
 
+    // --- No target: search ---
     if (!target) {
-        // Collect visible windows and nodes sorted by z descending.
         std::vector<EmbeddedWindow*> sorted;
         for (auto& ew : embeddedWindows_)
             if (ew->visible) sorted.push_back(ew.get());
@@ -639,38 +647,56 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
         std::sort(sorted.begin(), sorted.end(),
                   [](EmbeddedWindow* a, EmbeddedWindow* b) { return a->zOrder > b->zOrder; });
 
-        // Single pass by z-order: resize zone > hitTest > connection port.
         for (auto* ew : sorted) {
             if (ew->getResizeZone(mouseX, mouseY) != EmbeddedWindow::ResizeZone::None) {
                 target = ew;
                 targetIsResize = true;
+                captureKind_ = CaptureKind::Resize;
                 break;
             }
             if (ew->hitTest(mouseX, mouseY)) {
                 target = ew;
+                captureKind_ = CaptureKind::Content;
                 break;
             }
             Node* node = dynamic_cast<Node*>(ew);
             if (node) {
-                bool onPort = false;
                 for (auto* c : node->inputs.connections) {
                     if (c && mouseX >= c->rect.x && mouseX <= c->rect.x + c->rect.w &&
-                        mouseY >= c->rect.y && mouseY <= c->rect.y + c->rect.h) { target = node; onPort = true; break; }
+                        mouseY >= c->rect.y && mouseY <= c->rect.y + c->rect.h) { target = node; break; }
                 }
-                if (!onPort) {
+                if (!target) {
                     for (auto* c : node->outputs.connections) {
                         if (c && mouseX >= c->rect.x && mouseX <= c->rect.x + c->rect.w &&
                             mouseY >= c->rect.y && mouseY <= c->rect.y + c->rect.h) { target = node; break; }
                     }
                 }
-                if (target) break;
+                if (target) {
+                    captureKind_ = CaptureKind::Connection;
+                    break;
+                }
             }
+        }
+
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && target) {
+            capturedEmbeddedWindow_ = target;
+            target->captured_ = true;
+            focusedEmbeddedWindow_ = target;
+            int maxZ = 0;
+            for (auto& ewin : embeddedWindows_) if (ewin->zOrder > maxZ) maxZ = ewin->zOrder;
+            if (nm) {
+                for (auto n : nm->getNodes()) if (n->zOrder > maxZ) maxZ = n->zOrder;
+                if (nm->inNode && nm->inNode->zOrder > maxZ) maxZ = nm->inNode->zOrder;
+                if (nm->outNode && nm->outNode->zOrder > maxZ) maxZ = nm->outNode->zOrder;
+            }
+            target->zOrder = maxZ + 1;
         }
     }
 
+    // --- Cursor ---
     {
         SDL_SystemCursor cur = SDL_SYSTEM_CURSOR_DEFAULT;
-        if (targetIsResize) {
+        if (target && targetIsResize) {
             auto zone = target->getResizeZone(mouseX, mouseY);
             switch (zone) {
                 case EmbeddedWindow::ResizeZone::N:  cur = SDL_SYSTEM_CURSOR_N_RESIZE;  break;
@@ -687,22 +713,8 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
         SDL_SetCursor(SDL_CreateSystemCursor(cur));
     }
 
-    {
-        int maxZ = 0;
-        for (auto& ew : embeddedWindows_) if (ew->zOrder > maxZ) maxZ = ew->zOrder;
-        if (nm) {
-            for (auto n : nm->getNodes()) if (n->zOrder > maxZ) maxZ = n->zOrder;
-            if (nm->inNode && nm->inNode->zOrder > maxZ) maxZ = nm->inNode->zOrder;
-            if (nm->outNode && nm->outNode->zOrder > maxZ) maxZ = nm->outNode->zOrder;
-        }
-        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && target) {
-            capturedEmbeddedWindow_ = target;
-            focusedEmbeddedWindow_ = target;
-            target->zOrder = maxZ + 1;
-        }
-    }
-
-    if (target && target->handleResizeInput(e, mouseX, mouseY, isShiftPressed)) {
+    // --- Resize path ---
+    if (target && targetIsResize && target->handleResizeInput(e, mouseX, mouseY, isShiftPressed)) {
         if (!undoCaptured_ && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
             undoBeforeX_ = target->x;
             undoBeforeY_ = target->y;
@@ -715,7 +727,6 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
             float afterX = prevCapture->x, afterY = prevCapture->y;
             float afterW = prevCapture->w, afterH = prevCapture->h;
             int ewid = prevCapture->id;
-            std::cerr << "[EWACT] create ewID=" << ewid << std::endl;
             std::vector<int> mgrPath = nm ? nm->managerPath : std::vector<int>{};
             Project* proj = nm ? nm->project : nullptr;
             if (proj && proj->um && prevCapture->trackMoveResizeInUndo()) {
@@ -737,16 +748,36 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
             }
             undoCaptured_ = false;
         }
+        if (releaseCaptureAfter) {
+            capturedEmbeddedWindow_->captured_ = false;
+            capturedEmbeddedWindow_ = nullptr;
+            captureKind_ = CaptureKind::None;
+        }
         return true;
     }
 
-    // Chrome + content (drag, close, content delegation).
-    // Skip content input when hovering a resize edge so the cursor isn't overridden.
-    if (target && !targetIsResize && target->EmbeddedWindow::handleInput(e))
+    // --- Content / connection path ---
+    if (target && !targetIsResize && target->EmbeddedWindow::handleInput(e)) {
+        if (releaseCaptureAfter) {
+            capturedEmbeddedWindow_->captured_ = false;
+            capturedEmbeddedWindow_ = nullptr;
+            captureKind_ = CaptureKind::None;
+        }
         return true;
+    }
 
-    if (capturedEmbeddedWindow_ && !capturedEmbeddedWindow_->visible)
+    if (releaseCaptureAfter) {
+        capturedEmbeddedWindow_->captured_ = false;
         capturedEmbeddedWindow_ = nullptr;
+        captureKind_ = CaptureKind::None;
+    }
+
+    // --- Cleanup stale pointers ---
+    if (capturedEmbeddedWindow_ && !capturedEmbeddedWindow_->visible) {
+        capturedEmbeddedWindow_->captured_ = false;
+        capturedEmbeddedWindow_ = nullptr;
+        captureKind_ = CaptureKind::None;
+    }
     if (focusedEmbeddedWindow_ && !focusedEmbeddedWindow_->visible)
         focusedEmbeddedWindow_ = nullptr;
 

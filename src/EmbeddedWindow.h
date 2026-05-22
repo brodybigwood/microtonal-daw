@@ -61,6 +61,8 @@ public:
     /** Override to return false to skip undo tracking for move/resize. */
     virtual bool trackMoveResizeInUndo() const { return true; }
 
+    bool captured_ = false;
+
 protected:
     virtual void renderContent(SDL_Renderer*) {}
     virtual bool handleContentInput(SDL_Event&) { return false; }

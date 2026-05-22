@@ -490,9 +490,9 @@ bool Node::handleContentInput(SDL_Event& e) {
     msX = (*mouseX - dstRect.x) / zoomRatio;
     msY = (*mouseY - dstRect.y) / zoomRatio;
 
-    if (inPolygon(vx, vy, vCount, msX, msY)) {
+    if (inPolygon(vx, vy, vCount, msX, msY) || captured_) {
         handled = true;
-        hoveredConnection = -1;
+        if (!captured_) hoveredConnection = -1;
     } else {
         bool hoverFound = false;
 

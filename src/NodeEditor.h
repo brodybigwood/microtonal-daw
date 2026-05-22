@@ -181,7 +181,9 @@ class NodeEditor {
         std::vector<std::unique_ptr<EmbeddedWindow>> embeddedWindows_;
         std::unordered_map<int, EmbeddedWindow*> embeddedWindowById_;
         idManager ewIdPool_;
+        enum class CaptureKind : uint8_t { None, Resize, Content, Connection };
         EmbeddedWindow* capturedEmbeddedWindow_ = nullptr;
+        CaptureKind captureKind_ = CaptureKind::None;
         EmbeddedWindow* focusedEmbeddedWindow_ = nullptr;
 
         // Undo tracking for embedded window drag/resize.
