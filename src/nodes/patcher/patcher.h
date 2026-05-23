@@ -30,6 +30,7 @@ public:
 
     void renderContent(SDL_Renderer*) override;
     bool handleCustomInput(SDL_Event&) override;
+    bool showConnectionPorts() const override { return multiplexer == nullptr; }
 
     SDL_Texture* neTex = nullptr;
 

@@ -497,7 +497,7 @@ bool Node::handleContentInput(SDL_Event& e) {
     if (inPolygon(vx, vy, vCount, msX, msY) || captured_) {
         handled = true;
         if (!captured_) hoveredConnection = -1;
-    } else {
+    } else if (showConnectionPorts()) {
         bool hoverFound = false;
 
         const float mx = *mouseX, my = *mouseY;
@@ -1049,11 +1049,13 @@ void Node::render(SDL_Renderer* renderer) {
         aapolygonRGBA(portR, svx.data(), svy.data(), static_cast<int>(vCount), 0, 0, 0, 220);
     }
 
-    for (auto* conn : inputs.connections) {
-        if (conn) conn->render(portR, conn->id == hoveredConnection && hoveredDirection == Direction::input);
-    }
-    for (auto* conn : outputs.connections) {
-        if (conn) conn->render(portR, conn->id == hoveredConnection && hoveredDirection == Direction::output);
+    if (showConnectionPorts()) {
+        for (auto* conn : inputs.connections) {
+            if (conn) conn->render(portR, conn->id == hoveredConnection && hoveredDirection == Direction::input);
+        }
+        for (auto* conn : outputs.connections) {
+            if (conn) conn->render(portR, conn->id == hoveredConnection && hoveredDirection == Direction::output);
+        }
     }
 
     // Tooltip after all ports/cables so it draws on top

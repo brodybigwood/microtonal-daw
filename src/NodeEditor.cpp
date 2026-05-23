@@ -678,7 +678,7 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
                 break;
             }
             Node* node = dynamic_cast<Node*>(ew);
-            if (node) {
+            if (node && node->showConnectionPorts()) {
                 for (auto* c : node->inputs.connections) {
                     if (c && mouseX >= c->rect.x && mouseX <= c->rect.x + c->rect.w &&
                         mouseY >= c->rect.y && mouseY <= c->rect.y + c->rect.h) { target = node; break; }
