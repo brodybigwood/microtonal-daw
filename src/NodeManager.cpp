@@ -76,9 +76,6 @@ json NodeManager::serialize() {
     serializeConnections(outNode);
     serializeConnections(inNode);
     for (auto n : nodes) {
-        auto* patcher = dynamic_cast<PatcherNode*>(n);
-        if (patcher && patcher->multiplexer)
-            continue;
         serializeConnections(n);
         j["nodes"].push_back(n->serialize());
     }
@@ -97,8 +94,6 @@ void NodeManager::deSerialize(json j) {
     if (ne && j.contains("ewIdPool")) ne->ewIdPoolFromJSON(j["ewIdPool"]);
 
     for (auto n : j["nodes"]) {
-        if (n.value("_muxParent", false))
-            continue;
         auto node = Node::deSerialize(n, this);
         if (node) {
             nodes.push_back(node);
@@ -130,7 +125,10 @@ void NodeManager::deSerialize(json j) {
                   << " -> dstNode=" << dstNodeID << " dstCon=" << dstConID
                   << " srcNodeExists=" << (srcNode ? 1 : 0) << " dstNodeExists=" << (dstNode ? 1 : 0)
                   << std::endl;
-        if (!srcNode) continue;
+        if (!srcNode || !dstNode) {
+            std::cerr << "[ERR] deSerialize connection: node not found src=" << srcNodeID << " dst=" << dstNodeID << std::endl;
+            continue;
+        }
         makeNodeConnectionNow(srcNode->id, srcConID, dstNode->id, dstConID);
     }
     outNode->makeConnectionRects();
@@ -289,6 +287,7 @@ Node* NodeManager::addNodeNow(NodeType t, float x, float y, int forcedID) {
 
     n->update(bufferSize, sampleRate);
     if (ne) n->setNE(ne);
+    n->setup();
     topologyDirty = true;
     return n;
 }

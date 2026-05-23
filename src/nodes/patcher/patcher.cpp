@@ -404,7 +404,6 @@ void PatcherNode::clearCustomTextures() {
 
 json PatcherNode::extraSerialize() {
     json j;
-    j["_muxParent"] = (multiplexer != nullptr);
     j["mainManager"] = mainManager->serialize();
     j["outputs"] = json::array();
     for (auto* c : outputs.connections) {

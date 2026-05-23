@@ -4,6 +4,15 @@
 #include <cstring>
 
 MultiplexerNode::MultiplexerNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::Multiplexer) {
+}
+
+MultiplexerNode::~MultiplexerNode() {
+    for (auto* p : patchers)
+        p->multiplexer = nullptr;
+}
+
+void MultiplexerNode::setup() {
+    if (!patchers.empty()) return;
     for (int i = 0; i < 8; ++i) {
         float px = x + 50.f + static_cast<float>(i) * 30.f;
         float py = y + h + 40.f;
@@ -18,15 +27,6 @@ MultiplexerNode::MultiplexerNode(uint16_t id, NodeManager* nm) : Node(id, nm, No
     if (!patchers.empty())
         syncPortsFromPatchers();
 }
-
-MultiplexerNode::~MultiplexerNode() {
-    for (auto* p : patchers) {
-        p->multiplexer = nullptr;
-        nm->removeNodeNow(p->id);
-    }
-}
-
-void MultiplexerNode::setup() {}
 
 void MultiplexerNode::syncPortsFromPatchers() {
     if (patchers.empty()) return;
@@ -289,118 +289,34 @@ void MultiplexerNode::clearCustomTextures() {
 json MultiplexerNode::extraSerialize() {
     json j;
     j["activeIndex"] = activeIndex;
+    j["inputIdPool"] = inputs.id_pool.toJSON();
+    j["outputIdPool"] = outputs.id_pool.toJSON();
     j["patchers"] = json::array();
     for (auto* p : patchers) {
         json pj;
         pj["id"] = p->id;
         pj["visible"] = p->visible;
-        pj["manager"] = p->mainManager->serialize();
-        pj["outputs"] = json::array();
-        for (auto* c : p->outputs.connections) {
-            json jc;
-            jc["id"] = c->id;
-            jc["type"] = c->type;
-            pj["outputs"].push_back(jc);
-        }
-        pj["inputs"] = json::array();
-        for (auto* c : p->inputs.connections) {
-            json jc;
-            jc["id"] = c->id;
-            jc["type"] = c->type;
-            pj["inputs"].push_back(jc);
-        }
         j["patchers"].push_back(pj);
     }
     return j;
 }
 
 void MultiplexerNode::extraDeSerialize(json j) {
-    for (auto* p : patchers) {
+    for (auto* p : patchers)
         p->multiplexer = nullptr;
-        nm->removeNodeNow(p->id);
-    }
     patchers.clear();
     activeIndex = j.value("activeIndex", 0);
+
+    if (j.contains("inputIdPool")) inputs.id_pool.fromJSON(j["inputIdPool"]);
+    if (j.contains("outputIdPool")) outputs.id_pool.fromJSON(j["outputIdPool"]);
+
     if (!j.contains("patchers")) return;
 
     for (auto& pj : j["patchers"]) {
         uint16_t pid = static_cast<uint16_t>(pj["id"].get<int>());
-        auto* n = nm->addNodeNow(NodeType::Patcher, 0, 0, static_cast<int>(pid));
-        auto* patcher = static_cast<PatcherNode*>(n);
-        if (!patcher) continue;
+        auto* patcher = dynamic_cast<PatcherNode*>(nm->getNode(pid));
         patcher->multiplexer = this;
         patcher->visible = pj.value("visible", false);
-
-        if (pj.contains("outputs")) {
-            for (auto* c : patcher->outputs.connections) {
-                if (c->type == DataType::Waveform && c->buffer) { delete[] c->buffer; c->buffer = nullptr; }
-                else if (c->type == DataType::Events && c->events) { delete c->events; c->events = nullptr; }
-                delete c;
-            }
-            patcher->outputs.connections.clear();
-            patcher->outputs.ids.clear();
-            patcher->outputs.id_pool = idManager();
-            for (auto jc : pj["outputs"]) {
-                auto* c = new Connection;
-                c->nm = patcher->outputs.nm;
-                c->id = jc["id"];
-                c->type = jc["type"];
-                c->dir = Direction::output;
-                c->is_connected = false;
-                c->input_node = patcher->id;
-                c->input_connection = c->id;
-                c->output_node = -1;
-                c->output_connection = -1;
-                if (c->type == DataType::Events) { c->events = new std::vector<Event>; c->buffer = nullptr; }
-                else { c->buffer = nullptr; c->bufferSize = 0; c->events = nullptr; }
-                patcher->outputs.connections.push_back(c);
-                patcher->outputs.ids[c->id] = patcher->outputs.connections.size() - 1;
-                patcher->outputs.id_pool.reserveID(c->id);
-            }
-        }
-        if (pj.contains("inputs")) {
-            for (auto* c : patcher->inputs.connections) {
-                if (c->type == DataType::Events && c->events) { delete c->events; c->events = nullptr; }
-                delete c;
-            }
-            patcher->inputs.connections.clear();
-            patcher->inputs.ids.clear();
-            patcher->inputs.id_pool = idManager();
-            for (auto jc : pj["inputs"]) {
-                auto* c = new Connection;
-                c->nm = patcher->inputs.nm;
-                c->id = jc["id"];
-                c->type = jc["type"];
-                c->dir = Direction::input;
-                c->output_connection = c->id;
-                c->output_node = patcher->inputs.nodeID;
-                c->input_connection = -1;
-                c->input_node = -1;
-                c->events = nullptr;
-                c->buffer = nullptr;
-                c->bufferSize = 0;
-                patcher->inputs.connections.push_back(c);
-                patcher->inputs.ids[c->id] = patcher->inputs.connections.size() - 1;
-                patcher->inputs.id_pool.reserveID(c->id);
-            }
-        }
-        if (pj.contains("manager"))
-            patcher->mainManager->deSerialize(pj["manager"]);
-
-        patcher->setLinkedWaveformChannelCount(patcher->mainManager->outNode->countWaveformInputs());
-        {
-            size_t evSockets = 0;
-            for (auto* c : patcher->mainManager->outNode->inputs.connections)
-                if (c && c->type == DataType::Events) ++evSockets;
-            patcher->setLinkedEventOutputCount(evSockets);
-        }
-        patcher->setLinkedWaveformInputCount(patcher->mainManager->inNode->countWaveformOutputs());
-        {
-            size_t evSockets = 0;
-            for (auto* c : patcher->mainManager->inNode->outputs.connections)
-                if (c && c->type == DataType::Events) ++evSockets;
-            patcher->setLinkedEventInputCount(evSockets);
-        }
         patchers.push_back(patcher);
     }
     if (!patchers.empty())
