@@ -1,13 +1,23 @@
 #include "AudioManager.h"
 #include "NodeProcessor.h"
 #include "Settings.h"
+#include <jack/jack.h>
+#include <thread>
+#include <chrono>
 
 AudioManager::AudioManager() {
-
+#ifndef __EMSCRIPTEN__
+    rtaudio = new RtAudio(RtAudio::UNSPECIFIED);
+    std::cout << "[Audio] selected API: " << rtaudio->getApiName(rtaudio->getCurrentApi()) << std::endl;
+#endif
 }
 
 AudioManager::~AudioManager() {
     stop();
+#ifndef __EMSCRIPTEN__
+    delete rtaudio;
+    rtaudio = nullptr;
+#endif
 }
 
 AudioManager* AudioManager::instance() {
@@ -173,75 +183,134 @@ static unsigned int decodeBufferSize(int value) {
 }
 
 #ifndef __EMSCRIPTEN__
+static bool tryOpenStream(RtAudio* ra, void* userData, RtAudio::StreamParameters* outParams,
+                          RtAudio::StreamParameters* inParams, unsigned int sampleRate,
+                          unsigned int* bufferFrames, RtAudio::StreamOptions* options,
+                          unsigned int* inCh, bool* hasInput) {
+    RtAudioErrorType result = ra->openStream(outParams, inParams, RTAUDIO_FLOAT32, sampleRate,
+                                             bufferFrames, &AudioManager::callback, userData, options);
+    if (result == RTAUDIO_NO_ERROR) return true;
+
+    std::cerr << "[Audio:RtAudio] openStream failed: " << result << std::endl;
+    if (inParams) {
+        std::cerr << "[Audio:RtAudio] retrying without input device..." << std::endl;
+        result = ra->openStream(outParams, nullptr, RTAUDIO_FLOAT32, sampleRate,
+                                bufferFrames, &AudioManager::callback, userData, options);
+        if (result == RTAUDIO_NO_ERROR) {
+            *inCh = 0;
+            *hasInput = false;
+            return true;
+        }
+        std::cerr << "[Audio:RtAudio] openStream without input also failed: " << result << std::endl;
+    }
+    return false;
+}
+
 bool AudioManager::startRtAudio() {
     auto& s = Settings::instance();
 
-    // --- output device ---
-    int outDevId = s.audioOutputDevice();
-    unsigned int outDev = (outDevId < 0) ? rtaudio.getDefaultOutputDevice() : static_cast<unsigned int>(outDevId);
-    RtAudio::DeviceInfo info = rtaudio.getDeviceInfo(outDev);
-    outputChannels = info.outputChannels > 0 ? info.outputChannels : 2;
-    if (outputChannels > 8) outputChannels = 8;
-    outputParams.deviceId = outDev;
-    outputParams.nChannels = outputChannels;
-    outputParams.firstChannel = 0;
-
-    std::cout << "[Audio:RtAudio] output device: " << info.name << " (id=" << outDev << ")" << std::endl;
-
-    // --- sample rate ---
-    sampleRate = decodeSampleRate(s.audioSampleRate(), info.preferredSampleRate);
-
-    // --- buffer size ---
+    sampleRate = decodeSampleRate(s.audioSampleRate(), 48000);
     bufferSize = decodeBufferSize(s.audioBufferSize());
-
-    // --- input device ---
-    int inDevId = s.audioInputDevice();
-    RtAudio::StreamParameters* inParams = nullptr;
-    hasInput_ = false;
-    if (inDevId >= 0) {
-        unsigned int inDev = static_cast<unsigned int>(inDevId);
-        RtAudio::DeviceInfo inInfo = rtaudio.getDeviceInfo(inDev);
-        inputChannels = inInfo.inputChannels > 0 ? inInfo.inputChannels : 2;
-        if (inputChannels > 8) inputChannels = 8;
-        inputParams.deviceId = inDev;
-        inputParams.nChannels = inputChannels;
-        inputParams.firstChannel = 0;
-        inParams = &inputParams;
-        hasInput_ = true;
-        std::cout << "[Audio:RtAudio] input device: " << inInfo.name << " (id=" << inDev << ")" << std::endl;
-    } else {
-        inputChannels = 0;
-    }
-
-    // --- stream options ---
     options.flags = RTAUDIO_NONINTERLEAVED;
     options.streamName = "DAW";
     options.numberOfBuffers = s.audioTripleBuffer() ? 3 : 0;
 
+    // --- try JACK first ---
+    delete rtaudio;
+    rtaudio = new RtAudio(RtAudio::UNIX_JACK);
+    std::cout << "[Audio] trying JACK..." << std::endl;
+
+    unsigned int outDev = rtaudio->getDefaultOutputDevice();
+    outputChannels = 32;
+    outputParams.deviceId = outDev;
+    outputParams.nChannels = outputChannels;
+    outputParams.firstChannel = 0;
+
+    inputChannels = 32;
+    inputParams.deviceId = outDev;
+    inputParams.nChannels = inputChannels;
+    inputParams.firstChannel = 0;
+    hasInput_ = true;
+    options.flags |= RTAUDIO_JACK_DONT_CONNECT;
+    std::cout << "[Audio:RtAudio] JACK outCh=" << outputChannels << " inCh=" << inputChannels << std::endl;
+
+    if (tryOpenStream(rtaudio, this, &outputParams, &inputParams, sampleRate, &bufferSize, &options,
+                      &inputChannels, &hasInput_))
+        goto streamReady;
+
+    // --- try ALSA ---
+    options.flags &= ~RTAUDIO_JACK_DONT_CONNECT;
+    {
+    delete rtaudio;
+    rtaudio = new RtAudio(RtAudio::LINUX_ALSA);
+    std::cout << "[Audio] trying ALSA..." << std::endl;
+
+    outDev = (s.audioOutputDevice() >= 0) ? static_cast<unsigned int>(s.audioOutputDevice()) : rtaudio->getDefaultOutputDevice();
+    RtAudio::DeviceInfo info = rtaudio->getDeviceInfo(outDev);
+    outputChannels = info.outputChannels > 0 ? info.outputChannels : 2;
+    if (outputChannels > 32) outputChannels = 32;
+    outputParams.deviceId = outDev;
+    outputParams.nChannels = outputChannels;
+    outputParams.firstChannel = 0;
+    std::cout << "[Audio:RtAudio] ALSA device: " << info.name << " outCh=" << outputChannels << std::endl;
+
+    {
+        int inDevId = s.audioInputDevice();
+        RtAudio::StreamParameters* inParams = nullptr;
+        hasInput_ = false;
+        inputChannels = 0;
+        if (inDevId >= 0) {
+            unsigned int inDev = static_cast<unsigned int>(inDevId);
+            RtAudio::DeviceInfo inInfo = rtaudio->getDeviceInfo(inDev);
+            inputChannels = inInfo.inputChannels > 0 ? inInfo.inputChannels : 2;
+            if (inputChannels > 32) inputChannels = 32;
+            inputParams.deviceId = inDev;
+            inputParams.nChannels = inputChannels;
+            inputParams.firstChannel = 0;
+            inParams = &inputParams;
+            hasInput_ = true;
+            std::cout << "[Audio:RtAudio] ALSA input: " << inInfo.name << " inCh=" << inputChannels << std::endl;
+        }
+        if (!tryOpenStream(rtaudio, this, &outputParams, inParams, sampleRate, &bufferSize, &options,
+                           &inputChannels, &hasInput_))
+            return false;
+    }
+    } // ALSA scope
+
+streamReady:
     std::cout << "[Audio:RtAudio] sampleRate=" << sampleRate << " bufferSize=" << bufferSize
               << " outCh=" << outputChannels << " inCh=" << inputChannels
-              << " tripleBuf=" << (s.audioTripleBuffer() ? "yes" : "no") << std::endl;
-
-    try {
-        rtaudio.openStream(
-            &outputParams,
-            inParams,
-            RTAUDIO_FLOAT32,
-            sampleRate,
-            &bufferSize,
-            &AudioManager::callback,
-            this,
-            &options
-        );
-    } catch (RtAudioErrorType& e) {
-        std::cerr << "[Audio:RtAudio] openStream failed: " << e << std::endl;
-        return false;
-    }
+              << " api=" << rtaudio->getApiName(rtaudio->getCurrentApi()) << std::endl;
 
     audioThreadHandle = std::thread(&AudioManager::audioThread, this);
-
-    latency = rtaudio.getStreamLatency();
+    latency = rtaudio->getStreamLatency();
     std::cout << "[Audio:RtAudio] stream started, latency=" << latency << std::endl;
+
+    // Auto-connect all DAW outputs to system playback ports
+    if (rtaudio->getCurrentApi() == RtAudio::UNIX_JACK) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        jack_client_t* jc = jack_client_open("DAW-autowire", JackNoStartServer, nullptr);
+        if (jc) {
+            // DAW outputs -> system playback
+            const char** sysPlay = jack_get_ports(jc, nullptr, JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput);
+            const char** dawOut = jack_get_ports(jc, "DAW", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput);
+            if (sysPlay && dawOut)
+                for (int i = 0; sysPlay[i] && dawOut[i]; i++)
+                    jack_connect(jc, dawOut[i], sysPlay[i]);
+            if (sysPlay) jack_free(sysPlay);
+            if (dawOut) jack_free(dawOut);
+
+            // system capture -> DAW inputs
+            const char** sysCap = jack_get_ports(jc, nullptr, JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput);
+            const char** dawIn = jack_get_ports(jc, "DAW", JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput);
+            if (sysCap && dawIn)
+                for (int i = 0; sysCap[i] && dawIn[i]; i++)
+                    jack_connect(jc, sysCap[i], dawIn[i]);
+            if (sysCap) jack_free(sysCap);
+            if (dawIn) jack_free(dawIn);
+            jack_client_close(jc);
+        }
+    }
 
     usingSDL_ = false;
     if (project) project->processing = true;
@@ -291,22 +360,29 @@ bool AudioManager::startSDL() {
 bool AudioManager::start() {
 #ifndef __EMSCRIPTEN__
     auto& s = Settings::instance();
-    if (s.audioEngine() != 0)
-        return startRtAudio();
+    if (s.audioEngine() != 0) {
+        if (startRtAudio()) return true;
+        std::cerr << "[Audio] RtAudio failed, falling back to SDL..." << std::endl;
+    }
 #endif
     return startSDL();
 }
 
 bool AudioManager::restart() {
     stop();
+#ifndef __EMSCRIPTEN__
+    delete rtaudio;
+    rtaudio = new RtAudio(RtAudio::UNSPECIFIED);
+    std::cout << "[Audio] selected API: " << rtaudio->getApiName(rtaudio->getCurrentApi()) << std::endl;
+#endif
     return start();
 }
 
 #ifndef __EMSCRIPTEN__
 std::vector<RtAudio::DeviceInfo> AudioManager::getOutputDevices() {
     std::vector<RtAudio::DeviceInfo> out;
-    for (auto id : rtaudio.getDeviceIds()) {
-        auto info = rtaudio.getDeviceInfo(id);
+    for (auto id : rtaudio->getDeviceIds()) {
+        auto info = rtaudio->getDeviceInfo(id);
         if (info.outputChannels > 0) out.push_back(info);
     }
     return out;
@@ -314,8 +390,8 @@ std::vector<RtAudio::DeviceInfo> AudioManager::getOutputDevices() {
 
 std::vector<RtAudio::DeviceInfo> AudioManager::getInputDevices() {
     std::vector<RtAudio::DeviceInfo> in;
-    for (auto id : rtaudio.getDeviceIds()) {
-        auto info = rtaudio.getDeviceInfo(id);
+    for (auto id : rtaudio->getDeviceIds()) {
+        auto info = rtaudio->getDeviceInfo(id);
         if (info.inputChannels > 0) in.push_back(info);
     }
     return in;
@@ -324,22 +400,18 @@ std::vector<RtAudio::DeviceInfo> AudioManager::getInputDevices() {
 std::string AudioManager::getDeviceName(int deviceId) {
     if (deviceId < 0) return "Default";
     try {
-        return rtaudio.getDeviceInfo(static_cast<unsigned int>(deviceId)).name;
+        return rtaudio->getDeviceInfo(static_cast<unsigned int>(deviceId)).name;
     } catch (...) {
         return "Unknown";
     }
 }
 
 bool AudioManager::stopRtAudio() {
-    try {
-        if (rtaudio.isStreamOpen()) {
-            rtaudio.stopStream();
-            rtaudio.closeStream();
-            std::cout << "[Audio:RtAudio] stream stopped" << std::endl;
-        }
-    } catch (RtAudioErrorType& e) {
-        std::cerr << "[Audio:RtAudio] stop error: " << e << std::endl;
-        return false;
+    if (!rtaudio) return false;
+    if (rtaudio->isStreamOpen()) {
+        rtaudio->stopStream();
+        rtaudio->closeStream();
+        std::cout << "[Audio:RtAudio] stream stopped" << std::endl;
     }
     if (audioThreadHandle.joinable()) {
         audioThreadHandle.join();
@@ -373,11 +445,8 @@ bool AudioManager::stop() {
 
 #ifndef __EMSCRIPTEN__
 void AudioManager::audioThread() {
-    try {
-        // Start the stream and keep it running
-        rtaudio.startStream();
-    } catch (RtAudioErrorType &e) {
-        std::cerr << "Error starting audio stream: " << e << std::endl;
-    }
+    RtAudioErrorType result = rtaudio->startStream();
+    if (result != RTAUDIO_NO_ERROR)
+        std::cerr << "[Audio:RtAudio] startStream error: " << result << std::endl;
 }
 #endif // __EMSCRIPTEN__

@@ -38,10 +38,8 @@ int main(int argc, char* argv[]) {
     WindowHandler* windowHandler = WindowHandler::instance();
     windowHandler->project = project;
 
-    if (!audioManager->start()) {
-        std::cout << "audiomanager failed" << std::endl;
-        return -1;
-    }
+    if (!audioManager->start())
+        std::cout << "[Audio] failed to start, running without audio" << std::endl;
 
     project->setup();
 
@@ -59,8 +57,6 @@ int main(int argc, char* argv[]) {
 
     project->save();
     audioManager->stop();
-
-    delete audioManager;
     delete project;
     SDL_Quit();
 

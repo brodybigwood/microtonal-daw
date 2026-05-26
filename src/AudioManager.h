@@ -57,7 +57,7 @@ class AudioManager {
 
 #ifndef __EMSCRIPTEN__
         // RtAudio backend
-        RtAudio rtaudio;
+        RtAudio* rtaudio = nullptr;
         RtAudio::StreamParameters outputParams;
         RtAudio::StreamParameters inputParams;
         RtAudio::StreamOptions options;

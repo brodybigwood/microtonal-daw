@@ -11,6 +11,7 @@
 #include "nodes/arranger/arranger.h"
 #include "nodes/patcher/patcher.h"
 #include "nodes/multiplexer/multiplexer.h"
+#include "nodes/gain/gain.h"
 
 inline std::string NodeTypeStr[] = {
     "Arranger",
@@ -23,7 +24,8 @@ inline std::string NodeTypeStr[] = {
     "Envelope",
     "Visualizer",
     "Patcher",
-    "Multiplexer"
+    "Multiplexer",
+    "Gain"
 };
 
 inline Node* byType(NodeType t, int id, NodeManager* nm) {
@@ -50,6 +52,8 @@ inline Node* byType(NodeType t, int id, NodeManager* nm) {
             return new PatcherNode(id, nm);
         case NodeType::Multiplexer:
             return new MultiplexerNode(id, nm);
+        case NodeType::Gain:
+            return new GainNode(id, nm);
         default:
             return nullptr;
     }

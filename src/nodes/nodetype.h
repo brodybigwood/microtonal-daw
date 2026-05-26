@@ -10,5 +10,6 @@ enum NodeType {
     Visualizer,
     Patcher,
     Multiplexer,
+    Gain,
     Count // for iteration
 };
