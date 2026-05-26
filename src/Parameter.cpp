@@ -101,12 +101,12 @@ void Knob::render(SDL_Renderer* renderer) {
         4, 20, 20, 20, 255);
 
     if (!label.empty() && fonts.mainFont) {
-        SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, label.c_str(), 0, SDL_Color{0, 0, 0, 255});
+        SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, label.c_str(), 0, labelColor);
         if (surf) {
             SDL_Texture* textTex = SDL_CreateTextureFromSurface(renderer, surf);
             // Keep label visual size consistent across differently sized knobs.
-            const float referenceDiameter = 290.0f; // filter knob diameter
-            const float scale = std::clamp(2.0f * (knobRect.w / referenceDiameter), 2.0f, 3.2f);
+            const float referenceDiameter = 290.0f;
+            const float scale = knobRect.w / referenceDiameter;
             const float tw = static_cast<float>(surf->w) * scale;
             const float th = static_cast<float>(surf->h) * scale;
             SDL_FRect tr{
@@ -122,14 +122,22 @@ void Knob::render(SDL_Renderer* renderer) {
     }
 }
 
-Knob::Knob(float value, float x, float y, float r, std::string filepath, float thetaMin, float thetaMax, std::string label) : 
-    Parameter(value, generateCircle(x, y, r)), 
-    knobRect{x - r, y - r, 2 * r, 2 * r}, 
+Knob::Knob(float value, float x, float y, float r, std::string filepath, float thetaMin, float thetaMax, std::string label, SDL_Color labelColor) :
+    Parameter(value, generateCircle(x, y, r)),
+    knobRect{x - r, y - r, 2 * r, 2 * r},
     filepath(filepath),
     label(std::move(label)),
+    labelColor(labelColor),
     thetaMin(thetaMin),
     thetaMax(thetaMax) {
 
+}
+
+void Knob::reposition(float newX, float newY, float newR) {
+    knobRect = {newX - newR, newY - newR, 2.0f * newR, 2.0f * newR};
+    auto poly = generateCircle(newX, newY, newR);
+    vx = std::move(poly.first);
+    vy = std::move(poly.second);
 }
 
 void Knob::handleInput(SDL_Event& e) {
@@ -140,4 +148,74 @@ void Knob::handleInput(SDL_Event& e) {
             value = std::clamp(value + wheelVelocity * 0.05f, 0.0f, 1.0f);
         break;
     }
+}
+
+// --- DropdownParameter ---
+
+DropdownParameter::DropdownParameter(float value, float x, float y, float w, float h,
+                                     std::vector<std::string> choices)
+    : Parameter(value, generateRect(x, y, w, h))
+    , boxRect{x, y, w, h}
+    , choices(std::move(choices)) {}
+
+float DropdownParameter::operator[](size_t i) {
+    float v = value;
+    for (auto& m : modulators) v += (*m)[i];
+    v = std::clamp(v, 0.0f, 1.0f);
+    int n = static_cast<int>(choices.size());
+    if (n > 1) {
+        float step = 1.0f / static_cast<float>(n - 1);
+        v = std::round(v / step) * step;
+    }
+    return v;
+}
+
+size_t DropdownParameter::getChoiceIndex() const {
+    if (choices.size() <= 1) return 0;
+    return std::clamp(static_cast<size_t>(std::round(value * static_cast<float>(choices.size() - 1))),
+                      static_cast<size_t>(0), choices.size() - 1);
+}
+
+const std::string& DropdownParameter::getChoice() const {
+    return choices[getChoiceIndex()];
+}
+
+void DropdownParameter::render(SDL_Renderer* renderer) {
+    SDL_SetRenderDrawColor(renderer, 42, 42, 47, 255);
+    SDL_RenderFillRect(renderer, &boxRect);
+    SDL_SetRenderDrawColor(renderer, 100, 100, 105, 255);
+    SDL_RenderRect(renderer, &boxRect);
+
+    if (!fonts.mainFont) return;
+    const std::string& label = getChoice();
+    SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, label.c_str(), 0, SDL_Color{220, 220, 220, 255});
+    if (!surf) return;
+    SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
+    const float scale = 1.6f;
+    const float tw = static_cast<float>(surf->w) * scale;
+    const float th = static_cast<float>(surf->h) * scale;
+    SDL_FRect tr{boxRect.x + (boxRect.w - tw) * 0.5f, boxRect.y + (boxRect.h - th) * 0.5f, tw, th};
+    SDL_RenderTexture(renderer, tex, nullptr, &tr);
+    SDL_DestroyTexture(tex);
+    SDL_DestroySurface(surf);
+}
+
+void DropdownParameter::handleInput(SDL_Event& e) {
+    switch (e.type) {
+        case SDL_EVENT_MOUSE_WHEEL:
+            if (choices.size() <= 1) return;
+            {
+                int idx = static_cast<int>(getChoiceIndex());
+                idx = std::clamp(idx + (e.wheel.y > 0 ? 1 : -1), 0, static_cast<int>(choices.size()) - 1);
+                value = static_cast<float>(idx) / static_cast<float>(choices.size() - 1);
+            }
+            break;
+    }
+}
+
+void DropdownParameter::reposition(float newX, float newY, float newW, float newH) {
+    boxRect = {newX, newY, newW, newH};
+    auto poly = generateRect(newX, newY, newW, newH);
+    vx = std::move(poly.first);
+    vy = std::move(poly.second);
 }

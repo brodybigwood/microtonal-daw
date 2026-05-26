@@ -14,7 +14,7 @@ struct Parameter {
     std::vector<Modulator*> modulators;
     bool clampOutput = true;
 
-    float operator[](size_t);
+    virtual float operator[](size_t);
 
     void addModulator(Modulator*);
 
@@ -47,6 +47,7 @@ struct Knob : Parameter {
     float thetaMin;
     float thetaMax;
     std::string label;
+    SDL_Color labelColor{0, 0, 0, 255};
 
     void handleInput(SDL_Event&) override;
     std::string filepath;
@@ -54,5 +55,23 @@ struct Knob : Parameter {
     SDL_Texture* texture = nullptr;
     float wheelVelocity = 0.0f;
     void render(SDL_Renderer*) override;
-    Knob(float, float, float, float, std::string, float, float, std::string label = "");
+    void reposition(float newX, float newY, float newR);
+    Knob(float, float, float, float, std::string, float, float, std::string label = "",
+         SDL_Color labelColor = {0, 0, 0, 255});
+};
+
+struct DropdownParameter : Parameter {
+    std::vector<std::string> choices;
+    SDL_FRect boxRect;
+
+    float operator[](size_t) override;
+    void render(SDL_Renderer*) override;
+    void handleInput(SDL_Event&) override;
+
+    size_t getChoiceIndex() const;
+    const std::string& getChoice() const;
+    void reposition(float newX, float newY, float newW, float newH);
+
+    DropdownParameter(float value, float x, float y, float w, float h,
+                      std::vector<std::string> choices);
 };

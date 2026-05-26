@@ -12,6 +12,7 @@
 #include "nodes/patcher/patcher.h"
 #include "nodes/multiplexer/multiplexer.h"
 #include "nodes/gain/gain.h"
+#include "nodes/parametriceq/parametriceq.h"
 
 inline std::string NodeTypeStr[] = {
     "Arranger",
@@ -25,7 +26,8 @@ inline std::string NodeTypeStr[] = {
     "Visualizer",
     "Patcher",
     "Multiplexer",
-    "Gain"
+    "Gain",
+    "ParametricEQ"
 };
 
 inline Node* byType(NodeType t, int id, NodeManager* nm) {
@@ -54,6 +56,8 @@ inline Node* byType(NodeType t, int id, NodeManager* nm) {
             return new MultiplexerNode(id, nm);
         case NodeType::Gain:
             return new GainNode(id, nm);
+        case NodeType::ParametricEQ:
+            return new ParametricEQNode(id, nm);
         default:
             return nullptr;
     }

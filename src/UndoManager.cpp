@@ -1,4 +1,5 @@
 #include "UndoManager.h"
+#include "nodes/parametriceq/parametriceq.h"
 #include "GridElement.h"
 #include <cmath>
 #include "SDL_Events.h"
@@ -577,6 +578,16 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
                 j.at("oldDepth").get<float>(), j.at("newDepth").get<float>());
             break;
         }
+        case AddEQBand: {
+            pa = new AddEQBandAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(),
+                j.at("bandIndex").get<int>(), j.at("bandState"));
+            break;
+        }
+        case RemoveEQBand: {
+            pa = new RemoveEQBandAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(),
+                j.at("bandIndex").get<int>(), j.at("bandState"));
+            break;
+        }
         default:
             throw std::runtime_error("invalid undo action type in save");
     }
@@ -852,6 +863,22 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["newCentered"] = tc->newCentered;
             j["oldDepth"] = tc->oldDepth;
             j["newDepth"] = tc->newDepth;
+            break;
+        }
+        case AddEQBand: {
+            auto* ab = static_cast<AddEQBandAction*>(pa);
+            j["managerPath"] = ab->managerPath;
+            j["nodeID"] = ab->nodeID;
+            j["bandIndex"] = ab->bandIndex;
+            j["bandState"] = ab->bandState;
+            break;
+        }
+        case RemoveEQBand: {
+            auto* rb = static_cast<RemoveEQBandAction*>(pa);
+            j["managerPath"] = rb->managerPath;
+            j["nodeID"] = rb->nodeID;
+            j["bandIndex"] = rb->bandIndex;
+            j["bandState"] = rb->bandState;
             break;
         }
         default:
@@ -2231,5 +2258,75 @@ ToggleModulatorCenteredUndoAction::ToggleModulatorCenteredUndoAction(Project* p,
         auto* mod = param->modulators[this->modIndex];
         mod->centered = this->oldCentered;
         mod->depth.value = this->oldDepth;
+    };
+}
+
+AddEQBandAction::AddEQBandAction(Project* p, std::vector<int> managerPath, int nodeID, int bandIndex, json bandState)
+    : ProjectAction(p, AddEQBand)
+    , managerPath(std::move(managerPath))
+    , nodeID(nodeID)
+    , bandIndex(bandIndex)
+    , bandState(std::move(bandState))
+{
+    skipInitialDo = true;
+    name = "Add EQ Band";
+
+    doAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        Node* node = nm.getNode(static_cast<uint16_t>(this->nodeID));
+        auto* eq = dynamic_cast<ParametricEQNode*>(node);
+        if (!eq) throw std::runtime_error("AddEQBandAction::doAction: node not found or not an EQ");
+        eq->addBand(this->bandIndex);
+        if (this->bandIndex >= 0 && this->bandIndex < static_cast<int>(eq->bands.size())) {
+            auto& b = *eq->bands[this->bandIndex];
+            b.type.value = this->bandState.value("type", 0.0f);
+            b.frequency.value = this->bandState.value("freq", 0.5f);
+            b.gain.value = this->bandState.value("gain", 0.5f);
+            b.q.value = this->bandState.value("q", 0.1f);
+            b.coeffDirty = true;
+        }
+    };
+
+    undoAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        Node* node = nm.getNode(static_cast<uint16_t>(this->nodeID));
+        auto* eq = dynamic_cast<ParametricEQNode*>(node);
+        if (!eq) throw std::runtime_error("AddEQBandAction::undoAction: node not found or not an EQ");
+        eq->removeBand(this->bandIndex);
+    };
+}
+
+RemoveEQBandAction::RemoveEQBandAction(Project* p, std::vector<int> managerPath, int nodeID, int bandIndex, json bandState)
+    : ProjectAction(p, RemoveEQBand)
+    , managerPath(std::move(managerPath))
+    , nodeID(nodeID)
+    , bandIndex(bandIndex)
+    , bandState(std::move(bandState))
+{
+    skipInitialDo = true;
+    name = "Remove EQ Band";
+
+    doAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        Node* node = nm.getNode(static_cast<uint16_t>(this->nodeID));
+        auto* eq = dynamic_cast<ParametricEQNode*>(node);
+        if (!eq) throw std::runtime_error("RemoveEQBandAction::doAction: node not found or not an EQ");
+        eq->removeBand(this->bandIndex);
+    };
+
+    undoAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        Node* node = nm.getNode(static_cast<uint16_t>(this->nodeID));
+        auto* eq = dynamic_cast<ParametricEQNode*>(node);
+        if (!eq) throw std::runtime_error("RemoveEQBandAction::undoAction: node not found or not an EQ");
+        eq->addBand(this->bandIndex);
+        if (this->bandIndex >= 0 && this->bandIndex < static_cast<int>(eq->bands.size())) {
+            auto& b = *eq->bands[this->bandIndex];
+            b.type.value = this->bandState.value("type", 0.0f);
+            b.frequency.value = this->bandState.value("freq", 0.5f);
+            b.gain.value = this->bandState.value("gain", 0.5f);
+            b.q.value = this->bandState.value("q", 0.1f);
+            b.coeffDirty = true;
+        }
     };
 }

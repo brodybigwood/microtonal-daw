@@ -11,5 +11,6 @@ enum NodeType {
     Patcher,
     Multiplexer,
     Gain,
+    ParametricEQ,
     Count // for iteration
 };

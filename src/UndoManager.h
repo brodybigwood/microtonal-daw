@@ -43,7 +43,9 @@ enum ActionType {
     ResizeEmbeddedWindow = 23,
     ToggleNodeVisible = 24,
     PanNodes = 25,
-    ZoomNodes = 26
+    ZoomNodes = 26,
+    AddEQBand = 27,
+    RemoveEQBand = 28
 };
 
 
@@ -505,4 +507,22 @@ struct IoPortChannelAction : ProjectAction {
     bool idAssigned = false;
 
     IoPortChannelAction(Project* p, int op, std::vector<int> managerPath, uint16_t connectionId, size_t connectionIndex);
+};
+
+struct AddEQBandAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    int bandIndex = 0;
+    json bandState;
+
+    AddEQBandAction(Project* p, std::vector<int> managerPath, int nodeID, int bandIndex, json bandState);
+};
+
+struct RemoveEQBandAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    int bandIndex = 0;
+    json bandState;
+
+    RemoveEQBandAction(Project* p, std::vector<int> managerPath, int nodeID, int bandIndex, json bandState);
 };
