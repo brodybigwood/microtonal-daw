@@ -651,50 +651,61 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
         targetIsResize = (captureKind_ == CaptureKind::Resize);
     }
 
-    // --- No target: search ---
+    // --- No target: search non-node windows first (always on top), then nodes ---
     if (!target) {
-        std::vector<EmbeddedWindow*> sorted;
-        for (auto& ew : embeddedWindows_)
-            if (ew->visible) sorted.push_back(ew.get());
-        if (nm) {
-            for (auto n : nm->getNodes())
-                if (n->visible) sorted.push_back(n);
-            if (nm->inNode && nm->inNode->visible) sorted.push_back(nm->inNode);
-            if (nm->outNode && nm->outNode->visible) sorted.push_back(nm->outNode);
-        }
-        std::sort(sorted.begin(), sorted.end(),
-                  [](EmbeddedWindow* a, EmbeddedWindow* b) { return a->zOrder > b->zOrder; });
-
-        for (auto* ew : sorted) {
-            if (ew->getResizeZone(mouseX, mouseY) != EmbeddedWindow::ResizeZone::None) {
-                target = ew;
-                targetIsResize = true;
-                captureKind_ = CaptureKind::Resize;
-                break;
-            }
-            if (ew->hitTest(mouseX, mouseY)) {
-                target = ew;
-                captureKind_ = CaptureKind::Content;
-                break;
-            }
-            Node* node = dynamic_cast<Node*>(ew);
-            if (node && node->showConnectionPorts()) {
-                for (auto* c : node->inputs.connections) {
-                    if (c && mouseX >= c->rect.x && mouseX <= c->rect.x + c->rect.w &&
-                        mouseY >= c->rect.y && mouseY <= c->rect.y + c->rect.h) { target = node; break; }
+        auto searchInList = [&](std::vector<EmbeddedWindow*>& list) -> bool {
+            std::sort(list.begin(), list.end(),
+                      [](EmbeddedWindow* a, EmbeddedWindow* b) { return a->zOrder > b->zOrder; });
+            for (auto* ew : list) {
+                if (ew->getResizeZone(mouseX, mouseY) != EmbeddedWindow::ResizeZone::None) {
+                    target = ew;
+                    targetIsResize = true;
+                    captureKind_ = CaptureKind::Resize;
+                    return true;
                 }
-                if (!target) {
-                    for (auto* c : node->outputs.connections) {
+                if (ew->hitTest(mouseX, mouseY)) {
+                    target = ew;
+                    captureKind_ = CaptureKind::Content;
+                    return true;
+                }
+                Node* node = dynamic_cast<Node*>(ew);
+                if (node && node->showConnectionPorts()) {
+                    for (auto* c : node->inputs.connections) {
                         if (c && mouseX >= c->rect.x && mouseX <= c->rect.x + c->rect.w &&
                             mouseY >= c->rect.y && mouseY <= c->rect.y + c->rect.h) { target = node; break; }
                     }
-                }
-                if (target) {
-                    captureKind_ = CaptureKind::Connection;
-                    break;
+                    if (!target) {
+                        for (auto* c : node->outputs.connections) {
+                            if (c && mouseX >= c->rect.x && mouseX <= c->rect.x + c->rect.w &&
+                                mouseY >= c->rect.y && mouseY <= c->rect.y + c->rect.h) { target = node; break; }
+                        }
+                    }
+                    if (target) {
+                        captureKind_ = CaptureKind::Connection;
+                        return true;
+                    }
                 }
             }
+            return false;
+        };
+
+        // Non-node windows first (undo tree, prefs — rendered on top, get input priority).
+        {
+            std::vector<EmbeddedWindow*> winList;
+            for (auto& ew : embeddedWindows_)
+                if (ew->visible) winList.push_back(ew.get());
+            if (searchInList(winList)) goto found;
         }
+        // Nodes second.
+        if (nm) {
+            std::vector<EmbeddedWindow*> nodeList;
+            for (auto n : nm->getNodes())
+                if (n->visible) nodeList.push_back(n);
+            if (nm->inNode && nm->inNode->visible) nodeList.push_back(nm->inNode);
+            if (nm->outNode && nm->outNode->visible) nodeList.push_back(nm->outNode);
+            if (searchInList(nodeList)) goto found;
+        }
+        found:;
 
         if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && target) {
             capturedEmbeddedWindow_ = target;
