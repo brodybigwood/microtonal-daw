@@ -440,6 +440,7 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
             }
             an->panOffX = j.value("panOffX", 0.f);
             an->panOffY = j.value("panOffY", 0.f);
+            an->patcherData = j.value("patcherData", json());
             pa = an;
             break;
         }
@@ -479,6 +480,7 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
             rn->connectionsData = j.at("connectionsData");
             rn->panOffX = j.value("panOffX", 0.f);
             rn->panOffY = j.value("panOffY", 0.f);
+            rn->patcherData = j.value("patcherData", json());
             pa = rn;
             break;
         }
@@ -677,6 +679,8 @@ json ProjectAction::serialize(ProjectAction* pa) {
             }
             j["panOffX"] = an->panOffX;
             j["panOffY"] = an->panOffY;
+            if (!an->patcherData.is_null())
+                j["patcherData"] = an->patcherData;
             break;
         }
         case RemoveNode: {
@@ -691,6 +695,8 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["connectionsData"] = rn->connectionsData;
             j["panOffX"] = rn->panOffX;
             j["panOffY"] = rn->panOffY;
+            if (!rn->patcherData.is_null())
+                j["patcherData"] = rn->patcherData;
             break;
         }
         case MakeNodeConnection: {
@@ -1588,6 +1594,15 @@ AddNodeAction::AddNodeAction(Project* p, std::vector<int> managerPath, int type,
     doAction = [this] () {
         NodeManager& nm = requireManager(this->p, this->managerPath);
         if (hasRedoRestore) {
+            if (!patcherData.is_null()) {
+                for (auto& pd : patcherData) {
+                    auto* p = nm.addNodeNow(pd["node"]);
+                    if (p) {
+                        for (auto c : pd["conns"])
+                            nm.makeNodeConnectionNow(c["srcNodeID"], c["srcConID"], c["dstNodeID"], c["dstConID"]);
+                    }
+                }
+            }
             json snap = redoNodeSnapshot;
             if (nm.ne) {
                 snap["x"] = snap["x"].get<float>() + nm.ne->panOffsetX_ - this->panOffX;
@@ -1597,10 +1612,8 @@ AddNodeAction::AddNodeAction(Project* p, std::vector<int> managerPath, int type,
             if (!restored)
                 throw std::runtime_error("AddNodeAction::doAction: addNodeNow(json) failed");
             nodeID = restored->id;
-            for (auto c : redoConnectionsSnapshot) {
-                nm.makeNodeConnectionNow(c.at("srcNodeID").get<int>(), c.at("srcConID").get<int>(), c.at("dstNodeID").get<int>(),
-                                         c.at("dstConID").get<int>());
-            }
+            for (auto c : redoConnectionsSnapshot)
+                nm.makeNodeConnectionNow(c["srcNodeID"], c["srcConID"], c["dstNodeID"], c["dstConID"]);
             return;
         }
         float ax = this->x, ay = this->y;
@@ -1620,6 +1633,20 @@ AddNodeAction::AddNodeAction(Project* p, std::vector<int> managerPath, int type,
         if (!nm.snapshotNode(static_cast<uint16_t>(nodeID), redoNodeSnapshot, redoConnectionsSnapshot))
             throw std::runtime_error("AddNodeAction::undoAction: snapshotNode failed");
         hasRedoRestore = true;
+        auto* mux = dynamic_cast<MultiplexerNode*>(nm.getNode(static_cast<uint16_t>(nodeID)));
+        if (mux) {
+            patcherData = json::array();
+            std::vector<uint16_t> pids;
+            for (auto* p : mux->patchers) {
+                json pd;
+                (void)nm.snapshotNode(p->id, pd["node"], pd["conns"]);
+                patcherData.push_back(pd);
+                pids.push_back(p->id);
+            }
+            mux->patchers.clear();
+            for (auto pid : pids)
+                nm.removeNodeNow(pid);
+        }
         nm.removeNodeNow(nodeID);
     };
 }
@@ -1633,11 +1660,34 @@ RemoveNodeAction::RemoveNodeAction(Project* p, std::vector<int> managerPath, int
         NodeManager& nm2 = requireManager(this->p, this->managerPath);
         if (nodeData.is_null()) {
             (void)nm2.snapshotNode(static_cast<uint16_t>(this->nodeID), nodeData, connectionsData);
+            auto* mux = dynamic_cast<MultiplexerNode*>(nm2.getNode(static_cast<uint16_t>(this->nodeID)));
+            if (mux) {
+                patcherData = json::array();
+                std::vector<uint16_t> pids;
+                for (auto* p : mux->patchers) {
+                    json pd;
+                    (void)nm2.snapshotNode(p->id, pd["node"], pd["conns"]);
+                    patcherData.push_back(pd);
+                    pids.push_back(p->id);
+                }
+                mux->patchers.clear();
+                for (auto pid : pids)
+                    nm2.removeNodeNow(pid);
+            }
         }
         nm2.removeNodeNow(this->nodeID);
     };
     undoAction = [this] () {
         NodeManager& nm2 = requireManager(this->p, this->managerPath);
+        if (!patcherData.is_null()) {
+            for (auto& pd : patcherData) {
+                auto* p = nm2.addNodeNow(pd["node"]);
+                if (p) {
+                    for (auto c : pd["conns"])
+                        nm2.makeNodeConnectionNow(c["srcNodeID"], c["srcConID"], c["dstNodeID"], c["dstConID"]);
+                }
+            }
+        }
         json nd = nodeData;
         if (nm2.ne) {
             nd["x"] = nd["x"].get<float>() + nm2.ne->panOffsetX_ - this->panOffX;
@@ -1646,17 +1696,8 @@ RemoveNodeAction::RemoveNodeAction(Project* p, std::vector<int> managerPath, int
         auto* restored = nm2.addNodeNow(nd);
         if (!restored)
             throw std::runtime_error("RemoveNodeAction::undoAction: addNodeNow failed");
-        std::cout << "[DBG_DESER] RemoveNodeAction::undo restored node id=" << restored->id << " managerPath=";
-        for (size_t i = 0; i < this->managerPath.size(); ++i) {
-            std::cout << this->managerPath[i] << (i + 1 < this->managerPath.size() ? "/" : "");
-        }
-        if (this->managerPath.empty()) std::cout << "root";
-        std::cout << " replayConnections=" << connectionsData.size() << std::endl;
-        for (auto c : connectionsData) {
-            std::cout << "[DBG_DESER]  undo replay srcNode=" << c["srcNodeID"] << " srcCon=" << c["srcConID"]
-                      << " dstNode=" << c["dstNodeID"] << " dstCon=" << c["dstConID"] << std::endl;
+        for (auto c : connectionsData)
             nm2.makeNodeConnectionNow(c["srcNodeID"], c["srcConID"], c["dstNodeID"], c["dstConID"]);
-        }
     };
 }
 

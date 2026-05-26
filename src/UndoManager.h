@@ -446,6 +446,8 @@ struct AddNodeAction : ProjectAction {
     bool hasRedoRestore = false;
     json redoNodeSnapshot;
     json redoConnectionsSnapshot = json::array();
+    /** Multiplexer patcher snapshots for undo/redo idempotency. */
+    json patcherData;
 
     AddNodeAction(Project* p, std::vector<int> managerPath, int type, float x, float y);
 };
@@ -455,6 +457,8 @@ struct RemoveNodeAction : ProjectAction {
     int nodeID;
     json nodeData;
     json connectionsData;
+    /** Multiplexer patcher snapshots for undo/redo idempotency. */
+    json patcherData;
     float panOffX = 0.f, panOffY = 0.f;
 
     RemoveNodeAction(Project* p, std::vector<int> managerPath, int nodeID);
