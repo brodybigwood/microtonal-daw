@@ -12,5 +12,6 @@ enum NodeType {
     Multiplexer,
     Gain,
     ParametricEQ,
+    Vst,
     Count // for iteration
 };

@@ -1,5 +1,6 @@
 #include "UndoManager.h"
 #include "nodes/parametriceq/parametriceq.h"
+#include "nodes/vst/vstnode.h"
 #include "GridElement.h"
 #include <cmath>
 #include "SDL_Events.h"
@@ -588,6 +589,16 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
                 j.at("bandIndex").get<int>(), j.at("bandState"));
             break;
         }
+        case VstParameterChange: {
+            pa = new VstParameterChangeAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(),
+                j.at("paramID").get<uint32_t>(), j.at("oldValue").get<float>(), j.at("newValue").get<float>());
+            break;
+        }
+        case VstLoadPlugin: {
+            pa = new VstLoadPluginAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(),
+                j.at("oldState"), j.at("newState"));
+            break;
+        }
         default:
             throw std::runtime_error("invalid undo action type in save");
     }
@@ -879,6 +890,23 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["nodeID"] = rb->nodeID;
             j["bandIndex"] = rb->bandIndex;
             j["bandState"] = rb->bandState;
+            break;
+        }
+        case VstParameterChange: {
+            auto* vp = static_cast<VstParameterChangeAction*>(pa);
+            j["managerPath"] = vp->managerPath;
+            j["nodeID"] = vp->nodeID;
+            j["paramID"] = vp->paramID;
+            j["oldValue"] = vp->oldValue;
+            j["newValue"] = vp->newValue;
+            break;
+        }
+        case VstLoadPlugin: {
+            auto* vl = static_cast<VstLoadPluginAction*>(pa);
+            j["managerPath"] = vl->managerPath;
+            j["nodeID"] = vl->nodeID;
+            j["oldState"] = vl->oldState;
+            j["newState"] = vl->newState;
             break;
         }
         default:
@@ -2327,6 +2355,99 @@ RemoveEQBandAction::RemoveEQBandAction(Project* p, std::vector<int> managerPath,
             b.gain.value = this->bandState.value("gain", 0.5f);
             b.q.value = this->bandState.value("q", 0.1f);
             b.coeffDirty = true;
+        }
+    };
+}
+
+// ============================================================================
+// VstParameterChangeAction
+// ============================================================================
+
+VstParameterChangeAction::VstParameterChangeAction(Project* p, std::vector<int> managerPath, int nodeID,
+                                                     uint32_t paramID, float oldValue, float newValue)
+    : ProjectAction(p, VstParameterChange)
+    , managerPath(std::move(managerPath))
+    , nodeID(nodeID)
+    , paramID(paramID)
+    , oldValue(oldValue)
+    , newValue(newValue)
+{
+    skipInitialDo = true;
+    name = "VST Parameter Change";
+
+    doAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        Node* node = nm.getNode(static_cast<uint16_t>(this->nodeID));
+        auto* vst = dynamic_cast<VstNode*>(node);
+        if (!vst || !vst->plugin) return;
+        vst->plugin->setParameterValue(static_cast<int>(this->paramID), this->newValue);
+    };
+
+    undoAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        Node* node = nm.getNode(static_cast<uint16_t>(this->nodeID));
+        auto* vst = dynamic_cast<VstNode*>(node);
+        if (!vst || !vst->plugin) return;
+        vst->plugin->setParameterValue(static_cast<int>(this->paramID), this->oldValue);
+    };
+}
+
+// ============================================================================
+// VstLoadPluginAction
+// ============================================================================
+
+VstLoadPluginAction::VstLoadPluginAction(Project* p, std::vector<int> managerPath, int nodeID,
+                                           json oldState, json newState)
+    : ProjectAction(p, VstLoadPlugin)
+    , managerPath(std::move(managerPath))
+    , nodeID(nodeID)
+    , oldState(std::move(oldState))
+    , newState(std::move(newState))
+{
+    skipInitialDo = true;
+    name = "Load VST Plugin";
+
+    doAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        Node* node = nm.getNode(static_cast<uint16_t>(this->nodeID));
+        auto* vst = dynamic_cast<VstNode*>(node);
+        if (!vst) return;
+        std::string path = this->newState.is_null() ? "" : this->newState.value("path", "");
+        vst->loadPlugin(path);
+        if (!this->newState.is_null()) {
+            vst->bypass.value = this->newState.value("bypass", 0.0f);
+            if (this->newState.contains("compState") && vst->plugin) {
+                auto& arr = this->newState["compState"];
+                std::vector<uint8_t> data(arr.begin(), arr.end());
+                vst->plugin->setComponentState(data);
+            }
+            if (this->newState.contains("ctrlState") && vst->plugin) {
+                auto& arr = this->newState["ctrlState"];
+                std::vector<uint8_t> data(arr.begin(), arr.end());
+                vst->plugin->setControllerState(data);
+            }
+        }
+    };
+
+    undoAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        Node* node = nm.getNode(static_cast<uint16_t>(this->nodeID));
+        auto* vst = dynamic_cast<VstNode*>(node);
+        if (!vst) return;
+        std::string path = this->oldState.is_null() ? "" : this->oldState.value("path", "");
+        vst->loadPlugin(path);
+        if (!this->oldState.is_null()) {
+            vst->bypass.value = this->oldState.value("bypass", 0.0f);
+            if (this->oldState.contains("compState") && vst->plugin) {
+                auto& arr = this->oldState["compState"];
+                std::vector<uint8_t> data(arr.begin(), arr.end());
+                vst->plugin->setComponentState(data);
+            }
+            if (this->oldState.contains("ctrlState") && vst->plugin) {
+                auto& arr = this->oldState["ctrlState"];
+                std::vector<uint8_t> data(arr.begin(), arr.end());
+                vst->plugin->setControllerState(data);
+            }
         }
     };
 }

@@ -3,6 +3,9 @@
 #include "Node.h"
 #include "ContextMenu.h"
 #include "WindowHandler.h"
+#ifndef __EMSCRIPTEN__
+#include "nodes/vst/vstplugin.h"
+#endif
 #include "UndoManager.h"
 #include <iostream>
 #include "Preferences.h"
@@ -375,6 +378,9 @@ void NodeEditor::zoom(float amount) {
 }
 
 void NodeEditor::handleInput(SDL_Event& e) {
+#ifndef __EMSCRIPTEN__
+    VstPlugin::tickAllEditors();
+#endif
     moveMouse();
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {

@@ -489,6 +489,20 @@ bool Node::handleContentInput(SDL_Event& e) {
         return handleCustomInput(e);
     }
 
+    // File drops: use drop coordinates if valid, else fall back to mouse position.
+    if (e.type == SDL_EVENT_DROP_FILE) {
+        float dropX = e.drop.x > 0 ? e.drop.x : *mouseX;
+        float dropY = e.drop.y > 0 ? e.drop.y : *mouseY;
+        msX = (dropX - dstRect.x) / zoomRatio;
+        msY = (dropY - dstRect.y) / zoomRatio;
+        std::cout << "[Node] drop at screen=" << dropX << "," << dropY
+                  << " tex=" << msX << "," << msY << std::endl;
+        if (inPolygon(vx, vy, vCount, msX, msY) || captured_) {
+            return handleCustomInput(e);
+        }
+        return false;
+    }
+
     bool handled = false;
 
     msX = (*mouseX - dstRect.x) / zoomRatio;

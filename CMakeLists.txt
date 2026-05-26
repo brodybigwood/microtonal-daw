@@ -140,3 +140,48 @@ if(NOT EMSCRIPTEN)
     endif()
 endif()
 
+# VST3 SDK (native Linux only)
+if(NOT EMSCRIPTEN)
+    set(VST3_SDK_PATH "/home/brody/projects/lib/vst3sdk")
+
+    target_include_directories(DAW PRIVATE
+        ${VST3_SDK_PATH}
+        ${VST3_SDK_PATH}/public.sdk
+        ${VST3_SDK_PATH}/pluginterfaces
+        ${VST3_SDK_PATH}/base/thread/source
+    )
+
+    set(VST3_SOURCES
+        ${VST3_SDK_PATH}/public.sdk/source/common/memorystream.cpp
+        ${VST3_SDK_PATH}/public.sdk/source/vst/hosting/plugprovider.cpp
+        ${VST3_SDK_PATH}/public.sdk/source/vst/hosting/hostclasses.cpp
+        ${VST3_SDK_PATH}/public.sdk/source/vst/hosting/module.cpp
+        ${VST3_SDK_PATH}/public.sdk/source/vst/hosting/module_linux.cpp
+        ${VST3_SDK_PATH}/public.sdk/source/vst/hosting/connectionproxy.cpp
+        ${VST3_SDK_PATH}/public.sdk/source/vst/hosting/pluginterfacesupport.cpp
+        ${VST3_SDK_PATH}/public.sdk/source/main/pluginfactory.cpp
+        ${VST3_SDK_PATH}/public.sdk/source/vst/vstinitiids.cpp
+        ${VST3_SDK_PATH}/public.sdk/source/common/commoniids.cpp
+        ${VST3_SDK_PATH}/public.sdk/source/common/commonstringconvert.cpp
+        ${VST3_SDK_PATH}/public.sdk/source/common/threadchecker_linux.cpp
+        ${VST3_SDK_PATH}/public.sdk/source/vst/utility/stringconvert.cpp
+        ${VST3_SDK_PATH}/public.sdk/source/vst/moduleinfo/moduleinfocreator.cpp
+        ${VST3_SDK_PATH}/public.sdk/source/vst/moduleinfo/moduleinfoparser.cpp
+        ${VST3_SDK_PATH}/base/source/fobject.cpp
+        ${VST3_SDK_PATH}/base/source/fstring.cpp
+        ${VST3_SDK_PATH}/base/source/fdebug.cpp
+        ${VST3_SDK_PATH}/base/source/baseiids.cpp
+        ${VST3_SDK_PATH}/base/source/timer.cpp
+        ${VST3_SDK_PATH}/base/thread/source/flock.cpp
+        ${VST3_SDK_PATH}/base/source/updatehandler.cpp
+        ${VST3_SDK_PATH}/pluginterfaces/base/coreiids.cpp
+        ${VST3_SDK_PATH}/pluginterfaces/base/funknown.cpp
+        ${VST3_SDK_PATH}/pluginterfaces/base/ustring.cpp
+        ${VST3_SDK_PATH}/pluginterfaces/base/conststringtable.cpp
+    )
+
+    target_sources(DAW PRIVATE ${VST3_SOURCES})
+
+    target_link_libraries(DAW PRIVATE dl X11)
+endif()
+

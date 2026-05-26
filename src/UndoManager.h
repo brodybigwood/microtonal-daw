@@ -45,7 +45,9 @@ enum ActionType {
     PanNodes = 25,
     ZoomNodes = 26,
     AddEQBand = 27,
-    RemoveEQBand = 28
+    RemoveEQBand = 28,
+    VstParameterChange = 29,
+    VstLoadPlugin = 30
 };
 
 
@@ -525,4 +527,25 @@ struct RemoveEQBandAction : ProjectAction {
     json bandState;
 
     RemoveEQBandAction(Project* p, std::vector<int> managerPath, int nodeID, int bandIndex, json bandState);
+};
+
+struct VstParameterChangeAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    uint32_t paramID = 0;
+    float oldValue = 0;
+    float newValue = 0;
+
+    VstParameterChangeAction(Project* p, std::vector<int> managerPath, int nodeID,
+                             uint32_t paramID, float oldValue, float newValue);
+};
+
+struct VstLoadPluginAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    json oldState;      // previous plugin state (path, bypass, compState, ctrlState)
+    json newState;      // new plugin state
+
+    VstLoadPluginAction(Project* p, std::vector<int> managerPath, int nodeID,
+                        json oldState, json newState);
 };
