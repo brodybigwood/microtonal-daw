@@ -17,10 +17,9 @@
 #include <string>
 #include <vector>
 #include <memory>
-#include <unordered_map>
+#include <map>
 #include <functional>
 #include <atomic>
-#include <mutex>
 
 // ---------------------------------------------------------------------------
 // PlugLib — caches a dlopen'd VST3 library and its factory state
@@ -40,6 +39,7 @@ public:
     const Steinberg::TUID& getControllerCID() const { return controllerCID; }
 
     const std::string& getPath() const { return path; }
+    const std::string& getName() const { return displayName; }
 
 private:
     void* handle = nullptr;
@@ -53,6 +53,7 @@ private:
     Steinberg::TUID controllerCID{};
 
     std::string path;
+    std::string displayName;
 
     bool fetchClassIDs();
 };
@@ -95,14 +96,14 @@ public:
     bool isLoaded(const std::string& path) const;
 
     // Per-node VstPlugin instance cache (one shared across GUI+audio copies).
-    VstPlugin* getOrCreatePlugin(int nodeID, const std::string& path);
-    void removePlugin(int nodeID);
+    std::shared_ptr<VstPlugin> getOrCreatePlugin(int nodeID, const std::vector<int>& managerPath, const std::string& path);
+    void removePlugin(int nodeID, const std::vector<int>& managerPath);
 
 private:
     std::unordered_map<std::string, std::unique_ptr<PlugLib>> loaded;
 
-    std::mutex pluginMutex;
-    std::unordered_map<int, std::unique_ptr<VstPlugin>> instances;
+    using CacheKey = std::pair<int, std::vector<int>>;
+    std::map<CacheKey, std::shared_ptr<VstPlugin>> instances;
 };
 
 // ---------------------------------------------------------------------------
@@ -131,8 +132,13 @@ class EditorHostFrame : public Steinberg::IPlugFrame,
                         public Steinberg::Vst::IComponentHandler,
                         public Steinberg::Linux::IRunLoop {
 public:
-    // Parameter edit callback: paramID, newValue
-    std::function<void(Steinberg::Vst::ParamID, Steinberg::Vst::ParamValue)> onParamEdit;
+    // Parameter edit callbacks
+    std::function<void(Steinberg::Vst::ParamID)> onBeginEdit;
+    std::function<void(Steinberg::Vst::ParamID, Steinberg::Vst::ParamValue, Steinberg::Vst::ParamValue)> onPerformEdit; // (paramID, oldValue, newValue)
+
+    // Called by VstNode to snapshot pre-edit parameter value
+    void capturePreEditValue(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue val);
+    std::unordered_map<Steinberg::Vst::ParamID, Steinberg::Vst::ParamValue> preEditValues;
 
     // IPlugFrame
     Steinberg::tresult PLUGIN_API resizeView(Steinberg::IPlugView* view, Steinberg::ViewRect* newSize) override;
@@ -186,9 +192,6 @@ public:
     ~VstPlugin();
 
     bool isValid() const { return valid; }
-
-    // Locked during processAudio; GUI holds this while destroying instances.
-    std::mutex processMutex;
 
     const std::string& getName() const { return name; }
     const std::string& getVendor() const { return vendor; }
@@ -313,12 +316,6 @@ public:
     void* getHostFrame() { return nullptr; }
     std::vector<std::vector<float>> inputBusData;
     std::vector<std::vector<float>> outputBusData;
-    void setParameterValue(int, float) {}
-    std::vector<uint8_t> getComponentState() const { return {}; }
-    std::vector<uint8_t> getControllerState() const { return {}; }
-    void setComponentState(const std::vector<uint8_t>&) {}
-    void setControllerState(const std::vector<uint8_t>&) {}
-    void* getHostFrame() { return nullptr; }
 };
 
 #endif // __EMSCRIPTEN__

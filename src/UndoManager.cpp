@@ -174,6 +174,11 @@ void UndoManager::newAction(ProjectAction* pa) {
 
             if (pa->skipInitialDo) {
                 for (auto& sp : siblingPaths) {
+                    std::cout << "[mux-replicate] type=" << static_cast<int>(pa->type)
+                              << " nodeID=" << j.value("nodeID", -1) << " siblingPath=[";
+                    for (size_t pi = 0; pi < sp.size(); ++pi)
+                        std::cout << (pi ? "," : "") << sp[pi];
+                    std::cout << "]" << std::endl;
                     json sj = j;
                     sj["managerPath"] = sp;
                     auto* s = ProjectAction::deSerialize(sj, proj);
@@ -267,6 +272,10 @@ const std::unordered_map<std::string, ActionType>& UndoManager::actionRegistry()
         {"move_element_position", MoveElementPosition},
         {"move_embedded_window", MoveEmbeddedWindow},
         {"resize_embedded_window", ResizeEmbeddedWindow},
+        {"add_eq_band", AddEQBand},
+        {"remove_eq_band", RemoveEQBand},
+        {"vst_param_change", VstParameterChange},
+        {"vst_load_plugin", VstLoadPlugin},
     };
     return reg;
 }
@@ -310,6 +319,18 @@ std::string UndoManager::actionSchema(const std::string& actionName) {
     }
     if (actionName == "move_element_position") {
         return R"({"managerPath":[int,...],"nodeID":int,"elementID":int,"positionID":int,"before":object,"after":object})";
+    }
+    if (actionName == "add_eq_band") {
+        return R"({"managerPath":[int,...],"nodeID":int,"bandIndex":int,"bandState":object})";
+    }
+    if (actionName == "remove_eq_band") {
+        return R"({"managerPath":[int,...],"nodeID":int,"bandIndex":int,"bandState":object})";
+    }
+    if (actionName == "vst_param_change") {
+        return R"({"managerPath":[int,...],"nodeID":int,"paramID":int,"oldValue":float,"newValue":float})";
+    }
+    if (actionName == "vst_load_plugin") {
+        return R"({"managerPath":[int,...],"nodeID":int,"oldState":object,"newState":object})";
     }
     throw std::runtime_error("actionSchema: unknown action name");
 }

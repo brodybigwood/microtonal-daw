@@ -20,6 +20,6 @@ public:
     bool handleCustomInput(SDL_Event&) override;
 
     json extraSerialize() override;
-    void extraDeSerialize(json) override;
+    void extraDeSerialize(const json&) override;
     void clearCustomTextures() override;
 };

@@ -142,7 +142,7 @@ json EnvelopeNode::extraSerialize() {
     return j;
 }
 
-void EnvelopeNode::extraDeSerialize(json j) {
+void EnvelopeNode::extraDeSerialize(const json& j) {
     attack.value = j.value("attack", attack.value);
     decay.value = j.value("decay", decay.value);
     sustain.value = j.value("sustain", sustain.value);

@@ -720,7 +720,7 @@ json ParametricEQNode::extraSerialize() {
     return j;
 }
 
-void ParametricEQNode::extraDeSerialize(json j) {
+void ParametricEQNode::extraDeSerialize(const json& j) {
     bands.clear();
     if (j.contains("bands")) {
         for (auto& bj : j["bands"]) {

@@ -301,7 +301,7 @@ json MultiplexerNode::extraSerialize() {
     return j;
 }
 
-void MultiplexerNode::extraDeSerialize(json j) {
+void MultiplexerNode::extraDeSerialize(const json& j) {
     for (auto* p : patchers)
         p->multiplexer = nullptr;
     patchers.clear();

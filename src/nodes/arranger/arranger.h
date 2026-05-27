@@ -24,7 +24,7 @@ class ArrangerNode : public Node {
         ElementManager* elements = nullptr;
 
         json extraSerialize() override;
-        void extraDeSerialize(json) override;
+        void extraDeSerialize(const json&) override;
 
     private:
         void rebuildState(json);

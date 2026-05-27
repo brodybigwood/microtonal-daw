@@ -250,7 +250,7 @@ json FilterNode::extraSerialize() {
     return j;
 }
 
-void FilterNode::extraDeSerialize(json j) {
+void FilterNode::extraDeSerialize(const json& j) {
     mode = static_cast<FilterMode>(j.value("mode", 0));
     slopeIndex = j.value("slopeIndex", static_cast<size_t>(0));
     if (slopeIndex >= slopeOptionsDb.size()) {

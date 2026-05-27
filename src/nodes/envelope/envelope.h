@@ -10,7 +10,7 @@ public:
     void process() override;
     void setup() override;
     json extraSerialize() override;
-    void extraDeSerialize(json) override;
+    void extraDeSerialize(const json&) override;
 
 private:
     enum class Stage {

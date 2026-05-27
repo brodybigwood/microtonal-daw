@@ -98,7 +98,7 @@ json ArrangerNode::extraSerialize() {
     return j;
 }
 
-void ArrangerNode::extraDeSerialize(json j) {
+void ArrangerNode::extraDeSerialize(const json& j) {
     std::cout << "[DBG_DESER] ArrangerNode::extraDeSerialize node=" << id << " begin" << std::endl;
     for (auto* c : outputs.connections) {
         delete c;

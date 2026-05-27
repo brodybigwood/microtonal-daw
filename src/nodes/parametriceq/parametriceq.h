@@ -65,7 +65,7 @@ public:
     void setup() override;
 
     json extraSerialize() override;
-    void extraDeSerialize(json) override;
+    void extraDeSerialize(const json&) override;
 
     void addBand(int insertAt = -1);
     void removeBand(int index);

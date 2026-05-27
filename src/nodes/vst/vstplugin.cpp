@@ -90,6 +90,7 @@ bool PlugLib::fetchClassIDs() {
 
         if (!foundComponent && std::strcmp(info.category, "Audio Module Class") == 0) {
             std::memcpy(componentCID, info.cid, sizeof(Steinberg::TUID));
+            displayName = info.name;
             VST3::Hosting::ClassInfo classInfo(info);
             plugProvider = std::make_unique<Steinberg::Vst::PlugProvider>(*factoryWrapper, classInfo, true);
             foundComponent = plugProvider->initialize();
@@ -181,17 +182,29 @@ Steinberg::tresult PLUGIN_API EditorHostFrame::resizeView(Steinberg::IPlugView*,
 }
 
 Steinberg::tresult PLUGIN_API EditorHostFrame::beginEdit(Steinberg::Vst::ParamID id) {
+    if (onBeginEdit) onBeginEdit(id);
     return Steinberg::kResultTrue;
 }
 
 Steinberg::tresult PLUGIN_API EditorHostFrame::performEdit(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue valueNormalized) {
     std::cout << "[EditorHostFrame] performEdit id=" << id << " value=" << valueNormalized << std::endl;
-    if (onParamEdit) onParamEdit(id, valueNormalized);
+    if (onPerformEdit) {
+        // Look up pre-edit value captured by VstNode in beginEdit callback
+        auto it = preEditValues.find(id);
+        Steinberg::Vst::ParamValue oldValue = (it != preEditValues.end()) ? it->second : valueNormalized;
+        onPerformEdit(id, oldValue, valueNormalized);
+        preEditValues.erase(id);
+    }
     return Steinberg::kResultTrue;
 }
 
 Steinberg::tresult PLUGIN_API EditorHostFrame::endEdit(Steinberg::Vst::ParamID id) {
+    preEditValues.erase(id);
     return Steinberg::kResultTrue;
+}
+
+void EditorHostFrame::capturePreEditValue(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue val) {
+    preEditValues[id] = val;
 }
 
 Steinberg::tresult PLUGIN_API EditorHostFrame::restartComponent(Steinberg::int32 flags) {
@@ -432,11 +445,11 @@ VstPlugin::VstPlugin(const std::string& pluginPath) : pluginPath(pluginPath) {
     if (!createComponent()) return;
     if (!createController()) return;
 
-    // Get factory info for display name
+    name = lib->getName();
+    vendor = lib->getName(); // temporary, overwritten below if factory info available
     Steinberg::PFactoryInfo factoryInfo;
     if (lib->getFactory()->getFactoryInfo(&factoryInfo) == Steinberg::kResultTrue) {
         vendor = factoryInfo.vendor;
-        name = vendor;
     }
 
     // Connect component↔controller — parameter changes flow this way
@@ -669,7 +682,6 @@ void VstPlugin::setup(int sampleRate, int bufferSize) {
 }
 
 void VstPlugin::processAudio(int bufferSize, Steinberg::Vst::IEventList* inputEvents) {
-    std::lock_guard<std::mutex> lock(processMutex);
     if (!valid || !audioProcessor || !processingActive || bypassed) return;
 
     // Zero output bus data
@@ -776,33 +788,23 @@ bool VstPlugin::tickEditor() {
 }
 
 // Per-node instance cache — a single VstPlugin shared across GUI + audio copies.
-VstPlugin* VstPluginCache::getOrCreatePlugin(int nodeID, const std::string& path) {
-    std::lock_guard<std::mutex> lock(pluginMutex);
-    auto it = instances.find(nodeID);
+std::shared_ptr<VstPlugin> VstPluginCache::getOrCreatePlugin(int nodeID, const std::vector<int>& managerPath, const std::string& path) {
+    CacheKey key{nodeID, managerPath};
+    auto it = instances.find(key);
     if (it != instances.end()) {
         if (it->second->getPluginPath() == path)
-            return it->second.get();
-        // Different path — lock, destroy old, create new
-        {
-            std::lock_guard<std::mutex> procLock(it->second->processMutex);
-        }
+            return it->second;
         instances.erase(it);
     }
     if (path.empty()) return nullptr;
-    auto p = std::make_unique<VstPlugin>(path);
+    auto p = std::make_shared<VstPlugin>(path);
     if (!p->isValid()) return nullptr;
-    VstPlugin* ptr = p.get();
-    instances[nodeID] = std::move(p);
-    return ptr;
+    instances[key] = p;
+    return p;
 }
 
-void VstPluginCache::removePlugin(int nodeID) {
-    std::lock_guard<std::mutex> lock(pluginMutex);
-    auto it = instances.find(nodeID);
-    if (it != instances.end()) {
-        std::lock_guard<std::mutex> procLock(it->second->processMutex);
-        instances.erase(it);
-    }
+void VstPluginCache::removePlugin(int nodeID, const std::vector<int>& managerPath) {
+    instances.erase({nodeID, managerPath});
 }
 
 // Static editor tick — call from main event loop

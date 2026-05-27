@@ -93,14 +93,22 @@ void NodeManager::deSerialize(json j) {
     id_pool.fromJSON(j["idManager"]);
     if (ne && j.contains("ewIdPool")) ne->ewIdPoolFromJSON(j["ewIdPool"]);
 
+    // Pass 1: create all nodes (skip extraDeSerialize so cross-node ID lookups work)
+    std::vector<std::pair<Node*, json>> pendingExtra;
     for (auto n : j["nodes"]) {
-        auto node = Node::deSerialize(n, this);
+        auto node = Node::deSerialize(n, this, true);
         if (node) {
             nodes.push_back(node);
             ids[node->id] = nodes.size() - 1;
             if (ne) node->setNE(ne);
-            std::cout << "[DBG_DESER]  node restored id=" << node->id << " type=" << static_cast<int>(node->nodeType) << std::endl;
+            if (n.contains("extra"))
+                pendingExtra.push_back({node, n["extra"]});
         }
+    }
+    // Pass 2: extraDeSerialize now that all nodes are in the ID map
+    for (auto& [node, extra] : pendingExtra) {
+        node->extraDeSerialize(extra);
+        node->makeConnectionRects();
     }
 
     outNode->deSerialize(j["outNode"]);

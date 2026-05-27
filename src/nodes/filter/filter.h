@@ -20,7 +20,7 @@ public:
     void setup() override;
 
     json extraSerialize() override;
-    void extraDeSerialize(json) override;
+    void extraDeSerialize(const json&) override;
 
 private:
     struct SvfStage {

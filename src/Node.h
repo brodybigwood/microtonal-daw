@@ -140,10 +140,10 @@ class Node : public EmbeddedWindow {
         void removeModSource(Parameter*, size_t);
 
         json serialize();
-        static Node* deSerialize(json, NodeManager*);
+        static Node* deSerialize(json, NodeManager*, bool skipExtra = false);
 
         virtual json extraSerialize() { json j; return j; }
-        virtual void extraDeSerialize(json j) {}
+        virtual void extraDeSerialize(const json& j) {}
 
         void clearTextures();
         void clearParamTextures();

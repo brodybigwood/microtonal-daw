@@ -18,16 +18,17 @@ public:
     void handleWindowInput(SDL_Event&) override;
 
     json extraSerialize() override;
-    void extraDeSerialize(json) override;
+    void extraDeSerialize(const json&) override;
 
     // Called by EditorHostFrame when plugin parameter changes
-    void onPluginParameterChange(int paramID, float newValue);
+    void onPluginParameterChange(int paramID, float oldValue, float newValue);
+    void wirePluginCallbacks();
 
     // Load a new plugin (with undo support)
     void loadPlugin(const std::string& path, bool createUndo = false);
     void unloadPlugin();
 
-    VstPlugin* plugin = nullptr; // owned by VstPluginCache, shared across copies
+    std::shared_ptr<VstPlugin> plugin; // shared across copies via VstPluginCache
 
     Knob bypass = Knob(0.0f, 80.0f, TEX_H * 0.3f, 24.0f, "assets/knobs/1.png",
                        -135.0f, 135.0f, "Bypass", SDL_Color{220, 220, 220, 255});

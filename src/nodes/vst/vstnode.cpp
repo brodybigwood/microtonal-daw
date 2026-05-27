@@ -4,15 +4,23 @@
 #include "UndoManager.h"
 #include "NodeProcessor.h"
 #include <algorithm>
+#include <cstdio>
 #include <iostream>
-#include <SDL3/SDL_dialog.h>
 #include <SDL3_ttf/SDL_ttf.h>
 
-// File dialog callback
-static void onFileSelected(void* userdata, const char* const* filelist, int filter) {
-    if (!filelist || !filelist[0]) return;
-    auto* node = static_cast<VstNode*>(userdata);
-    node->loadPlugin(filelist[0], true);
+// Synchronous file dialog on the calling (GUI) thread via zenity
+static std::string openFileDialog() {
+    FILE* fp = popen("zenity --file-selection --title='Load VST3 Plugin' 2>/dev/null", "r");
+    if (!fp) return "";
+    char buf[4096]{};
+    std::string result;
+    if (fgets(buf, sizeof(buf), fp)) {
+        result = buf;
+        while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
+            result.pop_back();
+    }
+    pclose(fp);
+    return result;
 }
 
 // ============================================================================
@@ -31,7 +39,7 @@ VstNode::VstNode(uint16_t id, NodeManager* nm)
 
 VstNode::~VstNode() {
     plugin = nullptr;
-    VstPluginCache::instance().removePlugin(static_cast<int>(id));
+    VstPluginCache::instance().removePlugin(static_cast<int>(id), nm ? nm->managerPath : std::vector<int>{});
 }
 
 // ============================================================================
@@ -161,18 +169,18 @@ void VstNode::process() {
             std::memset(audioOutConns[ci]->buffer, 0, bufferSize * sizeof(float));
     }
 
-    if (plugin && plugin->isValid()) {
+    auto localPlugin = plugin; // hold ref across process call
+    if (localPlugin && localPlugin->isValid()) {
         bool bypassed = bypass.value > 0.5f;
-        plugin->setBypassed(bypassed);
+        localPlugin->setBypassed(bypassed);
         if (!bypassed) {
             // Route audio inputs — interleave mono connections into bus interleaved buffers
             for (size_t ci = 0; ci < inChannelMap.size() && ci < audioInConns.size(); ++ci) {
                 auto* c = audioInConns[ci];
                 if (!c || !c->is_connected || !c->buffer) continue;
                 auto [bus, ch] = inChannelMap[ci];
-                if (bus >= static_cast<int>(plugin->inputBusData.size())) continue;
-                auto& data = plugin->inputBusData[bus];
-                (void)plugin->getAudioInputChannels(bus); // nch used only for validation
+                if (bus >= static_cast<int>(localPlugin->inputBusData.size())) continue;
+                auto& data = localPlugin->inputBusData[bus];
                 for (int s = 0; s < bufferSize; ++s)
                     data[ch * bufferSize + s] = c->buffer[s];
             }
@@ -241,7 +249,7 @@ void VstNode::process() {
                 }
             }
 
-            plugin->processAudio(bufferSize, &vstEvents);
+            localPlugin->processAudio(bufferSize, &vstEvents);
 
             // Route audio outputs — deinterleave bus interleaved buffers into mono connections
             static int routLog = 0;
@@ -250,9 +258,9 @@ void VstNode::process() {
                 auto* c = audioOutConns[ci];
                 if (!c || !c->buffer) continue;
                 auto [bus, ch] = outChannelMap[ci];
-                if (bus >= static_cast<int>(plugin->outputBusData.size())) continue;
-                auto& data = plugin->outputBusData[bus];
-                int nch = plugin->getAudioOutputChannels(bus);
+                if (bus >= static_cast<int>(localPlugin->outputBusData.size())) continue;
+                auto& data = localPlugin->outputBusData[bus];
+                int nch = localPlugin->getAudioOutputChannels(bus);
                 for (int s = 0; s < bufferSize; ++s)
                     c->buffer[s] = data[ch * bufferSize + s];
                 if (routLog == 1) {
@@ -262,24 +270,25 @@ void VstNode::process() {
                 }
             }
         } else {
-            // Bypass: passthrough first active input to first active output
-            if (!inChannelMap.empty() && !outChannelMap.empty()) {
-                auto* inC = audioInConns[0];
-                auto* outC = audioOutConns[0];
-                if (inC && inC->is_connected && inC->buffer && outC && outC->buffer)
-                    std::memcpy(outC->buffer, inC->buffer, bufferSize * sizeof(float));
-            }
-        }
-    } else {
-        // No plugin: passthrough first active input to first active output
-        if (!outChannelMap.empty()) {
-            auto* outC = audioOutConns[0];
-            if (outC && outC->buffer) {
-                if (!inChannelMap.empty() && audioInConns[0] && audioInConns[0]->is_connected)
-                    std::memcpy(outC->buffer, audioInConns[0]->buffer, bufferSize * sizeof(float));
+            // Bypass: passthrough all channels
+            for (size_t ci = 0; ci < outChannelMap.size() && ci < audioOutConns.size(); ++ci) {
+                auto* outC = audioOutConns[ci];
+                if (!outC || !outC->buffer) continue;
+                if (ci < audioInConns.size() && audioInConns[ci] && audioInConns[ci]->is_connected)
+                    std::memcpy(outC->buffer, audioInConns[ci]->buffer, bufferSize * sizeof(float));
                 else
                     std::memset(outC->buffer, 0, bufferSize * sizeof(float));
             }
+        }
+    } else {
+        // No plugin: passthrough all channels
+        for (size_t ci = 0; ci < outChannelMap.size() && ci < audioOutConns.size(); ++ci) {
+            auto* outC = audioOutConns[ci];
+            if (!outC || !outC->buffer) continue;
+            if (ci < audioInConns.size() && audioInConns[ci] && audioInConns[ci]->is_connected)
+                std::memcpy(outC->buffer, audioInConns[ci]->buffer, bufferSize * sizeof(float));
+            else
+                std::memset(outC->buffer, 0, bufferSize * sizeof(float));
         }
     }
 }
@@ -407,10 +416,8 @@ bool VstNode::handleCustomInput(SDL_Event& e) {
 
         if (SDL_PointInRectFloat(&pt, &loadBtnRect)) {
             if (!plugin || !plugin->isValid()) {
-                auto* processor = project ? project->processor : nullptr;
-                SDL_Window* win = processor ? processor->getHostWindow() : nullptr;
-                SDL_DialogFileFilter filter{"VST3 Plugins", "so"};
-                SDL_ShowOpenFileDialog(onFileSelected, this, win, &filter, 1, nullptr, false);
+                std::string path = openFileDialog();
+                if (!path.empty()) loadPlugin(path, true);
             }
             return true;
         }
@@ -454,16 +461,13 @@ void VstNode::loadPlugin(const std::string& path, bool createUndo) {
             if (ne != nullptr) plugin->hideEditor();
             plugin = nullptr;
         }
-        VstPluginCache::instance().removePlugin(static_cast<int>(id));
+        VstPluginCache::instance().removePlugin(static_cast<int>(id), nm ? nm->managerPath : std::vector<int>{});
 
         loadedPath = path;
-        plugin = VstPluginCache::instance().getOrCreatePlugin(static_cast<int>(id), path);
+        plugin = VstPluginCache::instance().getOrCreatePlugin(static_cast<int>(id), nm ? nm->managerPath : std::vector<int>{}, path);
         if (plugin && plugin->isValid()) {
             name = plugin->getName();
-            plugin->getHostFrame()->onParamEdit = [this](Steinberg::Vst::ParamID paramID,
-                                                           Steinberg::Vst::ParamValue value) {
-                onPluginParameterChange(paramID, static_cast<float>(value));
-            };
+            wirePluginCallbacks();
             rebuildConnections();
             // Don't call setup() on GUI — audio thread handles it to avoid races
         } else {
@@ -489,17 +493,17 @@ void VstNode::loadPlugin(const std::string& path, bool createUndo) {
         }
     } else {
         // --- Undo/audio thread: retrieve existing instance, don't destroy ---
+        std::cout << "[VstNode::loadPlugin] sync-path nodeID=" << static_cast<int>(id)
+                  << " path=" << path << " ne=" << (ne ? "gui" : "audio") << std::endl;
         loadedPath = path;
-        plugin = VstPluginCache::instance().getOrCreatePlugin(static_cast<int>(id), path);
+        plugin = VstPluginCache::instance().getOrCreatePlugin(static_cast<int>(id), nm ? nm->managerPath : std::vector<int>{}, path);
         if (plugin && plugin->isValid()) {
             name = plugin->getName();
+            wirePluginCallbacks();
             rebuildConnections();
-            if (ne == nullptr) {
-                // Audio thread: set up processing
-                int sr = sampleRate > 0 ? sampleRate : 48000;
-                int bs = bufferSize > 0 ? bufferSize : 1024;
-                plugin->setup(sr, bs);
-            }
+            int sr = sampleRate > 0 ? sampleRate : 48000;
+            int bs = bufferSize > 0 ? bufferSize : 1024;
+            plugin->setup(sr, bs);
         } else {
             name = "VST Plugin";
             plugin = nullptr;
@@ -513,19 +517,50 @@ void VstNode::unloadPlugin() {
         plugin->hideEditor();
         plugin = nullptr;
     }
-    VstPluginCache::instance().removePlugin(static_cast<int>(id));
+    VstPluginCache::instance().removePlugin(static_cast<int>(id), nm ? nm->managerPath : std::vector<int>{});
     loadedPath.clear();
     name = "VST Plugin";
     rebuildConnections();
 }
 
-void VstNode::onPluginParameterChange(int paramID, float newValue) {
+void VstNode::onPluginParameterChange(int paramID, float oldValue, float newValue) {
     if (!project || !project->um || !plugin) return;
     std::vector<int> mgrPath = nm ? nm->managerPath : std::vector<int>{};
-    float oldValue = plugin->getParameterValue(paramID);
+    // Coalesce rapid edits of the same parameter (drag)
+    if (project->um->current && project->um->current->type == VstParameterChange) {
+        auto* prev = static_cast<VstParameterChangeAction*>(project->um->current);
+        if (prev->nodeID == static_cast<int>(id)
+            && prev->paramID == static_cast<uint32_t>(paramID)
+            && prev->managerPath == mgrPath) {
+            prev->newValue = newValue;
+            ProjectAction* cap = prev;
+            project->um->enqueueAudioSync([cap]() { cap->doAction(); });
+            return;
+        }
+    }
     auto* pa = new VstParameterChangeAction(project, std::move(mgrPath), static_cast<int>(id),
                                              static_cast<uint32_t>(paramID), oldValue, newValue);
     project->um->newAction(pa);
+}
+
+void VstNode::wirePluginCallbacks() {
+    if (!plugin || !plugin->isValid()) return;
+    mpeRangeSet = false;
+    auto* frame = plugin->getHostFrame();
+    // onBeginEdit: snapshot the current parameter value BEFORE the edit
+    frame->onBeginEdit = [this](Steinberg::Vst::ParamID id) {
+        if (plugin) {
+            float cur = plugin->getParameterValue(static_cast<int>(id));
+            plugin->getHostFrame()->capturePreEditValue(id, static_cast<Steinberg::Vst::ParamValue>(cur));
+        }
+    };
+    // onPerformEdit: receives (paramID, oldValue, newValue)
+    frame->onPerformEdit = [this](Steinberg::Vst::ParamID paramID,
+                                    Steinberg::Vst::ParamValue oldVal,
+                                    Steinberg::Vst::ParamValue newVal) {
+        onPluginParameterChange(static_cast<int>(paramID),
+                                static_cast<float>(oldVal), static_cast<float>(newVal));
+    };
 }
 
 // ============================================================================
@@ -545,17 +580,14 @@ json VstNode::extraSerialize() {
     return j;
 }
 
-void VstNode::extraDeSerialize(json j) {
+void VstNode::extraDeSerialize(const json& j) {
     bypass.value = j.value("bypass", 0.0f);
     if (j.contains("pluginPath")) {
         loadedPath = j["pluginPath"].get<std::string>();
-        plugin = VstPluginCache::instance().getOrCreatePlugin(static_cast<int>(id), loadedPath);
+        plugin = VstPluginCache::instance().getOrCreatePlugin(static_cast<int>(id), nm ? nm->managerPath : std::vector<int>{}, loadedPath);
         if (plugin && plugin->isValid()) {
             name = plugin->getName();
-            plugin->getHostFrame()->onParamEdit = [this](Steinberg::Vst::ParamID paramID,
-                                                           Steinberg::Vst::ParamValue value) {
-                onPluginParameterChange(paramID, static_cast<float>(value));
-            };
+            wirePluginCallbacks();
             if (j.contains("compState")) {
                 auto& arr = j["compState"];
                 std::vector<uint8_t> data(arr.begin(), arr.end());
@@ -574,6 +606,8 @@ void VstNode::extraDeSerialize(json j) {
             plugin = nullptr;
             rebuildConnections();
         }
+    } else {
+        loadedPath.clear();
     }
 }
 
@@ -612,6 +646,8 @@ void VstNode::freeMpeChannel(int noteId) {
 }
 
 void VstNode::sendMpePitchBendRange(void* eventList) {
+    if (mpeRangeSet) return;
+    mpeRangeSet = true;
     auto& out = *static_cast<HostEventList*>(eventList);
 
     auto rpn = [&](int ch, int cc, int val) {
@@ -630,10 +666,10 @@ void VstNode::sendMpePitchBendRange(void* eventList) {
     rpn(0, 6, 15);  rpn(0, 38, 0);
     rpn(0, 101, 127); rpn(0, 100, 127);
 
-    // RPN 0 (Pitch Bend Sensitivity) = ±2 semitones on all channels
+    // RPN 0 (Pitch Bend Sensitivity) = ±48 semitones to match calculation
     for (int ch = 0; ch <= 15; ++ch) {
         rpn(ch, 101, 0); rpn(ch, 100, 0);
-        rpn(ch, 6, 2);   rpn(ch, 38, 0);
+        rpn(ch, 6, 48);  rpn(ch, 38, 0);
         rpn(ch, 101, 127); rpn(ch, 100, 127);
     }
 }

@@ -397,7 +397,7 @@ static void deserializeModulators(Parameter* p, const json& arr, Node* n) {
     }
 }
 
-Node* Node::deSerialize(json j, NodeManager* nm) {
+Node* Node::deSerialize(json j, NodeManager* nm, bool skipExtra) {
     int id = j["id"];
 
     Node* n = byType(j["nodeType"].get<NodeType>(), id, nm);
@@ -409,7 +409,8 @@ Node* Node::deSerialize(json j, NodeManager* nm) {
     n->move(j["x"], j["y"]);
     if (j.contains("ewid")) n->EmbeddedWindow::id = j["ewid"];
 
-    n->extraDeSerialize(j["extra"]);
+    if (!skipExtra)
+        n->extraDeSerialize(j["extra"]);
 
     if (j.contains("params")) {
         const auto& jp = j["params"];

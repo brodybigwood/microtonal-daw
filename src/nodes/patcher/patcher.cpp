@@ -417,7 +417,7 @@ json PatcherNode::extraSerialize() {
     return j;
 }
 
-void PatcherNode::extraDeSerialize(json j) {
+void PatcherNode::extraDeSerialize(const json& j) {
     if (!j.contains("mainManager")) return;
     std::cout << "[DBG_DESER] PatcherNode::extraDeSerialize node=" << id << " begin" << std::endl;
     mainManager->deSerialize(j["mainManager"]);
