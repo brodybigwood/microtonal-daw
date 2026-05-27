@@ -54,9 +54,10 @@ private:
 
     // MPE channel allocator: maps noteId -> channel (1-15)
     std::unordered_map<int, int> noteChannels;
+    std::unordered_map<int, int> evictedNoteChannels; // noteId -> channel for evicted notes
     int nextMpeChannel = 1;
     bool mpeRangeSet = false;
-    int allocMpeChannel(int noteId);
+    int allocMpeChannel(int noteId, void* eventList); // HostEventList*
     void freeMpeChannel(int noteId);
     void sendMpePitchBendRange(void* eventList); // HostEventList*
 };

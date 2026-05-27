@@ -195,14 +195,14 @@ void VstNode::process() {
                     float cents = frac * 100.0f;
 
                     if (ev.type == noteOn) {
-                        int mpeCh = allocMpeChannel(ev.id);
+                        int mpeCh = allocMpeChannel(ev.id, &vstEvents);
 
                         // Send pitch bend on valid MPE channel BEFORE note-on
                         if (mpeCh > 0) {
                             Steinberg::int32 pb14 = 8192;
                             if (frac != 0.0f) {
-                                // pitch bend range: ±48 semitones (matches Vital's default)
-                                pb14 = 8192 + static_cast<Steinberg::int32>(frac / 48.0f * 8192.0f);
+                                // pitch bend range: ±2 semitones (MPE standard)
+                                pb14 = 8192 + static_cast<Steinberg::int32>(frac / 2.0f * 8192.0f);
                                 pb14 = std::max(0, std::min(16383, static_cast<int>(pb14)));
                             }
                             Steinberg::Vst::Event pb{};
@@ -231,8 +231,18 @@ void VstNode::process() {
                     } else if (ev.type == noteOff) {
                         int mpeCh = -1;
                         auto it = noteChannels.find(ev.id);
-                        if (it != noteChannels.end()) mpeCh = it->second;
-                        freeMpeChannel(ev.id);
+                        if (it != noteChannels.end()) {
+                            mpeCh = it->second;
+                            freeMpeChannel(ev.id);
+                        } else {
+                            // Check if this note was evicted — route note-off to its original channel
+                            auto eit = evictedNoteChannels.find(ev.id);
+                            if (eit != evictedNoteChannels.end()) {
+                                mpeCh = eit->second;
+                                evictedNoteChannels.erase(eit);
+                            }
+                        }
+                        if (mpeCh < 0) continue; // note already turned off by eviction or never existed
 
                         Steinberg::Vst::Event e{};
                         e.busIndex = 0;
@@ -615,7 +625,7 @@ void VstNode::extraDeSerialize(const json& j) {
 // MPE channel allocator
 // ============================================================================
 
-int VstNode::allocMpeChannel(int noteId) {
+int VstNode::allocMpeChannel(int noteId, void* eventList) {
     auto it = noteChannels.find(noteId);
     if (it != noteChannels.end()) return it->second;
     bool used[16] = {};
@@ -628,10 +638,27 @@ int VstNode::allocMpeChannel(int noteId) {
         if (++ch > 15) ch = 1;
     }
     if (!found) {
-        // Evict oldest entry
+        // All 15 MPE channels in use — evict the first entry and send note-off
         if (!noteChannels.empty()) {
-            ch = noteChannels.begin()->second;
-            noteChannels.erase(noteChannels.begin());
+            auto oldest = noteChannels.begin();
+            ch = oldest->second;
+            int evictedId = oldest->first;
+            noteChannels.erase(oldest);
+            evictedNoteChannels[evictedId] = ch;
+
+            // Send note-off for the evicted note so it doesn't ring forever
+            auto& out = *static_cast<HostEventList*>(eventList);
+            Steinberg::Vst::Event off{};
+            off.busIndex = 0;
+            off.sampleOffset = 0;
+            off.flags = 0;
+            off.type = Steinberg::Vst::Event::kNoteOffEvent;
+            off.noteOff.channel = static_cast<Steinberg::int16>(ch);
+            off.noteOff.pitch = 0;
+            off.noteOff.tuning = 0;
+            off.noteOff.velocity = 0.0f;
+            off.noteOff.noteId = evictedId;
+            out.addEvent(off);
         } else {
             ch = 1;
         }
@@ -666,10 +693,10 @@ void VstNode::sendMpePitchBendRange(void* eventList) {
     rpn(0, 6, 15);  rpn(0, 38, 0);
     rpn(0, 101, 127); rpn(0, 100, 127);
 
-    // RPN 0 (Pitch Bend Sensitivity) = ±48 semitones to match calculation
+    // RPN 0 (Pitch Bend Sensitivity) = ±2 semitones (MPE standard)
     for (int ch = 0; ch <= 15; ++ch) {
         rpn(ch, 101, 0); rpn(ch, 100, 0);
-        rpn(ch, 6, 48);  rpn(ch, 38, 0);
+        rpn(ch, 6, 2);   rpn(ch, 38, 0);
         rpn(ch, 101, 127); rpn(ch, 100, 127);
     }
 }
