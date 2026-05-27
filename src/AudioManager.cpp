@@ -234,6 +234,14 @@ bool AudioManager::startRtAudio() {
     options.flags |= RTAUDIO_JACK_DONT_CONNECT;
     std::cout << "[Audio:RtAudio] JACK outCh=" << outputChannels << " inCh=" << inputChannels << std::endl;
 
+    // Adopt JACK server rate before opening stream
+    {
+        jack_client_t* jc = jack_client_open("DAW-probe", JackNoStartServer, nullptr);
+        if (jc) {
+            sampleRate = jack_get_sample_rate(jc);
+            jack_client_close(jc);
+        }
+    }
     if (tryOpenStream(rtaudio, this, &outputParams, &inputParams, sampleRate, &bufferSize, &options,
                       &inputChannels, &hasInput_))
         goto streamReady;
