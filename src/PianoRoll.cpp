@@ -450,9 +450,6 @@ void PianoRoll::stampNoteTuning(const std::shared_ptr<Note>& note) {
     note->tuningAnchorHarmonic = harmonicAnchorNumber;
     note->tuningEdoAnchorMidi = edoAnchorMidi;
     note->tuningEdoStep = edoStep;
-    const size_t li = closestLineIndexForMidi(note->num);
-    if (li != SIZE_MAX && li < lineStructural.size() && tuningMode == TuningMode::Harmonic)
-        note->harmonicNumber = std::max(1, lineStructural[li]);
     note->syncNumFromPitchIntegerPairs();
 }
 
@@ -1156,7 +1153,9 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                                 rmb = false;
                             } catch (...) {
                             }
-                        });
+                        },
+                            [this]() { rmb = false; }
+                        );
                     } else {
                         deleteElement();
                     }
