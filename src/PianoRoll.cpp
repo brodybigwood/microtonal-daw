@@ -669,6 +669,7 @@ PianoRoll::~PianoRoll() {
     for(int i = 0; i<4; i++) {
         SDL_DestroyTexture(layers[i]);
     }
+    for (auto* t : lineLabelTextures) SDL_DestroyTexture(t);
 }
 
 static void pianoRollSyncCoords(PianoRoll* pr) {
@@ -789,7 +790,6 @@ void PianoRoll::RenderDestinations(SDL_Renderer* renderer) {
     }
 
     auto target = SDL_GetRenderTarget(renderer);
-    SDL_Texture* KeyTexture;
     SDL_SetRenderTarget(renderer, PianoTexture);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0); // Transparent
     SDL_RenderClear(renderer);
@@ -805,30 +805,27 @@ void PianoRoll::RenderDestinations(SDL_Renderer* renderer) {
 
     SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
 
-    for (size_t i = 0; i < pitchLines.size(); ++i) {
-        float y = getY(pitchLines[i].midi);
-        std::string noteNumStrTemp = (i < lineLabels.size()) ? lineLabels[i] : std::to_string(pitchLines[i].midi);
-        const char* noteNumStr = noteNumStrTemp.c_str();
-        
-        SDL_Surface* textSurface = TTF_RenderText_Solid(fonts.mainFont, noteNumStr, noteNumStrTemp.size(), textColor);  // textColor is an SDL_Color
-
-        KeyTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
-
-        SDL_FRect textRect = {
-            0,
-            y - textSurface->h/2,
-            static_cast<float>(textSurface->w),
-            static_cast<float>(textSurface->h)
-        };
-
-        SDL_RenderLine(renderer, textSurface->w, y, leftMargin, y);
-        SDL_DestroySurface(textSurface);
-
-        SDL_RenderTexture(renderer, KeyTexture, NULL, &textRect);
-
+    if (lineLabelTextures.size() != pitchLines.size()) {
+        for (auto* t : lineLabelTextures) SDL_DestroyTexture(t);
+        lineLabelTextures.clear();
+        lineLabelTextures.reserve(pitchLines.size());
+        for (size_t i = 0; i < pitchLines.size(); ++i) {
+            const std::string& label = (i < lineLabels.size()) ? lineLabels[i] : std::to_string(pitchLines[i].midi);
+            SDL_Surface* surf = TTF_RenderText_Solid(fonts.mainFont, label.c_str(), label.size(), textColor);
+            lineLabelTextures.push_back(SDL_CreateTextureFromSurface(renderer, surf));
+            SDL_DestroySurface(surf);
+        }
     }
 
-    SDL_DestroyTexture(KeyTexture);
+    for (size_t i = 0; i < pitchLines.size(); ++i) {
+        float y = getY(pitchLines[i].midi);
+        SDL_Texture* tex = lineLabelTextures[i];
+        float tw, th;
+        SDL_GetTextureSize(tex, &tw, &th);
+        SDL_FRect textRect = {0, y - th/2, tw, th};
+        SDL_RenderLine(renderer, tw, y, leftMargin, y);
+        SDL_RenderTexture(renderer, tex, NULL, &textRect);
+    }
     
     SDL_SetRenderTarget(renderer, target);
 
@@ -981,6 +978,8 @@ void PianoRoll::initWindow(SDL_Renderer* renderer) {
     SDL_DestroyTexture(PianoTexture);
     SDL_DestroyTexture(KeyTexture);
     SDL_DestroyTexture(NotesTexture);
+    for (auto* t : lineLabelTextures) SDL_DestroyTexture(t);
+    lineLabelTextures.clear();
 
     backgroundTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
     gridTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
