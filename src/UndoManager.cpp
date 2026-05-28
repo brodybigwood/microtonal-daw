@@ -1,6 +1,8 @@
 #include "UndoManager.h"
 #include "nodes/parametriceq/parametriceq.h"
 #include "nodes/vst/vstnode.h"
+#include "nodes/arranger/arranger.h"
+#include "SongRoll.h"
 #include "GridElement.h"
 #include <cmath>
 #include "SDL_Events.h"
@@ -276,6 +278,7 @@ const std::unordered_map<std::string, ActionType>& UndoManager::actionRegistry()
         {"remove_eq_band", RemoveEQBand},
         {"vst_param_change", VstParameterChange},
         {"vst_load_plugin", VstLoadPlugin},
+        {"toggle_piano_roll_window", TogglePianoRollWindow},
     };
     return reg;
 }
@@ -331,6 +334,9 @@ std::string UndoManager::actionSchema(const std::string& actionName) {
     }
     if (actionName == "vst_load_plugin") {
         return R"({"managerPath":[int,...],"nodeID":int,"oldState":object,"newState":object})";
+    }
+    if (actionName == "toggle_piano_roll_window") {
+        return R"({"managerPath":[int,...],"arrangerNodeID":int,"regionID":int,"ewID":int,"x":float,"y":float,"w":float,"h":float,"open":bool})";
     }
     throw std::runtime_error("actionSchema: unknown action name");
 }
@@ -618,6 +624,13 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
         case VstLoadPlugin: {
             pa = new VstLoadPluginAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(),
                 j.at("oldState"), j.at("newState"));
+            break;
+        }
+        case TogglePianoRollWindow: {
+            pa = new TogglePianoRollWindowAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("arrangerNodeID").get<int>(), j.at("regionID").get<int>(), j.at("ewID").get<int>(),
+                j.at("x").get<float>(), j.at("y").get<float>(), j.at("w").get<float>(), j.at("h").get<float>(),
+                j.value("zOrder", 0), j.at("open").get<bool>());
             break;
         }
         default:
@@ -928,6 +941,20 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["nodeID"] = vl->nodeID;
             j["oldState"] = vl->oldState;
             j["newState"] = vl->newState;
+            break;
+        }
+        case TogglePianoRollWindow: {
+            auto* tw = static_cast<TogglePianoRollWindowAction*>(pa);
+            j["managerPath"] = tw->managerPath;
+            j["arrangerNodeID"] = tw->arrangerNodeID;
+            j["regionID"] = tw->regionID;
+            j["ewID"] = tw->ewID;
+            j["x"] = tw->x;
+            j["y"] = tw->y;
+            j["w"] = tw->w;
+            j["h"] = tw->h;
+            j["zOrder"] = tw->zOrder;
+            j["open"] = tw->open;
             break;
         }
         default:
@@ -2470,5 +2497,57 @@ VstLoadPluginAction::VstLoadPluginAction(Project* p, std::vector<int> managerPat
                 vst->plugin->setControllerState(data);
             }
         }
+    };
+}
+
+static void openPianoRollWindow(Project* p, const std::vector<int>& managerPath, int arrangerNodeID, int regionID,
+                                int ewID, float x, float y, float w, float h, int zOrder) {
+    NodeManager& nm = requireManager(p, managerPath);
+    if (!nm.ne) return; // audio thread: GUI-only action
+    ArrangerNode* arr = undoResolveArrangerNode(p, managerPath, arrangerNodeID);
+    if (!arr) return;
+    arr->ensureSongRoll();
+    if (!arr->sl) return;
+    ElementManager* em = arr->elements;
+    if (!em) return;
+    auto* region = dynamic_cast<Region*>(em->getElement(static_cast<uint16_t>(regionID)));
+    if (!region) return;
+    arr->sl->createPianoRoll(region, false, ewID);
+    if (arr->sl->pianoRolls.empty()) return;
+    PianoRoll* pr = arr->sl->pianoRolls.back();
+    if (pr) { pr->applyGeometry(x, y, w, h); pr->zOrder = zOrder; }
+}
+
+static void closePianoRollWindow(Project* p, const std::vector<int>& managerPath, int arrangerNodeID, int regionID) {
+    ArrangerNode* arr = undoResolveArrangerNode(p, managerPath, arrangerNodeID);
+    if (!arr || !arr->sl) return;
+    arr->sl->clearPianoRoll(regionID, false);
+}
+
+TogglePianoRollWindowAction::TogglePianoRollWindowAction(Project* p, std::vector<int> managerPath, int arrangerNodeID, int regionID,
+                                                         int ewID, float x, float y, float w, float h, int zOrder, bool open) :
+        ProjectAction(p, TogglePianoRollWindow),
+        managerPath(std::move(managerPath)),
+        arrangerNodeID(arrangerNodeID),
+        regionID(regionID),
+        ewID(ewID),
+        x(x), y(y), w(w), h(h),
+        zOrder(zOrder),
+        open(open) {
+    skipInitialDo = true;
+    name = open ? "Open Piano Roll" : "Close Piano Roll";
+    doAction = [this]() {
+        if (this->open)
+            openPianoRollWindow(this->p, this->managerPath, this->arrangerNodeID, this->regionID,
+                                this->ewID, this->x, this->y, this->w, this->h, this->zOrder);
+        else
+            closePianoRollWindow(this->p, this->managerPath, this->arrangerNodeID, this->regionID);
+    };
+    undoAction = [this]() {
+        if (this->open)
+            closePianoRollWindow(this->p, this->managerPath, this->arrangerNodeID, this->regionID);
+        else
+            openPianoRollWindow(this->p, this->managerPath, this->arrangerNodeID, this->regionID,
+                                this->ewID, this->x, this->y, this->w, this->h, this->zOrder);
     };
 }

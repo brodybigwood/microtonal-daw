@@ -49,7 +49,10 @@ void NodeManager::resetNE() {
 json NodeManager::serialize() {
     json j;
     j["idManager"] = id_pool.toJSON();
-    if (ne) j["ewIdPool"] = ne->ewIdPoolToJSON();
+    if (ne) {
+        j["ewIdPool"] = ne->ewIdPoolToJSON();
+        j["openPianoRolls"] = ne->serializeOpenPianoRolls(managerPath);
+    }
 
     j["nodes"] = json::array();
     j["connections"] = json::array();
@@ -110,6 +113,9 @@ void NodeManager::deSerialize(json j) {
         node->extraDeSerialize(extra);
         node->makeConnectionRects();
     }
+
+    if (ne && j.contains("openPianoRolls"))
+        ne->restoreOpenPianoRolls(j["openPianoRolls"]);
 
     outNode->deSerialize(j["outNode"]);
     if (j.contains("inNode")) inNode->deSerialize(j["inNode"]);

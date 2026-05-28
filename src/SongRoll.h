@@ -82,7 +82,8 @@ class SongRoll : public GridView{
         void dropFile(SDL_DropEvent&) override;        
         
         std::vector<PianoRoll*> pianoRolls;
-        void createPianoRoll(Region*);
+        void createPianoRoll(Region*, bool createUndo = true, int forceEwID = -1);
+        void clearPianoRoll(int regionId, bool createUndo = true);
 
     private:
         int timelineHoverElementId = -1;
@@ -92,8 +93,6 @@ class SongRoll : public GridView{
 
         void validateTimelinePointers();
 
-    public:
-        void clearPianoRoll(int regionId);
 };
 
 #endif

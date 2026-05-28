@@ -114,6 +114,8 @@ class NodeEditor {
             auto it = embeddedWindowById_.find(id);
             return it != embeddedWindowById_.end() ? it->second : nullptr;
         }
+        json serializeOpenPianoRolls(const std::vector<int>& managerPath) const;
+        void restoreOpenPianoRolls(const json& arr);
 
     private:
 

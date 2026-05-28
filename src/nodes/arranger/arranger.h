@@ -28,6 +28,8 @@ class ArrangerNode : public Node {
 
     private:
         void rebuildState(json);
-        void ensureSongRoll();
         void syncSongRollContext();
+
+    public:
+        void ensureSongRoll();
 };

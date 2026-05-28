@@ -3,6 +3,8 @@
 #include "Node.h"
 #include "ContextMenu.h"
 #include "WindowHandler.h"
+#include "PianoRoll.h"
+#include "nodes/arranger/arranger.h"
 #ifndef __EMSCRIPTEN__
 #include "nodes/vst/vstplugin.h"
 #endif
@@ -585,7 +587,11 @@ EmbeddedWindow* NodeEditor::addEmbeddedWindow(std::unique_ptr<EmbeddedWindow> w)
     if (!w) return nullptr;
     int maxZ = 0;
     for (auto& ew : embeddedWindows_)
-        if (ew->zOrder > maxZ) maxZ = ew->zOrder;
+        if (ew->id != 0 && ew->id != 1 && ew->zOrder > maxZ) maxZ = ew->zOrder;
+    if (w->id == 0 || w->id == 1) {
+        for (auto& ew : embeddedWindows_)
+            if (ew->zOrder > maxZ) maxZ = ew->zOrder;
+    }
     w->zOrder = maxZ + 1;
     registerEmbeddedWindow(w.get());
     EmbeddedWindow* ptr = w.get();
@@ -718,7 +724,11 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
             target->captured_ = true;
             focusedEmbeddedWindow_ = target;
             int maxZ = 0;
-            for (auto& ewin : embeddedWindows_) if (ewin->zOrder > maxZ) maxZ = ewin->zOrder;
+            bool targetIsSystem = (target->id == 0 || target->id == 1);
+            for (auto& ewin : embeddedWindows_) {
+                if (!targetIsSystem && (ewin->id == 0 || ewin->id == 1)) continue;
+                if (ewin->zOrder > maxZ) maxZ = ewin->zOrder;
+            }
             if (nm) {
                 for (auto n : nm->getNodes()) if (n->zOrder > maxZ) maxZ = n->zOrder;
                 if (nm->inNode && nm->inNode->zOrder > maxZ) maxZ = nm->inNode->zOrder;
@@ -858,4 +868,47 @@ void NodeEditor::render(SDL_Renderer* renderer, SDL_FRect* surfaceRect) {
     renderEmbeddedWindows(renderer);
 
     SDL_SetRenderClipRect(renderer, nullptr);
+}
+
+json NodeEditor::serializeOpenPianoRolls(const std::vector<int>& managerPath) const {
+    json arr = json::array();
+    for (auto& ew : embeddedWindows_) {
+        auto* pr = dynamic_cast<PianoRoll*>(ew.get());
+        if (!pr || !pr->region) continue;
+        auto* arrNode = dynamic_cast<ArrangerNode*>(pr->region->parentNode);
+        if (!arrNode) continue;
+        json j;
+        j["managerPath"] = managerPath;
+        j["arrangerNodeID"] = static_cast<int>(arrNode->id);
+        j["regionID"] = static_cast<int>(pr->region->id);
+        j["ewID"] = ew->id;
+        j["x"] = ew->x;
+        j["y"] = ew->y;
+        j["w"] = ew->w;
+        j["h"] = ew->h;
+        j["zOrder"] = ew->zOrder;
+        arr.push_back(j);
+    }
+    return arr;
+}
+
+void NodeEditor::restoreOpenPianoRolls(const json& arr) {
+    for (auto& j : arr) {
+        const auto& mgrPath = j["managerPath"].get<std::vector<int>>();
+        int arrangerNodeID = j["arrangerNodeID"].get<int>();
+        int regionID = j["regionID"].get<int>();
+        if (!nm || nm->managerPath != mgrPath) continue; // skip if not this manager
+        auto* node = nm->getNode(static_cast<uint16_t>(arrangerNodeID));
+        auto* arrNode = dynamic_cast<ArrangerNode*>(node);
+        if (!arrNode) continue;
+        arrNode->ensureSongRoll();
+        if (!arrNode->sl) continue;
+        auto* region = dynamic_cast<Region*>(arrNode->elements->getElement(static_cast<uint16_t>(regionID)));
+        if (!region) continue;
+        arrNode->sl->createPianoRoll(region, false, j.value("ewID", -1));
+        if (arrNode->sl->pianoRolls.empty()) continue;
+        auto* pr = arrNode->sl->pianoRolls.back();
+        pr->applyGeometry(j["x"], j["y"], j["w"], j["h"]);
+        pr->zOrder = j.value("zOrder", pr->zOrder);
+    }
 }

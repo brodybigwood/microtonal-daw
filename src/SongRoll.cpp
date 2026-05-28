@@ -33,12 +33,21 @@ fract nearestBeatFromScreenX(float screenX, float scrollX, float leftMargin, dou
 }
 } // namespace
 
-void SongRoll::clearPianoRoll(int regionId) {
+void SongRoll::clearPianoRoll(int regionId, bool createUndo) {
     for (auto it = pianoRolls.begin(); it != pianoRolls.end(); ) {
         if ((*it)->region && static_cast<int>((*it)->region->id) == regionId) {
+            PianoRoll* pr = *it;
+            if (createUndo && project && project->um && parentNode) {
+                EmbeddedWindow* ew = pr;
+                auto* action = new TogglePianoRollWindowAction(project,
+                    parentNode->nm->managerPath, static_cast<int>(parentNode->id),
+                    static_cast<int>(regionId), ew->id,
+                    ew->x, ew->y, ew->w, ew->h, ew->zOrder, false);
+                project->um->newAction(action);
+            }
             if (project && project->processor) {
                 auto* editor = project->processor->getEditor();
-                if (editor) editor->removeEmbeddedWindow(*it);
+                if (editor) editor->removeEmbeddedWindow(pr);
             }
             it = pianoRolls.erase(it);
         } else {
@@ -629,12 +638,22 @@ void SongRoll::generateTextures(SDL_Renderer* renderer) {
     playHeadTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
 }
 
-void SongRoll::createPianoRoll(Region* region) {
+void SongRoll::createPianoRoll(Region* region, bool createUndo, int forceEwID) {
     auto pr = std::make_unique<PianoRoll>(region, this);
-    pianoRolls.push_back(pr.get());
+    if (forceEwID >= 0) pr->id = forceEwID;
+    PianoRoll* ptr = pr.get();
+    pianoRolls.push_back(ptr);
     if (project && project->processor) {
         auto* editor = project->processor->getEditor();
         if (editor)
             editor->addEmbeddedWindow(std::move(pr));
+    }
+    if (createUndo && project && project->um && parentNode) {
+        EmbeddedWindow* ew = ptr;
+        auto* action = new TogglePianoRollWindowAction(project,
+            parentNode->nm->managerPath, static_cast<int>(parentNode->id),
+            static_cast<int>(region->id), ew->id,
+            ew->x, ew->y, ew->w, ew->h, ew->zOrder, true);
+        project->um->newAction(action);
     }
 }

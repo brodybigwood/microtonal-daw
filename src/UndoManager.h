@@ -47,7 +47,8 @@ enum ActionType {
     AddEQBand = 27,
     RemoveEQBand = 28,
     VstParameterChange = 29,
-    VstLoadPlugin = 30
+    VstLoadPlugin = 30,
+    TogglePianoRollWindow = 31
 };
 
 
@@ -414,6 +415,18 @@ struct ResizeEmbeddedWindowAction : ProjectAction {
     ResizeEmbeddedWindowAction(Project* p, std::vector<int> managerPath, int ewID,
         float fromX, float fromY, float fromW, float fromH,
         float toX, float toY, float toW, float toH);
+};
+
+struct TogglePianoRollWindowAction : ProjectAction {
+    std::vector<int> managerPath;
+    int arrangerNodeID;
+    int regionID;
+    int ewID;
+    float x, y, w, h;
+    int zOrder;
+    bool open;
+    TogglePianoRollWindowAction(Project* p, std::vector<int> managerPath, int arrangerNodeID, int regionID,
+                                int ewID, float x, float y, float w, float h, int zOrder, bool open);
 };
 
 struct ToggleNodeVisibleAction : ProjectAction {
