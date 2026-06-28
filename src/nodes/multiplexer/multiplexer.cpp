@@ -62,7 +62,8 @@ void MultiplexerNode::syncPortsFromPatchers() {
         c->output_node = -1;
         c->output_connection = -1;
         c->bufferSize = bufferSize;
-        c->buffer = bufferSize > 0 ? new float[bufferSize]() : nullptr;
+        c->buffer = bufferSize > 0 ? new float[static_cast<size_t>(bufferSize) * static_cast<size_t>(c->numChannels)]() : nullptr;
+        c->allocChannels = c->numChannels;
         c->events = nullptr;
         outputs.connections.insert(outputs.connections.begin() + cur, c);
         ++cur;

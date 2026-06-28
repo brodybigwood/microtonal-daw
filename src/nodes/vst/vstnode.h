@@ -36,12 +36,9 @@ public:
 private:
     void rebuildConnections();
 
-    // Audio channel connections — one per mono channel
+    // Audio bus connections — one per bus, each with numChannels = bus channel count
     std::vector<Connection*> audioInConns;
     std::vector<Connection*> audioOutConns;
-    // Maps each connection to (busIndex, channelIndex)
-    std::vector<std::pair<int,int>> inChannelMap;
-    std::vector<std::pair<int,int>> outChannelMap;
     // Event bus connections
     Connection* midiIn = nullptr;
     Connection* midiOut = nullptr;

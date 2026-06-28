@@ -65,9 +65,10 @@ void PatcherNode::insertWaveformOutputAt(int index) {
     c->output_connection = -1;
     c->events = nullptr;
     c->bufferSize = bufferSize;
+    c->allocChannels = c->numChannels;
     if (bufferSize > 0) {
-        c->buffer = new float[bufferSize];
-        std::memset(c->buffer, 0, static_cast<size_t>(bufferSize) * sizeof(float));
+        c->buffer = new float[static_cast<size_t>(bufferSize) * static_cast<size_t>(c->numChannels)];
+        std::memset(c->buffer, 0, static_cast<size_t>(bufferSize) * static_cast<size_t>(c->numChannels) * sizeof(float));
     } else {
         c->buffer = nullptr;
     }
@@ -284,8 +285,8 @@ void PatcherNode::process() {
     int sr = sampleRate;
     if (bs <= 0) return;
 
-    int innerInWfCh = static_cast<int>(mainManager->inNode->countWaveformOutputs());
-    int innerWfCh = static_cast<int>(mainManager->outNode->countWaveformInputs());
+    int innerInWfCh = static_cast<int>(mainManager->inNode->totalWaveformChannels());
+    int innerWfCh = static_cast<int>(mainManager->outNode->totalWaveformChannels());
     if (innerInWfCh < 0) innerInWfCh = 0;
     if (innerWfCh < 1) innerWfCh = 1;
 
@@ -293,14 +294,16 @@ void PatcherNode::process() {
     int inIndex = 0;
     for (auto* c : inputs.connections) {
         if (!c || c->type != DataType::Waveform) continue;
-        if (inIndex >= innerInWfCh) break;
-        float* dst = inputPatchBuffer.data() + static_cast<size_t>(inIndex) * static_cast<size_t>(bs);
-        if (c->is_connected && c->buffer) {
-            std::memcpy(dst, c->buffer, static_cast<size_t>(bs) * sizeof(float));
-        } else {
-            std::memset(dst, 0, static_cast<size_t>(bs) * sizeof(float));
+        for (int ch = 0; ch < c->numChannels; ++ch) {
+            if (inIndex >= innerInWfCh) break;
+            float* dst = inputPatchBuffer.data() + static_cast<size_t>(inIndex) * static_cast<size_t>(bs);
+            if (c->is_connected && c->buffer) {
+                std::memcpy(dst, c->channel(ch), static_cast<size_t>(bs) * sizeof(float));
+            } else {
+                std::memset(dst, 0, static_cast<size_t>(bs) * sizeof(float));
+            }
+            ++inIndex;
         }
-        ++inIndex;
     }
     mainManager->inNode->input = innerInWfCh > 0 ? inputPatchBuffer.data() : nullptr;
     mainManager->inNode->numChannels = innerInWfCh;
@@ -334,13 +337,15 @@ void PatcherNode::process() {
     for (auto* out : outputs.connections) {
         if (!out || out->type != DataType::Waveform) continue;
         if (!out->buffer) continue;
-        if (wfIndex < innerWfCh) {
-            std::memcpy(out->buffer, patchBuffer.data() + static_cast<size_t>(wfIndex) * static_cast<size_t>(bs),
-                        static_cast<size_t>(bs) * sizeof(float));
-        } else {
-            std::memset(out->buffer, 0, static_cast<size_t>(bs) * sizeof(float));
+        for (int ch = 0; ch < out->numChannels; ++ch) {
+            if (wfIndex < innerWfCh) {
+                std::memcpy(out->channel(ch), patchBuffer.data() + static_cast<size_t>(wfIndex) * static_cast<size_t>(bs),
+                            static_cast<size_t>(bs) * sizeof(float));
+            } else {
+                std::memset(out->channel(ch), 0, static_cast<size_t>(bs) * sizeof(float));
+            }
+            ++wfIndex;
         }
-        ++wfIndex;
     }
 
     // Event outputs: copy from inner OutputNode event inputs (same index order).

@@ -24,7 +24,8 @@ public:
     std::string filepath = "";
     float* buffer = nullptr;
     size_t num_samples = 0;
-    int sampleRate = -1;
+    int sampleRate = 0;
+    int numChannels = 1;
 
     void setFile(std::string);
 };

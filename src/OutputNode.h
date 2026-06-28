@@ -28,6 +28,7 @@ class OutputNode : public Node {
         void placeDefaultByWindowSize(float windowW, float windowH);
 
         size_t countWaveformInputs() const;
+        size_t totalWaveformChannels() const;
 
         void addWaveformInputChannel();
         void removeLastWaveformInputChannel();

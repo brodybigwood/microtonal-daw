@@ -21,11 +21,15 @@ void GainNode::process() {
     if (!out || !out->buffer) return;
 
     if (!in || !in->is_connected || !in->buffer) {
-        std::memset(out->buffer, 0, static_cast<size_t>(bufferSize) * sizeof(float));
+        std::memset(out->buffer, 0, static_cast<size_t>(bufferSize) * static_cast<size_t>(out->numChannels) * sizeof(float));
         return;
     }
 
-    for (int i = 0; i < bufferSize; ++i) {
-        out->buffer[i] = in->buffer[i] * gain[i] * 2.0f;
+    for (int ch = 0; ch < out->numChannels; ++ch) {
+        float* inCh = in->channel(ch);
+        float* outCh = out->channel(ch);
+        for (int i = 0; i < bufferSize; ++i) {
+            outCh[i] = inCh[i] * gain[i] * 2.0f;
+        }
     }
 }

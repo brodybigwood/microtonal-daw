@@ -66,6 +66,7 @@ json NodeManager::serialize() {
             json s;
 
             s["dataType"] = c->type;
+            s["numChannels"] = c->numChannels;
 
             s["srcNodeID"] = c->input_node;
             s["srcConID"] = c->input_connection;

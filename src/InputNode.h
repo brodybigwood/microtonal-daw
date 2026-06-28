@@ -27,6 +27,7 @@ class InputNode : public Node {
         void placeDefaultByWindowSize(float windowW, float windowH);
 
         size_t countWaveformOutputs() const;
+        size_t totalWaveformChannels() const;
 
         /** Graph edits (IoPortChannelAction / NodeManager). */
         void addWaveformOutputChannel();

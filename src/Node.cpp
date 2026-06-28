@@ -888,14 +888,17 @@ void connectionSet::addConnection(Connection* c) {
         c->output_node = nodeID;
         c->events = nullptr;
         c->buffer = nullptr;
+        c->allocChannels = c->numChannels;
     } else {
         if (c->type == DataType::Events) {
             c->events = new std::vector<Event>;
         } else {
-            c->buffer = new float[bufferSize];
+            int nch = c->numChannels;
+            c->buffer = new float[static_cast<size_t>(bufferSize) * static_cast<size_t>(nch)];
             c->bufferSize = bufferSize;
+            c->allocChannels = nch;
             if (bufferSize > 0) {
-                std::memset(c->buffer, 0, static_cast<size_t>(bufferSize) * sizeof(float));
+                std::memset(c->buffer, 0, static_cast<size_t>(bufferSize) * static_cast<size_t>(nch) * sizeof(float));
             }
         }
     }
@@ -1216,10 +1219,13 @@ void Node::update(int bufferSize, int sampleRate) {
             if(c->buffer != nullptr) {
                 delete[] c->buffer;
             }
-            c->buffer = new float[bufferSize];
+            int nch = c->numChannels;
+            size_t allocSize = static_cast<size_t>(bufferSize) * static_cast<size_t>(nch);
+            c->buffer = new float[allocSize];
             c->bufferSize = bufferSize;
+            c->allocChannels = nch;
             if (bufferSize > 0) {
-                std::memset(c->buffer, 0, static_cast<size_t>(bufferSize) * sizeof(float));
+                std::memset(c->buffer, 0, allocSize * sizeof(float));
             }
         }
     }
@@ -1268,6 +1274,8 @@ void Node::relinkInputs() {
         if (c->type == DataType::Waveform) {
             c->buffer = ci->buffer;
             c->bufferSize = bufferSize;
+            c->numChannels = ci->numChannels;
+            c->allocChannels = ci->allocChannels;
         } else {
             c->events = ci->events;
         }

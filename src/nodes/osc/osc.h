@@ -13,7 +13,7 @@ struct Voice {
     float phase = 0;
     int wait_on = 0;
     int wait_off = -1;
-    void process(float* out0, float* out1, int& bufferSize, int& sampleRate, Parameter& vol); // stereo out
+    void process(float* out, int numChannels, int& bufferSize, int& sampleRate, Parameter& vol);
 };
 
 
@@ -23,9 +23,8 @@ class OscillatorNode : public Node {
 
 
         Connection* inputN;
-        Connection* output0;
-        Connection* output1;
-        
+        Connection* output;
+
         void process() override;
 
         void setup() override;

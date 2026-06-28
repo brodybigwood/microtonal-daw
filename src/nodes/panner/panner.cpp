@@ -7,15 +7,11 @@ PannerNode::PannerNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::Pa
     in->dir = Direction::input;
     inputs.addConnection(in);
 
-    l = new Connection;
-    l->type = DataType::Waveform;
-    l->dir = Direction::output;
-    outputs.addConnection(l);
-
-    r = new Connection;
-    r->type = DataType::Waveform;
-    r->dir = Direction::output;
-    outputs.addConnection(r);
+    out = new Connection;
+    out->type = DataType::Waveform;
+    out->dir = Direction::output;
+    out->numChannels = 2;
+    outputs.addConnection(out);
 
     params.push_back(&pan);
 }
@@ -23,34 +19,25 @@ PannerNode::PannerNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::Pa
 void PannerNode::process() {
     if (!in->is_connected) {
         for (Connection* c : outputs.connections) {
-            float* outBuffer = c->buffer;
-            if (!outBuffer) continue;
-            std::memset(outBuffer, 0, bufferSize * sizeof(float));
-        }
-        return;
-    }
-    float* inBuffer = in->buffer;
-    if (!inBuffer) {
-        for (Connection* c : outputs.connections) {
-            float* outBuffer = c->buffer;
-            if (!outBuffer) continue;
-            std::memset(outBuffer, 0, bufferSize * sizeof(float));
+            for (int ch = 0; ch < c->numChannels; ++ch) {
+                float* buf = c->channel(ch);
+                if (!buf) continue;
+                std::memset(buf, 0, bufferSize * sizeof(float));
+            }
         }
         return;
     }
 
-    auto getBufferOut = [this] (Connection* c) {
-        return c->buffer;
-    };
+    if (out->numChannels < 2) return;
 
-    auto outBufferL = getBufferOut(l);
-    auto outBufferR = getBufferOut(r);
-    if (!outBufferL || !outBufferR) return;
+    float* inBuf = in->buffer;
+    float* outL = out->channel(0);
+    float* outR = out->channel(1);
 
     for (size_t i = 0; i < bufferSize; ++i) {
         auto angle = pan[i] * M_PI_2;
-        outBufferL[i] = inBuffer[i] * cosf(angle);
-        outBufferR[i] = inBuffer[i] * sinf(angle);
+        outL[i] = inBuf[i] * cosf(angle);
+        outR[i] = inBuf[i] * sinf(angle);
     }
 }
 

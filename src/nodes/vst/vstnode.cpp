@@ -57,66 +57,53 @@ void VstNode::rebuildConnections() {
         numEventOut = plugin->getNumEventOutputs();
     }
 
-    // Count total channels needed
-    int totalInChannels = 0, totalOutChannels = 0;
-    for (int b = 0; b < numAudioInBuses; ++b)
-        totalInChannels += plugin->getAudioInputChannels(b);
-    for (int b = 0; b < numAudioOutBuses; ++b)
-        totalOutChannels += plugin->getAudioOutputChannels(b);
-
-    auto chLabel = [](const char* prefix, int bus, int ch, int totalCh) {
-        if (totalCh <= 2)
-            return std::string(prefix) + (ch == 0 ? " L" : " R");
-        return std::string(prefix) + " " + std::to_string(bus + 1) + ":" + std::to_string(ch + 1);
-    };
-
-    // Grow or reuse audio input connections
-    while (static_cast<int>(audioInConns.size()) < totalInChannels) {
+    // Grow or reuse audio input bus connections (set numChannels before addConnection)
+    for (int b = static_cast<int>(audioInConns.size()); b < numAudioInBuses; ++b) {
+        int channels = plugin->getAudioInputChannels(b);
         auto* c = new Connection;
         c->type = DataType::Waveform;
         c->dir = Direction::input;
+        c->numChannels = channels;
         inputs.addConnection(c);
         audioInConns.push_back(c);
-        inChannelMap.push_back({0, 0});
     }
 
-    // Grow or reuse audio output connections
-    while (static_cast<int>(audioOutConns.size()) < totalOutChannels) {
+    // Grow or reuse audio output bus connections (set numChannels before addConnection)
+    for (int b = static_cast<int>(audioOutConns.size()); b < numAudioOutBuses; ++b) {
+        int channels = plugin->getAudioOutputChannels(b);
         auto* c = new Connection;
         c->type = DataType::Waveform;
         c->dir = Direction::output;
+        c->numChannels = channels;
         outputs.addConnection(c);
         audioOutConns.push_back(c);
-        outChannelMap.push_back({0, 0});
     }
 
-    // Update channel maps and labels
-    int idx = 0;
-    inChannelMap.clear();
-    for (int b = 0; b < numAudioInBuses; ++b) {
+    // Update labels for existing connections
+    for (int b = 0; b < numAudioInBuses && b < static_cast<int>(audioInConns.size()); ++b) {
         int channels = plugin->getAudioInputChannels(b);
-        for (int ch = 0; ch < channels && idx < static_cast<int>(audioInConns.size()); ++ch) {
-            inChannelMap.push_back({b, ch});
-            audioInConns[idx]->label = chLabel("In", b, ch, channels);
-            ++idx;
-        }
+        auto* ic = audioInConns[b];
+        ic->numChannels = channels;
+        ic->allocChannels = channels;
+        ic->label = "In " + std::to_string(b + 1) + " (" + std::to_string(channels) + "ch)";
     }
-    // Hide unused input connections
-    for (int i = idx; i < static_cast<int>(audioInConns.size()); ++i)
-        audioInConns[i]->label = "";
+    for (int b = numAudioInBuses; b < static_cast<int>(audioInConns.size()); ++b)
+        audioInConns[b]->label = "";
 
-    idx = 0;
-    outChannelMap.clear();
-    for (int b = 0; b < numAudioOutBuses; ++b) {
+    for (int b = 0; b < numAudioOutBuses && b < static_cast<int>(audioOutConns.size()); ++b) {
         int channels = plugin->getAudioOutputChannels(b);
-        for (int ch = 0; ch < channels && idx < static_cast<int>(audioOutConns.size()); ++ch) {
-            outChannelMap.push_back({b, ch});
-            audioOutConns[idx]->label = chLabel("Out", b, ch, channels);
-            ++idx;
+        auto* c = audioOutConns[b];
+        if (c->numChannels != channels && c->buffer && bufferSize > 0) {
+            delete[] c->buffer;
+            c->buffer = new float[static_cast<size_t>(bufferSize) * static_cast<size_t>(channels)];
+            std::memset(c->buffer, 0, static_cast<size_t>(bufferSize) * static_cast<size_t>(channels) * sizeof(float));
+            c->allocChannels = channels;
         }
+        c->numChannels = channels;
+        c->label = "Out " + std::to_string(b + 1) + " (" + std::to_string(channels) + "ch)";
     }
-    for (int i = idx; i < static_cast<int>(audioOutConns.size()); ++i)
-        audioOutConns[i]->label = "";
+    for (int b = numAudioOutBuses; b < static_cast<int>(audioOutConns.size()); ++b)
+        audioOutConns[b]->label = "";
 
     // MIDI connections: create once, reuse
     if (numEventIn > 0 && !midiIn) {
@@ -150,39 +137,31 @@ void VstNode::setup() {
 // ============================================================================
 
 void VstNode::process() {
-    static int callCount = 0;
     bool hasOut = false;
-    for (size_t ci = 0; ci < outChannelMap.size(); ++ci) {
-        if (ci < audioOutConns.size() && audioOutConns[ci] && audioOutConns[ci]->buffer)
-            hasOut = true;
+    for (auto* c : audioOutConns) {
+        if (c && c->buffer) { hasOut = true; break; }
     }
-    if (!hasOut) {
-        if (callCount == 0) std::cout << "[VstNode::process] no outputs, map=" << outChannelMap.size()
-            << " conns=" << audioOutConns.size() << " plugin=" << (plugin ? "yes" : "no") << std::endl;
-        callCount++;
-        return;
+    if (!hasOut) return;
+
+    // Silence active output buses
+    for (auto* c : audioOutConns) {
+        if (c && c->buffer)
+            std::memset(c->buffer, 0, static_cast<size_t>(bufferSize) * static_cast<size_t>(c->numChannels) * sizeof(float));
     }
 
-    // Silence active outputs
-    for (size_t ci = 0; ci < outChannelMap.size(); ++ci) {
-        if (ci < audioOutConns.size() && audioOutConns[ci] && audioOutConns[ci]->buffer)
-            std::memset(audioOutConns[ci]->buffer, 0, bufferSize * sizeof(float));
-    }
-
-    auto localPlugin = plugin; // hold ref across process call
+    auto localPlugin = plugin;
     if (localPlugin && localPlugin->isValid()) {
         bool bypassed = bypass.value > 0.5f;
         localPlugin->setBypassed(bypassed);
         if (!bypassed) {
-            // Route audio inputs — interleave mono connections into bus interleaved buffers
-            for (size_t ci = 0; ci < inChannelMap.size() && ci < audioInConns.size(); ++ci) {
-                auto* c = audioInConns[ci];
+            // Route audio input buses directly (both sides already planar)
+            for (size_t bi = 0; bi < audioInConns.size(); ++bi) {
+                auto* c = audioInConns[bi];
                 if (!c || !c->is_connected || !c->buffer) continue;
-                auto [bus, ch] = inChannelMap[ci];
-                if (bus >= static_cast<int>(localPlugin->inputBusData.size())) continue;
-                auto& data = localPlugin->inputBusData[bus];
-                for (int s = 0; s < bufferSize; ++s)
-                    data[ch * bufferSize + s] = c->buffer[s];
+                if (bi >= localPlugin->inputBusData.size()) continue;
+                auto& data = localPlugin->inputBusData[bi];
+                size_t busSamples = static_cast<size_t>(bufferSize) * static_cast<size_t>(c->numChannels);
+                std::memcpy(data.data(), c->buffer, busSamples * sizeof(float));
             }
 
             // Convert DAW Events to VST3 EventList with MPE
@@ -192,16 +171,12 @@ void VstNode::process() {
                 for (auto& ev : *midiIn->events) {
                     Steinberg::int16 base = static_cast<Steinberg::int16>(std::floor(ev.num));
                     float frac = ev.num - base;
-                    float cents = frac * 100.0f;
 
                     if (ev.type == noteOn) {
                         int mpeCh = allocMpeChannel(ev.id, &vstEvents);
-
-                        // Send pitch bend on valid MPE channel BEFORE note-on
                         if (mpeCh > 0) {
                             Steinberg::int32 pb14 = 8192;
                             if (frac != 0.0f) {
-                                // pitch bend range: ±2 semitones (MPE standard)
                                 pb14 = 8192 + static_cast<Steinberg::int32>(frac / 2.0f * 8192.0f);
                                 pb14 = std::max(0, std::min(16383, static_cast<int>(pb14)));
                             }
@@ -235,14 +210,13 @@ void VstNode::process() {
                             mpeCh = it->second;
                             freeMpeChannel(ev.id);
                         } else {
-                            // Check if this note was evicted — route note-off to its original channel
                             auto eit = evictedNoteChannels.find(ev.id);
                             if (eit != evictedNoteChannels.end()) {
                                 mpeCh = eit->second;
                                 evictedNoteChannels.erase(eit);
                             }
                         }
-                        if (mpeCh < 0) continue; // note already turned off by eviction or never existed
+                        if (mpeCh < 0) continue;
 
                         Steinberg::Vst::Event e{};
                         e.busIndex = 0;
@@ -261,44 +235,37 @@ void VstNode::process() {
 
             localPlugin->processAudio(bufferSize, &vstEvents);
 
-            // Route audio outputs — deinterleave bus interleaved buffers into mono connections
-            static int routLog = 0;
-            routLog++;
-            for (size_t ci = 0; ci < outChannelMap.size() && ci < audioOutConns.size(); ++ci) {
-                auto* c = audioOutConns[ci];
+            // Route audio output buses directly (both sides planar)
+            for (size_t bi = 0; bi < audioOutConns.size(); ++bi) {
+                auto* c = audioOutConns[bi];
                 if (!c || !c->buffer) continue;
-                auto [bus, ch] = outChannelMap[ci];
-                if (bus >= static_cast<int>(localPlugin->outputBusData.size())) continue;
-                auto& data = localPlugin->outputBusData[bus];
-                int nch = localPlugin->getAudioOutputChannels(bus);
-                for (int s = 0; s < bufferSize; ++s)
-                    c->buffer[s] = data[ch * bufferSize + s];
-                if (routLog == 1) {
-                    float peak = 0;
-                    for (int s = 0; s < bufferSize; ++s) peak = std::max(peak, std::abs(c->buffer[s]));
-                    std::cout << "[VstNode] output ch=" << ch << " peak=" << peak << " nch=" << nch << std::endl;
-                }
+                if (bi >= localPlugin->outputBusData.size()) continue;
+                auto& data = localPlugin->outputBusData[bi];
+                size_t busSamples = static_cast<size_t>(bufferSize) * static_cast<size_t>(c->numChannels);
+                std::memcpy(c->buffer, data.data(), busSamples * sizeof(float));
             }
         } else {
-            // Bypass: passthrough all channels
-            for (size_t ci = 0; ci < outChannelMap.size() && ci < audioOutConns.size(); ++ci) {
-                auto* outC = audioOutConns[ci];
+            // Bypass: passthrough per bus
+            for (size_t bi = 0; bi < audioOutConns.size(); ++bi) {
+                auto* outC = audioOutConns[bi];
                 if (!outC || !outC->buffer) continue;
-                if (ci < audioInConns.size() && audioInConns[ci] && audioInConns[ci]->is_connected)
-                    std::memcpy(outC->buffer, audioInConns[ci]->buffer, bufferSize * sizeof(float));
+                size_t busSamples = static_cast<size_t>(bufferSize) * static_cast<size_t>(outC->numChannels);
+                if (bi < audioInConns.size() && audioInConns[bi] && audioInConns[bi]->is_connected)
+                    std::memcpy(outC->buffer, audioInConns[bi]->buffer, busSamples * sizeof(float));
                 else
-                    std::memset(outC->buffer, 0, bufferSize * sizeof(float));
+                    std::memset(outC->buffer, 0, busSamples * sizeof(float));
             }
         }
     } else {
-        // No plugin: passthrough all channels
-        for (size_t ci = 0; ci < outChannelMap.size() && ci < audioOutConns.size(); ++ci) {
-            auto* outC = audioOutConns[ci];
+        // No plugin: passthrough per bus
+        for (size_t bi = 0; bi < audioOutConns.size(); ++bi) {
+            auto* outC = audioOutConns[bi];
             if (!outC || !outC->buffer) continue;
-            if (ci < audioInConns.size() && audioInConns[ci] && audioInConns[ci]->is_connected)
-                std::memcpy(outC->buffer, audioInConns[ci]->buffer, bufferSize * sizeof(float));
+            size_t busSamples = static_cast<size_t>(bufferSize) * static_cast<size_t>(outC->numChannels);
+            if (bi < audioInConns.size() && audioInConns[bi] && audioInConns[bi]->is_connected)
+                std::memcpy(outC->buffer, audioInConns[bi]->buffer, busSamples * sizeof(float));
             else
-                std::memset(outC->buffer, 0, bufferSize * sizeof(float));
+                std::memset(outC->buffer, 0, busSamples * sizeof(float));
         }
     }
 }

@@ -100,6 +100,14 @@ size_t OutputNode::countWaveformInputs() const {
     return n;
 }
 
+size_t OutputNode::totalWaveformChannels() const {
+    size_t n = 0;
+    for (auto* c : inputs.connections) {
+        if (c && c->type == DataType::Waveform) n += static_cast<size_t>(c->numChannels);
+    }
+    return n;
+}
+
 size_t OutputNode::countLocalEventInputs() const {
     size_t n = 0;
     for (auto* c : inputs.connections) {
@@ -160,15 +168,16 @@ void OutputNode::process() {
     int wi = 0;
     for (auto* c : inputs.connections) {
         if (!c || c->type != DataType::Waveform) continue;
-        if (wi >= numChannels) return;
+        for (int ch = 0; ch < c->numChannels; ++ch) {
+            if (wi >= numChannels) return;
 
-        if (!c->is_connected) {
-            std::memset(output + wi * bufferSize, 0, bufferSize * sizeof(float));
-        } else {
-            float* inputBuffer = c->buffer;
-            std::memcpy(output + wi * bufferSize, inputBuffer, bufferSize * sizeof(float));
+            if (!c->is_connected) {
+                std::memset(output + wi * bufferSize, 0, bufferSize * sizeof(float));
+            } else {
+                std::memcpy(output + wi * bufferSize, c->channel(ch), bufferSize * sizeof(float));
+            }
+            ++wi;
         }
-        ++wi;
     }
 }
 
@@ -256,11 +265,13 @@ json OutputNode::serialize() {
     j["x"] = dstRect.x;
     j["y"] = dstRect.y;
     j["zoomRatio"] = zoomRatio;
-    j["channels"] = countWaveformInputs();
+    j["channels"] = totalWaveformChannels();
     j["inputConnectionIDs"] = json::array();
+    j["inputConnectionChannels"] = json::array();
     for (auto* c : inputs.connections) {
         if (c->type == DataType::Waveform) {
             j["inputConnectionIDs"].push_back(c->id);
+            j["inputConnectionChannels"].push_back(c->numChannels);
         }
     }
 
@@ -278,14 +289,26 @@ void OutputNode::deSerialize(json j) {
     const int defaultCh = nm->managerPath.empty() ? 2 : 0;
     int targetChannels = j.value("channels", defaultCh);
     std::vector<uint16_t> targetIDs;
+    std::vector<int> targetChPerID;
     if (j.contains("inputConnectionIDs")) {
         for (auto id : j["inputConnectionIDs"]) {
             targetIDs.push_back(id.get<uint16_t>());
         }
     }
-    if (targetIDs.size() != static_cast<size_t>(targetChannels)) {
-        targetIDs.clear();
-        for (int i = 0; i < targetChannels; ++i) targetIDs.push_back(static_cast<uint16_t>(i));
+    if (j.contains("inputConnectionChannels")) {
+        for (auto ch : j["inputConnectionChannels"]) {
+            targetChPerID.push_back(ch.get<int>());
+        }
+    }
+    if (targetChPerID.size() != targetIDs.size()) {
+        targetChPerID.clear();
+        for (size_t i = 0; i < targetIDs.size(); ++i) targetChPerID.push_back(1);
+    }
+    if (targetIDs.empty()) {
+        for (int i = 0; i < targetChannels; ++i) {
+            targetIDs.push_back(static_cast<uint16_t>(i));
+            targetChPerID.push_back(1);
+        }
     }
 
     for (auto* c : inputs.connections) {
@@ -295,10 +318,10 @@ void OutputNode::deSerialize(json j) {
     inputs.ids.clear();
     inputs.id_pool = idManager();
 
-    for (auto id : targetIDs) {
+    for (size_t i = 0; i < targetIDs.size(); ++i) {
         auto* c = new Connection;
         c->nm = inputs.nm;
-        c->id = id;
+        c->id = targetIDs[i];
         c->type = DataType::Waveform;
         c->dir = Direction::input;
         c->is_connected = false;
@@ -308,6 +331,7 @@ void OutputNode::deSerialize(json j) {
         c->input_node = -1;
         c->events = nullptr;
         c->buffer = nullptr;
+        c->numChannels = targetChPerID[i];
         inputs.connections.push_back(c);
         inputs.ids[c->id] = inputs.connections.size() - 1;
         inputs.id_pool.reserveID(c->id);
@@ -452,9 +476,10 @@ void OutputNode::insertWaveformInputChannelAt(size_t index, uint16_t id) {
     c->events = nullptr;
     c->buffer = nullptr;
     c->bufferSize = bufferSize;
+    c->allocChannels = c->numChannels;
     if (bufferSize > 0) {
-        c->buffer = new float[static_cast<size_t>(bufferSize)];
-        std::memset(c->buffer, 0, static_cast<size_t>(bufferSize) * sizeof(float));
+        c->buffer = new float[static_cast<size_t>(bufferSize) * static_cast<size_t>(c->numChannels)];
+        std::memset(c->buffer, 0, static_cast<size_t>(bufferSize) * static_cast<size_t>(c->numChannels) * sizeof(float));
     }
     inputs.connections.insert(inputs.connections.begin() + static_cast<ptrdiff_t>(index), c);
     inputs.ids.clear();

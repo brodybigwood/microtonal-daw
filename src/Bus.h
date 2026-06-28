@@ -53,6 +53,10 @@ struct Connection{
     std::vector<Event>* events;
     float* buffer;
     int bufferSize = 0;
+    int numChannels = 1;
+    int allocChannels = 1; // actual channels the buffer was allocated for
+
+    float* channel(int ch) { return buffer + ch * bufferSize; }
 
     int output_node = -1;
     int output_connection = -1;

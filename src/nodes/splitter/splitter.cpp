@@ -13,19 +13,25 @@ SplitterNode::SplitterNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType
 void SplitterNode::process() {
     if (!in->is_connected) {
         for (Connection* c : outputs.connections) {
-            float* outBuffer = c->buffer;
-            std::memset(outBuffer, 0, bufferSize * sizeof(float));
+            std::memset(c->buffer, 0, static_cast<size_t>(bufferSize) * static_cast<size_t>(c->numChannels) * sizeof(float));
         }
         return;
     }
-    float* inBuffer = in->buffer;
 
+    int maxCh = in->allocChannels > 0 ? in->allocChannels : in->numChannels;
+    int chIdx = 0;
     for (Connection* c : outputs.connections) {
         if (c->is_connected) {
-            float* outBuffer = c->buffer;
-            for (size_t i = 0; i < bufferSize; ++i) {
-                outBuffer[i] = inBuffer[i];
+            for (int ch = 0; ch < c->numChannels; ++ch) {
+                if (chIdx < maxCh) {
+                    std::memcpy(c->channel(ch), in->channel(chIdx), static_cast<size_t>(bufferSize) * sizeof(float));
+                } else {
+                    std::memset(c->channel(ch), 0, static_cast<size_t>(bufferSize) * sizeof(float));
+                }
+                ++chIdx;
             }
+        } else {
+            chIdx += c->numChannels;
         }
     }
 }

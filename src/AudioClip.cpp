@@ -23,6 +23,8 @@ json AudioClip::toJSON() {
     j["positions"] = GridElement::toJSON();
 
     j["filepath"] = filepath;
+    j["sampleRate"] = sampleRate;
+    j["numChannels"] = numChannels;
 
     return j;
 }
@@ -34,6 +36,8 @@ void AudioClip::fromJSON(json j) {
     GridElement::fromJSON(j["positions"]);
 
     setFile(j["filepath"]);
+    sampleRate = j.value("sampleRate", 0);
+    numChannels = j.value("numChannels", 1);
 }
 
 void AudioClip::draw(SDL_Renderer* renderer, float pixelsPerSecond, int h) {
@@ -49,9 +53,9 @@ void AudioClip::draw(SDL_Renderer* renderer, float pixelsPerSecond, int h) {
     }
 
     if (!texture) {
-        
-        int sampleRate = 48000;
-        float samplesPerPixel = sampleRate / pixelsPerSecond;
+
+        int sr = sampleRate > 0 ? sampleRate : 48000;
+        float samplesPerPixel = sr / pixelsPerSecond;
 
         texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, 16384, h);
 
@@ -98,12 +102,22 @@ void AudioClip::setFile(std::string file_path) {
 
     if (buffer) delete[] buffer;
 
-    buffer = new float[sfinfo.frames];
-    float* interleaved = new float[sfinfo.frames * sfinfo.channels * sizeof(float)];
-    num_samples = sf_readf_float(sndfile, interleaved, sfinfo.frames);
+    sampleRate = sfinfo.samplerate;
+    numChannels = sfinfo.channels;
+    num_samples = static_cast<size_t>(sfinfo.frames);
 
-    for (size_t i = 0; i < num_samples; ++i) {
-        buffer[i] = interleaved[i * sfinfo.channels]; // audioClips only support mono currently, so take the first channel
+    // Read interleaved, deinterleave to planar
+    size_t interleavedSize = num_samples * static_cast<size_t>(numChannels);
+    float* interleaved = new float[interleavedSize];
+    size_t framesRead = static_cast<size_t>(sf_readf_float(sndfile, interleaved, sfinfo.frames));
+    if (framesRead < num_samples) num_samples = framesRead;
+
+    buffer = new float[num_samples * static_cast<size_t>(numChannels)];
+    for (int ch = 0; ch < numChannels; ++ch) {
+        for (size_t i = 0; i < num_samples; ++i) {
+            buffer[static_cast<size_t>(ch) * num_samples + i] =
+                interleaved[i * static_cast<size_t>(numChannels) + static_cast<size_t>(ch)];
+        }
     }
 
     filepath = file_path;

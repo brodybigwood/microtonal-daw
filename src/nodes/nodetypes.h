@@ -14,6 +14,7 @@
 #include "nodes/gain/gain.h"
 #include "nodes/parametriceq/parametriceq.h"
 #include "nodes/vst/vstnode.h"
+#include "nodes/surroundtostereo/surroundtostereo.h"
 
 inline std::string NodeTypeStr[] = {
     "Arranger",
@@ -29,7 +30,8 @@ inline std::string NodeTypeStr[] = {
     "Multiplexer",
     "Gain",
     "ParametricEQ",
-    "VST"
+    "VST",
+    "Surround->Stereo"
 };
 
 inline Node* byType(NodeType t, int id, NodeManager* nm) {
@@ -62,6 +64,8 @@ inline Node* byType(NodeType t, int id, NodeManager* nm) {
             return new ParametricEQNode(id, nm);
         case NodeType::Vst:
             return new VstNode(id, nm);
+        case NodeType::SurroundToStereo:
+            return new SurroundToStereoNode(id, nm);
         default:
             return nullptr;
     }

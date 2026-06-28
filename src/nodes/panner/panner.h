@@ -8,8 +8,7 @@ class PannerNode : public Node {
         void setup() override;
 
         Connection* in = nullptr;
-        Connection* l = nullptr;
-        Connection* r = nullptr;
+        Connection* out = nullptr;
 
         Knob pan = Knob(0.5, TEX_W / 2, TEX_H / 2, 200, "assets/knobs/1.png", -30, 30, "Pan");
 };

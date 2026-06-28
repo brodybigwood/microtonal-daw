@@ -4,15 +4,11 @@
 #include <algorithm>
 
 OscillatorNode::OscillatorNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::Oscillator) {
-    output0 = new Connection;
-    output0->type = DataType::Waveform;
-    output0->dir = Direction::output;
-    outputs.addConnection(output0);
-
-    output1 = new Connection;
-    output1->type = DataType::Waveform;
-    output1->dir = Direction::output;
-    outputs.addConnection(output1);
+    output = new Connection;
+    output->type = DataType::Waveform;
+    output->dir = Direction::output;
+    output->numChannels = 2;
+    outputs.addConnection(output);
 
     inputN = new Connection;
     inputN->type = DataType::Events;
@@ -26,12 +22,8 @@ void OscillatorNode::process() {
 // first process input
 
     if (!inputN->is_connected) { // just do zeroes
-        if (output0->is_connected) {
-            std::memset(output0->buffer, 0, bufferSize * sizeof(float));
-        }
-
-        if (output1->is_connected) {
-            std::memset(output1->buffer, 0, bufferSize * sizeof(float));
+        if (output->is_connected) {
+            std::memset(output->buffer, 0, static_cast<size_t>(bufferSize) * static_cast<size_t>(output->numChannels) * sizeof(float));
         }
         return;
     }
@@ -59,7 +51,7 @@ void OscillatorNode::process() {
                         if (event.id == voice.noteId && voice.active) {
                             voice.wait_off = event.sampleOffset;
                             break;
-                        }   
+                        }
                     }
                 }
                 break;
@@ -70,28 +62,21 @@ void OscillatorNode::process() {
 
 // now do output
 
-    float* b0 = output0->buffer;
-    float* b1 = output1->buffer;
-
-    if (output0->is_connected) {
-        std::memset(b0, 0, bufferSize * sizeof(float));
-    }
-
-    if (output1->is_connected) {
-        std::memset(b1, 0, bufferSize * sizeof(float));
+    if (output->is_connected) {
+        std::memset(output->buffer, 0, static_cast<size_t>(bufferSize) * static_cast<size_t>(output->numChannels) * sizeof(float));
     }
 
     for (int i = 0; i < NUM_VOICES; i++) {
         auto& voice = voices[i];
         if (!voice.active) continue;
-        voice.process(b0, b1, bufferSize, sampleRate, volume);
+        voice.process(output->buffer, output->numChannels, bufferSize, sampleRate, volume);
     }
 }
 
 void OscillatorNode::setup() {
 }
 
-void Voice::process(float* out0, float* out1, int& bufferSize, int& sampleRate, Parameter& volume) {
+void Voice::process(float* out, int numChannels, int& bufferSize, int& sampleRate, Parameter& volume) {
     for (int i = 0; i < bufferSize; i++) {
         if (wait_on > 0) {
             wait_on -=1;
@@ -109,13 +94,14 @@ void Voice::process(float* out0, float* out1, int& bufferSize, int& sampleRate, 
 
         float smp = sin(phase) * volume[i];
 
-        if (out0) out0[i] += smp;
-        if (out1) out1[i] += smp;
+        for (int ch = 0; ch < numChannels; ++ch) {
+            out[ch * bufferSize + i] += smp;
+        }
 
         phase += 2 * M_PI * frequency / sampleRate;
 
         if (phase >= 2* M_PI) phase -= 2 * M_PI;
-    } 
+    }
 }
 
 void Voice::reset() {

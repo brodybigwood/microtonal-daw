@@ -13,5 +13,6 @@ enum NodeType {
     Gain,
     ParametricEQ,
     Vst,
+    SurroundToStereo,
     Count // for iteration
 };
