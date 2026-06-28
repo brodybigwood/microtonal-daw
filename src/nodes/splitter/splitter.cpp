@@ -7,6 +7,7 @@ SplitterNode::SplitterNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType
     in = new Connection;
     in->type = DataType::Waveform;
     in->dir = Direction::input;
+    in->numChannels = NUM_OUTPUTS;
     inputs.addConnection(in);
 }
 
@@ -18,7 +19,7 @@ void SplitterNode::process() {
         return;
     }
 
-    int maxCh = in->allocChannels > 0 ? in->allocChannels : in->numChannels;
+    int maxCh = in->numChannels;
     int chIdx = 0;
     for (Connection* c : outputs.connections) {
         if (c->is_connected) {

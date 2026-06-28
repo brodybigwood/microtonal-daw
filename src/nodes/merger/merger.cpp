@@ -7,21 +7,19 @@ MergerNode::MergerNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::Me
     out = new Connection;
     out->type = DataType::Waveform;
     out->dir = Direction::output;
+    out->numChannels = NUM_INPUTS;
     outputs.addConnection(out);
 }
 
 void MergerNode::process() {
     if (!out->is_connected || !out->buffer) return;
 
-    int nch = out->numChannels;
-    if (nch <= 0) return;
-
-    std::memset(out->buffer, 0, static_cast<size_t>(bufferSize) * static_cast<size_t>(nch) * sizeof(float));
+    std::memset(out->buffer, 0, static_cast<size_t>(bufferSize) * static_cast<size_t>(NUM_INPUTS) * sizeof(float));
 
     int chIdx = 0;
     for (Connection* c : inputs.connections) {
         if (!c->is_connected || c->type != DataType::Waveform) continue;
-        if (chIdx >= nch) break;
+        if (chIdx >= NUM_INPUTS) break;
         float* inBuf = c->buffer;
         float* outCh = out->channel(chIdx);
         for (int i = 0; i < bufferSize; ++i)
@@ -37,13 +35,4 @@ void MergerNode::addInput() {
     inputs.addConnection(in);
 }
 
-void MergerNode::setup() {
-    // Sync output channel count to connected input count (runs during update, before process)
-    int nch = 0;
-    for (Connection* c : inputs.connections) {
-        if (c->is_connected && c->type == DataType::Waveform) ++nch;
-    }
-    if (nch <= 0) nch = 1;
-    out->numChannels = nch;
-    // Buffer is reallocated by update() right after setup() returns
-}
+void MergerNode::setup() {}

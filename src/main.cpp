@@ -12,8 +12,13 @@
 #include <cstdlib>
 #include <string>
 #include <atomic>
+#include <csignal>
+
+static std::atomic<bool> quit{false};
 
 int main(int argc, char* argv[]) {
+    std::signal(SIGINT, [](int){ quit.store(true); });
+    std::signal(SIGTERM, [](int){ quit.store(true); });
 
     if(!initFonts()) {
         std::cerr << "ttf init failed" << std::endl;
@@ -53,7 +58,7 @@ int main(int argc, char* argv[]) {
         WindowHandler::instance()->tick();
     }, 0, 1);
 #else
-    while (windowHandler->tick()) {
+    while (windowHandler->tick() && !quit.load()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 #endif

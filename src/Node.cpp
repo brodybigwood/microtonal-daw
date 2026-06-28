@@ -565,14 +565,7 @@ void Node::clickMouse(SDL_Event& e) {
 
     if (e.button.button == SDL_BUTTON_LEFT) {
         if (hoveredConnection != -1 && ne) {
-            switch (hoveredDirection) {
-                case Direction::input:
-                    if (ne) ne->setDstConn(this, hoveredConnection);
-                    break;
-                case Direction::output:
-                    if (ne) ne->setSrcConn(this, hoveredConnection);
-                    break;
-            }
+            ne->startPortDrag(this, hoveredConnection, hoveredDirection);
         }
 
         auto time = SDL_GetTicks();
@@ -1189,6 +1182,9 @@ void Connection::render(SDL_Renderer* renderer, bool hover) {
     }
 
     if (is_connected && dir == Direction::input) {
+        // Suppress normal cable when this connection is being dragged.
+        if (nm && nm->ne && nm->ne->isConnectionBeingDragged(this)) return;
+
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         auto src = srcRect();
         if (src.w > 0.0f || src.h > 0.0f) {
@@ -1274,8 +1270,6 @@ void Node::relinkInputs() {
         if (c->type == DataType::Waveform) {
             c->buffer = ci->buffer;
             c->bufferSize = bufferSize;
-            c->numChannels = ci->numChannels;
-            c->allocChannels = ci->allocChannels;
         } else {
             c->events = ci->events;
         }

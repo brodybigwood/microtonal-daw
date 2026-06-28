@@ -105,6 +105,203 @@ void NodeEditor::setSrcConn(Node* node, int id) {
     makeConnection();
 }
 
+void NodeEditor::startPortDrag(Node* node, int portId, Direction dir) {
+    if (!node || !nm) return;
+
+    Connection* conn = nullptr;
+    if (dir == Direction::input) {
+        conn = node->inputs.getConnection(static_cast<uint16_t>(portId));
+    } else {
+        conn = node->outputs.getConnection(static_cast<uint16_t>(portId));
+    }
+
+    if (!conn) return;
+
+    dragNode_ = node;
+    dragPort_ = portId;
+    dragDir_ = dir;
+    dragInProgress_ = true;
+
+    // Cancel any pending click-click connection in progress
+    srcNode = nullptr;
+    srcNodeID = -1;
+    dstNode = nullptr;
+    dstNodeID = -1;
+
+    if (conn->is_connected) {
+        dragIsNew_ = false;
+        draggedConnection_ = conn;
+
+        if (dir == Direction::input) {
+            // On an input connection, the upstream output is in input_node/input_connection.
+            dragAnchorNode_ = nm->getNode(static_cast<uint16_t>(conn->input_node));
+            dragAnchorPort_ = conn->input_connection;
+        } else {
+            // On an output connection, the downstream input is in output_node/output_connection.
+            dragAnchorNode_ = nm->getNode(static_cast<uint16_t>(conn->output_node));
+            dragAnchorPort_ = conn->output_connection;
+        }
+    } else {
+        dragIsNew_ = true;
+        draggedConnection_ = nullptr;
+        dragAnchorNode_ = nullptr;
+        dragAnchorPort_ = -1;
+    }
+}
+
+Node* NodeEditor::findPortAt(float mx, float my, int& portId, Direction& portDir) {
+    if (!nm) return nullptr;
+
+    auto checkNode = [&](Node* n) -> Node* {
+        if (!n || !n->visible || !n->showConnectionPorts()) return nullptr;
+        for (auto* c : n->inputs.connections) {
+            if (c && mx >= c->rect.x && mx <= c->rect.x + c->rect.w &&
+                my >= c->rect.y && my <= c->rect.y + c->rect.h) {
+                portId = c->id;
+                portDir = Direction::input;
+                return n;
+            }
+        }
+        for (auto* c : n->outputs.connections) {
+            if (c && mx >= c->rect.x && mx <= c->rect.x + c->rect.w &&
+                my >= c->rect.y && my <= c->rect.y + c->rect.h) {
+                portId = c->id;
+                portDir = Direction::output;
+                return n;
+            }
+        }
+        return nullptr;
+    };
+
+    if (Node* found = checkNode(nm->inNode)) return found;
+    if (Node* found = checkNode(nm->outNode)) return found;
+    for (auto n : nm->getNodes()) {
+        if (Node* found = checkNode(n)) return found;
+    }
+    return nullptr;
+}
+
+void NodeEditor::handleDragDrop() {
+    if (!dragInProgress_) return;
+
+    int dropPortId = -1;
+    Direction dropPortDir = Direction::input;
+    Node* dropNode = findPortAt(mouseX, mouseY, dropPortId, dropPortDir);
+
+    bool shouldSever = false;
+    bool shouldConnect = false;
+    Node* srcNode = nullptr;
+    uint16_t srcId = 0;
+    Node* dstNode = nullptr;
+    uint16_t dstId = 0;
+
+    if (!dropNode) {
+        shouldSever = !dragIsNew_ && draggedConnection_;
+    } else {
+        bool dropOnSamePort = dropNode == dragNode_ && dropPortId == dragPort_ && dropPortDir == dragDir_;
+        bool dropOnAnchor = !dragIsNew_ && dropNode == dragAnchorNode_ && dropPortId == dragAnchorPort_;
+
+        if (!dropOnSamePort && !dropOnAnchor) {
+            // Collect old connections to sever and the new connection to make,
+            // then execute as a single undoable action.
+            ConnIDs oldCxns[2];
+            int oldCount = 0;
+
+            // Sever existing connection on the drop target.
+            Connection* dropConn = nullptr;
+            if (dropPortDir == Direction::input)
+                dropConn = dropNode->inputs.getConnection(static_cast<uint16_t>(dropPortId));
+            else
+                dropConn = dropNode->outputs.getConnection(static_cast<uint16_t>(dropPortId));
+            if (dropConn && dropConn->is_connected && dropConn != draggedConnection_) {
+                if (dropConn->dir == Direction::input) {
+                    oldCxns[oldCount].srcNodeID = dropConn->input_node;
+                    oldCxns[oldCount].srcConID = dropConn->input_connection;
+                    oldCxns[oldCount].dstNodeID = dropConn->output_node;
+                    oldCxns[oldCount].dstConID = dropConn->output_connection;
+                } else {
+                    // Find which node owns this output connection.
+                    oldCxns[oldCount].srcNodeID = dropNode->id;
+                    oldCxns[oldCount].srcConID = dropConn->id;
+                    oldCxns[oldCount].dstNodeID = dropConn->output_node;
+                    oldCxns[oldCount].dstConID = dropConn->output_connection;
+                }
+                oldCxns[oldCount].existed = true;
+                ++oldCount;
+            }
+
+            // Sever the dragged existing connection.
+            if (!dragIsNew_ && draggedConnection_) {
+                if (draggedConnection_->dir == Direction::input) {
+                    oldCxns[oldCount].srcNodeID = draggedConnection_->input_node;
+                    oldCxns[oldCount].srcConID = draggedConnection_->input_connection;
+                    oldCxns[oldCount].dstNodeID = draggedConnection_->output_node;
+                    oldCxns[oldCount].dstConID = draggedConnection_->output_connection;
+                } else {
+                    oldCxns[oldCount].srcNodeID = dragNode_->id;
+                    oldCxns[oldCount].srcConID = draggedConnection_->id;
+                    oldCxns[oldCount].dstNodeID = draggedConnection_->output_node;
+                    oldCxns[oldCount].dstConID = draggedConnection_->output_connection;
+                }
+                oldCxns[oldCount].existed = true;
+                ++oldCount;
+            }
+
+            // Determine src (output) and dst (input) for the new connection.
+            if (dragIsNew_) {
+                if (dragDir_ != dropPortDir) {
+                    shouldConnect = true;
+                    if (dragDir_ == Direction::output) {
+                        srcNode = dragNode_; srcId = static_cast<uint16_t>(dragPort_);
+                        dstNode = dropNode; dstId = static_cast<uint16_t>(dropPortId);
+                    } else {
+                        srcNode = dropNode; srcId = static_cast<uint16_t>(dropPortId);
+                        dstNode = dragNode_; dstId = static_cast<uint16_t>(dragPort_);
+                    }
+                }
+            } else if (dragDir_ != dropPortDir) {
+                shouldConnect = true;
+                if (dragDir_ == Direction::output) {
+                    srcNode = dragNode_; srcId = static_cast<uint16_t>(dragPort_);
+                    dstNode = dropNode; dstId = static_cast<uint16_t>(dropPortId);
+                } else {
+                    srcNode = dropNode; srcId = static_cast<uint16_t>(dropPortId);
+                    dstNode = dragNode_; dstId = static_cast<uint16_t>(dragPort_);
+                }
+            } else {
+                shouldConnect = true;
+                if (dragDir_ == Direction::output) {
+                    srcNode = dropNode; srcId = static_cast<uint16_t>(dropPortId);
+                    dstNode = dragAnchorNode_; dstId = static_cast<uint16_t>(dragAnchorPort_);
+                } else {
+                    srcNode = dragAnchorNode_; srcId = static_cast<uint16_t>(dragAnchorPort_);
+                    dstNode = dropNode; dstId = static_cast<uint16_t>(dropPortId);
+                }
+            }
+
+            if (shouldConnect) {
+                auto* ra = new ReassignNodeConnectionAction(
+                    nm->project, nm->managerPath,
+                    oldCxns, oldCount,
+                    static_cast<int>(srcNode->id), static_cast<int>(srcId),
+                    static_cast<int>(dstNode->id), static_cast<int>(dstId));
+                nm->project->um->newAction(ra);
+            }
+        }
+    }
+
+    if (shouldSever && !shouldConnect)
+        nm->severConnection(draggedConnection_);
+
+    dragInProgress_ = false;
+    dragIsNew_ = false;
+    dragNode_ = nullptr;
+    dragPort_ = -1;
+    dragAnchorNode_ = nullptr;
+    dragAnchorPort_ = -1;
+    draggedConnection_ = nullptr;
+}
+
 void NodeEditor::makeConnection() {
     // srcNodeID & dstNodeID are the connection/io ids, not node identifiers
     if(srcNode != nullptr && dstNode != nullptr
@@ -117,6 +314,17 @@ void NodeEditor::makeConnection() {
         dstNode = nullptr;
         dstNodeID = -1;
     }
+}
+
+bool NodeEditor::isConnectionBeingDragged(Connection* c) const {
+    if (!dragInProgress_ || dragIsNew_) return false;
+    if (c == draggedConnection_) return true;
+    // When dragging from an output, the cable is rendered by the anchor's input connection.
+    if (dragDir_ == Direction::output && dragAnchorNode_ && dragAnchorPort_ >= 0) {
+        Connection* anchorConn = dragAnchorNode_->inputs.getConnection(static_cast<uint16_t>(dragAnchorPort_));
+        if (c == anchorConn) return true;
+    }
+    return false;
 }
 
 void NodeEditor::clearPointersToNode(Node* n) {
@@ -134,6 +342,15 @@ void NodeEditor::clearPointersToNode(Node* n) {
         movingNode->moving = false;
         movingNode = nullptr;
     }
+    if (dragNode_ == n || dragAnchorNode_ == n) {
+        dragInProgress_ = false;
+        dragIsNew_ = false;
+        dragNode_ = nullptr;
+        dragPort_ = -1;
+        dragAnchorNode_ = nullptr;
+        dragAnchorPort_ = -1;
+        draggedConnection_ = nullptr;
+    }
 }
 
 void NodeEditor::clearWireDragState() {
@@ -146,6 +363,13 @@ void NodeEditor::clearWireDragState() {
     dstNodeID = -1;
     srcNode = nullptr;
     srcNodeID = -1;
+    dragInProgress_ = false;
+    dragIsNew_ = false;
+    dragNode_ = nullptr;
+    dragPort_ = -1;
+    dragAnchorNode_ = nullptr;
+    dragAnchorPort_ = -1;
+    draggedConnection_ = nullptr;
 }
 
 NodeEditor::NodeEditor() :
@@ -295,30 +519,39 @@ std::shared_ptr<TreeEntry> NodeEditor::buildMenuTree(int menuIndex) {
 
 void NodeEditor::renderConnector(SDL_Renderer* renderer) {
 
-    int x;
-    int y;
-    Connection* conn;
+    float x, y;
+    DataType dtype = DataType::Waveform;
 
-    if (dstNode != nullptr) {
-        if (dstNodeID != -1) {
-            conn = dstNode->inputs.getConnection(static_cast<uint16_t>(dstNodeID));
-            if (!conn) return;
-            auto rect = conn->rect;
-            x = rect.x + rect.w/2.0f;
-            y = rect.y + rect.h/2.0f;
-        } else return;
-    } else if (srcNode != nullptr) {
-        if (srcNodeID != -1) {
-            conn = srcNode->outputs.getConnection(static_cast<uint16_t>(srcNodeID));
-            if (!conn) return;
-            auto rect = conn->rect;
-            x = rect.x + rect.w/2.0f;
-            y = rect.y + rect.h/2.0f;
-        } else return;
-    } else return;
+    if (dragInProgress_) {
+        Connection* conn = nullptr;
+        if (dragIsNew_) {
+            // New drag: fixed end is the clicked port.
+            if (dragDir_ == Direction::output) {
+                conn = dragNode_->outputs.getConnection(static_cast<uint16_t>(dragPort_));
+            } else {
+                conn = dragNode_->inputs.getConnection(static_cast<uint16_t>(dragPort_));
+            }
+        } else {
+            // Existing drag: fixed end is the anchor.
+            if (dragDir_ == Direction::input) {
+                // Dragging input — anchor is the upstream output.
+                conn = dragAnchorNode_->outputs.getConnection(static_cast<uint16_t>(dragAnchorPort_));
+            } else {
+                // Dragging output — anchor is the downstream input.
+                conn = dragAnchorNode_->inputs.getConnection(static_cast<uint16_t>(dragAnchorPort_));
+            }
+        }
+        if (!conn) return;
+        auto rect = conn->rect;
+        x = rect.x + rect.w/2.0f;
+        y = rect.y + rect.h/2.0f;
+        dtype = conn->type;
+    } else {
+        return;
+    }
 
     SDL_FColor color;
-    if (conn->type == DataType::Events) color = {0.5f, 1.0f, 0.5f, 1.0f}; 
+    if (dtype == DataType::Events) color = {0.5f, 1.0f, 0.5f, 1.0f};
     else color = {1.0f, 0.5f, 0.5f, 1.0f};
     renderSine(renderer, mouseX, mouseY, x, y, color);
 }
@@ -386,6 +619,15 @@ void NodeEditor::handleInput(SDL_Event& e) {
     moveMouse();
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+        if (dragInProgress_) {
+            if (capturedEmbeddedWindow_) {
+                capturedEmbeddedWindow_->captured_ = false;
+                capturedEmbeddedWindow_ = nullptr;
+                captureKind_ = CaptureKind::None;
+            }
+            handleDragDrop();
+            return;
+        }
         if (panning_ && !rootMenuBar_) {
             float dx = mouseX - panStartX_;
             float dy = mouseY - panStartY_;
@@ -720,6 +962,10 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
         found:;
 
         if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && target) {
+            // Release previous capture if any
+            if (capturedEmbeddedWindow_ && capturedEmbeddedWindow_ != target) {
+                capturedEmbeddedWindow_->captured_ = false;
+            }
             capturedEmbeddedWindow_ = target;
             target->captured_ = true;
             focusedEmbeddedWindow_ = target;

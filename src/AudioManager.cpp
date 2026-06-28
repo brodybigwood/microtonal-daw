@@ -140,12 +140,17 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
         project->um->flushAudioSync();
     }
 
+    // JACK can change buffer size dynamically — keep in sync.
+    if (static_cast<unsigned int>(audioManager->bufferSize) != bufferSize) {
+        audioManager->bufferSize = static_cast<int>(bufferSize);
+    }
+
     float *outBuffer = static_cast<float *>(outputBuffer);
     float *inBuffer = static_cast<float *>(inputBuffer);
 
     int ic = static_cast<int>(audioManager->inputChannels);
     int oc = static_cast<int>(audioManager->outputChannels);
-    int bs = static_cast<int>(audioManager->bufferSize);
+    int bs = static_cast<int>(bufferSize);
     int sr = static_cast<int>(audioManager->sampleRate);
 
     project->process(inBuffer, outBuffer, bs, ic, oc, sr);

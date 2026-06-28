@@ -48,7 +48,8 @@ enum ActionType {
     RemoveEQBand = 28,
     VstParameterChange = 29,
     VstLoadPlugin = 30,
-    TogglePianoRollWindow = 31
+    TogglePianoRollWindow = 31,
+    ReassignNodeConnection = 32
 };
 
 
@@ -499,6 +500,22 @@ struct SeverNodeConnectionAction : ProjectAction {
     int dstConID;
 
     SeverNodeConnectionAction(Project* p, std::vector<int> managerPath, int srcNodeID, int srcConID, int dstNodeID, int dstConID);
+};
+
+struct ConnIDs {
+    int srcNodeID, srcConID, dstNodeID, dstConID;
+    bool existed = false;
+};
+
+struct ReassignNodeConnectionAction : ProjectAction {
+    std::vector<int> managerPath;
+    ConnIDs oldConns[2];
+    int oldConnCount = 0;
+    int newSrcNodeID, newSrcConID, newDstNodeID, newDstConID;
+
+    ReassignNodeConnectionAction(Project* p, std::vector<int> managerPath,
+                                 const ConnIDs* oldCxns, int oldCount,
+                                 int nSrcN, int nSrcC, int nDstN, int nDstC);
 };
 
 namespace IoPortChannelOp {

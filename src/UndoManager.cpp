@@ -367,6 +367,27 @@ bool UndoManager::runRegisteredAction(const std::string& actionName, const json&
             pa = new SeverNodeConnectionAction(head->p, params.at("managerPath").get<std::vector<int>>(), params.at("srcNodeID").get<int>(),
                 params.at("srcConID").get<int>(), params.at("dstNodeID").get<int>(), params.at("dstConID").get<int>());
             break;
+        case ReassignNodeConnection: {
+            auto mp = params.at("managerPath").get<std::vector<int>>();
+            int oldCount = params.at("oldConnCount").get<int>();
+            ConnIDs oldCxns[2];
+            if (params.contains("oldConns")) {
+                int i = 0;
+                for (auto& oc : params.at("oldConns")) {
+                    if (i >= 2) break;
+                    oldCxns[i].srcNodeID = oc.at("srcNodeID").get<int>();
+                    oldCxns[i].srcConID = oc.at("srcConID").get<int>();
+                    oldCxns[i].dstNodeID = oc.at("dstNodeID").get<int>();
+                    oldCxns[i].dstConID = oc.at("dstConID").get<int>();
+                    oldCxns[i].existed = oc.at("existed").get<bool>();
+                    ++i;
+                }
+            }
+            pa = new ReassignNodeConnectionAction(head->p, std::move(mp), oldCxns, oldCount,
+                params.at("newSrcNodeID").get<int>(), params.at("newSrcConID").get<int>(),
+                params.at("newDstNodeID").get<int>(), params.at("newDstConID").get<int>());
+            break;
+        }
         case MoveEmbeddedWindow: {
             auto managerPath = params.at("managerPath").get<std::vector<int>>();
             NodeManager& nm = requireManager(head->p, managerPath);
@@ -521,6 +542,27 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
         case SeverNodeConnection: {
             pa = new SeverNodeConnectionAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("srcNodeID").get<int>(), j.at("srcConID").get<int>(),
                 j.at("dstNodeID").get<int>(), j.at("dstConID").get<int>());
+            break;
+        }
+        case ReassignNodeConnection: {
+            auto mp = j.at("managerPath").get<std::vector<int>>();
+            int oldCount = j.at("oldConnCount").get<int>();
+            ConnIDs oldCxns[2];
+            if (j.contains("oldConns")) {
+                int i = 0;
+                for (auto& oc : j.at("oldConns")) {
+                    if (i >= 2) break;
+                    oldCxns[i].srcNodeID = oc.at("srcNodeID").get<int>();
+                    oldCxns[i].srcConID = oc.at("srcConID").get<int>();
+                    oldCxns[i].dstNodeID = oc.at("dstNodeID").get<int>();
+                    oldCxns[i].dstConID = oc.at("dstConID").get<int>();
+                    oldCxns[i].existed = oc.at("existed").get<bool>();
+                    ++i;
+                }
+            }
+            pa = new ReassignNodeConnectionAction(p, std::move(mp), oldCxns, oldCount,
+                j.at("newSrcNodeID").get<int>(), j.at("newSrcConID").get<int>(),
+                j.at("newDstNodeID").get<int>(), j.at("newDstConID").get<int>());
             break;
         }
         case MoveNote: {
@@ -771,6 +813,26 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["srcConID"] = sc->srcConID;
             j["dstNodeID"] = sc->dstNodeID;
             j["dstConID"] = sc->dstConID;
+            break;
+        }
+        case ReassignNodeConnection: {
+            auto ra = static_cast<ReassignNodeConnectionAction*>(pa);
+            j["managerPath"] = ra->managerPath;
+            j["newSrcNodeID"] = ra->newSrcNodeID;
+            j["newSrcConID"] = ra->newSrcConID;
+            j["newDstNodeID"] = ra->newDstNodeID;
+            j["newDstConID"] = ra->newDstConID;
+            j["oldConnCount"] = ra->oldConnCount;
+            j["oldConns"] = json::array();
+            for (int i = 0; i < ra->oldConnCount; ++i) {
+                json oc;
+                oc["srcNodeID"] = ra->oldConns[i].srcNodeID;
+                oc["srcConID"] = ra->oldConns[i].srcConID;
+                oc["dstNodeID"] = ra->oldConns[i].dstNodeID;
+                oc["dstConID"] = ra->oldConns[i].dstConID;
+                oc["existed"] = ra->oldConns[i].existed;
+                j["oldConns"].push_back(oc);
+            }
             break;
         }
         case MoveNote: {
@@ -1837,6 +1899,48 @@ SeverNodeConnectionAction::SeverNodeConnectionAction(Project* p, std::vector<int
     undoAction = [this] () {
         NodeManager& nm = requireManager(this->p, this->managerPath);
         nm.makeNodeConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
+    };
+}
+
+ReassignNodeConnectionAction::ReassignNodeConnectionAction(Project* p, std::vector<int> managerPath,
+        const ConnIDs* oldCxns, int oldCount,
+        int nSrcN, int nSrcC, int nDstN, int nDstC) :
+        ProjectAction(p, ReassignNodeConnection),
+        managerPath(std::move(managerPath)),
+        oldConnCount(oldCount),
+        newSrcNodeID(nSrcN), newSrcConID(nSrcC),
+        newDstNodeID(nDstN), newDstConID(nDstC) {
+    name = "Reassign Connection";
+    for (int i = 0; i < oldCount; ++i) oldConns[i] = oldCxns[i];
+
+    doAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        for (int i = 0; i < this->oldConnCount; ++i) {
+            if (this->oldConns[i].existed)
+                nm.severConnectionNow(static_cast<uint16_t>(this->oldConns[i].srcNodeID),
+                                      static_cast<uint16_t>(this->oldConns[i].srcConID),
+                                      static_cast<uint16_t>(this->oldConns[i].dstNodeID),
+                                      static_cast<uint16_t>(this->oldConns[i].dstConID));
+        }
+        nm.makeNodeConnectionNow(static_cast<uint16_t>(this->newSrcNodeID),
+                                 static_cast<uint16_t>(this->newSrcConID),
+                                 static_cast<uint16_t>(this->newDstNodeID),
+                                 static_cast<uint16_t>(this->newDstConID));
+    };
+
+    undoAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        nm.severConnectionNow(static_cast<uint16_t>(this->newSrcNodeID),
+                              static_cast<uint16_t>(this->newSrcConID),
+                              static_cast<uint16_t>(this->newDstNodeID),
+                              static_cast<uint16_t>(this->newDstConID));
+        for (int i = this->oldConnCount - 1; i >= 0; --i) {
+            if (this->oldConns[i].existed)
+                nm.makeNodeConnectionNow(static_cast<uint16_t>(this->oldConns[i].srcNodeID),
+                                         static_cast<uint16_t>(this->oldConns[i].srcConID),
+                                         static_cast<uint16_t>(this->oldConns[i].dstNodeID),
+                                         static_cast<uint16_t>(this->oldConns[i].dstConID));
+        }
     };
 }
 

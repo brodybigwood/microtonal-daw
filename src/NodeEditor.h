@@ -37,6 +37,15 @@ class NodeEditor {
         void setDstConn(Node*, int);
         void setSrcConn(Node*, int);
 
+        /** Start dragging from a port (new or existing connection). */
+        void startPortDrag(Node* node, int portId, Direction dir);
+
+        /** Finish drag: sever, reassign, or create based on what's under the mouse. */
+        void handleDragDrop();
+
+        /** Check whether a connection's normal cable should be suppressed during drag. */
+        bool isConnectionBeingDragged(Connection* c) const;
+
         bool& isAltPressed;
         bool& isCtrlPressed;
         bool& isShiftPressed;
@@ -200,6 +209,19 @@ class NodeEditor {
         float panStartX_ = 0.f;
         float panStartY_ = 0.f;
         bool panning_ = false;
+
+        // Drag-to-sever/reassign/create state
+        bool dragInProgress_ = false;
+        bool dragIsNew_ = false;           // true when dragging from an unconnected port
+        Node* dragNode_ = nullptr;         // port being dragged (clicked)
+        int dragPort_ = -1;
+        Direction dragDir_ = Direction::input;
+        Node* dragAnchorNode_ = nullptr;   // other end of existing connection
+        int dragAnchorPort_ = -1;
+        Connection* draggedConnection_ = nullptr; // the existing connection being dragged
+
+        /** Find a port under (mx, my). Returns the node, sets portId and portDir. */
+        Node* findPortAt(float mx, float my, int& portId, Direction& portDir);
 
     public:
         float panOffsetX_ = 0.f;

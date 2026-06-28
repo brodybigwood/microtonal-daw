@@ -171,19 +171,17 @@ void InputNode::process() {
     int wi = 0;
     for (auto* c : outputs.connections) {
         if (!c || c->type != DataType::Waveform) continue;
-        for (int ch = 0; ch < c->numChannels; ++ch) {
-            if (wi >= numChannels) return;
+        if (wi >= numChannels) return;
 
-            if (!c->buffer) continue;
+        if (!c->buffer) continue;
 
-            if (!input) {
-                std::memset(c->channel(ch), 0, static_cast<size_t>(bufferSize) * sizeof(float));
-            } else {
-                float* src = input + static_cast<size_t>(wi) * static_cast<size_t>(bufferSize);
-                std::memcpy(c->channel(ch), src, static_cast<size_t>(bufferSize) * sizeof(float));
-            }
-            ++wi;
+        if (!input) {
+            std::memset(c->channel(0), 0, static_cast<size_t>(bufferSize) * sizeof(float));
+        } else {
+            float* src = input + static_cast<size_t>(wi) * static_cast<size_t>(bufferSize);
+            std::memcpy(c->channel(0), src, static_cast<size_t>(bufferSize) * sizeof(float));
         }
+        ++wi;
     }
 }
 
@@ -289,11 +287,9 @@ json InputNode::serialize() {
     j["zoomRatio"] = zoomRatio;
     j["channels"] = totalWaveformChannels();
     j["outputConnectionIDs"] = json::array();
-    j["outputConnectionChannels"] = json::array();
     for (auto* c : outputs.connections) {
         if (c->type == DataType::Waveform) {
             j["outputConnectionIDs"].push_back(c->id);
-            j["outputConnectionChannels"].push_back(c->numChannels);
         }
     }
 
@@ -311,25 +307,14 @@ void InputNode::deSerialize(json j) {
     const int defaultCh = nm->managerPath.empty() ? 2 : 0;
     int targetChannels = j.value("channels", defaultCh);
     std::vector<uint16_t> targetIDs;
-    std::vector<int> targetChPerID;
     if (j.contains("outputConnectionIDs")) {
         for (auto id : j["outputConnectionIDs"]) {
             targetIDs.push_back(id.get<uint16_t>());
         }
     }
-    if (j.contains("outputConnectionChannels")) {
-        for (auto ch : j["outputConnectionChannels"]) {
-            targetChPerID.push_back(ch.get<int>());
-        }
-    }
-    if (targetChPerID.size() != targetIDs.size()) {
-        targetChPerID.clear();
-        for (size_t i = 0; i < targetIDs.size(); ++i) targetChPerID.push_back(1);
-    }
     if (targetIDs.empty()) {
         for (int i = 0; i < targetChannels; ++i) {
             targetIDs.push_back(static_cast<uint16_t>(i));
-            targetChPerID.push_back(1);
         }
     }
 
@@ -354,7 +339,7 @@ void InputNode::deSerialize(json j) {
         c->events = nullptr;
         c->buffer = nullptr;
         c->bufferSize = 0;
-        c->numChannels = targetChPerID[i];
+        c->numChannels = 1;
         outputs.connections.push_back(c);
         outputs.ids[c->id] = outputs.connections.size() - 1;
         outputs.id_pool.reserveID(c->id);
