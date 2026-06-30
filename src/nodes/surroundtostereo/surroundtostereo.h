@@ -2,8 +2,9 @@
 
 #include "Node.h"
 #include <cstring>
+#include <cmath>
+#include <algorithm>
 
-// Biquad filter (direct form I): y = b0*x[n] + b1*x[n-1] + b2*x[n-2] - a1*y[n-1] - a2*y[n-2]
 struct Biquad {
     float b0=0, b1=0, b2=0, a1=0, a2=0;
     float x1=0, x2=0, y1=0, y2=0;
@@ -15,11 +16,11 @@ struct Biquad {
     }
     void reset() { x1=x2=y1=y2=0; }
 
-    // Low-shelf: boost/cut below fc
     static Biquad lowShelf(float fc, float fs, float gainDB) {
         Biquad f;
+        if (gainDB > -0.01f && gainDB < 0.01f) { f.b0 = 1.0f; return f; }
         float A = std::pow(10.0f, gainDB/40.0f);
-        float w0 = 2.0f*M_PI*fc/fs;
+        float w0 = 2.0f*M_PI*std::min(fc, fs * 0.49f) / fs;
         float cosW = std::cos(w0);
         float sinW = std::sin(w0);
         float alpha = sinW/2.0f * std::sqrt((A+1.0f/A)*(1.0f/0.707f - 1.0f) + 2.0f);
@@ -32,11 +33,11 @@ struct Biquad {
         return f;
     }
 
-    // Peaking EQ
     static Biquad peak(float fc, float fs, float gainDB, float Q) {
         Biquad f;
+        if (gainDB > -0.01f && gainDB < 0.01f) { f.b0 = 1.0f; return f; }
         float A = std::pow(10.0f, gainDB/40.0f);
-        float w0 = 2.0f*M_PI*fc/fs;
+        float w0 = 2.0f*M_PI*std::min(fc, fs * 0.49f) / fs;
         float cosW = std::cos(w0);
         float sinW = std::sin(w0);
         float alpha = sinW/(2.0f*Q);
@@ -51,10 +52,9 @@ struct Biquad {
 };
 
 struct EarChain {
-    Biquad shadow;   // head shadow shelf
-    Biquad pinna1;   // concha boost  ~4.5kHz
-    Biquad pinna2;   // pinna notch   ~7-11kHz
-    float shouldTap = 0;  // shoulder reflection level
+    Biquad shadow;
+    Biquad pinna1;
+    Biquad pinna2;
 };
 
 struct SurroundChannel {
@@ -95,8 +95,11 @@ public:
     static constexpr float angles[6] = {-30, 30, -90, 90, -150, 150};
     static constexpr float ITD_MAX_MS = 0.65f;
 
-    Knob mix = Knob(1.0f, TEX_W*0.5f - 40, TEX_H*0.5f, 80, "assets/knobs/1.png",
-                    -135, 135, "Width");
-    Knob room = Knob(0.3f, TEX_W*0.5f + 80, TEX_H*0.5f, 80, "assets/knobs/1.png",
-                     -135, 135, "Room");
+    float peakAmps[6] = {};
+    float outPeak = 0.0f;
+
+private:
+    void syncToGui();
+    float peakAmpsGui_[6] = {};
+    float outPeakGui_ = 0.0f;
 };
