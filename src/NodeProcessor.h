@@ -9,6 +9,7 @@ using json = nlohmann::json;
 
 class Project;
 class NodeManager;
+class WindowManager;
 
 class NodeProcessor {
 public:
@@ -28,6 +29,7 @@ public:
     SDL_Window* getHostWindow() const { return hostWindow; }
     SDL_Renderer* getHostRenderer() const { return hostRenderer; }
     class NodeEditor* getEditor() const { return editor; }
+    WindowManager* getWindowManager() const { return windowManager; }
 
     json serialize() const;
     void deSerialize(const json&);
@@ -46,6 +48,7 @@ private:
     class NodeEditor* editor = nullptr;
     SDL_Window* hostWindow = nullptr;
     SDL_Renderer* hostRenderer = nullptr;
+    WindowManager* windowManager = nullptr;
 
     std::mutex processorActionMutex_;
     std::vector<std::function<void()>> pendingProcessorActions_;

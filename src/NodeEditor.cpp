@@ -4,6 +4,11 @@
 #include "ContextMenu.h"
 #include "WindowHandler.h"
 #include "PianoRoll.h"
+#include "PianoRollWindow.h"
+#include "UndoTreeExpandedWindow.h"
+#include "PreferencesExpandedWindow.h"
+#include "WindowManager.h"
+#include "NodeProcessor.h"
 #include "nodes/arranger/arranger.h"
 #ifndef __EMSCRIPTEN__
 #include "nodes/vst/vstplugin.h"
@@ -146,6 +151,22 @@ void NodeEditor::startPortDrag(Node* node, int portId, Direction dir) {
         draggedConnection_ = nullptr;
         dragAnchorNode_ = nullptr;
         dragAnchorPort_ = -1;
+    }
+}
+
+void NodeEditor::startNodeDrag(Node* node) {
+    if (!node) return;
+    movingNode = node;
+    node->moving = true;
+    movingNodeStartX = node->dstRect.x;
+    movingNodeStartY = node->dstRect.y;
+    SDL_GetMouseState(&moveOffX, &moveOffY);
+}
+
+void NodeEditor::stopNodeDrag() {
+    if (movingNode) {
+        movingNode->moving = false;
+        movingNode = nullptr;
     }
 }
 
@@ -338,6 +359,13 @@ void NodeEditor::clearPointersToNode(Node* n) {
         srcNode = nullptr;
         srcNodeID = -1;
     }
+    // Close any expanded windows that reference this node.
+    if (nm && nm->project && nm->project->processor) {
+        auto* wm = nm->project->processor->getWindowManager();
+        if (wm) {
+            wm->removeWindowsByTitleSuffix("##" + std::to_string(n->id));
+        }
+    }
     if (movingNode == n) {
         movingNode->moving = false;
         movingNode = nullptr;
@@ -477,40 +505,44 @@ std::shared_ptr<TreeEntry> NodeEditor::buildMenuTree(int menuIndex) {
             {
                 auto item = uTreeEntry();
                 item->label = "Preferences...";
-                item->click = [this, w = canvasW_, h = canvasH_]() {
-                    auto existing = existingPreferencesWindow();
-                    if (!existing) {
-                        auto pw = std::make_unique<PreferencesWindow>();
-                        pw->id = 0;
-                        existing = pw.get();
-                        addEmbeddedWindow(std::move(pw));
-                        existing->moveTo((w - existing->w) * 0.5f, (h - existing->h) * 0.4f);
+                item->click = [this]() {
+                    if (!nm || !nm->project || !nm->project->processor) return;
+                    auto* wm = nm->project->processor->getWindowManager();
+                    if (!wm) return;
+                    auto* existing = wm->findByTitle("Preferences");
+                    if (existing) {
+                        existing->show();
+                        SDL_RaiseWindow(existing->window);
+                        return;
                     }
-                    int maxZ = 0;
-                    for (auto& ew : embeddedWindows_)
-                        if (ew->zOrder > maxZ) maxZ = ew->zOrder;
-                    existing->zOrder = maxZ + 1;
-                    existing->open();
+                    auto pw = std::make_unique<PreferencesExpandedWindow>();
+                    ExpandedWindow* ew = wm->addWindow(std::move(pw), 500, 500, "Preferences");
+                    if (ew) {
+                        ew->show();
+                        ew->setPosition(200, 150);
+                    }
                 };
                 root->addChild(item);
             }
             {
                 auto item = uTreeEntry();
                 item->label = "Undo Tree";
-                item->click = [this, w = canvasW_, h = canvasH_]() {
-                    auto existing = existingUndoTreeWindow();
-                    if (!existing) {
-                        auto uw = std::make_unique<UndoTreeWindow>(nm->project);
-                        uw->id = 1;
-                        existing = uw.get();
-                        addEmbeddedWindow(std::move(uw));
-                        existing->moveTo((w - existing->w) * 0.5f, (h - existing->h) * 0.4f);
+                item->click = [this]() {
+                    if (!nm || !nm->project || !nm->project->processor) return;
+                    auto* wm = nm->project->processor->getWindowManager();
+                    if (!wm) return;
+                    auto* existing = wm->findByTitle("Undo Tree");
+                    if (existing) {
+                        existing->show();
+                        SDL_RaiseWindow(existing->window);
+                        return;
                     }
-                    int maxZ = 0;
-                    for (auto& ew : embeddedWindows_)
-                        if (ew->zOrder > maxZ) maxZ = ew->zOrder;
-                    existing->zOrder = maxZ + 1;
-                    existing->open();
+                    auto uw = std::make_unique<UndoTreeExpandedWindow>(nm->project);
+                    ExpandedWindow* ew = wm->addWindow(std::move(uw), 480, 640, "Undo Tree");
+                    if (ew) {
+                        ew->show();
+                        ew->setPosition(200, 150);
+                    }
                 };
                 root->addChild(item);
             }
@@ -564,6 +596,31 @@ void NodeEditor::renderSine(SDL_Renderer* renderer, float x1, float y1, float x2
     renderPatchCable(renderer, x1, y1, x2, y2, color);
 }
 
+void NodeEditor::clearStaleHover() {
+    if (!nm) return;
+    stopNodeDrag();
+    leftClick = false;
+    panning_ = false;
+    // Release any captured embedded window.
+    if (capturedEmbeddedWindow_) {
+        capturedEmbeddedWindow_->captured_ = false;
+        capturedEmbeddedWindow_ = nullptr;
+        captureKind_ = CaptureKind::None;
+    }
+    for (auto* n : nm->getNodes()) {
+        n->hoveredConnection = -1;
+        n->captured_ = false;
+    }
+    nm->inNode->hoveredConnection = -1;
+    nm->inNode->captured_ = false;
+    nm->outNode->hoveredConnection = -1;
+    nm->outNode->captured_ = false;
+    focusedEmbeddedWindow_ = nullptr;
+    hoveredNode = nullptr;
+    dragInProgress_ = false;
+    dragNode_ = nullptr;
+}
+
 void NodeEditor::tick(SDL_Renderer* r) {
     if (!nm || !r) return;
     SDL_FRect surface{0.f, 0.f, canvasW_, canvasH_};
@@ -597,25 +654,6 @@ void NodeEditor::move() {
     moveOffY = mouseY;
 }
 
-void NodeEditor::zoom(float amount) {
-    for (auto n : nm->getNodes()) if (!n->canZoom(amount)) return;
-    if (!nm->inNode->canZoom(amount)) return;
-    if (!nm->outNode->canZoom(amount)) return;
-    
-    auto zoomNode = [this, amount] (Node* n) {        
-
-        float mx = (n->dstRect.x - mouseX) * amount + mouseX;
-        float my = (n->dstRect.y - mouseY) * amount + mouseY;
-        
-        n->zoom(amount);
-        n->move(mx, my);
-    };
-
-    for (auto n : nm->getNodes()) zoomNode(n);
-    zoomNode(nm->inNode);
-    zoomNode(nm->outNode);
-}
-
 void NodeEditor::handleInput(SDL_Event& e) {
 #ifndef __EMSCRIPTEN__
     VstPlugin::tickAllEditors();
@@ -642,6 +680,10 @@ void NodeEditor::handleInput(SDL_Event& e) {
         }
         panning_ = false;
         leftClick = false;
+        if (movingNode) {
+            movingNode->moving = false;
+            movingNode = nullptr;
+        }
     }
 
     if (routeEmbeddedWindowEvent(e, mouseX, mouseY))
@@ -711,25 +753,6 @@ void NodeEditor::handleInput(SDL_Event& e) {
         case SDL_EVENT_MOUSE_BUTTON_UP:
             break;
         case SDL_EVENT_MOUSE_WHEEL:
-            if (isCtrlPressed) {
-                float amt = std::pow(1.1f, e.wheel.y);
-                zoom(amt);
-                if (!rootMenuBar_) {
-                    auto* um = nm->project->um;
-                    if (um->current->type == ZoomNodes) {
-                        auto* prev = static_cast<ZoomNodesAction*>(um->current);
-                        if (prev->managerPath == nm->managerPath) {
-                            prev->addStep(amt, mouseX, mouseY);
-                            ProjectAction* cap = prev;
-                            um->enqueueAudioSync([cap]() { cap->doAction(); });
-                        } else {
-                            um->newAction(new ZoomNodesAction(nm->project, nm->managerPath, amt, mouseX, mouseY));
-                        }
-                    } else {
-                        um->newAction(new ZoomNodesAction(nm->project, nm->managerPath, amt, mouseX, mouseY));
-                    }
-                }
-            }
             break;
         default:
             break;
@@ -748,10 +771,27 @@ void NodeEditor::handleInput(SDL_Event& e) {
 }
 
 void NodeEditor::moveMouse() {
-    if (!embedded_)
-        SDL_GetMouseState(&mouseX, &mouseY);
+    if (!embedded_) {
+        // Right-click doesn't give focus, so SDL_GetMouseState returns coords
+        // relative to the wrong window. Use global state and convert.
+        float gx, gy;
+        SDL_GetGlobalMouseState(&gx, &gy);
+        int wx = 0, wy = 0;
+        if (nm && nm->project && nm->project->window)
+            SDL_GetWindowPosition(nm->project->window, &wx, &wy);
+        mouseX = gx - static_cast<float>(wx);
+        mouseY = gy - static_cast<float>(wy);
+    }
 
-    if (movingNode) movingNode->move(mouseX - moveOffX, mouseY - moveOffY);
+    if (movingNode) movingNode->move(movingNodeStartX + mouseX - moveOffX, movingNodeStartY + mouseY - moveOffY);
+
+    // Clear stale hover state on all nodes each frame.
+    if (nm) {
+        for (auto* n : nm->getNodes()) n->hoveredConnection = -1;
+        if (nm->inNode) nm->inNode->hoveredConnection = -1;
+        if (nm->outNode) nm->outNode->hoveredConnection = -1;
+    }
+
     hover();
 }
 
@@ -786,11 +826,13 @@ void NodeEditor::clickMouse(SDL_Event& e) {
 
     } else if (e.button.button == SDL_BUTTON_RIGHT) {
         auto* ctxMenu = ContextMenu::get();
-        ctxMenu->activate();
+        SDL_Window* evWin = SDL_GetWindowFromID(e.button.windowID);
+        SDL_Renderer* evRenderer = evWin ? SDL_GetRenderer(evWin) : nullptr;
+        ctxMenu->activate(evRenderer ? evRenderer : (nm && nm->project ? nm->project->renderer : nullptr), e.button.windowID);
 
         auto t = getClickMenu();
 
-        ctxMenu->dynamicTick = getTreeMenuTicker(t);         
+        ctxMenu->dynamicTick = getTreeMenuTicker(t);
     }
 }
 void NodeEditor::doubleClick() {
@@ -1158,9 +1200,15 @@ void NodeEditor::restoreOpenPianoRolls(const json& arr) {
         auto* region = dynamic_cast<Region*>(arrNode->elements->getElement(static_cast<uint16_t>(regionID)));
         if (!region) continue;
         arrNode->sl->createPianoRoll(region, false, j.value("ewID", -1));
-        if (arrNode->sl->pianoRolls.empty()) continue;
-        auto* pr = arrNode->sl->pianoRolls.back();
-        pr->applyGeometry(j["x"], j["y"], j["w"], j["h"]);
-        pr->zOrder = j.value("zOrder", pr->zOrder);
+        if (arrNode->sl->pianoRollWindows.empty()) continue;
+        auto* prw = arrNode->sl->pianoRollWindows.back();
+        if (prw) {
+            int px = j.contains("x") ? static_cast<int>(j["x"].get<float>()) : 100;
+            int py = j.contains("y") ? static_cast<int>(j["y"].get<float>()) : 100;
+            int pw = j.contains("w") ? static_cast<int>(j["w"].get<float>()) : 800;
+            int ph = j.contains("h") ? static_cast<int>(j["h"].get<float>()) : 600;
+            prw->setPosition(px, py);
+            prw->setSize(pw, ph);
+        }
     }
 }

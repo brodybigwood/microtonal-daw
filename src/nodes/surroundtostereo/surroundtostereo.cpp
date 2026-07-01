@@ -245,9 +245,9 @@ void SurroundToStereoNode::syncToGui() {
 
 void SurroundToStereoNode::renderContent(SDL_Renderer* renderer) {
     // Hexagon window shape
-    float cx = TEX_W * 0.5f;
-    float cy = TEX_H * 0.5f;
-    float r = std::min(TEX_W, TEX_H) * 0.48f;
+    float cx = NODE_W * 0.5f;
+    float cy = NODE_H * 0.5f;
+    float r = std::min(NODE_W, NODE_H) * 0.48f;
 
     if (vCount != 6) {
         vCount = 6;

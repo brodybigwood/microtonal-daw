@@ -282,7 +282,7 @@ void VstNode::renderContent(SDL_Renderer* renderer) {
             "VST not supported on browsers", 0, SDL_Color{220, 220, 220, 255});
         if (surf) {
             SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
-            SDL_FRect tr{100, 200, static_cast<float>(surf->w), static_cast<float>(surf->h)};
+            SDL_FRect tr{10, 10, static_cast<float>(surf->w), static_cast<float>(surf->h)};
             SDL_RenderTexture(renderer, tex, nullptr, &tr);
             SDL_DestroyTexture(tex);
             SDL_DestroySurface(surf);
@@ -291,8 +291,17 @@ void VstNode::renderContent(SDL_Renderer* renderer) {
     return;
 #else
 
+    if (!vCount) {
+        vCount = 4;
+        vx = new float[vCount];
+        vy = new float[vCount];
+        vx[0] = 0; vx[1] = NODE_W; vx[2] = NODE_W; vx[3] = 0;
+        vy[0] = 0; vy[1] = 0; vy[2] = NODE_H; vy[3] = NODE_H;
+    }
+
     SDL_SetRenderDrawColor(renderer, 24, 24, 28, 255);
-    SDL_RenderFillRect(renderer, nullptr);
+    SDL_FRect full{0, 0, NODE_W, NODE_H};
+    SDL_RenderFillRect(renderer, &full);
 
     if (!fonts.mainFont) return;
 
@@ -309,79 +318,74 @@ void VstNode::renderContent(SDL_Renderer* renderer) {
     SDL_Color white{220, 220, 220, 255};
     SDL_Color grey{150, 150, 155, 255};
 
-    // Plugin name
-    std::string displayName = plugin ? plugin->getName() : "No Plugin Loaded";
-    if (displayName.empty()) displayName = "No Plugin Loaded";
-    renderText(displayName, nameRect.x, nameRect.y, white);
+    // Dropdown: plugin name or "Select VST..."
+    std::string displayName = plugin ? plugin->getName() : "Select VST...";
+    if (displayName.empty()) displayName = "(unnamed)";
+    if (displayName.size() > 22) displayName = displayName.substr(0, 22) + "...";
 
-    // I/O info
-    if (plugin && plugin->isValid()) {
-        int ai = plugin->getNumAudioInputs();
-        int ao = plugin->getNumAudioOutputs();
-        int ei = plugin->getNumEventInputs();
-        int eo = plugin->getNumEventOutputs();
-        std::string ioInfo = "Audio: " + std::to_string(ai) + " in / " + std::to_string(ao) + " out";
-        if (ei > 0 || eo > 0)
-            ioInfo += "  MIDI: " + std::to_string(ei) + " in / " + std::to_string(eo) + " out";
-        renderText(ioInfo, 40, 60, grey);
-    }
+    SDL_SetRenderDrawColor(renderer, 38, 38, 42, 255);
+    SDL_RenderFillRect(renderer, &dropdownRect_);
+    SDL_SetRenderDrawColor(renderer, 70, 70, 74, 255);
+    SDL_RenderRect(renderer, &dropdownRect_);
+    renderText(displayName, dropdownRect_.x + 6, dropdownRect_.y + 4, white);
 
-    // Bypass label
-    renderText("Bypass", 38, TEX_H * 0.3f + 50, white);
+    // Dropdown arrow
+    float ax = dropdownRect_.x + dropdownRect_.w - 12.f;
+    float ay = dropdownRect_.y + 8.f;
+    SDL_SetRenderDrawColor(renderer, 180, 180, 180, 255);
+    SDL_RenderLine(renderer, ax, ay, ax + 4, ay + 6);
+    SDL_RenderLine(renderer, ax + 4, ay + 6, ax + 8, ay);
 
-    // Load button (hidden once a plugin is loaded)
-    if (!plugin || !plugin->isValid()) {
-        SDL_SetRenderDrawColor(renderer, 50, 50, 55, 255);
-        SDL_RenderFillRect(renderer, &loadBtnRect);
-        SDL_SetRenderDrawColor(renderer, 100, 100, 105, 255);
-        SDL_RenderRect(renderer, &loadBtnRect);
-        renderText("Load Plugin...", loadBtnRect.x + 12, loadBtnRect.y + 6, white);
-
-        // VST history list
+    // Dropdown open: show history list
+    historyRects_.clear();
+    if (dropdownOpen_) {
         auto history = Settings::instance().getVstHistory();
-        if (!history.empty()) {
-            renderText("Recent:", 40, loadBtnRect.y + loadBtnRect.h + 12, grey);
-            historyRects_.clear();
-            float y = loadBtnRect.y + loadBtnRect.h + 36;
-            int count = 0;
-            for (const auto& p : history) {
-                if (count >= 10) break;
-                // Extract filename from path
-                std::string name = p;
-                size_t slash = name.find_last_of("/\\");
-                if (slash != std::string::npos) name = name.substr(slash + 1);
-                // Remove extension
-                size_t dot = name.find_last_of('.');
-                if (dot != std::string::npos) name = name.substr(0, dot);
-                if (name.size() > 35) name = name.substr(0, 35) + "...";
+        float y = dropdownRect_.y + dropdownRect_.h;
+        int count = 0;
+        for (const auto& p : history) {
+            if (count >= 5) break;
+            std::string name = p;
+            size_t slash = name.find_last_of("/\\");
+            if (slash != std::string::npos) name = name.substr(slash + 1);
+            size_t dot = name.find_last_of('.');
+            if (dot != std::string::npos) name = name.substr(0, dot);
+            if (name.size() > 22) name = name.substr(0, 22) + "...";
 
-                SDL_FRect itemRect{40, y, 340, 28};
-                historyRects_.push_back(itemRect);
+            SDL_FRect itemRect{dropdownRect_.x, y, dropdownRect_.w, 20.f};
+            historyRects_.push_back(itemRect);
 
-                SDL_SetRenderDrawColor(renderer, 38, 38, 42, 255);
-                SDL_RenderFillRect(renderer, &itemRect);
-                SDL_SetRenderDrawColor(renderer, 70, 70, 74, 255);
-                SDL_RenderRect(renderer, &itemRect);
-                renderText(name, itemRect.x + 8, itemRect.y + 5, white);
-                y += 32;
-                ++count;
-            }
+            bool hovered = (msX >= itemRect.x && msX < itemRect.x + itemRect.w &&
+                            msY >= itemRect.y && msY < itemRect.y + itemRect.h);
+            SDL_SetRenderDrawColor(renderer, hovered ? 55 : 42, hovered ? 55 : 42, hovered ? 60 : 46, 255);
+            SDL_RenderFillRect(renderer, &itemRect);
+            SDL_SetRenderDrawColor(renderer, 70, 70, 74, 255);
+            SDL_RenderRect(renderer, &itemRect);
+            renderText(name, itemRect.x + 6, itemRect.y + 2, white);
+            y += 20.f;
+            ++count;
         }
+        // "Load from file..." option
+        SDL_FRect loadRect{dropdownRect_.x, y, dropdownRect_.w, 20.f};
+        historyRects_.push_back(loadRect);
+        bool hovered = (msX >= loadRect.x && msX < loadRect.x + loadRect.w &&
+                        msY >= loadRect.y && msY < loadRect.y + loadRect.h);
+        SDL_SetRenderDrawColor(renderer, hovered ? 55 : 42, hovered ? 55 : 42, hovered ? 60 : 46, 255);
+        SDL_RenderFillRect(renderer, &loadRect);
+        SDL_SetRenderDrawColor(renderer, 70, 70, 74, 255);
+        SDL_RenderRect(renderer, &loadRect);
+        renderText("Load from file...", loadRect.x + 6, loadRect.y + 2, grey);
     }
 
     // Editor toggle button
     if (plugin && plugin->isValid()) {
-        SDL_SetRenderDrawColor(renderer, 50, 50, 55, 255);
-        SDL_RenderFillRect(renderer, &editorBtnRect);
+        bool hovered = (msX >= editorBtnRect_.x && msX < editorBtnRect_.x + editorBtnRect_.w &&
+                        msY >= editorBtnRect_.y && msY < editorBtnRect_.y + editorBtnRect_.h);
+        SDL_SetRenderDrawColor(renderer, hovered ? 65 : 50, hovered ? 65 : 50, hovered ? 70 : 55, 255);
+        SDL_RenderFillRect(renderer, &editorBtnRect_);
         SDL_SetRenderDrawColor(renderer, 100, 100, 105, 255);
-        SDL_RenderRect(renderer, &editorBtnRect);
+        SDL_RenderRect(renderer, &editorBtnRect_);
         const char* label = plugin->isEditorOpen() ? "Hide Editor" : "Show Editor";
-        renderText(label, editorBtnRect.x + 12, editorBtnRect.y + 6, white);
-    }
-
-    // Vendor info
-    if (plugin && plugin->isValid()) {
-        renderText("Vendor: " + plugin->getVendor(), 40, 170, grey);
+        renderText(label, editorBtnRect_.x + 6, editorBtnRect_.y + 4, white);
     }
 
     if (plugin && plugin->isEditorOpen()) {
@@ -411,11 +415,11 @@ bool VstNode::handleCustomInput(SDL_Event& e) {
 #endif
 
     if (e.type == SDL_EVENT_DROP_FILE) {
-        if (plugin && plugin->isValid()) return false;
         const char* path = e.drop.data;
         if (path) {
             std::cout << "[VstNode] drop file: " << path << std::endl;
             loadPlugin(path, true);
+            dropdownOpen_ = false;
             return true;
         }
     }
@@ -423,24 +427,8 @@ bool VstNode::handleCustomInput(SDL_Event& e) {
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
         SDL_FPoint pt{msX, msY};
 
-        if (SDL_PointInRectFloat(&pt, &loadBtnRect)) {
-            if (!plugin || !plugin->isValid()) {
-                std::string path = openFileDialog();
-                if (!path.empty()) loadPlugin(path, true);
-            }
-            return true;
-        }
-
-        // History item clicks
-        auto history = Settings::instance().getVstHistory();
-        for (size_t i = 0; i < historyRects_.size() && i < history.size(); ++i) {
-            if (SDL_PointInRectFloat(&pt, &historyRects_[i])) {
-                loadPlugin(history[i], true);
-                return true;
-            }
-        }
-
-        if (SDL_PointInRectFloat(&pt, &editorBtnRect)) {
+        // Editor button click
+        if (SDL_PointInRectFloat(&pt, &editorBtnRect_)) {
             if (plugin && plugin->isValid()) {
                 if (plugin->isEditorOpen()) {
                     plugin->hideEditor();
@@ -449,6 +437,34 @@ bool VstNode::handleCustomInput(SDL_Event& e) {
                     wirePluginCallbacks();
                 }
             }
+            return true;
+        }
+
+        // Dropdown: history item clicks (when open)
+        if (dropdownOpen_) {
+            auto history = Settings::instance().getVstHistory();
+            // History items
+            for (size_t i = 0; i < historyRects_.size(); ++i) {
+                if (SDL_PointInRectFloat(&pt, &historyRects_[i])) {
+                    if (i < history.size()) {
+                        loadPlugin(history[i], true);
+                    } else {
+                        // "Load from file..." is the last item
+                        std::string path = openFileDialog();
+                        if (!path.empty()) loadPlugin(path, true);
+                    }
+                    dropdownOpen_ = false;
+                    return true;
+                }
+            }
+            // Click outside dropdown closes it
+            dropdownOpen_ = false;
+            return false;
+        }
+
+        // Dropdown toggle
+        if (SDL_PointInRectFloat(&pt, &dropdownRect_)) {
+            dropdownOpen_ = !dropdownOpen_;
             return true;
         }
     }
@@ -461,8 +477,6 @@ bool VstNode::handleCustomInput(SDL_Event& e) {
 // ============================================================================
 
 void VstNode::loadPlugin(const std::string& path, bool createUndo) {
-    // Once a plugin is loaded, don't allow replacement via UI
-    if (createUndo && plugin && plugin->isValid()) return;
 
     if (createUndo) {
         // --- GUI thread: create/destroy the shared instance ---

@@ -30,5 +30,5 @@ class OscillatorNode : public Node {
         void setup() override;
         Voice voices[NUM_VOICES];
 
-        Knob volume = Knob(0.5, TEX_W / 2, TEX_H / 2, 200, "assets/knobs/1.png", -135, 135, "Volume");
+        Knob volume = Knob(0.5, NODE_W / 2, NODE_H / 2, 16, "assets/knobs/1.png", -135, 135, "Volume");
 };

@@ -4,6 +4,8 @@
 #include "styles.h"
 #include "NodeEditor.h"
 #include "Node.h"
+#include "WindowManager.h"
+#include "NodeProcessor.h"
 #include <algorithm>
 #include <cstdio>
 #include <vector>
@@ -40,9 +42,9 @@ bool WindowHandler::tick() {
 
         clearPendingTooltip();
 
-        if (ctxMenu->active) { project->render(); }
-
         bool eventHandled = false;
+        bool ctxMenuHadEvent = false;
+        SDL_Event ctxMenuEvent{};
 
         SDL_Event e;
         while(SDL_PollEvent(&e)) {
@@ -52,7 +54,19 @@ bool WindowHandler::tick() {
                 running = false;
                 break;
             }
+            // Clear stale hover/drag state on focus change or mouse leave.
+            if ((e.type == SDL_EVENT_WINDOW_FOCUS_GAINED ||
+                 e.type == SDL_EVENT_WINDOW_FOCUS_LOST ||
+                 e.type == SDL_EVENT_WINDOW_MOUSE_LEAVE) && project && project->processor) {
+                auto* editor = project->processor->getEditor();
+                if (editor) editor->clearStaleHover();
+            }
             if (e.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
+                // Check expanded windows first.
+                WindowManager* wm = (project && project->processor) ? project->processor->getWindowManager() : nullptr;
+                if (wm && wm->handleEvent(e))
+                    continue;
+
                 bool handledClose = false;
                 SDL_Window* closingWindow = SDL_GetWindowFromID(e.window.windowID);
                 if (closingWindow) {
@@ -122,9 +136,24 @@ bool WindowHandler::tick() {
             toggleKey(e, SDL_SCANCODE_LCTRL, isCtrlPressed);
             toggleKey(e, SDL_SCANCODE_LALT, isAltPressed);
 
+            WindowManager* wm = (project && project->processor) ? project->processor->getWindowManager() : nullptr;
+
+            // Context menu: dismiss on click/key outside its window, track events for it.
             if (ctxMenu->active) {
-                ctxMenu->tick(e);
-            } else {
+                if (!isEventForWindow(e, ctxMenu->window_id)) {
+                    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_KEY_DOWN)
+                        ctxMenu->active = false;
+                } else {
+                    ctxMenuEvent = e;
+                    ctxMenuHadEvent = true;
+                }
+            }
+
+            // Route to expanded windows.
+            if (wm && wm->handleEvent(e))
+                continue;
+
+            {
                 SDL_Window* eventWin = SDL_GetWindowFromID(getEventWindowID(e));
                 for (auto w : windows)
                     if (w && eventWin == w->window) {
@@ -138,35 +167,30 @@ bool WindowHandler::tick() {
 
         if (!running) return false;
 
-        if (!eventHandled && ctxMenu->active) { // home was already rendered, but ctxMenu hasn't rendered yet. so render on top by triggering with fake event
-            e.type = SDL_EVENT_USER;
-            e.window.windowID = ctxMenu->window_id;
-            ctxMenu->tick(e);
-        } else if (!ctxMenu->active) {
-            project->render();
-        }
+        // Render project.
+        project->render();
+
+        // Render expanded windows (no present yet).
+        WindowManager* wm = (project && project->processor) ? project->processor->getWindowManager() : nullptr;
+        if (wm) wm->renderAll();
+
+        // Draw tooltip on top of whatever window's renderer it was set for.
         drawPendingTooltip();
-        if (Settings::instance().showFps() && fonts.mainFont) {
-            SDL_Renderer* fpsR = project ? project->renderer : nullptr;
-            SDL_Window* fpsW = project ? project->window : nullptr;
-            if (fpsR) {
-                char buf[16];
-                snprintf(buf, sizeof(buf), "%.0f", fpsCounter_);
-                SDL_Surface* sf = TTF_RenderText_Blended(fonts.mainFont, buf, 0, SDL_Color{180, 220, 180, 220});
-                if (sf) {
-                    SDL_Texture* tex = SDL_CreateTextureFromSurface(fpsR, sf);
-                    if (tex) {
-                        float fw = static_cast<float>(sf->w), fh = static_cast<float>(sf->h);
-                        int winW = 800, winH = 0;
-                        if (fpsW) SDL_GetWindowSize(fpsW, &winW, &winH);
-                        SDL_FRect dst{static_cast<float>(winW) - fw - 8.f, 8.f, fw, fh};
-                        SDL_RenderTexture(fpsR, tex, nullptr, &dst);
-                        SDL_DestroyTexture(tex);
-                    }
-                    SDL_DestroySurface(sf);
-                }
+
+        // Context menu: one tick after render, with real event or fake.
+        if (ctxMenu->active) {
+            if (ctxMenuHadEvent) {
+                ctxMenu->tick(ctxMenuEvent);
+            } else {
+                SDL_Event fake{};
+                fake.type = SDL_EVENT_USER;
+                fake.window.windowID = ctxMenu->window_id;
+                ctxMenu->tick(fake);
             }
         }
+
+        // Present everything once.
+        if (wm) wm->presentAll();
         project->renderPresent();
     }
     // Compact nulled-out window pointers (deferred from removeWindow during iteration).

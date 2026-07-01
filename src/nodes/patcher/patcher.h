@@ -34,7 +34,7 @@ public:
 
     SDL_Texture* neTex = nullptr;
 
-    SDL_FRect neRect{0, 0, TEX_W, TEX_H};
+    SDL_FRect neRect{0, 0, NODE_W, NODE_H};
     std::vector<float> inputPatchBuffer;
     std::vector<float> patchBuffer;
 

@@ -30,7 +30,7 @@ public:
 
     std::shared_ptr<VstPlugin> plugin; // shared across copies via VstPluginCache
 
-    Knob bypass = Knob(0.0f, 80.0f, TEX_H * 0.3f, 24.0f, "assets/knobs/1.png",
+    Knob bypass = Knob(0.0f, 20.0f, NODE_H * 0.3f, 10.0f, "assets/knobs/1.png",
                        -135.0f, 135.0f, "Bypass", SDL_Color{220, 220, 220, 255});
 
 private:
@@ -43,10 +43,11 @@ private:
     Connection* midiIn = nullptr;
     Connection* midiOut = nullptr;
 
-    SDL_FRect loadBtnRect{160, 80, 160, 30};
-    SDL_FRect editorBtnRect{160, 120, 160, 30};
-    SDL_FRect nameRect{40, 40, 400, 30};
+    // Layout rects (updated each frame in renderContent).
+    SDL_FRect dropdownRect_{8, 8, NODE_W - 16, 24};
+    SDL_FRect editorBtnRect_{8, 38, NODE_W - 16, 24};
     std::vector<SDL_FRect> historyRects_;
+    bool dropdownOpen_ = false;
 
     std::string loadedPath; // currently loaded plugin path
 

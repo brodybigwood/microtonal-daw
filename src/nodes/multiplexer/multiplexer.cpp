@@ -209,12 +209,12 @@ void MultiplexerNode::process() {
     }
 }
 
-// --- chrome (sized for TEX_H=720, node renders ~50px tall on screen) ---
-static constexpr float kDotR = 56.f;
-static constexpr float kDotSpacing = 140.f;
-static constexpr float kBtnW = 130.f;
-static constexpr float kChromeY = 70.f;
-static constexpr float kChromeX = 80.f;
+// --- chrome (sized for NODE_H) ---
+static constexpr float kDotR = 8.f;
+static constexpr float kDotSpacing = 20.f;
+static constexpr float kBtnW = 30.f;
+static constexpr float kChromeY = 10.f;
+static constexpr float kChromeX = 10.f;
 
 void MultiplexerNode::renderContent(SDL_Renderer* renderer) {
     if (!vCount) {
@@ -222,14 +222,14 @@ void MultiplexerNode::renderContent(SDL_Renderer* renderer) {
         vx = new float[vCount];
         vy = new float[vCount];
         vx[0] = 0; vy[0] = 0;
-        vx[1] = TEX_W; vy[1] = 0;
-        vx[2] = TEX_W; vy[2] = TEX_H;
-        vx[3] = 0; vy[3] = TEX_H;
+        vx[1] = NODE_W; vy[1] = 0;
+        vx[2] = NODE_W; vy[2] = NODE_H;
+        vx[3] = 0; vy[3] = NODE_H;
     }
 
     // Background
     SDL_SetRenderDrawColor(renderer, 26, 30, 38, 255);
-    SDL_FRect bg{0, 0, static_cast<float>(TEX_W), static_cast<float>(TEX_H)};
+    SDL_FRect bg{0, 0, static_cast<float>(NODE_W), static_cast<float>(NODE_H)};
     SDL_RenderFillRect(renderer, &bg);
 
     // Slot dots (8 fixed slots)

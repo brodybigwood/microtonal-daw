@@ -40,11 +40,11 @@ private:
     Connection* in = nullptr;
     Connection* out = nullptr;
 
-    Knob cutoff = Knob(0.55f, TEX_W * 0.34f, TEX_H * 0.56f, 145.0f, "assets/knobs/1.png", -135.0f, 135.0f, "Cutoff");
-    Knob resonance = Knob(0.12f, TEX_W * 0.66f, TEX_H * 0.56f, 145.0f, "assets/knobs/1.png", -135.0f, 135.0f, "Resonance");
+    Knob cutoff = Knob(0.55f, NODE_W * 0.34f, NODE_H * 0.56f, 14.0f, "assets/knobs/1.png", -135.0f, 135.0f, "Cutoff");
+    Knob resonance = Knob(0.12f, NODE_W * 0.66f, NODE_H * 0.56f, 14.0f, "assets/knobs/1.png", -135.0f, 135.0f, "Resonance");
 
-    SDL_FRect modeRect{180, 70, 330, 62};
-    SDL_FRect slopeRect{770, 70, 330, 62};
+    SDL_FRect modeRect{10, 10, 40, 15};
+    SDL_FRect slopeRect{60, 10, 40, 15};
     FilterMode mode = FilterMode::LowPass;
     std::vector<int> slopeOptionsDb{6, 12, 18, 24, 36, 48};
     size_t slopeIndex = 0;

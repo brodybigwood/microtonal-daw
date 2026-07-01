@@ -3,6 +3,7 @@
 #include "nodes/vst/vstnode.h"
 #include "nodes/arranger/arranger.h"
 #include "SongRoll.h"
+#include "PianoRollWindow.h"
 #include "GridElement.h"
 #include <cmath>
 #include "SDL_Events.h"
@@ -156,22 +157,9 @@ void UndoManager::newAction(ProjectAction* pa) {
             };
 
             if (pa->type == ZoomNodes) {
+                // Zoom removed — no-op propagation for backward compat.
                 auto* zn = static_cast<ZoomNodesAction*>(pa);
-                zn->propagateCoalesced = [proj, siblingPaths](float amt, float mx, float my) {
-                    for (auto& sp : siblingPaths) {
-                        NodeManager& nm3 = requireManager(proj, sp);
-                        auto zoomOne = [&](Node* n) {
-                            if (!n->canZoom(amt)) return;
-                            float nx = mx + (n->dstRect.x - mx) * amt;
-                            float ny = my + (n->dstRect.y - my) * amt;
-                            n->zoom(amt);
-                            n->move(nx, ny);
-                        };
-                        for (auto n : nm3.getNodes()) zoomOne(n);
-                        zoomOne(nm3.inNode);
-                        zoomOne(nm3.outNode);
-                    }
-                };
+                zn->propagateCoalesced = [](float, float, float) {};
             }
 
             if (pa->skipInitialDo) {
@@ -1705,40 +1693,9 @@ ZoomNodesAction::ZoomNodesAction(Project* p, std::vector<int> managerPath, float
     amounts.push_back(amount);
     mxs.push_back(mx);
     mys.push_back(my);
-
-    doAction = [this]() {
-        NodeManager& nm2 = requireManager(this->p, this->managerPath);
-        for (size_t i = 0; i < amounts.size(); ++i) {
-            float a = amounts[i], cx = mxs[i], cy = mys[i];
-            auto zoomOne = [&](Node* n) {
-                if (!n->canZoom(a)) return;
-                float nx = cx + (n->dstRect.x - cx) * a;
-                float ny = cy + (n->dstRect.y - cy) * a;
-                n->zoom(a);
-                n->move(nx, ny);
-            };
-            for (auto n : nm2.getNodes()) zoomOne(n);
-            zoomOne(nm2.inNode);
-            zoomOne(nm2.outNode);
-        }
-    };
-    undoAction = [this]() {
-        NodeManager& nm2 = requireManager(this->p, this->managerPath);
-        for (int i = (int)amounts.size() - 1; i >= 0; --i) {
-            float a = amounts[i], cx = mxs[i], cy = mys[i];
-            float inv = 1.f / a;
-            auto zoomOne = [&](Node* n) {
-                if (!n->canZoom(inv)) return;
-                float nx = cx + (n->dstRect.x - cx) * inv;
-                float ny = cy + (n->dstRect.y - cy) * inv;
-                n->zoom(inv);
-                n->move(nx, ny);
-            };
-            for (auto n : nm2.getNodes()) zoomOne(n);
-            zoomOne(nm2.inNode);
-            zoomOne(nm2.outNode);
-        }
-    };
+    // Zoom removed — actions are no-ops for backward compat with serialized history.
+    doAction = [](){};
+    undoAction = [](){};
 }
 
 void ZoomNodesAction::addStep(float amount, float mx, float my) {
@@ -2617,9 +2574,13 @@ static void openPianoRollWindow(Project* p, const std::vector<int>& managerPath,
     auto* region = dynamic_cast<Region*>(em->getElement(static_cast<uint16_t>(regionID)));
     if (!region) return;
     arr->sl->createPianoRoll(region, false, ewID);
-    if (arr->sl->pianoRolls.empty()) return;
-    PianoRoll* pr = arr->sl->pianoRolls.back();
-    if (pr) { pr->applyGeometry(x, y, w, h); pr->zOrder = zOrder; }
+    if (!arr->sl->pianoRollWindows.empty()) {
+        auto* prw = arr->sl->pianoRollWindows.back();
+        if (prw) {
+            prw->setPosition(static_cast<int>(x), static_cast<int>(y));
+            prw->setSize(static_cast<int>(w), static_cast<int>(h));
+        }
+    }
 }
 
 static void closePianoRollWindow(Project* p, const std::vector<int>& managerPath, int arrangerNodeID, int regionID) {

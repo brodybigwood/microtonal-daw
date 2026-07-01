@@ -191,25 +191,19 @@ void InputNode::renderContent(SDL_Renderer* renderer) {
         vx = new float[vCount];
         vy = new float[vCount];
 
-        // Opposite of OutputNode/Node default trapezoid: narrow top, wide bottom.
-        vx[0] = 300;
-        vx[1] = TEX_W - 300;
-        vx[2] = TEX_W;
-        vx[3] = 0;
-
-        vy[0] = 0;
-        vy[1] = 0;
-        vy[2] = TEX_H;
-        vy[3] = TEX_H;
+        // Narrow top, wide bottom (opposite of default trapezoid).
+        vx[0] = 40;       vx[1] = NODE_W - 40; vx[2] = NODE_W; vx[3] = 0;
+        vy[0] = 0;        vy[1] = 0;           vy[2] = NODE_H; vy[3] = NODE_H;
     }
-    const float zoneTop = TEX_H - 100.0f;
-    const float zoneH = 100.0f;
+    const float zoneTop = NODE_H * 0.4f;
+    const float zoneH = NODE_H * 0.6f;
     const float rowH = zoneH * 0.5f;
     const float y0 = zoneTop;
     const float y1 = zoneTop + rowH;
     const float y2 = zoneTop + zoneH;
-    auto leftAt = [](float y) { return (300.0f / TEX_H) * (TEX_H - y); };
-    auto rightAt = [&](float y) { return TEX_W - leftAt(y); };
+    // Inverted trapezoid: narrow top (40px indent), wide bottom.
+    auto leftAt = [](float y) { return (40.0f / NODE_H) * (NODE_H - y); };
+    auto rightAt = [&](float y) { return NODE_W - leftAt(y); };
     auto split = [](float l, float r) { return l + (r - l) * 0.5f; };
 
     const float l0 = leftAt(y0), r0 = rightAt(y0), m0 = split(l0, r0);
@@ -284,7 +278,7 @@ json InputNode::serialize() {
 
     j["x"] = dstRect.x;
     j["y"] = dstRect.y;
-    j["zoomRatio"] = zoomRatio;
+    j["zoomRatio"] = kDefaultZoomRatio;
     j["channels"] = totalWaveformChannels();
     j["outputConnectionIDs"] = json::array();
     for (auto* c : outputs.connections) {
@@ -371,7 +365,6 @@ void InputNode::deSerialize(json j) {
     }
     makeConnectionRects();
 
-    zoom(j["zoomRatio"].get<float>() / zoomRatio);
     move(j["x"], j["y"]);
     shouldAutoPlaceFromWindow = false;
 }

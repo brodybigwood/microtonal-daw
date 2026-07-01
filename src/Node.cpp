@@ -337,7 +337,7 @@ json Node::serialize() {
 
     j["id"] = id;
     j["name"] = name;
-    j["zoomRatio"] = zoomRatio;
+    j["zoomRatio"] = kDefaultZoomRatio;
     j["nodeType"] = nodeType;
     j["x"] = dstRect.x;
     j["y"] = dstRect.y;
@@ -404,8 +404,6 @@ Node* Node::deSerialize(json j, NodeManager* nm, bool skipExtra) {
 
     n->name = j["name"];
 
-    n->zoom(j["zoomRatio"].get<float>()/n->zoomRatio);
-
     n->move(j["x"], j["y"]);
     if (j.contains("ewid")) n->EmbeddedWindow::id = j["ewid"];
 
@@ -446,7 +444,7 @@ Node::Node(uint16_t id, NodeManager* nm, NodeType nt) :
     nodeType(nt),
     isAltPressed(WindowHandler::instance()->isAltPressed),
     isCtrlPressed(WindowHandler::instance()->isCtrlPressed) {
-    dstRect = {0, 0, TEX_W * zoomRatio, TEX_H * zoomRatio};
+    dstRect = {0, 0, NODE_W, NODE_H};
     w = dstRect.w;
     h = dstRect.h;
     outputs.nodeID = id;
@@ -566,6 +564,8 @@ void Node::clickMouse(SDL_Event& e) {
     if (e.button.button == SDL_BUTTON_LEFT) {
         if (hoveredConnection != -1 && ne) {
             ne->startPortDrag(this, hoveredConnection, hoveredDirection);
+        } else if (ne) {
+            ne->startNodeDrag(this);
         }
 
         auto time = SDL_GetTicks();
@@ -574,6 +574,8 @@ void Node::clickMouse(SDL_Event& e) {
 
     } else if (e.button.button == SDL_BUTTON_RIGHT) {
         auto* ctxMenu = ContextMenu::get();
+        SDL_Window* evWin = SDL_GetWindowFromID(e.button.windowID);
+        SDL_Renderer* evRenderer = evWin ? SDL_GetRenderer(evWin) : nullptr;
 
         Parameter* hoveredParam = nullptr;
         for (auto* p : params) {
@@ -584,7 +586,7 @@ void Node::clickMouse(SDL_Event& e) {
         }
 
         if (hoveredParam) {
-            ctxMenu->activate();
+            ctxMenu->activate(evRenderer, e.button.windowID);
             size_t paramIndex = 0;
             for (size_t i = 0; i < params.size(); ++i) {
                 if (params[i] == hoveredParam) { paramIndex = i; break; }
@@ -596,7 +598,7 @@ void Node::clickMouse(SDL_Event& e) {
                 ctxMenu->active = false;
                 return;
             }
-            ctxMenu->activate();
+            ctxMenu->activate(evRenderer, e.button.windowID);
 
             Connection* c;
             switch (hoveredDirection) {
@@ -612,7 +614,7 @@ void Node::clickMouse(SDL_Event& e) {
 
             ctxMenu->dynamicTick = getTreeMenuTicker(t);
         } else {
-            ctxMenu->activate();
+            ctxMenu->activate(evRenderer, e.button.windowID);
 
             auto t = getNodeMenu();
             ctxMenu->dynamicTick = getTreeMenuTicker(t);
@@ -897,36 +899,7 @@ void connectionSet::addConnection(Connection* c) {
     }
 }
 
-void Node::resize(float rx, float ry) {
 
-    float new_w = dstRect.w + rx;
-    float new_h = dstRect.h + ry;
-
-    if (new_w > new_h) {
-        zoom((new_w / TEX_W)/zoomRatio);
-    } else {
-        zoom((new_h / TEX_H)/zoomRatio);
-
-    }
-
-    zoom(1.0f);
-}
-
-bool Node::canZoom(float amount) {
-    return zoomRatio * amount >= 0.01;
-}
-
-void Node::zoom(float amount) {
-
-    if (!canZoom(amount)) return;
-
-    zoomRatio *= amount;
-
-    dstRect.w = TEX_W * zoomRatio;
-    dstRect.h = TEX_H * zoomRatio;
-
-    makeConnectionRects();
-}
 
 void Node::makeConnectionRects() {
     const PortDisplayMode mode = static_cast<PortDisplayMode>(Settings::instance().portDisplayMode());
@@ -964,7 +937,7 @@ void Node::move(float mx, float my) {
     y = my;
     w = dstRect.w;
     h = dstRect.h;
-    resize(0, 0);
+    makeConnectionRects();
 }
 
 SDL_FRect Connection::srcRect() {
@@ -983,15 +956,8 @@ void Node::renderContent(SDL_Renderer* renderer) {
         vx = new float[vCount];
         vy = new float[vCount];
 
-        vx[0] = 0;
-        vx[1] = TEX_W;
-        vx[2] = TEX_W-300;
-        vx[3] = 300;
-
-        vy[0] = 0;
-        vy[1] = 0;
-        vy[2] = TEX_H;
-        vy[3] = TEX_H;
+        vx[0] = 0;       vx[1] = NODE_W;    vx[2] = NODE_W - 40; vx[3] = 40;
+        vy[0] = 0;       vy[1] = 0;         vy[2] = NODE_H;      vy[3] = NODE_H;
     }
 
     filledPolygonRGBA(renderer, vx, vy, vCount, 255, 255, 255, 255);
@@ -1001,15 +967,15 @@ void Node::renderContent(SDL_Renderer* renderer) {
 }
 
 void Node::renderContentHelper(SDL_Renderer* renderer) {
-    SDL_FRect tRect{0,0,TEX_W,TEX_H};
-
     auto target = SDL_GetRenderTarget(renderer);
     SDL_SetRenderTarget(renderer, texture);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
     SDL_RenderClear(renderer);
     renderContent(renderer);
     SDL_SetRenderTarget(renderer, target);
-    SDL_RenderTexture(renderer, texture, &tRect, &dstRect);
+    // Texture is 1:1 with dstRect, just blit at the node's position.
+    SDL_FRect src{0, 0, dstRect.w, dstRect.h};
+    SDL_RenderTexture(renderer, texture, &src, &dstRect);
 }
 
 void Node::render(SDL_Renderer* renderer) {
@@ -1017,21 +983,20 @@ void Node::render(SDL_Renderer* renderer) {
         return;
 
     if (!texture)
-        texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, TEX_W, TEX_H);
+        texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, NODE_W, NODE_H);
 
     renderContentHelper(renderer);
 
     // Polygon outline, ports, and tooltip all render onto the same renderer.
     SDL_Renderer* portR = renderer;
 
-    // Polygon outline on the canvas (not the texture), transformed to screen space.
+    // Polygon outline on the canvas, offset by node position.
     if (vCount >= 3 && vx && vy) {
-        const float s = zoomRatio;
         std::vector<float> svx(vCount);
         std::vector<float> svy(vCount);
         for (size_t i = 0; i < vCount; ++i) {
-            svx[i] = dstRect.x + vx[i] * s;
-            svy[i] = dstRect.y + vy[i] * s;
+            svx[i] = dstRect.x + vx[i];
+            svy[i] = dstRect.y + vy[i];
         }
 
         // Glow pass — expand outward, low alpha.
@@ -1395,17 +1360,8 @@ void Node::buildHitPolygon(std::vector<SDL_FPoint>& out) const {
     }
     out.resize(vCount);
     for (size_t i = 0; i < vCount; ++i)
-        out[i] = {dstRect.x + vx[i] * zoomRatio, dstRect.y + vy[i] * zoomRatio};
+        out[i] = {dstRect.x + vx[i], dstRect.y + vy[i]};
 }
 
-void Node::applyResizeDelta(float dx, float dy) {
-    EmbeddedWindow::applyResizeDelta(dx, dy);
-    dstRect.x = x;
-    dstRect.y = y;
-    dstRect.w = w;
-    dstRect.h = h;
-    resize(0, 0);
-    w = dstRect.w;
-    h = dstRect.h;
-}
+
 

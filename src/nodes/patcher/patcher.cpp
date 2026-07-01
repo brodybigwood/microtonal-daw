@@ -3,6 +3,9 @@
 #include "NodeEditor.h"
 #include "OutputNode.h"
 #include "InputNode.h"
+#include "PatcherExpandedWindow.h"
+#include "WindowManager.h"
+#include "NodeProcessor.h"
 #include "Preferences.h"
 #include "nodes/multiplexer/multiplexer.h"
 #include <cstring>
@@ -18,7 +21,7 @@ PatcherNode::PatcherNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::
 
     mainEditor = new NodeEditor;
     mainEditor->embedded_ = true;
-    mainEditor->setEmbeddedCanvasSize(static_cast<float>(TEX_W), static_cast<float>(TEX_H));
+    mainEditor->setEmbeddedCanvasSize(static_cast<float>(NODE_W), static_cast<float>(NODE_H));
     mainManager->setNE(mainEditor);
     mainEditor->retach();
 }
@@ -369,35 +372,79 @@ void PatcherNode::process() {
     }
 }
 
+// Button rect — fills most of the node with a small margin.
+static const SDL_FRect kPatcherOpenBtnRect{10.f, 10.f, NODE_W - 20.f, NODE_H - 20.f};
+
 void PatcherNode::renderContent(SDL_Renderer* renderer) {
     if (!vCount) {
         vCount = 4;
         vx = new float[vCount];
         vy = new float[vCount];
-        vx[0] = 0;
-        vx[1] = TEX_W;
-        vx[2] = TEX_W;
-        vx[3] = 0;
-        vy[0] = 0;
-        vy[1] = 0;
-        vy[2] = TEX_H;
-        vy[3] = TEX_H;
+        vx[0] = 0; vx[1] = NODE_W; vx[2] = NODE_W; vx[3] = 0;
+        vy[0] = 0; vy[1] = 0; vy[2] = NODE_H; vy[3] = NODE_H;
     }
 
-    if (ne) {
-        mainEditor->mouseX = (ne->mouseX - dstRect.x) / zoomRatio;
-        mainEditor->mouseY = (ne->mouseY - dstRect.y) / zoomRatio;
+    // Label.
+    if (fonts.mainFont) {
+        SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, "Patcher", 0, SDL_Color{200, 200, 200, 255});
+        if (surf) {
+            SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
+            if (tex) {
+                float tw = static_cast<float>(surf->w), th = static_cast<float>(surf->h);
+                SDL_FRect dst{kPatcherOpenBtnRect.x + kPatcherOpenBtnRect.w * 0.5f - tw * 0.5f,
+                              kPatcherOpenBtnRect.y + kPatcherOpenBtnRect.h * 0.5f - th * 0.5f, tw, th};
+                SDL_RenderTexture(renderer, tex, nullptr, &dst);
+                SDL_DestroyTexture(tex);
+            }
+            SDL_DestroySurface(surf);
+        }
     }
-    mainEditor->tick(renderer);
+
+    // Open button.
+    SDL_SetRenderDrawColor(renderer, 60, 60, 68, 255);
+    SDL_RenderFillRect(renderer, &kPatcherOpenBtnRect);
+    SDL_SetRenderDrawColor(renderer, 100, 100, 110, 255);
+    SDL_RenderRect(renderer, &kPatcherOpenBtnRect);
+
+    if (fonts.mainFont) {
+        SDL_Surface* btnSurf = TTF_RenderText_Blended(fonts.mainFont, "Open", 0, SDL_Color{220, 220, 220, 255});
+        if (btnSurf) {
+            SDL_Texture* btnTex = SDL_CreateTextureFromSurface(renderer, btnSurf);
+            if (btnTex) {
+                float tw = static_cast<float>(btnSurf->w), th = static_cast<float>(btnSurf->h);
+                SDL_FRect dst{kPatcherOpenBtnRect.x + kPatcherOpenBtnRect.w * 0.5f - tw * 0.5f,
+                              kPatcherOpenBtnRect.y + kPatcherOpenBtnRect.h * 0.5f - th * 0.5f, tw, th};
+                SDL_RenderTexture(renderer, btnTex, nullptr, &dst);
+                SDL_DestroyTexture(btnTex);
+            }
+            SDL_DestroySurface(btnSurf);
+        }
+    }
 
     renderParams(renderer);
 }
 
 bool PatcherNode::handleCustomInput(SDL_Event& e) {
-    if (mainEditor) {
-        mainEditor->mouseX = msX;
-        mainEditor->mouseY = msY;
-        mainEditor->handleInput(e);
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+        if (msX >= kPatcherOpenBtnRect.x && msX < kPatcherOpenBtnRect.x + kPatcherOpenBtnRect.w &&
+            msY >= kPatcherOpenBtnRect.y && msY < kPatcherOpenBtnRect.y + kPatcherOpenBtnRect.h) {
+            if (project && project->processor) {
+                auto* wm = project->processor->getWindowManager();
+                if (wm) {
+                    std::string title = "Patcher##" + std::to_string(id);
+                    auto* existing = wm->findByTitle(title.c_str());
+                    if (existing) {
+                        existing->show();
+                        SDL_RaiseWindow(existing->window);
+                    } else {
+                        auto pw = std::make_unique<PatcherExpandedWindow>(this, project);
+                        ExpandedWindow* ew = wm->addWindow(std::move(pw), 1200, 800, title.c_str());
+                        if (ew) ew->show();
+                    }
+                }
+            }
+            return true;
+        }
     }
     return true;
 }

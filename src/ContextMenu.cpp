@@ -10,17 +10,43 @@ ContextMenu* ContextMenu::get() {
 }
 
 void ContextMenu::activate() {
-    auto* wh = WindowHandler::instance();
-    if (wh && wh->project && wh->project->window) {
-        window_id = SDL_GetWindowID(wh->project->window);
-        renderer = wh->project->renderer;
+    // Use the currently focused window, falling back to the project window.
+    SDL_Window* focused = SDL_GetMouseFocus();
+    if (focused) {
+        window_id = SDL_GetWindowID(focused);
+        renderer = SDL_GetRenderer(focused);
+    }
+    if (!renderer) {
+        auto* wh = WindowHandler::instance();
+        if (wh && wh->project && wh->project->window) {
+            window_id = SDL_GetWindowID(wh->project->window);
+            renderer = wh->project->renderer;
+        }
     }
     SDL_GetMouseState(&locX, &locY);
     active = true;
+    // Enable text input on this window for text fields.
+    if (focused) SDL_StartTextInput(focused);
+}
+
+void ContextMenu::activate(SDL_Renderer* r, uint32_t wid) {
+    renderer = r;
+    window_id = wid;
+    SDL_GetMouseState(&locX, &locY);
+    active = true;
+    // Enable text input on this window for text fields.
+    SDL_Window* w = SDL_GetWindowFromID(wid);
+    if (w) SDL_StartTextInput(w);
 }
 
 void ContextMenu::tick(SDL_Event& e) {
-    if (!isEventForWindow(e, window_id)) return;
+    // Dismiss if the event is for a different window.
+    if (!isEventForWindow(e, window_id)) {
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+            active = false;
+        }
+        return;
+    }
 
     if (skipNextEvent) {
         skipNextEvent = false;

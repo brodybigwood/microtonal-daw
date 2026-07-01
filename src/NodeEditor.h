@@ -30,6 +30,9 @@ class NodeEditor {
 
         void renderPresent(SDL_Renderer* renderer);
 
+        /// Clear stale hover/focus state (call when window regains focus).
+        void clearStaleHover();
+
         float mouseX = 0;
         float mouseY = 0;
         bool leftClick = false;
@@ -39,6 +42,12 @@ class NodeEditor {
 
         /** Start dragging from a port (new or existing connection). */
         void startPortDrag(Node* node, int portId, Direction dir);
+
+        /** Start dragging a node by its body. */
+        void startNodeDrag(Node* node);
+
+        /** Stop any in-progress node drag. */
+        void stopNodeDrag();
 
         /** Finish drag: sever, reassign, or create based on what's under the mouse. */
         void handleDragDrop();
@@ -128,7 +137,6 @@ class NodeEditor {
 
     private:
 
-        void zoom(float);
         void move();
 
         float topMargin = 0.0f;

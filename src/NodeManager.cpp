@@ -323,6 +323,9 @@ void NodeManager::removeNodeNow(uint16_t id) {
     auto node = getNode(id);
     if (!node) return;
 
+    // Close expanded windows BEFORE deleting the node to avoid dangling pointers.
+    if (ne) ne->clearPointersToNode(node);
+
     for (auto c : node->inputs.connections) {
         if (c->is_connected) {
             severConnectionNow(c->input_node, c->input_connection, node->id, c->id);
@@ -345,7 +348,6 @@ void NodeManager::removeNodeNow(uint16_t id) {
     ids.erase(node->id);
     Node* removed = nodes.back();
     nodes.pop_back();
-    if (ne) ne->clearPointersToNode(removed);
     delete removed;
     topologyDirty = true;
 }

@@ -10,5 +10,5 @@ class PannerNode : public Node {
         Connection* in = nullptr;
         Connection* out = nullptr;
 
-        Knob pan = Knob(0.5, TEX_W / 2, TEX_H / 2, 200, "assets/knobs/1.png", -30, 30, "Pan");
+        Knob pan = Knob(0.5, NODE_W / 2, NODE_H / 2, 16, "assets/knobs/1.png", -30, 30, "Pan");
 };

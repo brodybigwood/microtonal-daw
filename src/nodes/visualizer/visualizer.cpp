@@ -21,17 +21,17 @@ VisualizerNode::VisualizerNode(uint16_t id, NodeManager* nm) : Node(id, nm, Node
     vCount = 4;
     vx = new float[vCount];
     vy = new float[vCount];
-    vx[0] = 0.0f;    vy[0] = 0.0f;
-    vx[1] = TEX_W;   vy[1] = 0.0f;
-    vx[2] = TEX_W;   vy[2] = TEX_H;
-    vx[3] = 0.0f;    vy[3] = TEX_H;
+    vx[0] = 0.0f;     vy[0] = 0.0f;
+    vx[1] = NODE_W;   vy[1] = 0.0f;
+    vx[2] = NODE_W;   vy[2] = NODE_H;
+    vx[3] = 0.0f;     vy[3] = NODE_H;
 
-    levelHistory.assign(TEX_W, 0.0f);
+    levelHistory.assign(NODE_W, 0.0f);
 }
 
 void VisualizerNode::setup() {
-    if (levelHistory.size() != TEX_W) {
-        levelHistory.assign(TEX_W, 0.0f);
+    if (levelHistory.size() != NODE_W) {
+        levelHistory.assign(NODE_W, 0.0f);
         writePos = 0;
     }
 }
@@ -94,7 +94,7 @@ void VisualizerNode::syncToGui() {
 }
 
 void VisualizerNode::renderContent(SDL_Renderer* renderer) {
-    const SDL_FRect graphRect{0.0f, 0.0f, static_cast<float>(TEX_W), static_cast<float>(TEX_H)};
+    const SDL_FRect graphRect{0.0f, 0.0f, static_cast<float>(NODE_W), static_cast<float>(NODE_H)};
     SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
     SDL_RenderFillRect(renderer, &graphRect);
     SDL_SetRenderDrawColor(renderer, 80, 80, 80, 255);

@@ -15,6 +15,8 @@
 
 #define TEX_W 1280
 #define TEX_H 720
+#define NODE_W 200
+#define NODE_H 120
 
 class NodeEditor;
 
@@ -71,9 +73,6 @@ class Node : public EmbeddedWindow {
 
         bool moving = false;
         void move(float, float);
-        void resize(float, float);
-        bool canZoom(float);
-        void zoom(float);
         void makeConnectionRects();
 
         // bounding polygon (for gui)
@@ -82,7 +81,8 @@ class Node : public EmbeddedWindow {
         // fixed size, no position
         size_t vCount = 0;
 
-        float zoomRatio = 50.0f / TEX_H; // 50px for every TEX_H texture pixels, so 50px height default
+        static constexpr float kDefaultZoomRatio = 1.0f;
+        float zoomRatio = kDefaultZoomRatio;
 
         SDL_Texture* texture = nullptr;
         void renderContentHelper(SDL_Renderer*);
@@ -159,7 +159,6 @@ class Node : public EmbeddedWindow {
 
         void applyGeometry(float nx, float ny, float nw, float nh) override {
             x = nx; y = ny; w = nw; h = nh;
-            zoomRatio = nw / TEX_W;
             dstRect = {nx, ny, nw, nh};
             markPolygonDirty();
             makeConnectionRects();
@@ -173,10 +172,7 @@ class Node : public EmbeddedWindow {
         virtual void setNEFinal() {}
         virtual void resetNEFinal() {}
 
-        // EmbeddedWindow polygon: use the node's existing shape.
-        bool hasRectResize() const override { return false; }
-        float minW() const override { return 40.f; }
-        float minH() const override { return 22.5f; } // 40 * TEX_H/TEX_W
+        // EmbeddedWindow polygon: use the node's existing shape. Fixed size — no resize.
+        ResizeZone getResizeZone(float, float) const override { return ResizeZone::None; }
         void buildHitPolygon(std::vector<SDL_FPoint>& out) const override;
-        void applyResizeDelta(float dx, float dy) override;
 }; 

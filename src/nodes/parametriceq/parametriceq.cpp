@@ -358,10 +358,10 @@ void ParametricEQNode::renderContent(SDL_Renderer* renderer) {
 
     if (!vCount) {
         vCount = 4;
-        vx = new float[4]{0, TEX_W, TEX_W, 0};
-        vy = new float[4]{0, 0, TEX_H, TEX_H};
+        vx = new float[4]{0, NODE_W, NODE_W, 0};
+        vy = new float[4]{0, 0, NODE_H, NODE_H};
     }
-    SDL_FRect fullRect{0, 0, TEX_W, TEX_H};
+    SDL_FRect fullRect{0, 0, NODE_W, NODE_H};
     SDL_SetRenderDrawColor(renderer, 24, 24, 28, 255);
     SDL_RenderFillRect(renderer, &fullRect);
 

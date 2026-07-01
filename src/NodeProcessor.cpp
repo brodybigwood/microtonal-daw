@@ -1,6 +1,7 @@
 #include "NodeProcessor.h"
 #include "NodeManager.h"
 #include "NodeEditor.h"
+#include "WindowManager.h"
 #include <cstring>
 
 NodeProcessor::NodeProcessor(Project* p) : project(p) {
@@ -16,9 +17,16 @@ NodeProcessor::NodeProcessor(Project* p) : project(p) {
 
     // Audio copy: separate project graph, no SDL resources.
     audioManager = new NodeManager(project);
+
+    // Expanded window manager for pop-out windows (PianoRoll, Preferences, etc.)
+    windowManager = new WindowManager;
 }
 
 NodeProcessor::~NodeProcessor() {
+    // Destroy expanded windows before tearing down SDL resources.
+    delete windowManager;
+    windowManager = nullptr;
+
     if (guiManager) {
         guiManager->resetNE();
         delete guiManager;

@@ -3,6 +3,9 @@
 #include <cmath>
 #include "GridElement.h"
 #include "GridView.h"
+#include "PianoRollWindow.h"
+#include "WindowManager.h"
+#include "NodeProcessor.h"
 #include <SDL3/SDL_events.h>
 #include "Region.h"
 #include "AudioClip.h"
@@ -34,39 +37,41 @@ fract nearestBeatFromScreenX(float screenX, float scrollX, float leftMargin, dou
 } // namespace
 
 void SongRoll::clearPianoRoll(int regionId, bool createUndo) {
-    for (auto it = pianoRolls.begin(); it != pianoRolls.end(); ) {
-        if ((*it)->region && static_cast<int>((*it)->region->id) == regionId) {
-            PianoRoll* pr = *it;
+    for (size_t i = 0; i < pianoRolls.size(); ) {
+        if (pianoRolls[i]->region && static_cast<int>(pianoRolls[i]->region->id) == regionId) {
+            PianoRoll* pr = pianoRolls[i];
             if (createUndo && project && project->um && parentNode) {
-                EmbeddedWindow* ew = pr;
                 auto* action = new TogglePianoRollWindowAction(project,
                     parentNode->nm->managerPath, static_cast<int>(parentNode->id),
-                    static_cast<int>(regionId), ew->id,
-                    ew->x, ew->y, ew->w, ew->h, ew->zOrder, false);
+                    static_cast<int>(regionId), 0,
+                    0.f, 0.f, 0.f, 0.f, 0, false);
                 project->um->newAction(action);
             }
-            if (project && project->processor) {
-                auto* editor = project->processor->getEditor();
-                if (editor) editor->removeEmbeddedWindow(pr);
+            // Remove from expanded window manager.
+            if (i < pianoRollWindows.size() && project && project->processor) {
+                auto* wm = project->processor->getWindowManager();
+                if (wm) wm->removeWindow(pianoRollWindows[i]);
+                pianoRollWindows.erase(pianoRollWindows.begin() + static_cast<ptrdiff_t>(i));
             }
-            it = pianoRolls.erase(it);
+            pianoRolls.erase(pianoRolls.begin() + static_cast<ptrdiff_t>(i));
         } else {
-            ++it;
+            ++i;
         }
     }
 }
 
 void SongRoll::validateTimelinePointers() {
-    for (auto it = pianoRolls.begin(); it != pianoRolls.end(); ) {
-        PianoRoll* pr = *it;
+    for (size_t i = 0; i < pianoRolls.size(); ) {
+        PianoRoll* pr = pianoRolls[i];
         if (!pr->region || !em->ids.count(pr->region->id)) {
-            if (project && project->processor) {
-                auto* editor = project->processor->getEditor();
-                if (editor) editor->removeEmbeddedWindow(pr);
+            if (i < pianoRollWindows.size() && project && project->processor) {
+                auto* wm = project->processor->getWindowManager();
+                if (wm) wm->removeWindow(pianoRollWindows[i]);
+                pianoRollWindows.erase(pianoRollWindows.begin() + static_cast<ptrdiff_t>(i));
             }
-            it = pianoRolls.erase(it);
+            pianoRolls.erase(pianoRolls.begin() + static_cast<ptrdiff_t>(i));
         } else {
-            ++it;
+            ++i;
         }
     }
 
@@ -189,6 +194,12 @@ bool SongRoll::customTick(SDL_Renderer* renderer) {
 }
 
 void SongRoll::syncLayout() {
+    // Sync GridView dimensions from dstRect.
+    width = dstRect->w;
+    height = dstRect->h;
+    x = dstRect->x;
+    y = dstRect->y;
+
     rightRect = SDL_FRect{
         dstRect->x + dstRect->w - rightMargin,
         dstRect->y + topMargin,
@@ -202,6 +213,14 @@ void SongRoll::syncLayout() {
         leftMargin,
         dstRect->h - topMargin
     };
+
+    // Update gridRect to match current dstRect.
+    gridRect = {
+        dstRect->x + leftMargin,
+        dstRect->y + topMargin,
+        dstRect->w - leftMargin - rightMargin,
+        dstRect->h - topMargin - bottomMargin
+    };
 }
 
 void SongRoll::renderMargins(SDL_Renderer* renderer) {
@@ -212,14 +231,17 @@ void SongRoll::renderMargins(SDL_Renderer* renderer) {
 
 
 SongRoll::~SongRoll() {
-    while (!pianoRolls.empty()) {
-        PianoRoll* pr = pianoRolls.back();
-        pianoRolls.pop_back();
-        if (project && project->processor) {
-            auto* editor = project->processor->getEditor();
-            if (editor) editor->removeEmbeddedWindow(pr);
+    // Destroy expanded windows first.
+    if (project && project->processor) {
+        auto* wm = project->processor->getWindowManager();
+        if (wm) {
+            for (auto* pw : pianoRollWindows) {
+                wm->removeWindow(pw);
+            }
         }
     }
+    pianoRollWindows.clear();
+    pianoRolls.clear();
 }
 
 void SongRoll::movePosition() {
@@ -454,6 +476,10 @@ void SongRoll::doubleClick() {
         auto e = hoveredPosition->element;
         if (e->type == ElementType::region) {
             auto reg = static_cast<Region*>(e);
+            // Stop dragging before opening the piano roll.
+            movingPosition = nullptr;
+            positionDragKind = PositionDragKind::None;
+            lmb = false;
             createPianoRoll(reg);
         }
     } else {
@@ -639,21 +665,30 @@ void SongRoll::generateTextures(SDL_Renderer* renderer) {
 }
 
 void SongRoll::createPianoRoll(Region* region, bool createUndo, int forceEwID) {
-    auto pr = std::make_unique<PianoRoll>(region, this);
-    if (forceEwID >= 0) pr->id = forceEwID;
-    PianoRoll* ptr = pr.get();
-    pianoRolls.push_back(ptr);
-    if (project && project->processor) {
-        auto* editor = project->processor->getEditor();
-        if (editor)
-            editor->addEmbeddedWindow(std::move(pr));
-    }
-    if (createUndo && project && project->um && parentNode) {
-        EmbeddedWindow* ew = ptr;
+    if (!project || !project->processor) return;
+
+    auto* wm = project->processor->getWindowManager();
+    if (!wm) return;
+
+    auto prw = std::make_unique<PianoRollWindow>(region, this);
+    PianoRollWindow* ptr = prw.get();
+
+    // Create the SDL3 window — 800x600 default, hidden until shown.
+    ExpandedWindow* ew = wm->addWindow(std::move(prw), 800, 600, "Piano Roll");
+    if (!ew) return;
+
+    ew->show();
+    pianoRollWindows.push_back(ptr);
+
+    // Also keep a raw PianoRoll pointer for coordinate/data access.
+    pianoRolls.push_back(ptr->getPianoRoll());
+
+    if (createUndo && project->um && parentNode) {
+        // Undo tracking uses the expanded window's logical ID.
         auto* action = new TogglePianoRollWindowAction(project,
             parentNode->nm->managerPath, static_cast<int>(parentNode->id),
             static_cast<int>(region->id), ew->id,
-            ew->x, ew->y, ew->w, ew->h, ew->zOrder, true);
+            0.f, 0.f, 800.f, 600.f, 0, true);
         project->um->newAction(action);
     }
 }

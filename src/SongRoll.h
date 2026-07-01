@@ -19,6 +19,7 @@ class WindowHandler;  // forward declaration
 class ElementManager;
 class ArrangerNode;
 class PianoRoll;
+class PianoRollWindow;
 
 class SongRoll : public GridView{
 
@@ -82,6 +83,7 @@ class SongRoll : public GridView{
         void dropFile(SDL_DropEvent&) override;        
         
         std::vector<PianoRoll*> pianoRolls;
+        std::vector<PianoRollWindow*> pianoRollWindows;
         void createPianoRoll(Region*, bool createUndo = true, int forceEwID = -1);
         void clearPianoRoll(int regionId, bool createUndo = true);
 

@@ -26,7 +26,7 @@ void TrackManager::setGeometry(SDL_FRect* dstRect, SDL_Renderer*& r) {
         dstRect->w / 2.0f, 20.0f
     };
 
-    newTrackE = new Button(r);
+    newTrackE = new Button();
     newTrackE->dstRect = &newTrackRectE;
     newTrackE->title = "New Track (notes)";
 
@@ -34,7 +34,7 @@ void TrackManager::setGeometry(SDL_FRect* dstRect, SDL_Renderer*& r) {
     newTrackE->hover = [this] { return this->mouseOn(&(this->newTrackRectE)); };
     newTrackE->onClick = [this] { this->addTrack(TrackType::Notes); };
 
-    newTrackW = new Button(r);
+    newTrackW = new Button();
     newTrackW->dstRect = &newTrackRectW;
     newTrackW->title = "New Track (audio)";
 
@@ -202,7 +202,17 @@ bool TrackManager::mouseOn(SDL_FRect* rect) {
 }
 
 void TrackManager::render(SDL_Renderer* renderer) {
-    
+
+    // Update button rects from current dstRect (may have changed due to resize).
+    newTrackRectE = SDL_FRect{
+        dstRect->x, dstRect->y + dstRect->h - 20.0f,
+        dstRect->w / 2.0f, 20.0f
+    };
+    newTrackRectW = SDL_FRect{
+        dstRect->x + dstRect->w / 2.0f, dstRect->y + dstRect->h - 20.0f,
+        dstRect->w / 2.0f, 20.0f
+    };
+
     SDL_FRect trackRect{
         dstRect->x, dstRect->y - *scrollY, dstRect->w, *divHeight
     };
@@ -226,7 +236,9 @@ void TrackManager::render(SDL_Renderer* renderer) {
         thickLineRGBA(renderer, dstRect->x, y, dstRect->x + dstRect->w, y, 3, 0, 0, 255, 255);
     }
 
+    newTrackE->renderer = renderer;
     newTrackE->render();
+    newTrackW->renderer = renderer;
     newTrackW->render();
 }
 
