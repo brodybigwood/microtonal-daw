@@ -7,6 +7,7 @@
 #include <iostream>
 #include <algorithm>
 #include <chrono>
+#include <thread>
 #include <poll.h>
 #include <SDL3/SDL_events.h>
 #include <X11/Xlib.h>
@@ -35,6 +36,16 @@ PlugLib::PlugLib(std::string path) : path(std::move(path)) {
     if (!handle) {
         std::cerr << "[PlugLib] dlopen failed: " << dlerror() << std::endl;
         return;
+    }
+
+    is_yabridge = dlsym(handle, "yabridge_version") != nullptr;
+
+    // Call ModuleEntry before GetPluginFactory — required by VST3 spec,
+    // and essential for yabridge chainloaders.
+    using ModuleEntryProc = bool (*)();
+    auto moduleEntry = reinterpret_cast<ModuleEntryProc>(dlsym(handle, "ModuleEntry"));
+    if (moduleEntry) {
+        moduleEntry();
     }
 
     using GetFactoryProc = Steinberg::FUnknown* (*)();
@@ -91,9 +102,10 @@ bool PlugLib::fetchClassIDs() {
         if (!foundComponent && std::strcmp(info.category, "Audio Module Class") == 0) {
             std::memcpy(componentCID, info.cid, sizeof(Steinberg::TUID));
             displayName = info.name;
-            VST3::Hosting::ClassInfo classInfo(info);
-            plugProvider = std::make_unique<Steinberg::Vst::PlugProvider>(*factoryWrapper, classInfo, true);
-            foundComponent = plugProvider->initialize();
+            // Don't use PlugProvider here — it calls initialize(nullptr) which
+            // yabridge-wrapped plugins reject. We create the component manually
+            // in createComponent() where we can pass a proper context.
+            foundComponent = true;
         }
 
         if (!foundController && std::strcmp(info.category, "Component Controller Class") == 0) {
@@ -438,31 +450,38 @@ std::unique_ptr<EditorWindowHost> EditorWindowHost::create() {
 VstPlugin::VstPlugin(const std::string& pluginPath) : pluginPath(pluginPath) {
     lib = VstPluginCache::instance().load(pluginPath);
     if (!lib) {
-        std::cerr << "[VstPlugin] Failed to load: " << pluginPath << std::endl;
         return;
     }
 
-    if (!createComponent()) return;
-    if (!createController()) return;
+    if (!createComponent()) { lib = nullptr; return; }
 
     name = lib->getName();
-    vendor = lib->getName(); // temporary, overwritten below if factory info available
+    vendor = lib->getName();
     Steinberg::PFactoryInfo factoryInfo;
     if (lib->getFactory()->getFactoryInfo(&factoryInfo) == Steinberg::kResultTrue) {
         vendor = factoryInfo.vendor;
     }
 
-    // Connect component↔controller — parameter changes flow this way
-    connectComponentController();
-
-    if (!setupBuses()) return;
-    if (!activateComponent()) return;
-
-    // Create editor view (GUI thread will attach it to a window; audio thread ignores)
     hostFrame = std::make_unique<EditorHostFrame>();
-    editController->setComponentHandler(hostFrame.get());
-    view = editController->createView(Steinberg::Vst::ViewType::kEditor);
+    is_yabridge_ = lib->is_yabridge;
 
+    // Buses: fast, no controller needed. setActive: deferred to setup().
+    if (!setupBuses()) return;
+    needsSetup_ = true;
+
+    if (is_yabridge_) {
+        // Controller, view creation: yabridge IPC, defer to showEditor bg thread.
+        valid = true;
+        return;
+    }
+
+    // Native: do everything now (fast, in-process).
+    if (!createController()) return;
+    connectComponentController();
+    if (editController) {
+        editController->setComponentHandler(hostFrame.get());
+        view = editController->createView(Steinberg::Vst::ViewType::kEditor);
+    }
     valid = true;
 }
 
@@ -513,7 +532,19 @@ bool VstPlugin::createComponent() {
     }
     audioProcessor = Steinberg::FUnknownPtr<Steinberg::Vst::IAudioProcessor>(processorUnknown);
 
-    if (component->initialize(nullptr) != Steinberg::kResultTrue) {
+    // Pass a minimal FUnknown as context — yabridge/Serum need non-null
+    struct DummyContext : Steinberg::FUnknown {
+        Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID iid, void** obj) override {
+            if (Steinberg::FUnknownPrivate::iidEqual(iid, Steinberg::FUnknown::iid)) {
+                addRef(); *obj = this; return Steinberg::kResultTrue;
+            }
+            *obj = nullptr; return Steinberg::kNoInterface;
+        }
+        Steinberg::uint32 PLUGIN_API addRef() override { return 1; }
+        Steinberg::uint32 PLUGIN_API release() override { return 1; }
+    };
+    DummyContext ctx;
+    if (component->initialize(&ctx) != Steinberg::kResultTrue) {
         std::cerr << "[VstPlugin] Component initialize failed" << std::endl;
         return false;
     }
@@ -522,6 +553,7 @@ bool VstPlugin::createComponent() {
 }
 
 bool VstPlugin::createController() {
+    if (editController) return true; // already created
     Steinberg::FUnknown* controllerUnknown = nullptr;
     auto result = lib->getFactory()->createInstance(
         lib->getControllerCID(), Steinberg::Vst::IEditController::iid, (void**)&controllerUnknown);
@@ -534,7 +566,19 @@ bool VstPlugin::createController() {
     editController = Steinberg::FUnknownPtr<Steinberg::Vst::IEditController>(controllerUnknown);
     if (!editController) return false;
 
-    if (editController->initialize(nullptr) != Steinberg::kResultTrue) {
+    // Same DummyContext trick for the controller
+    struct DummyContext : Steinberg::FUnknown {
+        Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID iid, void** obj) override {
+            if (Steinberg::FUnknownPrivate::iidEqual(iid, Steinberg::FUnknown::iid)) {
+                addRef(); *obj = this; return Steinberg::kResultTrue;
+            }
+            *obj = nullptr; return Steinberg::kNoInterface;
+        }
+        Steinberg::uint32 PLUGIN_API addRef() override { return 1; }
+        Steinberg::uint32 PLUGIN_API release() override { return 1; }
+    };
+    DummyContext ctx;
+    if (editController->initialize(&ctx) != Steinberg::kResultTrue) {
         std::cerr << "[VstPlugin] Edit controller initialize failed" << std::endl;
         return false;
     }
@@ -626,6 +670,11 @@ bool VstPlugin::activateComponent() {
 void VstPlugin::setup(int sampleRate, int bufferSize) {
     if (!valid || !audioProcessor) return;
 
+    if (needsSetup_) {
+        needsSetup_ = false;
+        component->setActive(true);
+    }
+
     processBufferSize = bufferSize;
     processSampleRate = sampleRate;
 
@@ -710,55 +759,63 @@ void VstPlugin::processAudio(int bufferSize, Steinberg::Vst::IEventList* inputEv
 
 void VstPlugin::showEditor() {
     std::cout << "[VstPlugin::showEditor] called" << std::endl;
-    if (!view) {
-        std::cerr << "[VstPlugin::showEditor] no view — plugin has no editor GUI" << std::endl;
-        return;
-    }
     if (editorOpen) {
         std::cout << "[VstPlugin::showEditor] editor already open" << std::endl;
         return;
     }
 
-    editorHost = EditorWindowHost::create();
-    if (!editorHost) {
-        std::cerr << "[VstPlugin::showEditor] failed to create EditorWindowHost" << std::endl;
-        return;
-    }
-
-    editorHost->view = view;
-
-    auto nativeHandle = editorHost->getNativeWindowHandle();
-    auto platformType = editorHost->getPlatformType();
-    std::cout << "[VstPlugin::showEditor] nativeHandle=" << nativeHandle
-              << " platformType=" << platformType << std::endl;
-
-    if (view->isPlatformTypeSupported(platformType) != Steinberg::kResultTrue) {
-        std::cerr << "[VstPlugin::showEditor] platform type not supported: " << platformType << std::endl;
-        return;
-    }
-
-    // Give the view access to our IPlugFrame before attaching.
-    view->setFrame(hostFrame.get());
-
-    auto result = view->attached(nativeHandle, platformType);
-    std::cout << "[VstPlugin::showEditor] attached result=" << result << std::endl;
-
-    if (result == Steinberg::kResultTrue) {
-        editorHost->setName(name.c_str());
-
-        Steinberg::ViewRect vr;
-        view->getSize(&vr);
-        editorW = vr.right - vr.left;
-        editorH = vr.bottom - vr.top;
-        std::cout << "[VstPlugin::showEditor] editor size: " << editorW << "x" << editorH << std::endl;
-        editorHost->resize(editorW, editorH);
-        view->onSize(&vr);
-
+    if (is_yabridge_) {
+        // Ardour pattern: yabridge IPC on bg thread. Create parent window on GUI.
+        editorHost = EditorWindowHost::create();
+        if (!editorHost) { std::cerr << "[showEditor] no host" << std::endl; return; }
+        auto nativeHandle = editorHost->getNativeWindowHandle();
+        auto platformType = editorHost->getPlatformType();
         editorOpen = true;
         registerEditor(this);
-        std::cout << "[VstPlugin::showEditor] editor opened successfully" << std::endl;
-    } else {
-        std::cerr << "[VstPlugin::showEditor] view->attached failed" << std::endl;
+        auto* eh = editorHost.get();
+        auto* frame = hostFrame.get();
+        std::thread([this, eh, frame, nativeHandle, platformType]() {
+            createController();
+            connectComponentController();
+            if (!view && editController) {
+                editController->setComponentHandler(frame);
+                view = editController->createView(Steinberg::Vst::ViewType::kEditor);
+            }
+            if (!view) return;
+            view->setFrame(frame);
+            std::cerr << "[showEditor] yabridge bg: attached..." << std::endl;
+            view->attached(nativeHandle, platformType);
+            std::cerr << "[showEditor] yabridge bg: done" << std::endl;
+        }).detach();
+        std::cout << "[VstPlugin::showEditor] yabridge spawned on bg" << std::endl;
+        return;
+    }
+
+    // Native: view created in constructor, full X11 embedding on GUI thread
+    if (!view) {
+        std::cerr << "[VstPlugin::showEditor] no view" << std::endl;
+        return;
+    }
+    editorHost = EditorWindowHost::create();
+    if (!editorHost) { std::cerr << "[showEditor] no host" << std::endl; return; }
+    editorHost->view = view;
+    auto nativeHandle = editorHost->getNativeWindowHandle();
+    auto platformType = editorHost->getPlatformType();
+    if (view->isPlatformTypeSupported(platformType) != Steinberg::kResultTrue) {
+        std::cerr << "[showEditor] platform not supported" << std::endl;
+        return;
+    }
+    view->setFrame(hostFrame.get());
+    auto result = view->attached(nativeHandle, platformType);
+    if (result == Steinberg::kResultTrue) {
+        editorHost->setName(name.c_str());
+        Steinberg::ViewRect vr;
+        view->getSize(&vr);
+        editorHost->resize(vr.right - vr.left, vr.bottom - vr.top);
+        view->onSize(&vr);
+        editorOpen = true;
+        registerEditor(this);
+        std::cout << "[VstPlugin::showEditor] native opened" << std::endl;
     }
 }
 

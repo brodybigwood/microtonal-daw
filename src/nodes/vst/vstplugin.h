@@ -44,6 +44,8 @@ public:
 private:
     void* handle = nullptr;
     bool loaded = false;
+public:
+    bool is_yabridge = false;
 
     Steinberg::FUnknownPtr<Steinberg::IPluginFactory> factory;
     std::unique_ptr<VST3::Hosting::PluginFactory> factoryWrapper;
@@ -246,6 +248,8 @@ public:
 
 private:
     bool valid = false;
+    bool needsSetup_ = false;
+    bool is_yabridge_ = false;
     std::string pluginPath;
     std::string name;
     std::string vendor;

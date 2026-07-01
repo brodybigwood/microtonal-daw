@@ -446,6 +446,7 @@ bool VstNode::handleCustomInput(SDL_Event& e) {
                     plugin->hideEditor();
                 } else {
                     plugin->showEditor();
+                    wirePluginCallbacks();
                 }
             }
             return true;
@@ -487,12 +488,14 @@ void VstNode::loadPlugin(const std::string& path, bool createUndo) {
             name = plugin->getName();
             wirePluginCallbacks();
             rebuildConnections();
+            nm->markTopologyDirty(); // force setup() via update() on next audio cycle
             Settings::instance().addVstToHistory(path);
             // Don't call setup() on GUI — audio thread handles it to avoid races
         } else {
             name = "VST Plugin";
             plugin = nullptr;
             rebuildConnections();
+            nm->markTopologyDirty();
         }
 
         if (project && project->um) {
@@ -565,8 +568,9 @@ void VstNode::onPluginParameterChange(int paramID, float oldValue, float newValu
 
 void VstNode::wirePluginCallbacks() {
     if (!plugin || !plugin->isValid()) return;
-    mpeRangeSet = false;
     auto* frame = plugin->getHostFrame();
+    if (!frame) return;
+    mpeRangeSet = false;
     // onBeginEdit: snapshot the current parameter value BEFORE the edit
     frame->onBeginEdit = [this](Steinberg::Vst::ParamID id) {
         if (plugin) {
