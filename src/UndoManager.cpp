@@ -405,6 +405,9 @@ bool UndoManager::runRegisteredAction(const std::string& actionName, const json&
         case AddArrangerTrack:
             pa = new AddArrangerTrackAction(head->p, params.at("managerPath").get<std::vector<int>>(), params.at("nodeID").get<int>(), params.at("trackType").get<int>());
             break;
+        case RemoveArrangerTrack:
+            pa = new RemoveArrangerTrackAction(head->p, params.at("managerPath").get<std::vector<int>>(), params.at("nodeID").get<int>(), params.at("trackType").get<int>(), params.at("trackID").get<int>(), params.at("connectionID").get<int>());
+            break;
         case CreateNote: {
             auto managerPath = params.at("managerPath").get<std::vector<int>>();
             requireManager(head->p, managerPath);
@@ -466,6 +469,21 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
             at->trackID = j.at("trackID").get<int>();
             at->connectionID = j.at("connectionID").get<int>();
             pa = at;
+            break;
+        }
+        case RemoveArrangerTrack: {
+            auto rt = new RemoveArrangerTrackAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(), j.at("trackType").get<int>(), j.at("trackID").get<int>(), j.at("connectionID").get<int>());
+            if (j.contains("trackIndex"))
+                rt->trackIndex = j["trackIndex"].get<int>();
+            if (j.contains("positionsSnapshot"))
+                rt->positionsSnapshot = j["positionsSnapshot"];
+            if (j.contains("trackIdPoolSnapshot"))
+                rt->trackIdPoolSnapshot = j["trackIdPoolSnapshot"];
+            if (j.contains("connectionIdPoolSnapshot"))
+                rt->connectionIdPoolSnapshot = j["connectionIdPoolSnapshot"];
+            if (j.contains("positionIdPoolSnapshot"))
+                rt->positionIdPoolSnapshot = j["positionIdPoolSnapshot"];
+            pa = rt;
             break;
         }
         case AddNode: {
@@ -705,6 +723,20 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["trackType"] = at->trackType;
             j["trackID"] = at->trackID;
             j["connectionID"] = at->connectionID;
+            break;
+        }
+        case RemoveArrangerTrack: {
+            auto rt = static_cast<RemoveArrangerTrackAction*>(pa);
+            j["managerPath"] = rt->managerPath;
+            j["nodeID"] = rt->nodeID;
+            j["trackType"] = rt->trackType;
+            j["trackID"] = rt->trackID;
+            j["connectionID"] = rt->connectionID;
+            j["trackIndex"] = rt->trackIndex;
+            j["positionsSnapshot"] = rt->positionsSnapshot;
+            if (!rt->trackIdPoolSnapshot.is_null()) j["trackIdPoolSnapshot"] = rt->trackIdPoolSnapshot;
+            if (!rt->connectionIdPoolSnapshot.is_null()) j["connectionIdPoolSnapshot"] = rt->connectionIdPoolSnapshot;
+            if (!rt->positionIdPoolSnapshot.is_null()) j["positionIdPoolSnapshot"] = rt->positionIdPoolSnapshot;
             break;
         }
         case MoveEmbeddedWindow: {
@@ -1603,6 +1635,80 @@ AddArrangerTrackAction::AddArrangerTrackAction(Project* p, std::vector<int> mana
         if (!tm)
             throw std::runtime_error("AddArrangerTrackAction::undoAction: no active track manager");
         tm->removeTrackNow(static_cast<uint16_t>(this->trackID));
+    };
+}
+
+RemoveArrangerTrackAction::RemoveArrangerTrackAction(Project* p, std::vector<int> managerPath, int nodeID, int trackType, int trackID, int connectionID) :
+        ProjectAction(p, RemoveArrangerTrack),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        trackType(trackType),
+        trackID(trackID),
+        connectionID(connectionID) {
+    name = "Remove Arranger Track";
+
+    // Snapshot positions on this track before deletion.
+    NodeManager& nm = requireManager(p, this->managerPath);
+    auto* node = dynamic_cast<ArrangerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+    if (node && node->tracks) {
+        trackIndex = node->tracks->getIndex(static_cast<uint16_t>(this->trackID));
+        // Save full idManager state for track and connection pools.
+        trackIdPoolSnapshot = node->tracks->getIdPool().toJSON();
+        connectionIdPoolSnapshot = node->outputs.id_pool.toJSON();
+    }
+    if (node && node->elements) {
+        positionIdPoolSnapshot = node->elements->id_pool.toJSON();
+        positionsSnapshot = json::array();
+        for (auto* el : node->elements->elements) {
+            for (size_t i = 0; i < el->positions.size(); ++i) {
+                if (el->positions[i]->trackID == static_cast<uint16_t>(this->trackID)) {
+                    json entry;
+                    entry["elementID"] = static_cast<int>(el->id);
+                    entry["index"] = static_cast<int>(i);
+                    entry["pos"] = GridElement::positionToJson(*el->positions[i]);
+                    positionsSnapshot.push_back(entry);
+                }
+            }
+        }
+    }
+
+    doAction = [this] () {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        auto* node = dynamic_cast<ArrangerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!node || !node->elements) return;
+        // Remove positions on this track (reverse order to preserve indices).
+        for (int i = static_cast<int>(positionsSnapshot.size()) - 1; i >= 0; --i) {
+            auto& entry = positionsSnapshot[static_cast<size_t>(i)];
+            int elemID = entry["elementID"].get<int>();
+            int posID = entry["pos"]["id"].get<int>();
+            auto* el = node->elements->getElement(static_cast<uint16_t>(elemID));
+            if (el) el->removePositionById(posID);
+        }
+        if (node->tracks)
+            node->tracks->removeTrackNow(static_cast<uint16_t>(this->trackID));
+    };
+    undoAction = [this] () {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        auto* node = dynamic_cast<ArrangerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!node || !node->tracks) return;
+        node->tracks->addTrackNow(static_cast<TrackType>(this->trackType), this->trackID, this->connectionID, this->trackIndex);
+        // Restore idManager state for track and connection pools.
+        if (!trackIdPoolSnapshot.is_null())
+            node->tracks->getIdPool().fromJSON(trackIdPoolSnapshot);
+        if (!connectionIdPoolSnapshot.is_null())
+            node->outputs.id_pool.fromJSON(connectionIdPoolSnapshot);
+        // Restore positions.
+        if (node->elements) {
+            for (auto& entry : positionsSnapshot) {
+                int elemID = entry["elementID"].get<int>();
+                int index = entry["index"].get<int>();
+                auto* el = node->elements->getElement(static_cast<uint16_t>(elemID));
+                if (el) el->insertPositionAt(static_cast<size_t>(index), entry["pos"]);
+            }
+            // Restore position idManager state.
+            if (!positionIdPoolSnapshot.is_null())
+                node->elements->id_pool.fromJSON(positionIdPoolSnapshot);
+        }
     };
 }
 

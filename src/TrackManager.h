@@ -21,7 +21,7 @@ class TrackManager {
         ArrangerNode* parentNode;
 
         void addTrack(TrackType);
-        Track* addTrackNow(TrackType, int forcedTrackID = -1, int forcedConnectionID = -1);
+        Track* addTrackNow(TrackType, int forcedTrackID = -1, int forcedConnectionID = -1, int forcedIndex = -1);
         void removeTrackNow(uint16_t);
 
         void solo(uint16_t);
@@ -58,6 +58,7 @@ class TrackManager {
 
         int getIndex(uint16_t);
         int getID(int);
+        idManager& getIdPool() { return id_pool; }
 
         void fromJSON(json);
         json toJSON();

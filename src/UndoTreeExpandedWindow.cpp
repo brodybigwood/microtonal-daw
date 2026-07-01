@@ -32,7 +32,9 @@ void UndoTreeExpandedWindow::render() {
     SDL_RenderClear(renderer);
 
     project->um->baseRect = &rootCell;
+    project->um->hitTestWindow = window;
     project->um->render(renderer);
+    project->um->hitTestWindow = nullptr;
     project->um->baseRect = nullptr;
 }
 

@@ -134,16 +134,32 @@ bool WindowManager::handleEvent(const SDL_Event& e) {
 }
 
 void WindowManager::renderAll() {
-    for (auto& w : windows_) {
-        if (w->visible && w->renderer) {
+    // Snapshot raw pointers — render() may trigger add/removeWindow via undo.
+    std::vector<ExpandedWindow*> snapshot;
+    snapshot.reserve(windows_.size());
+    for (auto& w : windows_) snapshot.push_back(w.get());
+    for (auto* w : snapshot) {
+        // Check if still alive (may have been removed during a previous render).
+        bool alive = false;
+        for (auto& owned : windows_) {
+            if (owned.get() == w) { alive = true; break; }
+        }
+        if (alive && w->visible && w->renderer) {
             w->render();
         }
     }
 }
 
 void WindowManager::presentAll() {
-    for (auto& w : windows_) {
-        if (w->visible && w->renderer) {
+    std::vector<ExpandedWindow*> snapshot;
+    snapshot.reserve(windows_.size());
+    for (auto& w : windows_) snapshot.push_back(w.get());
+    for (auto* w : snapshot) {
+        bool alive = false;
+        for (auto& owned : windows_) {
+            if (owned.get() == w) { alive = true; break; }
+        }
+        if (alive && w->visible && w->renderer) {
             SDL_RenderPresent(w->renderer);
         }
     }

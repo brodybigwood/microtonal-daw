@@ -65,7 +65,7 @@ void TrackManager::addTrack(TrackType tp) {
     parentNode->project->um->newAction(pa);
 }
 
-Track* TrackManager::addTrackNow(TrackType tp, int forcedTrackID, int forcedConnectionID) {
+Track* TrackManager::addTrackNow(TrackType tp, int forcedTrackID, int forcedConnectionID, int forcedIndex) {
     uint16_t id;
     if (forcedTrackID >= 0) {
         id = static_cast<uint16_t>(forcedTrackID);
@@ -75,9 +75,14 @@ Track* TrackManager::addTrackNow(TrackType tp, int forcedTrackID, int forcedConn
     }
 
     Track* t = new Track;
-    tracks.push_back(t);
+    if (forcedIndex >= 0 && static_cast<size_t>(forcedIndex) <= tracks.size()) {
+        tracks.insert(tracks.begin() + static_cast<ptrdiff_t>(forcedIndex), t);
+    } else {
+        tracks.push_back(t);
+    }
     t->id = id;
-    ids[id] = tracks.size() - 1;
+    // Rebuild id map.
+    for (size_t i = 0; i < tracks.size(); ++i) ids[tracks[i]->id] = static_cast<uint16_t>(i);
     t->type = tp;
 
     auto c = new Connection;
@@ -149,6 +154,7 @@ void TrackManager::removeTrackNow(uint16_t trackID) {
         ids[tracks[index]->id] = index;
     }
     ids.erase(track->id);
+    if (movingTrack == track) movingTrack = nullptr;
     delete tracks.back();
     tracks.pop_back();
 
@@ -314,6 +320,28 @@ void TrackManager::handleInput(SDL_Event& e) {
                 }
                 movingTrack = hoveredTrack;
                 last_lmb_y = *mouseY;
+            } else if (e.button.button == SDL_BUTTON_RIGHT && hoveredTrack) {
+                auto* ctxMenu = ContextMenu::get();
+                ctxMenu->activate();
+                uint16_t tid = hoveredTrack->id;
+                int ttype = static_cast<int>(hoveredTrack->type);
+                auto root = uTreeEntry();
+                auto del = uTreeEntry();
+                del->label = "Delete Track";
+                del->click = [this, tid, ttype]() {
+                    if (!parentNode || !parentNode->project || !parentNode->nm) return;
+                    // Find the connection ID for this track.
+                    int connID = -1;
+                    Track* t = getTrack(tid);
+                    if (t && t->connection) connID = static_cast<int>(t->connection->id);
+                    auto* action = new RemoveArrangerTrackAction(
+                        parentNode->project, parentNode->nm->managerPath,
+                        static_cast<int>(parentNode->id), ttype,
+                        static_cast<int>(tid), connID);
+                    parentNode->project->um->newAction(action);
+                };
+                root->addChild(del);
+                ctxMenu->dynamicTick = getTreeMenuTicker(root);
             }
             break;
         case SDL_EVENT_MOUSE_BUTTON_UP:

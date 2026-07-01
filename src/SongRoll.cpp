@@ -50,8 +50,10 @@ void SongRoll::clearPianoRoll(int regionId, bool createUndo) {
             // Remove from expanded window manager.
             if (i < pianoRollWindows.size() && project && project->processor) {
                 auto* wm = project->processor->getWindowManager();
-                if (wm) wm->removeWindow(pianoRollWindows[i]);
+                // Erase from our list FIRST, then destroy — renderAll may run before next frame.
+                ExpandedWindow* ew = pianoRollWindows[i];
                 pianoRollWindows.erase(pianoRollWindows.begin() + static_cast<ptrdiff_t>(i));
+                if (wm) wm->removeWindow(ew);
             }
             pianoRolls.erase(pianoRolls.begin() + static_cast<ptrdiff_t>(i));
         } else {

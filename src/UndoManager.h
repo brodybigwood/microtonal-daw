@@ -49,7 +49,8 @@ enum ActionType {
     VstParameterChange = 29,
     VstLoadPlugin = 30,
     TogglePianoRollWindow = 31,
-    ReassignNodeConnection = 32
+    ReassignNodeConnection = 32,
+    RemoveArrangerTrack = 33
 };
 
 
@@ -396,6 +397,25 @@ struct AddArrangerTrackAction : ProjectAction {
     int connectionID = -1;
 
     AddArrangerTrackAction(Project* p, std::vector<int> managerPath, int nodeID, int trackType);
+};
+
+struct RemoveArrangerTrackAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID;
+    int trackType;
+    int trackID;
+    int connectionID;
+    int trackIndex = -1;  // position in the tracks list
+    // Snapshot of positions on this track: {elementID, positionIndex, positionJson}
+    json positionsSnapshot;
+    // Full idManager state snapshots for determinism
+    json trackIdPoolSnapshot;
+    json connectionIdPoolSnapshot;
+    json positionIdPoolSnapshot;
+    // Connection list snapshot for the removed connection
+    json connectionSnapshot;
+
+    RemoveArrangerTrackAction(Project* p, std::vector<int> managerPath, int nodeID, int trackType, int trackID, int connectionID);
 };
 
 struct MoveEmbeddedWindowAction : ProjectAction {
