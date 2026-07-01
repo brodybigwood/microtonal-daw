@@ -210,6 +210,8 @@ class NodeEditor {
         float panStartY_ = 0.f;
         bool panning_ = false;
 
+        SDL_Cursor* currentCursor_ = nullptr;
+
         // Drag-to-sever/reassign/create state
         bool dragInProgress_ = false;
         bool dragIsNew_ = false;           // true when dragging from an unconnected port

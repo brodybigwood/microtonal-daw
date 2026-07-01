@@ -379,6 +379,10 @@ NodeEditor::NodeEditor() :
 }
 
 NodeEditor::~NodeEditor() {
+    if (currentCursor_) {
+        SDL_DestroyCursor(currentCursor_);
+        currentCursor_ = nullptr;
+    }
 }
 
 void NodeEditor::setEmbeddedCanvasSize(float w, float h) {
@@ -1001,7 +1005,9 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
                 default: break;
             }
         }
-        SDL_SetCursor(SDL_CreateSystemCursor(cur));
+        if (currentCursor_) SDL_DestroyCursor(currentCursor_);
+        currentCursor_ = SDL_CreateSystemCursor(cur);
+        SDL_SetCursor(currentCursor_);
     }
 
     // --- Resize path ---
