@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 #include <nlohmann/json.hpp>
 
 class Settings {
@@ -31,6 +32,9 @@ public:
     void setAudioTripleBuffer(bool v) { setBool("audioTripleBuffer", v); }
     int audioEngine() const { return getInt("audioEngine", 0); }
     void setAudioEngine(int v) { setInt("audioEngine", v); }
+
+    std::vector<std::string> getVstHistory() const;
+    void addVstToHistory(const std::string& path);
 
     // Load defaults from settings.json.default, saving current values to "backup".
     void loadDefaults();

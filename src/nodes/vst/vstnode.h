@@ -46,6 +46,7 @@ private:
     SDL_FRect loadBtnRect{160, 80, 160, 30};
     SDL_FRect editorBtnRect{160, 120, 160, 30};
     SDL_FRect nameRect{40, 40, 400, 30};
+    std::vector<SDL_FRect> historyRects_;
 
     std::string loadedPath; // currently loaded plugin path
 

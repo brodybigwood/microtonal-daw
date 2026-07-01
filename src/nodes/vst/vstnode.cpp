@@ -1,6 +1,7 @@
 #include "vstnode.h"
 #include "NodeManager.h"
 #include "styles.h"
+#include "Settings.h"
 #include "UndoManager.h"
 #include "NodeProcessor.h"
 #include <algorithm>
@@ -335,6 +336,37 @@ void VstNode::renderContent(SDL_Renderer* renderer) {
         SDL_SetRenderDrawColor(renderer, 100, 100, 105, 255);
         SDL_RenderRect(renderer, &loadBtnRect);
         renderText("Load Plugin...", loadBtnRect.x + 12, loadBtnRect.y + 6, white);
+
+        // VST history list
+        auto history = Settings::instance().getVstHistory();
+        if (!history.empty()) {
+            renderText("Recent:", 40, loadBtnRect.y + loadBtnRect.h + 12, grey);
+            historyRects_.clear();
+            float y = loadBtnRect.y + loadBtnRect.h + 36;
+            int count = 0;
+            for (const auto& p : history) {
+                if (count >= 10) break;
+                // Extract filename from path
+                std::string name = p;
+                size_t slash = name.find_last_of("/\\");
+                if (slash != std::string::npos) name = name.substr(slash + 1);
+                // Remove extension
+                size_t dot = name.find_last_of('.');
+                if (dot != std::string::npos) name = name.substr(0, dot);
+                if (name.size() > 35) name = name.substr(0, 35) + "...";
+
+                SDL_FRect itemRect{40, y, 340, 28};
+                historyRects_.push_back(itemRect);
+
+                SDL_SetRenderDrawColor(renderer, 38, 38, 42, 255);
+                SDL_RenderFillRect(renderer, &itemRect);
+                SDL_SetRenderDrawColor(renderer, 70, 70, 74, 255);
+                SDL_RenderRect(renderer, &itemRect);
+                renderText(name, itemRect.x + 8, itemRect.y + 5, white);
+                y += 32;
+                ++count;
+            }
+        }
     }
 
     // Editor toggle button
@@ -399,6 +431,15 @@ bool VstNode::handleCustomInput(SDL_Event& e) {
             return true;
         }
 
+        // History item clicks
+        auto history = Settings::instance().getVstHistory();
+        for (size_t i = 0; i < historyRects_.size() && i < history.size(); ++i) {
+            if (SDL_PointInRectFloat(&pt, &historyRects_[i])) {
+                loadPlugin(history[i], true);
+                return true;
+            }
+        }
+
         if (SDL_PointInRectFloat(&pt, &editorBtnRect)) {
             if (plugin && plugin->isValid()) {
                 if (plugin->isEditorOpen()) {
@@ -446,6 +487,7 @@ void VstNode::loadPlugin(const std::string& path, bool createUndo) {
             name = plugin->getName();
             wirePluginCallbacks();
             rebuildConnections();
+            Settings::instance().addVstToHistory(path);
             // Don't call setup() on GUI — audio thread handles it to avoid races
         } else {
             name = "VST Plugin";
@@ -478,6 +520,7 @@ void VstNode::loadPlugin(const std::string& path, bool createUndo) {
             name = plugin->getName();
             wirePluginCallbacks();
             rebuildConnections();
+            Settings::instance().addVstToHistory(path);
             int sr = sampleRate > 0 ? sampleRate : 48000;
             int bs = bufferSize > 0 ? bufferSize : 1024;
             plugin->setup(sr, bs);

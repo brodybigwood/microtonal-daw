@@ -1,5 +1,6 @@
 #include "Settings.h"
 #include <fstream>
+#include <algorithm>
 using json = nlohmann::json;
 
 Settings& Settings::instance() {
@@ -93,4 +94,26 @@ void Settings::restoreBackup() {
 
 bool Settings::hasBackup() const {
     return data_.contains("backup");
+}
+
+std::vector<std::string> Settings::getVstHistory() const {
+    std::vector<std::string> result;
+    if (data_.contains("vstHistory")) {
+        for (auto& p : data_["vstHistory"]) {
+            try { result.push_back(p.get<std::string>()); } catch (...) {}
+        }
+    }
+    return result;
+}
+
+void Settings::addVstToHistory(const std::string& path) {
+    auto history = getVstHistory();
+    // Remove if already present, then push to front
+    auto it = std::find(history.begin(), history.end(), path);
+    if (it != history.end()) history.erase(it);
+    history.insert(history.begin(), path);
+    // Keep max 20 entries
+    if (history.size() > 20) history.resize(20);
+    data_["vstHistory"] = history;
+    save();
 }
