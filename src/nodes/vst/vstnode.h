@@ -46,8 +46,6 @@ private:
     // Layout rects (updated each frame in renderContent).
     SDL_FRect dropdownRect_{8, 8, NODE_W - 16, 24};
     SDL_FRect editorBtnRect_{8, 38, NODE_W - 16, 24};
-    std::vector<SDL_FRect> historyRects_;
-    bool dropdownOpen_ = false;
 
     std::string loadedPath; // currently loaded plugin path
 

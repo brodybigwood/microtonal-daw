@@ -784,14 +784,6 @@ void NodeEditor::moveMouse() {
     }
 
     if (movingNode) movingNode->move(movingNodeStartX + mouseX - moveOffX, movingNodeStartY + mouseY - moveOffY);
-
-    // Clear stale hover state on all nodes each frame.
-    if (nm) {
-        for (auto* n : nm->getNodes()) n->hoveredConnection = -1;
-        if (nm->inNode) nm->inNode->hoveredConnection = -1;
-        if (nm->outNode) nm->outNode->hoveredConnection = -1;
-    }
-
     hover();
 }
 

@@ -4,6 +4,7 @@
 #include "Settings.h"
 #include "UndoManager.h"
 #include "NodeProcessor.h"
+#include "ContextMenu.h"
 #include <algorithm>
 #include <cstdio>
 #include <iostream>
@@ -318,12 +319,14 @@ void VstNode::renderContent(SDL_Renderer* renderer) {
     SDL_Color white{220, 220, 220, 255};
     SDL_Color grey{150, 150, 155, 255};
 
-    // Dropdown: plugin name or "Select VST..."
+    // Dropdown button
     std::string displayName = plugin ? plugin->getName() : "Select VST...";
     if (displayName.empty()) displayName = "(unnamed)";
     if (displayName.size() > 22) displayName = displayName.substr(0, 22) + "...";
 
-    SDL_SetRenderDrawColor(renderer, 38, 38, 42, 255);
+    bool ddHover = (msX >= dropdownRect_.x && msX < dropdownRect_.x + dropdownRect_.w &&
+                    msY >= dropdownRect_.y && msY < dropdownRect_.y + dropdownRect_.h);
+    SDL_SetRenderDrawColor(renderer, ddHover ? 48 : 38, ddHover ? 48 : 38, ddHover ? 52 : 42, 255);
     SDL_RenderFillRect(renderer, &dropdownRect_);
     SDL_SetRenderDrawColor(renderer, 70, 70, 74, 255);
     SDL_RenderRect(renderer, &dropdownRect_);
@@ -335,46 +338,6 @@ void VstNode::renderContent(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 180, 180, 180, 255);
     SDL_RenderLine(renderer, ax, ay, ax + 4, ay + 6);
     SDL_RenderLine(renderer, ax + 4, ay + 6, ax + 8, ay);
-
-    // Dropdown open: show history list
-    historyRects_.clear();
-    if (dropdownOpen_) {
-        auto history = Settings::instance().getVstHistory();
-        float y = dropdownRect_.y + dropdownRect_.h;
-        int count = 0;
-        for (const auto& p : history) {
-            if (count >= 5) break;
-            std::string name = p;
-            size_t slash = name.find_last_of("/\\");
-            if (slash != std::string::npos) name = name.substr(slash + 1);
-            size_t dot = name.find_last_of('.');
-            if (dot != std::string::npos) name = name.substr(0, dot);
-            if (name.size() > 22) name = name.substr(0, 22) + "...";
-
-            SDL_FRect itemRect{dropdownRect_.x, y, dropdownRect_.w, 20.f};
-            historyRects_.push_back(itemRect);
-
-            bool hovered = (msX >= itemRect.x && msX < itemRect.x + itemRect.w &&
-                            msY >= itemRect.y && msY < itemRect.y + itemRect.h);
-            SDL_SetRenderDrawColor(renderer, hovered ? 55 : 42, hovered ? 55 : 42, hovered ? 60 : 46, 255);
-            SDL_RenderFillRect(renderer, &itemRect);
-            SDL_SetRenderDrawColor(renderer, 70, 70, 74, 255);
-            SDL_RenderRect(renderer, &itemRect);
-            renderText(name, itemRect.x + 6, itemRect.y + 2, white);
-            y += 20.f;
-            ++count;
-        }
-        // "Load from file..." option
-        SDL_FRect loadRect{dropdownRect_.x, y, dropdownRect_.w, 20.f};
-        historyRects_.push_back(loadRect);
-        bool hovered = (msX >= loadRect.x && msX < loadRect.x + loadRect.w &&
-                        msY >= loadRect.y && msY < loadRect.y + loadRect.h);
-        SDL_SetRenderDrawColor(renderer, hovered ? 55 : 42, hovered ? 55 : 42, hovered ? 60 : 46, 255);
-        SDL_RenderFillRect(renderer, &loadRect);
-        SDL_SetRenderDrawColor(renderer, 70, 70, 74, 255);
-        SDL_RenderRect(renderer, &loadRect);
-        renderText("Load from file...", loadRect.x + 6, loadRect.y + 2, grey);
-    }
 
     // Editor toggle button
     if (plugin && plugin->isValid()) {
@@ -419,7 +382,6 @@ bool VstNode::handleCustomInput(SDL_Event& e) {
         if (path) {
             std::cout << "[VstNode] drop file: " << path << std::endl;
             loadPlugin(path, true);
-            dropdownOpen_ = false;
             return true;
         }
     }
@@ -440,31 +402,38 @@ bool VstNode::handleCustomInput(SDL_Event& e) {
             return true;
         }
 
-        // Dropdown: history item clicks (when open)
-        if (dropdownOpen_) {
-            auto history = Settings::instance().getVstHistory();
-            // History items
-            for (size_t i = 0; i < historyRects_.size(); ++i) {
-                if (SDL_PointInRectFloat(&pt, &historyRects_[i])) {
-                    if (i < history.size()) {
-                        loadPlugin(history[i], true);
-                    } else {
-                        // "Load from file..." is the last item
-                        std::string path = openFileDialog();
-                        if (!path.empty()) loadPlugin(path, true);
-                    }
-                    dropdownOpen_ = false;
-                    return true;
-                }
-            }
-            // Click outside dropdown closes it
-            dropdownOpen_ = false;
-            return false;
-        }
-
-        // Dropdown toggle
+        // Dropdown: open context menu with history
         if (SDL_PointInRectFloat(&pt, &dropdownRect_)) {
-            dropdownOpen_ = !dropdownOpen_;
+            auto* ctxMenu = ContextMenu::get();
+            ctxMenu->activate();
+
+            auto root = uTreeEntry();
+            root->label = "VST Plugin";
+
+            auto history = Settings::instance().getVstHistory();
+            for (const auto& p : history) {
+                std::string name = p;
+                size_t slash = name.find_last_of("/\\");
+                if (slash != std::string::npos) name = name.substr(slash + 1);
+                size_t dot = name.find_last_of('.');
+                if (dot != std::string::npos) name = name.substr(0, dot);
+                if (name.size() > 35) name = name.substr(0, 35) + "...";
+
+                auto item = uTreeEntry();
+                item->label = name;
+                item->click = [this, p]() { loadPlugin(p, true); };
+                root->addChild(item);
+            }
+
+            auto loadFile = uTreeEntry();
+            loadFile->label = "Load from file...";
+            loadFile->click = [this]() {
+                std::string path = openFileDialog();
+                if (!path.empty()) loadPlugin(path, true);
+            };
+            root->addChild(loadFile);
+
+            ctxMenu->dynamicTick = getTreeMenuTicker(root);
             return true;
         }
     }
