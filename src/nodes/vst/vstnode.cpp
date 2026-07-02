@@ -533,6 +533,7 @@ void VstNode::unloadPlugin() {
 
 void VstNode::onPluginParameterChange(int paramID, float oldValue, float newValue) {
     if (!project || !project->um || !plugin) return;
+    if (restoringState) return;
     std::vector<int> mgrPath = nm ? nm->managerPath : std::vector<int>{};
     // Coalesce rapid edits of the same parameter (drag)
     if (project->um->current && project->um->current->type == VstParameterChange) {
@@ -567,8 +568,6 @@ void VstNode::wirePluginCallbacks() {
     frame->onPerformEdit = [this](Steinberg::Vst::ParamID paramID,
                                     Steinberg::Vst::ParamValue oldVal,
                                     Steinberg::Vst::ParamValue newVal) {
-        if (plugin && plugin->getEditController())
-            plugin->getEditController()->setParamNormalized(paramID, newVal);
         onPluginParameterChange(static_cast<int>(paramID),
                                 static_cast<float>(oldVal), static_cast<float>(newVal));
     };
@@ -599,9 +598,7 @@ void VstNode::extraDeSerialize(const json& j) {
         if (plugin && plugin->isValid()) {
             name = plugin->getName();
             wirePluginCallbacks();
-            // Suppress callbacks during state restoration to avoid spurious undo actions
-            auto* frame = plugin->getHostFrame();
-            if (frame) frame->suppressCallbacks = true;
+            restoringState = true;
             if (j.contains("compState")) {
                 auto& arr = j["compState"];
                 std::vector<uint8_t> data(arr.begin(), arr.end());
@@ -612,7 +609,7 @@ void VstNode::extraDeSerialize(const json& j) {
                 std::vector<uint8_t> data(arr.begin(), arr.end());
                 plugin->setControllerState(data);
             }
-            if (frame) frame->suppressCallbacks = false;
+            restoringState = false;
             rebuildConnections();
             int sr = sampleRate > 0 ? sampleRate : 48000;
             int bs = bufferSize > 0 ? bufferSize : 1024;

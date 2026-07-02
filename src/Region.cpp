@@ -52,22 +52,10 @@ json Region::toJSON() {
     j["positions"] = GridElement::toJSON();
     j["idManager"] = id_pool.toJSON();
     j["tuningMode"] = tuningMode;
-    j["tuningAnchorMidi"] = tuningAnchorMidi;
     j["tuningAnchorHarmonic"] = tuningAnchorHarmonic;
     j["tuningHarmonicAnchorVector"] = json::array();
     for (const auto& pr : tuningHarmonicAnchorVector)
         j["tuningHarmonicAnchorVector"].push_back(json::array({pr.first, pr.second}));
-    j["tuningEdoAnchorMidi"] = tuningEdoAnchorMidi;
-    j["tuningEdoStep"] = tuningEdoStep;
-    j["tuningEdoSpanDivisions"] = tuningEdoSpanDivisions;
-    j["tuningEdoSpanLoMidi"] = tuningEdoSpanLoMidi;
-    j["tuningEdoSpanHiMidi"] = tuningEdoSpanHiMidi;
-    j["tuningSpanLoHarm"] = tuningSpanLoHarm;
-    j["tuningSpanHiHarm"] = tuningSpanHiHarm;
-    j["tuningSpanLoEdoK"] = tuningSpanLoEdoK;
-    j["tuningSpanHiEdoK"] = tuningSpanHiEdoK;
-    j["tuningEdoStepSemiNum"] = tuningEdoStepSemiNum;
-    j["tuningEdoStepSemiDen"] = tuningEdoStepSemiDen;
     j["tuningEdoSubdivisionSteps"] = tuningEdoSubdivisionSteps;
     j["tuningEdoLowerVector"] = json::array();
     for (const auto& pr : tuningEdoLowerVector)
@@ -91,7 +79,6 @@ void Region::fromJSON(json j) {
     }
     id_pool.fromJSON(j["idManager"]);
     tuningMode = j.value("tuningMode", 0);
-    tuningAnchorMidi = j.value("tuningAnchorMidi", 69.0f);
     tuningAnchorHarmonic = j.value("tuningAnchorHarmonic", 1);
     tuningHarmonicAnchorVector.clear();
     if (j.contains("tuningHarmonicAnchorVector") && j["tuningHarmonicAnchorVector"].is_array()) {
@@ -100,17 +87,6 @@ void Region::fromJSON(json j) {
                 tuningHarmonicAnchorVector.push_back({el[0].get<int>(), el[1].get<int>()});
         }
     }
-    tuningEdoAnchorMidi = j.value("tuningEdoAnchorMidi", 69.0f);
-    tuningEdoStep = j.value("tuningEdoStep", 1.0f);
-    tuningEdoSpanDivisions = j.value("tuningEdoSpanDivisions", 0);
-    tuningEdoSpanLoMidi = j.value("tuningEdoSpanLoMidi", 0.0f);
-    tuningEdoSpanHiMidi = j.value("tuningEdoSpanHiMidi", 0.0f);
-    tuningSpanLoHarm = j.value("tuningSpanLoHarm", 0);
-    tuningSpanHiHarm = j.value("tuningSpanHiHarm", 0);
-    tuningSpanLoEdoK = j.value("tuningSpanLoEdoK", INT_MAX);
-    tuningSpanHiEdoK = j.value("tuningSpanHiEdoK", INT_MAX);
-    tuningEdoStepSemiNum = j.value("tuningEdoStepSemiNum", 1);
-    tuningEdoStepSemiDen = j.value("tuningEdoStepSemiDen", 1);
     tuningEdoSubdivisionSteps = j.value("tuningEdoSubdivisionSteps", 12);
     tuningEdoLowerVector.clear();
     if (j.contains("tuningEdoLowerVector") && j["tuningEdoLowerVector"].is_array()) {
@@ -131,19 +107,7 @@ void Region::fromJSON(json j) {
 json Region::tuningUndoToJSON() const {
     json j;
     j["tuningMode"] = tuningMode;
-    j["tuningAnchorMidi"] = tuningAnchorMidi;
     j["tuningAnchorHarmonic"] = tuningAnchorHarmonic;
-    j["tuningEdoAnchorMidi"] = tuningEdoAnchorMidi;
-    j["tuningEdoStep"] = tuningEdoStep;
-    j["tuningEdoSpanDivisions"] = tuningEdoSpanDivisions;
-    j["tuningEdoSpanLoMidi"] = tuningEdoSpanLoMidi;
-    j["tuningEdoSpanHiMidi"] = tuningEdoSpanHiMidi;
-    j["tuningSpanLoHarm"] = tuningSpanLoHarm;
-    j["tuningSpanHiHarm"] = tuningSpanHiHarm;
-    j["tuningSpanLoEdoK"] = tuningSpanLoEdoK;
-    j["tuningSpanHiEdoK"] = tuningSpanHiEdoK;
-    j["tuningEdoStepSemiNum"] = tuningEdoStepSemiNum;
-    j["tuningEdoStepSemiDen"] = tuningEdoStepSemiDen;
     j["tuningEdoSubdivisionSteps"] = tuningEdoSubdivisionSteps;
     j["tuningEdoLowerVector"] = json::array();
     for (const auto& pr : tuningEdoLowerVector)
@@ -159,19 +123,7 @@ json Region::tuningUndoToJSON() const {
 
 void Region::applyTuningUndoFromJSON(const json& j) {
     tuningMode = j.value("tuningMode", 0);
-    tuningAnchorMidi = j.value("tuningAnchorMidi", 69.0f);
     tuningAnchorHarmonic = j.value("tuningAnchorHarmonic", 1);
-    tuningEdoAnchorMidi = j.value("tuningEdoAnchorMidi", 69.0f);
-    tuningEdoStep = j.value("tuningEdoStep", 1.0f);
-    tuningEdoSpanDivisions = j.value("tuningEdoSpanDivisions", 0);
-    tuningEdoSpanLoMidi = j.value("tuningEdoSpanLoMidi", 0.0f);
-    tuningEdoSpanHiMidi = j.value("tuningEdoSpanHiMidi", 0.0f);
-    tuningSpanLoHarm = j.value("tuningSpanLoHarm", 0);
-    tuningSpanHiHarm = j.value("tuningSpanHiHarm", 0);
-    tuningSpanLoEdoK = j.value("tuningSpanLoEdoK", INT_MAX);
-    tuningSpanHiEdoK = j.value("tuningSpanHiEdoK", INT_MAX);
-    tuningEdoStepSemiNum = j.value("tuningEdoStepSemiNum", 1);
-    tuningEdoStepSemiDen = j.value("tuningEdoStepSemiDen", 1);
     tuningEdoSubdivisionSteps = j.value("tuningEdoSubdivisionSteps", 12);
     tuningEdoLowerVector.clear();
     if (j.contains("tuningEdoLowerVector") && j["tuningEdoLowerVector"].is_array()) {
@@ -196,8 +148,8 @@ void Region::applyTuningUndoFromJSON(const json& j) {
     }
 }
 
-int Region::createNote(fract start, fract length, float pitch, std::vector<std::pair<int, int>> pitchIntegerPairs) {
-    auto n = std::make_shared<Note>(start, start + length, pitch);
+int Region::createNote(fract start, fract length, std::vector<std::pair<int, int>> pitchIntegerPairs) {
+    auto n = std::make_shared<Note>(start, start + length, 0.f);
     n->pitchIntegerPairs = std::move(pitchIntegerPairs);
     n->syncNumFromPitchIntegerPairs();
     notes.push_back(n);

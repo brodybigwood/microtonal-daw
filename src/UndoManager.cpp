@@ -416,7 +416,7 @@ bool UndoManager::runRegisteredAction(const std::string& actionName, const json&
                 pairs.push_back({el.at(0).get<int>(), el.at(1).get<int>()});
             }
             pa = new CreateNoteAction(head->p, managerPath, params.at("nodeID").get<int>(), params.at("regionID").get<int>(),
-                fract::fromJSON(params.at("start")), fract::fromJSON(params.at("length")), params.at("pitch").get<float>(),
+                fract::fromJSON(params.at("start")), fract::fromJSON(params.at("length")),
                 std::move(pairs));
             break;
         }
@@ -457,7 +457,7 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
                 pairs.push_back({el.at(0).get<int>(), el.at(1).get<int>()});
             }
             auto cn = new CreateNoteAction(p, managerPath, j.at("nodeID").get<int>(), j.at("regionID").get<int>(), fract::fromJSON(j.at("start")),
-                fract::fromJSON(j.at("length")), j.at("pitch").get<float>(), std::move(pairs));
+                fract::fromJSON(j.at("length")), std::move(pairs));
             cn->noteID = j.at("noteID").get<int>();
             if (j.contains("noteStampedSnapshot") && !j["noteStampedSnapshot"].is_null())
                 cn->noteStampedSnapshot = j["noteStampedSnapshot"];
@@ -574,6 +574,12 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
         case MoveNote: {
             pa = new MoveNoteAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(), j.at("regionID").get<int>(), j.at("noteID").get<int>(),
                 j.at("before"), j.at("after"));
+            break;
+        }
+        case MoveMultipleNotes: {
+            pa = new MoveMultipleNotesAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(), j.at("regionID").get<int>(),
+                j.at("noteIDs").get<std::vector<int>>(), j.at("befores").get<std::vector<json>>(), j.at("afters").get<std::vector<json>>(),
+                j.value("name", "Move Notes"));
             break;
         }
         case DeleteNote: {
@@ -709,7 +715,6 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["regionID"] = cn->regionID;
             j["start"] = cn->start.toJSON();
             j["length"] = cn->length.toJSON();
-            j["pitch"] = cn->pitch;
             j["pitchIntegerPairs"] = json::array();
             for (const auto& pr : cn->pitchIntegerPairs)
                 j["pitchIntegerPairs"].push_back(json::array({pr.first, pr.second}));
@@ -865,6 +870,16 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["noteID"] = mn->noteID;
             j["before"] = mn->before;
             j["after"] = mn->after;
+            break;
+        }
+        case MoveMultipleNotes: {
+            auto mm = static_cast<MoveMultipleNotesAction*>(pa);
+            j["managerPath"] = mm->managerPath;
+            j["nodeID"] = mm->nodeID;
+            j["regionID"] = mm->regionID;
+            j["noteIDs"] = mm->noteIDs;
+            j["befores"] = mm->befores;
+            j["afters"] = mm->afters;
             break;
         }
         case DeleteNote: {
@@ -1384,18 +1399,17 @@ void UndoManager::goTo(ProjectAction* target) {
 
 
 CreateNoteAction::CreateNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, fract start,
-                                   fract length, float pitch, std::vector<std::pair<int, int>> pitchIntegerPairs) :
+                                   fract length, std::vector<std::pair<int, int>> pitchIntegerPairs) :
         ProjectAction(p, CreateNote),
         managerPath(std::move(managerPath)),
         regionID(regionID),
         start(start),
         length(length),
-        pitch(pitch),
         pitchIntegerPairs(std::move(pitchIntegerPairs)),
         nodeID(nodeID) {
     doAction = [this]() {
         Region& region = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
-        noteID = region.createNote(this->start, this->length, this->pitch, this->pitchIntegerPairs);
+        noteID = region.createNote(this->start, this->length, this->pitchIntegerPairs);
         name = "Create Note " + std::to_string(noteID) + " " + std::to_string(this->regionID);
         if (!noteStampedSnapshot.is_null()) {
             auto it = region.id_to_index.find(noteID);
@@ -2191,6 +2205,40 @@ MoveNoteAction::MoveNoteAction(Project* p, std::vector<int> managerPath, int nod
     };
 }
 
+MoveMultipleNotesAction::MoveMultipleNotesAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID,
+                                                  std::vector<int> noteIDs, std::vector<json> befores, std::vector<json> afters,
+                                                  std::string actionName) :
+        ProjectAction(p, MoveMultipleNotes),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        regionID(regionID),
+        noteIDs(std::move(noteIDs)),
+        befores(std::move(befores)),
+        afters(std::move(afters)) {
+    skipInitialDo = true;
+    name = std::move(actionName);
+    doAction = [this]() {
+        Region& region = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
+        for (size_t i = 0; i < this->noteIDs.size(); ++i) {
+            auto it = region.id_to_index.find(this->noteIDs[i]);
+            if (it == region.id_to_index.end()) continue;
+            const size_t idx = static_cast<size_t>(it->second);
+            if (idx >= region.notes.size() || !region.notes[idx]) continue;
+            region.notes[idx]->applyUndoSnapshot(this->afters[i]);
+        }
+    };
+    undoAction = [this]() {
+        Region& region = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
+        for (size_t i = 0; i < this->noteIDs.size(); ++i) {
+            auto it = region.id_to_index.find(this->noteIDs[i]);
+            if (it == region.id_to_index.end()) continue;
+            const size_t idx = static_cast<size_t>(it->second);
+            if (idx >= region.notes.size() || !region.notes[idx]) continue;
+            region.notes[idx]->applyUndoSnapshot(this->befores[i]);
+        }
+    };
+}
+
 void DeleteNoteAction::wireDeleteLambdas() {
     doAction = [this]() {
         Region& r = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
@@ -2595,23 +2643,31 @@ VstParameterChangeAction::VstParameterChangeAction(Project* p, std::vector<int> 
     name = "VST Parameter Change";
 
     doAction = [this]() {
-        try {
-            NodeManager& nm = requireManager(this->p, this->managerPath);
-            Node* node = nm.getNode(static_cast<uint16_t>(this->nodeID));
-            auto* vst = dynamic_cast<VstNode*>(node);
-            if (!vst || !vst->plugin) return;
-            vst->plugin->setParameterValue(static_cast<int>(this->paramID), this->newValue);
-        } catch (const std::runtime_error&) {}
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        Node* node = nm.getNode(static_cast<uint16_t>(this->nodeID));
+        auto* vst = dynamic_cast<VstNode*>(node);
+        if (!vst) throw std::runtime_error("VstParameterChangeAction::doAction: node not found or not VstNode");
+        if (!vst->plugin) throw std::runtime_error("VstParameterChangeAction::doAction: plugin is null");
+        auto* ec = vst->plugin->getEditController();
+        if (!ec) throw std::runtime_error("VstParameterChangeAction::doAction: no edit controller");
+        vst->restoringState = true;
+        ec->setParamNormalized(static_cast<Steinberg::Vst::ParamID>(this->paramID),
+                               static_cast<Steinberg::Vst::ParamValue>(this->newValue));
+        vst->restoringState = false;
     };
 
     undoAction = [this]() {
-        try {
-            NodeManager& nm = requireManager(this->p, this->managerPath);
-            Node* node = nm.getNode(static_cast<uint16_t>(this->nodeID));
-            auto* vst = dynamic_cast<VstNode*>(node);
-            if (!vst || !vst->plugin) return;
-            vst->plugin->setParameterValue(static_cast<int>(this->paramID), this->oldValue);
-        } catch (const std::runtime_error&) {}
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        Node* node = nm.getNode(static_cast<uint16_t>(this->nodeID));
+        auto* vst = dynamic_cast<VstNode*>(node);
+        if (!vst) throw std::runtime_error("VstParameterChangeAction::undoAction: node not found or not VstNode");
+        if (!vst->plugin) throw std::runtime_error("VstParameterChangeAction::undoAction: plugin is null");
+        auto* ec = vst->plugin->getEditController();
+        if (!ec) throw std::runtime_error("VstParameterChangeAction::undoAction: no edit controller");
+        vst->restoringState = true;
+        ec->setParamNormalized(static_cast<Steinberg::Vst::ParamID>(this->paramID),
+                               static_cast<Steinberg::Vst::ParamValue>(this->oldValue));
+        vst->restoringState = false;
     };
 }
 

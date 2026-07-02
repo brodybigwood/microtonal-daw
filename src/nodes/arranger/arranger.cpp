@@ -189,6 +189,7 @@ void ArrangerNode::extraDeSerialize(const json& j) {
     std::cout << "[DBG_DESER]  arranger outputs count=" << outputs.connections.size() << std::endl;
 
     rebuildState(j);
+    std::cout << "[DBG_DESER]  arranger rebuildState done node=" << id << std::endl;
 
     if (sl) {
         sl->tracks = tracks;
@@ -203,6 +204,7 @@ void ArrangerNode::ensureSongRoll() {
 }
 
 void ArrangerNode::rebuildState(json j) {
+    std::cout << "[DBG_DESER]  rebuildState begin node=" << id << std::endl;
     if (elements) {
         delete elements;
         elements = nullptr;
@@ -213,8 +215,17 @@ void ArrangerNode::rebuildState(json j) {
     }
     tracks = new TrackManager(this);
     elements = new ElementManager(project, tracks, this);
-    if (j.contains("TrackManager")) tracks->fromJSON(j["TrackManager"]);
-    if (j.contains("ElementManager")) elements->fromJSON(j["ElementManager"]);
+    if (j.contains("TrackManager")) {
+        std::cout << "[DBG_DESER]  rebuildState TrackManager begin" << std::endl;
+        tracks->fromJSON(j["TrackManager"]);
+        std::cout << "[DBG_DESER]  rebuildState TrackManager done" << std::endl;
+    }
+    if (j.contains("ElementManager")) {
+        std::cout << "[DBG_DESER]  rebuildState ElementManager begin" << std::endl;
+        elements->fromJSON(j["ElementManager"]);
+        std::cout << "[DBG_DESER]  rebuildState ElementManager done" << std::endl;
+    }
+    std::cout << "[DBG_DESER]  rebuildState end node=" << id << std::endl;
 }
 
 void ArrangerNode::syncSongRollContext() {

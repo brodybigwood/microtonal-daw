@@ -24,6 +24,8 @@ public:
     void onPluginParameterChange(int paramID, float oldValue, float newValue);
     void wirePluginCallbacks();
 
+    bool restoringState = false;
+
     // Load a new plugin (with undo support)
     void loadPlugin(const std::string& path, bool createUndo = false);
     void unloadPlugin();

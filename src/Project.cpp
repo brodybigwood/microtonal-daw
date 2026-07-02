@@ -129,12 +129,11 @@ void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {
 
     if (filepath.empty()) {
         auto ctxMenu = ContextMenu::get();
-        // Raise project window and grab focus so the text input gets keyboard events
         if (this->window) {
             SDL_RaiseWindow(this->window);
             SDL_SetWindowKeyboardGrab(this->window, true);
         }
-        ctxMenu->activate();
+        ctxMenu->activate(SDL_GetRenderer(this->window), SDL_GetWindowID(this->window));
         if (this->window) SDL_StartTextInput(this->window);
         int w = 0, h = 0;
         if (this->window) SDL_GetWindowSize(this->window, &w, &h);
@@ -158,9 +157,9 @@ void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {
     } else save_l();
 }
 
-void Project::createNote(int nodeID, fract start, fract length, float pitch, int regionID, std::vector<int> managerPath,
+void Project::createNote(int nodeID, fract start, fract length, int regionID, std::vector<int> managerPath,
                          std::vector<std::pair<int, int>> pitchIntegerPairs) {
-    auto pa = new CreateNoteAction(this, std::move(managerPath), nodeID, regionID, start, length, pitch,
+    auto pa = new CreateNoteAction(this, std::move(managerPath), nodeID, regionID, start, length,
                                    std::move(pitchIntegerPairs));
     um->newAction(pa);
 }

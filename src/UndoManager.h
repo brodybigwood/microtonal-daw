@@ -50,7 +50,8 @@ enum ActionType {
     VstLoadPlugin = 30,
     TogglePianoRollWindow = 31,
     ReassignNodeConnection = 32,
-    RemoveArrangerTrack = 33
+    RemoveArrangerTrack = 33,
+    MoveMultipleNotes = 34
 };
 
 
@@ -299,6 +300,19 @@ struct MoveNoteAction : ProjectAction {
                    json after, std::string actionName = "Move Note");
 };
 
+struct MoveMultipleNotesAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    int regionID = 0;
+    std::vector<int> noteIDs;
+    std::vector<json> befores;
+    std::vector<json> afters;
+
+    MoveMultipleNotesAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID,
+                            std::vector<int> noteIDs, std::vector<json> befores, std::vector<json> afters,
+                            std::string actionName = "Move Notes");
+};
+
 struct DeleteNoteAction : ProjectAction {
     std::vector<int> managerPath;
     int nodeID = 0;
@@ -323,13 +337,12 @@ struct CreateNoteAction : ProjectAction {
     int regionID;
     fract start;
     fract length;
-    float pitch;
     std::vector<std::pair<int, int>> pitchIntegerPairs;
     /** Filled after PianoRoll::stampNoteTuning on first create; reapplied on redo (doAction) so tuningMode matches the lattice. */
     json noteStampedSnapshot = json();
 
     CreateNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, fract start, fract length,
-                     float pitch, std::vector<std::pair<int, int>> pitchIntegerPairs);
+                     std::vector<std::pair<int, int>> pitchIntegerPairs);
 };
 
 struct CreateRegionAction : ProjectAction {

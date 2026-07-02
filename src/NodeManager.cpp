@@ -92,13 +92,16 @@ void NodeManager::deSerialize(json j) {
         std::cout << managerPath[i] << (i + 1 < managerPath.size() ? "/" : "");
     }
     if (managerPath.empty()) std::cout << "root";
-    std::cout << std::endl;
+    std::cout << " nodesSize=" << j["nodes"].size() << std::endl;
     id_pool.fromJSON(j["idManager"]);
+    std::cout << "[DBG_DESER]  id_pool done" << std::endl;
     if (ne && j.contains("ewIdPool")) ne->ewIdPoolFromJSON(j["ewIdPool"]);
 
     // Pass 1: create all nodes (skip extraDeSerialize so cross-node ID lookups work)
     std::vector<std::pair<Node*, json>> pendingExtra;
+    int nodeIdx = 0;
     for (auto n : j["nodes"]) {
+        std::cout << "[DBG_DESER]  creating node " << nodeIdx << " type=" << n.value("nodeType", -1) << std::endl;
         auto node = Node::deSerialize(n, this, true);
         if (node) {
             nodes.push_back(node);
@@ -107,6 +110,7 @@ void NodeManager::deSerialize(json j) {
             if (n.contains("extra"))
                 pendingExtra.push_back({node, n["extra"]});
         }
+        nodeIdx++;
     }
     // Pass 2: extraDeSerialize now that all nodes are in the ID map
     for (auto& [node, extra] : pendingExtra) {

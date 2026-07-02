@@ -20,12 +20,11 @@ class Note {
 
         int id;
         int channel;
-        int harmonicNumber = 0;
         int tuningMode = 0; // 0=harmonic, 1=edo
-        float tuningAnchorMidi = 69.0f;
         int tuningAnchorHarmonic = 1;
-        float tuningEdoAnchorMidi = 69.0f;
-        float tuningEdoStep = 1.0f;
+        int tuningEdoSubdivisionSteps = 12;
+        std::vector<std::pair<int, int>> tuningEdoLowerVector;
+        std::vector<std::pair<int, int>> tuningEdoUpperVector;
         // Rational prime-power factors for pitch (same meaning as PianoRollPitchLine::integerPairs).
         // num = 69 + 12*log2(product of primes[i]^(num/den)); empty vector => product 1 => num 69.
         std::vector<std::pair<int, int>> pitchIntegerPairs;

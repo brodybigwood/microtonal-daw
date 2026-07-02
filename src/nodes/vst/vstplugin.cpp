@@ -194,12 +194,11 @@ Steinberg::tresult PLUGIN_API EditorHostFrame::resizeView(Steinberg::IPlugView*,
 }
 
 Steinberg::tresult PLUGIN_API EditorHostFrame::beginEdit(Steinberg::Vst::ParamID id) {
-    if (!suppressCallbacks && onBeginEdit) onBeginEdit(id);
+    if (onBeginEdit) onBeginEdit(id);
     return Steinberg::kResultTrue;
 }
 
 Steinberg::tresult PLUGIN_API EditorHostFrame::performEdit(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue valueNormalized) {
-    if (suppressCallbacks) return Steinberg::kResultTrue;
     if (onPerformEdit) {
         // Look up pre-edit value captured by VstNode in beginEdit callback
         auto it = preEditValues.find(id);
@@ -291,10 +290,6 @@ void EditorHostFrame::pollRunLoop() {
             }
         }
     }
-
-    // Clear suppression AFTER timer/fd processing so async plugin callbacks
-    // triggered by setParamNormalized (undo/redo) remain suppressed.
-    suppressCallbacks = false;
 }
 
 // ============================================================================
@@ -946,11 +941,8 @@ float VstPlugin::getParameterValue(int paramID) const {
 
 void VstPlugin::setParameterValue(int paramID, float valueNormalized) {
     if (!editController || !hostFrame) return;
-    hostFrame->suppressCallbacks = true;
     editController->setParamNormalized(static_cast<Steinberg::Vst::ParamID>(paramID),
                                        static_cast<Steinberg::Vst::ParamValue>(valueNormalized));
-    // Don't clear suppressCallbacks here — pollRunLoop() clears it next frame
-    // so async timer callbacks triggered by setParamNormalized are also suppressed.
 }
 
 std::vector<uint8_t> VstPlugin::getComponentState() const {

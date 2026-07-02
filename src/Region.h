@@ -30,7 +30,7 @@ class Region : public GridElement {
         std::string name = "MIDI Region FX Rack";
         std::vector<std::shared_ptr<Note>> notes;
 
-    int createNote(fract, fract, float, std::vector<std::pair<int, int>> pitchIntegerPairs = {});
+    int createNote(fract, fract, std::vector<std::pair<int, int>> pitchIntegerPairs = {});
     void deleteNote(int);
     void restoreNoteAt(std::shared_ptr<Note> n, size_t insertIndex);
 
@@ -40,24 +40,10 @@ int releaseMS = 1000;
 
 // Procedural tuning state for PianoRoll (avoids scale object churn).
 int tuningMode = 0; // 0=harmonic, 1=edo
-float tuningAnchorMidi = 69.0f;
 int tuningAnchorHarmonic = 1;
 // Slot-wise rational lattice offset at the anchor; integer harmonic lines add dense prime exponents on top.
 std::vector<std::pair<int, int>> tuningHarmonicAnchorVector;
-float tuningEdoAnchorMidi = 69.0f;
-float tuningEdoStep = 1.0f;
-// When >0, subdividing [tuningEdoSpanLoMidi, tuningEdoSpanHiMidi] into this many parts (grid / UI).
-int tuningEdoSpanDivisions = 0;
-float tuningEdoSpanLoMidi = 0.0f;
-float tuningEdoSpanHiMidi = 0.0f;
-
-int tuningSpanLoHarm = 0;
-int tuningSpanHiHarm = 0;
-int tuningSpanLoEdoK = INT_MAX;
-int tuningSpanHiEdoK = INT_MAX;
-int tuningEdoStepSemiNum = 1;
-int tuningEdoStepSemiDen = 1;
-// Equal subdivision of rational pitch vector from lower to upper into this many steps (EDO line factors).
+// Number of equal subdivision steps (EDO line factors).
 int tuningEdoSubdivisionSteps = 12;
 std::vector<std::pair<int, int>> tuningEdoLowerVector;
 std::vector<std::pair<int, int>> tuningEdoUpperVector;

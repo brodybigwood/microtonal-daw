@@ -3,6 +3,8 @@
 #include <SDL_ttf.h>
 #include <utility>
 #include <vector>
+#include <set>
+#include <map>
 #include "GridView.h"
 #include "EmbeddedWindow.h"
 #include "Region.h"
@@ -75,6 +77,22 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         bool stretchingNoteHasUndoSnapshot = false;
         bool stretchingNoteDragDirty = false;
 
+        // Multi-note selection
+        std::set<int> selectedNoteIds;
+        bool selectingRubberBand = false;
+        float rubberBandStartX = 0, rubberBandStartY = 0;
+        float rubberBandEndX = 0, rubberBandEndY = 0;
+
+        // Multi-note move state (populated when dragging a selected note)
+        bool movingMultipleNotes = false;
+        std::map<int, json> multiMoveBefores;                // noteId -> JSON snapshot at mousedown
+        std::map<int, std::vector<std::pair<int,int>>> multiPitchPreviews; // noteId -> preview integerPairs
+        std::vector<std::pair<int,int>> dragStartPairs;      // integerPairs at drag start (from note or grid line)
+
+        // Multi-note resize state
+        bool stretchingMultipleNotes = false;
+        std::map<int, json> multiStretchBefores;             // noteId -> JSON snapshot at mousedown
+
         bool customTick(SDL_Renderer* renderer) override;
 
         void UpdateGrid() override;
@@ -96,6 +114,7 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         void createElement() override;
 
         void deleteElement() override;
+        void deleteSelection();
 
         bool getExistingNote();
 
@@ -122,10 +141,7 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         
     private:
         TuningMode tuningMode = TuningMode::Harmonic;
-        float harmonicAnchorMidi = 69.0f;
         int harmonicAnchorNumber = 1;
-        float edoAnchorMidi = 69.0f;
-        float edoStep = 1.0f;
 
         bool selectingInterval = false;
         float intervalStartLine = 0.0f;
@@ -157,9 +173,7 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         int structuralHarmonicNearNote(const std::shared_ptr<Note>& n);
         int structuralEdoKNearNote(const std::shared_ptr<Note>& n);
 
-        float harmonicToMidi(int harmonic) const;
-        void applyHarmonicAnchor(float midi, int harmonic);
-        void defineEdoFromInterval(float a, float b, int steps);
+
         void syncTuningToRegion();
         void loadTuningFromRegion();
         void applyNoteTuning(const std::shared_ptr<Note>& note);

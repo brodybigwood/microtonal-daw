@@ -27,19 +27,7 @@
 namespace {
 struct RegionTuningSnapshot {
     int mode = 0;
-    float harmonicAnchorMidi = 69.0f;
     int harmonicAnchorNumber = 1;
-    float edoAnchorMidi = 69.0f;
-    float edoStep = 1.0f;
-    int edoSpanDivisions = 0;
-    float edoSpanLoMidi = 0.0f;
-    float edoSpanHiMidi = 0.0f;
-    int spanLoHarm = 0;
-    int spanHiHarm = 0;
-    int spanLoEdoK = INT_MAX;
-    int spanHiEdoK = INT_MAX;
-    int edoStepSemiNum = 1;
-    int edoStepSemiDen = 1;
     int edoSubdivisionSteps = 12;
     std::vector<std::pair<int, int>> edoLowerVector;
     std::vector<std::pair<int, int>> edoUpperVector;
@@ -47,12 +35,11 @@ struct RegionTuningSnapshot {
 };
 
 struct NoteTuningSnapshot {
-    int harmonicNumber = 0;
     int tuningMode = 0;
-    float tuningAnchorMidi = 69.0f;
     int tuningAnchorHarmonic = 1;
-    float tuningEdoAnchorMidi = 69.0f;
-    float tuningEdoStep = 1.0f;
+    int tuningEdoSubdivisionSteps = 12;
+    std::vector<std::pair<int, int>> tuningEdoLowerVector;
+    std::vector<std::pair<int, int>> tuningEdoUpperVector;
 };
 
 static bool isPrimeInt(int p) {
@@ -204,20 +191,8 @@ static std::vector<std::pair<int, int>> alignedRatSubVectors(const std::vector<s
     return out;
 }
 
-static bool isDefaultHarmonicReference(int anchorHarmonic, float anchorMidi) {
-    return std::max(1, anchorHarmonic) == 1 && std::fabs(anchorMidi - 69.0f) < 1e-4f;
-}
 
-static std::vector<std::pair<int, int>> harmonicAnchorBaseFromNoteAtHarmonic(
-    const std::vector<std::pair<int, int>>& notePairsRaw,
-    int anchorHarmonic) {
-    return alignedRatSubVectors(notePairsRaw, densePrimeExponentPairsForHarmonic(anchorHarmonic));
-}
 
-static std::vector<std::pair<int, int>> harmonicLineVectorFromAnchorBase(const std::vector<std::pair<int, int>>& anchorBase,
-                                                                        int lineHarmonicH) {
-    return alignedRatAddVectors(anchorBase, densePrimeExponentPairsForHarmonic(lineHarmonicH));
-}
 
 // Dense exponents for primes 2,3,5,… ; empty vector → "0"; zero exponent prints as "0" not "(0/den)".
 static std::string formatPrimePowerVector(const std::vector<std::pair<int, int>>& v) {
@@ -243,9 +218,8 @@ static std::string formatPrimePowerVector(const std::vector<std::pair<int, int>>
 /** True after Define EDO interval (or undo restoring that state); enables mode-bar switch to EDO.
  *  Here "nonzero" for a boundary = vector non-empty; the rational zero vector is stored as empty. */
 static bool regionHasDragDefinedEdoLattice(const Region* r) {
-    if (!r || r->tuningEdoSpanDivisions <= 0)
-        return false;
-    return !r->tuningEdoLowerVector.empty() || !r->tuningEdoUpperVector.empty();
+    return r && r->tuningEdoSubdivisionSteps > 0 &&
+           (!r->tuningEdoLowerVector.empty() || !r->tuningEdoUpperVector.empty());
 }
 
 } // namespace
@@ -277,70 +251,13 @@ void PianoRoll::renderPitchFactorsHoverTooltip() {
     renderTooltip(renderer, text, mouseX + dstRect->x, mouseY + dstRect->y, bounds);
 }
 
-float PianoRoll::harmonicToMidi(int harmonic) const {
-    const int h = std::max(1, harmonic);
-    const int anchorH = std::max(1, harmonicAnchorNumber);
-    return harmonicAnchorMidi + 12.0f * std::log2(static_cast<float>(h) / static_cast<float>(anchorH));
-}
 
-void PianoRoll::applyHarmonicAnchor(float midi, int harmonic) {
-    tuningMode = TuningMode::Harmonic;
-    harmonicAnchorMidi = midi;
-    harmonicAnchorNumber = std::max(1, harmonic);
-    if (region) {
-        region->tuningHarmonicAnchorVector.clear();
-        region->tuningEdoSpanDivisions = 0;
-        region->tuningEdoSpanLoMidi = 0.0f;
-        region->tuningEdoSpanHiMidi = 0.0f;
-        region->tuningSpanLoHarm = 0;
-        region->tuningSpanHiHarm = 0;
-        region->tuningSpanLoEdoK = INT_MAX;
-        region->tuningSpanHiEdoK = INT_MAX;
-    }
-    syncTuningToRegion();
-    updateLines();
-}
-
-void PianoRoll::defineEdoFromInterval(float a, float b, int steps) {
-    const int n = std::max(1, steps);
-    const float lo = std::min(a, b);
-    const float hi = std::max(a, b);
-    const float diff = std::max(1e-6f, hi - lo);
-    tuningMode = TuningMode::EDO;
-    edoAnchorMidi = lo;
-    edoStep = diff / static_cast<float>(n);
-    if (region) {
-        region->tuningHarmonicAnchorVector.clear();
-        region->tuningEdoSpanDivisions = n;
-        region->tuningEdoSpanLoMidi = lo;
-        region->tuningEdoSpanHiMidi = hi;
-        region->tuningEdoSubdivisionSteps = n;
-        region->tuningSpanLoHarm = 0;
-        region->tuningSpanHiHarm = 0;
-        region->tuningSpanLoEdoK = INT_MAX;
-        region->tuningSpanHiEdoK = INT_MAX;
-    }
-    syncTuningToRegion();
-    updateLines();
-}
 
 static RegionTuningSnapshot captureRegionTuning(const Region* region) {
     RegionTuningSnapshot s;
     if (!region) return s;
     s.mode = region->tuningMode;
-    s.harmonicAnchorMidi = region->tuningAnchorMidi;
     s.harmonicAnchorNumber = region->tuningAnchorHarmonic;
-    s.edoAnchorMidi = region->tuningEdoAnchorMidi;
-    s.edoStep = region->tuningEdoStep;
-    s.edoSpanDivisions = region->tuningEdoSpanDivisions;
-    s.edoSpanLoMidi = region->tuningEdoSpanLoMidi;
-    s.edoSpanHiMidi = region->tuningEdoSpanHiMidi;
-    s.spanLoHarm = region->tuningSpanLoHarm;
-    s.spanHiHarm = region->tuningSpanHiHarm;
-    s.spanLoEdoK = region->tuningSpanLoEdoK;
-    s.spanHiEdoK = region->tuningSpanHiEdoK;
-    s.edoStepSemiNum = region->tuningEdoStepSemiNum;
-    s.edoStepSemiDen = region->tuningEdoStepSemiDen;
     s.edoSubdivisionSteps = region->tuningEdoSubdivisionSteps;
     s.edoLowerVector = region->tuningEdoLowerVector;
     s.edoUpperVector = region->tuningEdoUpperVector;
@@ -351,19 +268,7 @@ static RegionTuningSnapshot captureRegionTuning(const Region* region) {
 static void applyRegionTuning(Region* region, const RegionTuningSnapshot& s) {
     if (!region) return;
     region->tuningMode = s.mode;
-    region->tuningAnchorMidi = s.harmonicAnchorMidi;
     region->tuningAnchorHarmonic = s.harmonicAnchorNumber;
-    region->tuningEdoAnchorMidi = s.edoAnchorMidi;
-    region->tuningEdoStep = s.edoStep;
-    region->tuningEdoSpanDivisions = s.edoSpanDivisions;
-    region->tuningEdoSpanLoMidi = s.edoSpanLoMidi;
-    region->tuningEdoSpanHiMidi = s.edoSpanHiMidi;
-    region->tuningSpanLoHarm = s.spanLoHarm;
-    region->tuningSpanHiHarm = s.spanHiHarm;
-    region->tuningSpanLoEdoK = s.spanLoEdoK;
-    region->tuningSpanHiEdoK = s.spanHiEdoK;
-    region->tuningEdoStepSemiNum = std::max(1, s.edoStepSemiNum);
-    region->tuningEdoStepSemiDen = std::max(1, s.edoStepSemiDen);
     region->tuningEdoSubdivisionSteps = std::max(1, s.edoSubdivisionSteps);
     region->tuningEdoLowerVector = s.edoLowerVector;
     region->tuningEdoUpperVector = s.edoUpperVector;
@@ -373,19 +278,7 @@ static void applyRegionTuning(Region* region, const RegionTuningSnapshot& s) {
 static json regionTuningSnapshotToUndoJson(const RegionTuningSnapshot& s) {
     json j;
     j["tuningMode"] = s.mode;
-    j["tuningAnchorMidi"] = s.harmonicAnchorMidi;
     j["tuningAnchorHarmonic"] = s.harmonicAnchorNumber;
-    j["tuningEdoAnchorMidi"] = s.edoAnchorMidi;
-    j["tuningEdoStep"] = s.edoStep;
-    j["tuningEdoSpanDivisions"] = s.edoSpanDivisions;
-    j["tuningEdoSpanLoMidi"] = s.edoSpanLoMidi;
-    j["tuningEdoSpanHiMidi"] = s.edoSpanHiMidi;
-    j["tuningSpanLoHarm"] = s.spanLoHarm;
-    j["tuningSpanHiHarm"] = s.spanHiHarm;
-    j["tuningSpanLoEdoK"] = s.spanLoEdoK;
-    j["tuningSpanHiEdoK"] = s.spanHiEdoK;
-    j["tuningEdoStepSemiNum"] = s.edoStepSemiNum;
-    j["tuningEdoStepSemiDen"] = s.edoStepSemiDen;
     j["tuningEdoSubdivisionSteps"] = s.edoSubdivisionSteps;
     j["tuningEdoLowerVector"] = json::array();
     for (const auto& pr : s.edoLowerVector)
@@ -401,44 +294,52 @@ static json regionTuningSnapshotToUndoJson(const RegionTuningSnapshot& s) {
 
 static json noteTuningSnapshotToUndoJson(const NoteTuningSnapshot& s) {
     json j;
-    j["harmonicNumber"] = s.harmonicNumber;
     j["tuningMode"] = s.tuningMode;
-    j["tuningAnchorMidi"] = s.tuningAnchorMidi;
     j["tuningAnchorHarmonic"] = s.tuningAnchorHarmonic;
-    j["tuningEdoAnchorMidi"] = s.tuningEdoAnchorMidi;
-    j["tuningEdoStep"] = s.tuningEdoStep;
+    j["tuningEdoSubdivisionSteps"] = s.tuningEdoSubdivisionSteps;
+    j["tuningEdoLowerVector"] = json::array();
+    for (const auto& pr : s.tuningEdoLowerVector)
+        j["tuningEdoLowerVector"].push_back(json::array({pr.first, pr.second}));
+    j["tuningEdoUpperVector"] = json::array();
+    for (const auto& pr : s.tuningEdoUpperVector)
+        j["tuningEdoUpperVector"].push_back(json::array({pr.first, pr.second}));
     return j;
 }
 
 static NoteTuningSnapshot captureNoteTuning(const std::shared_ptr<Note>& n) {
     NoteTuningSnapshot s;
     if (!n) return s;
-    s.harmonicNumber = n->harmonicNumber;
     s.tuningMode = n->tuningMode;
-    s.tuningAnchorMidi = n->tuningAnchorMidi;
     s.tuningAnchorHarmonic = n->tuningAnchorHarmonic;
-    s.tuningEdoAnchorMidi = n->tuningEdoAnchorMidi;
-    s.tuningEdoStep = n->tuningEdoStep;
+    s.tuningEdoSubdivisionSteps = n->tuningEdoSubdivisionSteps;
+    s.tuningEdoLowerVector = n->tuningEdoLowerVector;
+    s.tuningEdoUpperVector = n->tuningEdoUpperVector;
     return s;
 }
 
 static void applyNoteTuningSnapshot(const std::shared_ptr<Note>& n, const NoteTuningSnapshot& s) {
     if (!n) return;
-    n->harmonicNumber = s.harmonicNumber;
     n->tuningMode = s.tuningMode;
-    n->tuningAnchorMidi = s.tuningAnchorMidi;
     n->tuningAnchorHarmonic = s.tuningAnchorHarmonic;
-    n->tuningEdoAnchorMidi = s.tuningEdoAnchorMidi;
-    n->tuningEdoStep = s.tuningEdoStep;
+    n->tuningEdoSubdivisionSteps = s.tuningEdoSubdivisionSteps;
+    n->tuningEdoLowerVector = s.tuningEdoLowerVector;
+    n->tuningEdoUpperVector = s.tuningEdoUpperVector;
 }
 
 void PianoRoll::applyNoteTuning(const std::shared_ptr<Note>& note) {
     if (!note) return;
     tuningMode = (note->tuningMode == 1) ? TuningMode::EDO : TuningMode::Harmonic;
-    harmonicAnchorMidi = note->tuningAnchorMidi;
     harmonicAnchorNumber = std::max(1, note->tuningAnchorHarmonic);
-    edoAnchorMidi = note->tuningEdoAnchorMidi;
-    edoStep = std::max(1e-5f, note->tuningEdoStep);
+    if (region) {
+        if (tuningMode == TuningMode::Harmonic) {
+            region->tuningHarmonicAnchorVector = note->pitchIntegerPairs;
+        } else {
+            region->tuningHarmonicAnchorVector.clear();
+            region->tuningEdoSubdivisionSteps = note->tuningEdoSubdivisionSteps;
+            region->tuningEdoLowerVector = note->tuningEdoLowerVector;
+            region->tuningEdoUpperVector = note->tuningEdoUpperVector;
+        }
+    }
     syncTuningToRegion();
     updateLines();
 }
@@ -446,29 +347,19 @@ void PianoRoll::applyNoteTuning(const std::shared_ptr<Note>& note) {
 void PianoRoll::stampNoteTuning(const std::shared_ptr<Note>& note) {
     if (!note) return;
     note->tuningMode = (tuningMode == TuningMode::EDO) ? 1 : 0;
-    note->tuningAnchorMidi = harmonicAnchorMidi;
-    note->tuningAnchorHarmonic = harmonicAnchorNumber;
-    note->tuningEdoAnchorMidi = edoAnchorMidi;
-    note->tuningEdoStep = edoStep;
     note->syncNumFromPitchIntegerPairs();
 }
 
 void PianoRoll::syncTuningToRegion() {
     if (!region) return;
     region->tuningMode = static_cast<int>(tuningMode);
-    region->tuningAnchorMidi = harmonicAnchorMidi;
     region->tuningAnchorHarmonic = harmonicAnchorNumber;
-    region->tuningEdoAnchorMidi = edoAnchorMidi;
-    region->tuningEdoStep = edoStep;
 }
 
 void PianoRoll::loadTuningFromRegion() {
     if (!region) return;
     tuningMode = (region->tuningMode == 1) ? TuningMode::EDO : TuningMode::Harmonic;
-    harmonicAnchorMidi = region->tuningAnchorMidi;
     harmonicAnchorNumber = std::max(1, region->tuningAnchorHarmonic);
-    edoAnchorMidi = region->tuningEdoAnchorMidi;
-    edoStep = std::max(1e-5f, region->tuningEdoStep);
 }
 
 void PianoRoll::newTuning() {
@@ -489,22 +380,14 @@ void PianoRoll::updateLines() {
     lineStructural.clear();
 
     if (tuningMode == TuningMode::Harmonic) {
-        const bool defaultHarmonicRef = isDefaultHarmonicReference(harmonicAnchorNumber, harmonicAnchorMidi);
-        static const std::vector<std::pair<int, int>> kEmptyHarmonicAnchor;
+        const auto& anchorVec = region->tuningHarmonicAnchorVector;
+        const auto anchorBase = alignedRatSubVectors(anchorVec, densePrimeExponentPairsForHarmonic(harmonicAnchorNumber));
         for (int h = 1; h <= 512; ++h) {
-            const float midi = harmonicToMidi(h);
+            auto pairs = alignedRatAddVectors(anchorBase, densePrimeExponentPairsForHarmonic(h));
+            const float midi = Note::midiFromPitchIntegerPairs(pairs);
             if (midi < -24.0f || midi > 152.0f) continue;
             pitchLines.emplace_back(midi);
-            if (defaultHarmonicRef) {
-                if (h == 1)
-                    pitchLines.back().integerPairs.clear();
-                else
-                    pitchLines.back().integerPairs = densePrimeExponentPairsForHarmonic(h);
-            } else {
-                const std::vector<std::pair<int, int>>& anchorBase =
-                    region ? region->tuningHarmonicAnchorVector : kEmptyHarmonicAnchor;
-                pitchLines.back().integerPairs = harmonicLineVectorFromAnchorBase(anchorBase, h);
-            }
+            pitchLines.back().integerPairs = std::move(pairs);
             lineLabels.push_back(std::to_string(h));
             lineStructural.push_back(h);
         }
@@ -607,10 +490,10 @@ int PianoRoll::hoveredEdoKFromGrid() {
 int PianoRoll::structuralHarmonicNearNote(const std::shared_ptr<Note>& n) {
     if (!n)
         return hoveredHarmonicFromGrid();
-    if (n->harmonicNumber > 0) {
+    if (n->tuningAnchorHarmonic > 0) {
         for (size_t i = 0; i < lineStructural.size(); ++i) {
-            if (lineStructural[i] == n->harmonicNumber)
-                return std::max(1, n->harmonicNumber);
+            if (lineStructural[i] == n->tuningAnchorHarmonic)
+                return std::max(1, n->tuningAnchorHarmonic);
         }
     }
     if (hoveredPitchLineIndex != SIZE_MAX && hoveredPitchLineIndex < lineStructural.size())
@@ -1064,6 +947,27 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     }
                     return;
                 }
+                if (isCtrlPressed && mouseX > leftMargin) {
+                    getExistingNote();
+                    if (hoveredElement != nullptr) {
+                        auto n = std::dynamic_pointer_cast<Note>(hoveredElement);
+                        if (n) {
+                            if (selectedNoteIds.count(n->id))
+                                selectedNoteIds.erase(n->id);
+                            else
+                                selectedNoteIds.insert(n->id);
+                        }
+                    } else {
+                        selectingRubberBand = true;
+                        rubberBandStartX = mouseX;
+                        rubberBandStartY = mouseY;
+                        rubberBandEndX = mouseX;
+                        rubberBandEndY = mouseY;
+                    }
+                    handleMouse();
+                    refreshGrid = true;
+                    return;
+                }
                 if (mouseX > leftMargin) {
                     getExistingNote();
                     getStretchingNote();
@@ -1071,12 +975,25 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                         stretchingNoteUndoBefore = stretchingNote->toJSON();
                         stretchingNoteHasUndoSnapshot = true;
                         stretchingNoteDragDirty = false;
+                        // Multi-note stretch: if stretched note is selected, snapshot all selected
+                        if (selectedNoteIds.count(stretchingNote->id) && selectedNoteIds.size() > 1) {
+                            stretchingMultipleNotes = true;
+                            multiStretchBefores.clear();
+                            for (auto& sn : region->notes) {
+                                if (selectedNoteIds.count(sn->id))
+                                    multiStretchBefores[sn->id] = sn->toJSON();
+                            }
+                        } else {
+                            stretchingMultipleNotes = false;
+                            multiStretchBefores.clear();
+                        }
                         last_lmb_x = mouseX;
                         handleMouse();
                         refreshGrid = true;
                         return;
                     }
                     if (hoveredElement == nullptr) {
+                        selectedNoteIds.clear();
                         createElement();
                     } else {
                         auto n = std::dynamic_pointer_cast<Note>(hoveredElement);
@@ -1085,29 +1002,49 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                             auto before = captureRegionTuning(region);
                             auto after = before;
                             after.mode = n->tuningMode;
-                            after.harmonicAnchorMidi = n->tuningAnchorMidi;
                             after.harmonicAnchorNumber = n->tuningAnchorHarmonic;
-                            after.edoAnchorMidi = n->tuningEdoAnchorMidi;
-                            after.edoStep = n->tuningEdoStep;
                             if (after.mode == 0) {
-                                if (isDefaultHarmonicReference(after.harmonicAnchorNumber, after.harmonicAnchorMidi))
-                                    after.harmonicAnchorVector.clear();
-                                else
-                                    after.harmonicAnchorVector = harmonicAnchorBaseFromNoteAtHarmonic(
-                                        n->pitchIntegerPairs, after.harmonicAnchorNumber);
+                                after.harmonicAnchorVector = n->pitchIntegerPairs;
                             } else {
                                 after.harmonicAnchorVector.clear();
+                                after.edoSubdivisionSteps = n->tuningEdoSubdivisionSteps;
+                                after.edoLowerVector = n->tuningEdoLowerVector;
+                                after.edoUpperVector = n->tuningEdoUpperVector;
                             }
                             project->um->newAction(new PianoRollRegionTuningUndoAction(project, region->parentNode->nm->managerPath,
                                 region->parentNode->id, region->id, regionTuningSnapshotToUndoJson(before),
                                 regionTuningSnapshotToUndoJson(after), "Recall Note Tuning View"));
                             return;
                         }
-                        movingNote = n;
-                        movingNoteUndoBefore = n->toJSON();
-                        movingNoteHasUndoSnapshot = true;
-                        movingNoteDragDirty = false;
-                        movingNotePitchPreviewLineMidi.reset();
+                        // Multi-note move: if clicked note is in selection, move all selected
+                        if (selectedNoteIds.count(n->id) && selectedNoteIds.size() > 1) {
+                            movingMultipleNotes = true;
+                            multiMoveBefores.clear();
+                            multiPitchPreviews.clear();
+                            movingNote = n;
+                            movingNoteUndoBefore = n->toJSON();
+                            movingNoteHasUndoSnapshot = true;
+                            movingNoteDragDirty = false;
+                            movingNotePitchPreviewLineMidi.reset();
+                            // Store start pairs: prefer hovered note's pairs, else grid line
+                            dragStartPairs = n->pitchIntegerPairs;
+                            for (auto& sn : region->notes) {
+                                if (selectedNoteIds.count(sn->id))
+                                    multiMoveBefores[sn->id] = sn->toJSON();
+                            }
+                        } else {
+                            // Single note move (clear selection)
+                            selectedNoteIds.clear();
+                            movingMultipleNotes = false;
+                            multiMoveBefores.clear();
+                            multiPitchPreviews.clear();
+                            movingNote = n;
+                            movingNoteUndoBefore = n->toJSON();
+                            movingNoteHasUndoSnapshot = true;
+                            movingNoteDragDirty = false;
+                            movingNotePitchPreviewLineMidi.reset();
+                            dragStartPairs = n->pitchIntegerPairs;
+                        }
                         last_lmb_x = mouseX;
                     }
                 }
@@ -1132,17 +1069,10 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                                 auto beforeNote = captureNoteTuning(note);
                                 auto afterRegion = beforeRegion;
                                 afterRegion.mode = 0;
-                                afterRegion.harmonicAnchorMidi = note->num;
                                 afterRegion.harmonicAnchorNumber = h;
-                                if (isDefaultHarmonicReference(h, note->num))
-                                    afterRegion.harmonicAnchorVector.clear();
-                                else
-                                    afterRegion.harmonicAnchorVector =
-                                        harmonicAnchorBaseFromNoteAtHarmonic(note->pitchIntegerPairs, h);
+                                afterRegion.harmonicAnchorVector = note->pitchIntegerPairs;
                                 auto afterNote = beforeNote;
-                                afterNote.harmonicNumber = h;
                                 afterNote.tuningMode = 0;
-                                afterNote.tuningAnchorMidi = note->num;
                                 afterNote.tuningAnchorHarmonic = h;
                                 project->um->newAction(new AssignNoteHarmonicUndoAction(project, region->parentNode->nm->managerPath,
                                     region->parentNode->id, region->id, note->id, regionTuningSnapshotToUndoJson(beforeRegion),
@@ -1167,7 +1097,48 @@ void PianoRoll::clickMouse(SDL_Event& e) {
         case SDL_EVENT_MOUSE_BUTTON_UP:
             if (e.button.button == SDL_BUTTON_LEFT) {
                 lmb = false;
-                if (stretchingNoteHasUndoSnapshot && stretchingNote) {
+                // Rubber band selection finalize
+                if (selectingRubberBand) {
+                    selectingRubberBand = false;
+                    float bx1 = std::min(rubberBandStartX, rubberBandEndX);
+                    float by1 = std::min(rubberBandStartY, rubberBandEndY);
+                    float bx2 = std::max(rubberBandStartX, rubberBandEndX);
+                    float by2 = std::max(rubberBandStartY, rubberBandEndY);
+                    for (auto& note : region->notes) {
+                        float nx = getNotePosX(note);
+                        float ne = getNoteEnd(note);
+                        float ny = getY(noteMidiForRender(note));
+                        if (ne >= bx1 && nx <= bx2 && ny + noteRadius >= by1 && ny - noteRadius <= by2)
+                            selectedNoteIds.insert(note->id);
+                    }
+                    refreshGrid = true;
+                    break;
+                }
+                // Multi-note stretch commit
+                if (stretchingMultipleNotes && stretchingNoteHasUndoSnapshot) {
+                    std::vector<int> ids;
+                    std::vector<json> befores, afters;
+                    bool anyDirty = stretchingNoteDragDirty;
+                    for (auto& [nid, before] : multiStretchBefores) {
+                        auto it = region->id_to_index.find(nid);
+                        if (it == region->id_to_index.end()) continue;
+                        const size_t idx = static_cast<size_t>(it->second);
+                        if (idx >= region->notes.size() || !region->notes[idx]) continue;
+                        json after = region->notes[idx]->toJSON();
+                        if (after != before) anyDirty = true;
+                        ids.push_back(nid);
+                        befores.push_back(std::move(before));
+                        afters.push_back(std::move(after));
+                    }
+                    if (anyDirty && !ids.empty()) {
+                        project->um->newAction(new MoveMultipleNotesAction(project, region->parentNode->nm->managerPath,
+                            region->parentNode->id, region->id, std::move(ids), std::move(befores), std::move(afters), "Resize Notes"));
+                    }
+                    stretchingNoteHasUndoSnapshot = false;
+                    stretchingNoteDragDirty = false;
+                    stretchingMultipleNotes = false;
+                    multiStretchBefores.clear();
+                } else if (stretchingNoteHasUndoSnapshot && stretchingNote) {
                     json afterStretch = stretchingNote->toJSON();
                     if (stretchingNoteDragDirty || afterStretch != stretchingNoteUndoBefore) {
                         project->um->newAction(new MoveNoteAction(project, region->parentNode->nm->managerPath,
@@ -1177,7 +1148,50 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     stretchingNoteHasUndoSnapshot = false;
                     stretchingNoteDragDirty = false;
                 }
-                if (movingNoteHasUndoSnapshot && movingNote) {
+                // Multi-note move commit
+                if (movingMultipleNotes && movingNoteHasUndoSnapshot && movingNote) {
+                    // Apply pitch previews from integer pairs
+                    for (auto& [nid, previewPairs] : multiPitchPreviews) {
+                        auto it = region->id_to_index.find(nid);
+                        if (it == region->id_to_index.end()) continue;
+                        const size_t idx = static_cast<size_t>(it->second);
+                        if (idx >= region->notes.size() || !region->notes[idx]) continue;
+                        auto& note = region->notes[idx];
+                        note->pitchIntegerPairs = previewPairs;
+                        note->syncNumFromPitchIntegerPairs();
+                        note->tuningAnchorHarmonic = harmonicAnchorNumber;
+                        stampNoteTuning(note);
+                    }
+                    // Also handle the primary note's pitch preview if it was single-tracked
+                    if (movingNotePitchPreviewLineMidi) {
+                        commitNotePitchSnap(movingNote, *movingNotePitchPreviewLineMidi);
+                        movingNotePitchPreviewLineMidi.reset();
+                    }
+                    // Build multi-note undo action
+                    std::vector<int> ids;
+                    std::vector<json> befores, afters;
+                    bool anyDirty = movingNoteDragDirty;
+                    for (auto& [nid, before] : multiMoveBefores) {
+                        auto it = region->id_to_index.find(nid);
+                        if (it == region->id_to_index.end()) continue;
+                        const size_t idx = static_cast<size_t>(it->second);
+                        if (idx >= region->notes.size() || !region->notes[idx]) continue;
+                        json after = region->notes[idx]->toJSON();
+                        if (after != before) anyDirty = true;
+                        ids.push_back(nid);
+                        befores.push_back(std::move(before));
+                        afters.push_back(std::move(after));
+                    }
+                    if (anyDirty && !ids.empty()) {
+                        project->um->newAction(new MoveMultipleNotesAction(project, region->parentNode->nm->managerPath,
+                            region->parentNode->id, region->id, std::move(ids), std::move(befores), std::move(afters)));
+                    }
+                    movingNoteHasUndoSnapshot = false;
+                    movingNoteDragDirty = false;
+                    movingMultipleNotes = false;
+                    multiMoveBefores.clear();
+                    multiPitchPreviews.clear();
+                } else if (movingNoteHasUndoSnapshot && movingNote) {
                     if (movingNotePitchPreviewLineMidi) {
                         commitNotePitchSnap(movingNote, *movingNotePitchPreviewLineMidi);
                         movingNotePitchPreviewLineMidi.reset();
@@ -1224,11 +1238,6 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     intervalDialogFrozenEndVertexPairs = intervalDragEndVertexPairs;
                     intervalEdoDefineDialogOpen = true;
                     selectingInterval = false;
-                    const bool capStartedHarm = intervalSelectStartedHarmonic;
-                    const int capHarmA = intervalDragHarmA;
-                    const int capHarmB = intervalDragHarmB;
-                    const int capEdoKA = intervalDragEdoKA;
-                    const int capEdoKB = intervalDragEdoKB;
                     bool intervalFromTwoNotes = false;
                     std::vector<std::pair<int, int>> intervalLoNotePairs;
                     std::vector<std::pair<int, int>> intervalHiNotePairs;
@@ -1255,13 +1264,11 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     const std::vector<std::pair<int, int>> capDragStartVertexPairs = intervalDialogFrozenStartVertexPairs;
                     const std::vector<std::pair<int, int>> capDragEndVertexPairs = intervalDialogFrozenEndVertexPairs;
                     ctxMenu->dynamicTick = getTextInputTicker(
-                        [this, a, b, capStartedHarm, capHarmA, capHarmB, capEdoKA, capEdoKB, intervalFromTwoNotes,
+                        [this, a, b, intervalFromTwoNotes,
                             intervalLoNotePairs, intervalHiNotePairs, capIntervalStartNote, capIntervalEndNote,
                             capDragStartVertexPairs, capDragEndVertexPairs](std::string text) {
                         try {
                             const int steps = std::max(1, std::stoi(text));
-                            const float loF = std::min(a, b);
-                            const float hiF = std::max(a, b);
                             // Snapshots track rational endpoints while dragging; b can be off-grid note MIDI with
                             // hoveredElement on the staff (endNote null) — never pitchIntegerPairsAtGridMidi(note->num).
                             const std::vector<std::pair<int, int>> vecAtA =
@@ -1279,68 +1286,7 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                             auto before = captureRegionTuning(region);
                             auto after = before;
 
-                            if (intervalFromTwoNotes) {
-                                // Notes may sit off grid lines: use their rational vectors and exact MIDI span, not
-                                // nearest-line pairs or structural harmonic/k span (which can look like an octave).
-                                after.spanLoHarm = 0;
-                                after.spanHiHarm = 0;
-                                after.spanLoEdoK = INT_MAX;
-                                after.spanHiEdoK = INT_MAX;
-                                after.edoSpanLoMidi = loF;
-                                after.edoSpanHiMidi = hiF;
-                                after.edoAnchorMidi = loF;
-                                const float diff = std::max(1e-6f, hiF - loF);
-                                after.edoStep = diff / static_cast<float>(steps);
-                                after.edoSpanDivisions = steps;
-                                after.mode = 1;
-                            } else if (capStartedHarm && capHarmA > 0 && capHarmB > 0) {
-                                const int hLo = std::min(capHarmA, capHarmB);
-                                const int hHi = std::max(capHarmA, capHarmB);
-                                after.spanLoHarm = hLo;
-                                after.spanHiHarm = hHi;
-                                after.spanLoEdoK = INT_MAX;
-                                after.spanHiEdoK = INT_MAX;
-                                const int ah = std::max(1, after.harmonicAnchorNumber);
-                                const auto harmToMidi = [ah](float anchorMidi, int h) {
-                                    return anchorMidi + 12.0f * std::log2f(static_cast<float>(std::max(1, h)) /
-                                                                           static_cast<float>(ah));
-                                };
-                                const float loM = harmToMidi(after.harmonicAnchorMidi, hLo);
-                                const float hiM = harmToMidi(after.harmonicAnchorMidi, hHi);
-                                after.edoSpanLoMidi = std::min(loM, hiM);
-                                after.edoSpanHiMidi = std::max(loM, hiM);
-                                after.edoAnchorMidi = after.edoSpanLoMidi;
-                                const float diff = std::max(1e-6f, after.edoSpanHiMidi - after.edoSpanLoMidi);
-                                after.edoStep = diff / static_cast<float>(steps);
-                                after.edoSpanDivisions = steps;
-                                after.mode = 1;
-                            } else if (!capStartedHarm && capEdoKA != INT_MAX && capEdoKB != INT_MAX) {
-                                // Span must match the drag (intervalStartLine / intervalEndLine → a, b), e.g. exact
-                                // note->num. Do not rebuild from lattice k (structuralEdoK*); that snaps to lines.
-                                after.spanLoHarm = 0;
-                                after.spanHiHarm = 0;
-                                after.edoSpanLoMidi = loF;
-                                after.edoSpanHiMidi = hiF;
-                                after.edoAnchorMidi = after.edoSpanLoMidi;
-                                const float diff = std::max(1e-6f, after.edoSpanHiMidi - after.edoSpanLoMidi);
-                                after.edoStep = diff / static_cast<float>(steps);
-                                after.edoSpanDivisions = steps;
-                                after.mode = 1;
-                                after.spanLoEdoK = 0;
-                                after.spanHiEdoK = steps;
-                            } else {
-                                const float diff = std::max(1e-6f, hiF - loF);
-                                after.mode = 1;
-                                after.edoAnchorMidi = loF;
-                                after.edoStep = diff / static_cast<float>(steps);
-                                after.edoSpanDivisions = steps;
-                                after.edoSpanLoMidi = loF;
-                                after.edoSpanHiMidi = hiF;
-                                after.spanLoHarm = 0;
-                                after.spanHiHarm = 0;
-                                after.spanLoEdoK = INT_MAX;
-                                after.spanHiEdoK = INT_MAX;
-                            }
+                            after.mode = 1;
                             after.edoLowerVector = lowerLineVec;
                             after.edoUpperVector = upperLineVec;
                             after.edoSubdivisionSteps = steps;
@@ -1391,6 +1337,10 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
         case SDL_EVENT_KEY_DOWN:
 
             switch (e.key.scancode) {
+                case SDL_SCANCODE_DELETE:
+                case SDL_SCANCODE_BACKSPACE:
+                    deleteSelection();
+                    break;
                 case SDL_SCANCODE_MINUS:
                     notesPerOctave -= 1;
                     UpdateGrid();
@@ -1447,6 +1397,14 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                 break;
             }
 
+            // Rubber band drag
+            if (selectingRubberBand && lmb) {
+                rubberBandEndX = mouseX;
+                rubberBandEndY = mouseY;
+                refreshGrid = true;
+                break;
+            }
+
             
             if(stretchingNote != nullptr) {
                 if(!lmb) {
@@ -1456,9 +1414,34 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                     float dX = mouseX - last_lmb_x;
                     if(dX >= dW/notesPerBar) {
                         stretchElement(1);
+                        // Also stretch all other selected notes
+                        if (stretchingMultipleNotes) {
+                            for (auto& sn : region->notes) {
+                                if (sn->id == stretchingNote->id) continue;
+                                if (!selectedNoteIds.count(sn->id)) continue;
+                                if (resizeDir == -1)
+                                    sn->start = sn->start + fract(1, notesPerBar);
+                                else if (resizeDir == 1)
+                                    sn->end = sn->end + fract(1, notesPerBar);
+                                if (sn->end < sn->start)
+                                    sn->end = sn->start;
+                            }
+                        }
                         last_lmb_x += dW/notesPerBar;
                     } else if(dX <= -dW/notesPerBar) {
                         stretchElement(-1);
+                        if (stretchingMultipleNotes) {
+                            for (auto& sn : region->notes) {
+                                if (sn->id == stretchingNote->id) continue;
+                                if (!selectedNoteIds.count(sn->id)) continue;
+                                if (resizeDir == -1)
+                                    sn->start = sn->start + fract(-1, notesPerBar);
+                                else if (resizeDir == 1)
+                                    sn->end = sn->end + fract(-1, notesPerBar);
+                                if (sn->end < sn->start)
+                                    sn->end = sn->start;
+                            }
+                        }
                         last_lmb_x -= dW/notesPerBar;
                     }
                 }
@@ -1471,16 +1454,58 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                 int steps = dX / step;
 
                 if(steps) {
-                    moveNoteTime(movingNote, steps);
+                    if (movingMultipleNotes) {
+                        for (auto& sn : region->notes) {
+                            if (selectedNoteIds.count(sn->id))
+                                moveNoteTime(sn, steps);
+                        }
+                    } else {
+                        moveNoteTime(movingNote, steps);
+                    }
                     last_lmb_x += steps * step;
                 }
 
-                constexpr float pitchDragEpsilon = 1e-3f;
-                const float snappedLine = getHoveredLine();
-                if (std::fabs(snappedLine - movingNote->num) > pitchDragEpsilon)
-                    movingNotePitchPreviewLineMidi = snappedLine;
-                else
-                    movingNotePitchPreviewLineMidi.reset();
+                // Pitch preview: compute delta in integer pairs, apply same delta to all selected notes
+                if (movingMultipleNotes && !dragStartPairs.empty() &&
+                    hoveredPitchLineIndex != SIZE_MAX && hoveredPitchLineIndex < pitchLines.size()) {
+                    auto& currentPairs = pitchLines[hoveredPitchLineIndex].integerPairs;
+                    size_t maxLen = std::max(dragStartPairs.size(), currentPairs.size());
+                    std::vector<std::pair<int,int>> deltaPairs(maxLen, {0, 1});
+                    for (size_t i = 0; i < maxLen; ++i) {
+                        int sN = i < dragStartPairs.size() ? dragStartPairs[i].first : 0;
+                        int sD = i < dragStartPairs.size() ? dragStartPairs[i].second : 1;
+                        int eN = i < currentPairs.size() ? currentPairs[i].first : 0;
+                        int eD = i < currentPairs.size() ? currentPairs[i].second : 1;
+                        deltaPairs[i] = { eN * sD - sN * eD, eD * sD };
+                    }
+                    bool allZero = true;
+                    for (auto& d : deltaPairs)
+                        if (d.first != 0) { allZero = false; break; }
+                    if (!allZero) {
+                        for (auto& sn : region->notes) {
+                            if (!selectedNoteIds.count(sn->id)) continue;
+                            size_t noteMax = std::max(sn->pitchIntegerPairs.size(), deltaPairs.size());
+                            std::vector<std::pair<int,int>> preview(noteMax, {0, 1});
+                            for (size_t i = 0; i < noteMax; ++i) {
+                                int nN = i < sn->pitchIntegerPairs.size() ? sn->pitchIntegerPairs[i].first : 0;
+                                int nD = i < sn->pitchIntegerPairs.size() ? sn->pitchIntegerPairs[i].second : 1;
+                                int dN = i < deltaPairs.size() ? deltaPairs[i].first : 0;
+                                int dD = i < deltaPairs.size() ? deltaPairs[i].second : 1;
+                                preview[i] = { nN * dD + dN * nD, nD * dD };
+                            }
+                            multiPitchPreviews[sn->id] = std::move(preview);
+                        }
+                    } else {
+                        multiPitchPreviews.clear();
+                    }
+                } else if (!movingMultipleNotes) {
+                    constexpr float pitchDragEpsilon = 1e-3f;
+                    const float snappedLine = getHoveredLine();
+                    if (std::fabs(snappedLine - movingNote->num) > pitchDragEpsilon)
+                        movingNotePitchPreviewLineMidi = snappedLine;
+                    else
+                        movingNotePitchPreviewLineMidi.reset();
+                }
                 
             } else {
                 last_lmb_x = mouseX;
@@ -1499,31 +1524,28 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
 
 void PianoRoll::createElement() {
     fract start = getHoveredTime();
-    const float pitch = getHoveredLine();
-    const size_t li = closestLineIndexForMidi(pitch);
+    refreshHoveredPitchLineIndex();
+    const size_t li = hoveredPitchLineIndex;
     std::vector<std::pair<int, int>> pitchPairs;
     if (li != SIZE_MAX && li < pitchLines.size())
         pitchPairs = pitchLines[li].integerPairs;
+    const int anchorHarmonic = (tuningMode == TuningMode::Harmonic && li != SIZE_MAX && li < lineStructural.size())
+        ? std::max(1, lineStructural[li]) : 1;
     project->createNote(
         region->parentNode->id,
         start,
         lastLength,
-        pitch,
         region->id,
         region->parentNode->nm->managerPath,
         std::move(pitchPairs)
     );
     if (!region->notes.empty()) {
         auto note = region->notes.back();
-        refreshHoveredPitchLineIndex();
-        const size_t li = hoveredPitchLineIndex;
-        if (tuningMode == TuningMode::Harmonic) {
-            if (li != SIZE_MAX && li < lineStructural.size())
-                note->harmonicNumber = std::max(1, lineStructural[li]);
-            else
-                note->harmonicNumber = 1;
-        } else {
-            note->harmonicNumber = 0;
+        note->tuningAnchorHarmonic = anchorHarmonic;
+        if (tuningMode == TuningMode::EDO) {
+            note->tuningEdoSubdivisionSteps = region->tuningEdoSubdivisionSteps;
+            note->tuningEdoLowerVector = region->tuningEdoLowerVector;
+            note->tuningEdoUpperVector = region->tuningEdoUpperVector;
         }
         stampNoteTuning(note);
         // CreateNoteAction::doAction does not rerun stampNoteTuning on redo; persist post-stamp state on the action.
@@ -1558,16 +1580,31 @@ void PianoRoll::RenderNotes(SDL_Renderer* renderer) {
             float noteY = getY(noteMidiForRender(note));
             float noteEnd = getNoteEnd(note) -2;
 
-            //noteRadius = (noteTop - noteY)/2;
+            bool selected = selectedNoteIds.count(note->id) > 0;
 
-            setRenderColor(renderer, colors.note);
+            setRenderColor(renderer, selected ? colors.noteSelected : colors.note);
             SDL_FRect noteRect = { noteX, noteY - noteRadius, noteEnd - noteX, 2*noteRadius};
             SDL_RenderFillRect(renderer, &noteRect);
 
-            setRenderColor(renderer, colors.noteBorder);
+            setRenderColor(renderer, selected ? colors.noteSelectedBorder : colors.noteBorder);
 
             SDL_RenderRect(renderer, &noteRect);
 
+    }
+
+    // Rubber band selection rect
+    if (selectingRubberBand) {
+        float bx = std::min(rubberBandStartX, rubberBandEndX);
+        float by = std::min(rubberBandStartY, rubberBandEndY);
+        float bw = std::fabs(rubberBandEndX - rubberBandStartX);
+        float bh = std::fabs(rubberBandEndY - rubberBandStartY);
+        SDL_FRect bandRect = {bx, by, bw, bh};
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer, 100, 150, 255, 40);
+        SDL_RenderFillRect(renderer, &bandRect);
+        SDL_SetRenderDrawColor(renderer, 100, 150, 255, 180);
+        SDL_RenderRect(renderer, &bandRect);
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     }
 
     SDL_SetRenderTarget(renderer, target);
@@ -1614,9 +1651,21 @@ void PianoRoll::deleteElement() {
     auto note = std::dynamic_pointer_cast<Note>(hoveredElement);
     if (!note)
         return;
+    selectedNoteIds.erase(note->id);
     const int nid = note->id;
     hoveredElement = nullptr;
     project->deleteNote(region->parentNode->id, region->id, nid, region->parentNode->nm->managerPath);
+    Scroll();
+}
+
+void PianoRoll::deleteSelection() {
+    if (selectedNoteIds.empty())
+        return;
+    std::vector<int> toDelete(selectedNoteIds.begin(), selectedNoteIds.end());
+    selectedNoteIds.clear();
+    hoveredElement = nullptr;
+    for (int nid : toDelete)
+        project->deleteNote(region->parentNode->id, region->id, nid, region->parentNode->nm->managerPath);
     Scroll();
 }
 
@@ -1696,6 +1745,11 @@ void PianoRoll::stretchElement(int amount) {
 
 
 float PianoRoll::noteMidiForRender(const std::shared_ptr<Note>& note) const {
+    // Multi-note pitch preview (integer pairs)
+    auto pit = multiPitchPreviews.find(note->id);
+    if (pit != multiPitchPreviews.end())
+        return Note::midiFromPitchIntegerPairs(pit->second);
+    // Single-note pitch preview (legacy path)
     if (movingNote && movingNote.get() == note.get() && movingNotePitchPreviewLineMidi)
         return *movingNotePitchPreviewLineMidi;
     return note->num;
@@ -1711,15 +1765,19 @@ void PianoRoll::moveNoteTime(std::shared_ptr<Note> note, int moveX) {
 }
 
 void PianoRoll::commitNotePitchSnap(std::shared_ptr<Note> note, float targetLineMidi) {
-    note->tuningAnchorMidi = harmonicAnchorMidi;
-    note->tuningAnchorHarmonic = harmonicAnchorNumber;
-    note->tuningEdoAnchorMidi = edoAnchorMidi;
-    note->tuningEdoStep = edoStep;
     const size_t li = closestLineIndexForMidi(targetLineMidi);
     if (li != SIZE_MAX && li < pitchLines.size()) {
         note->pitchIntegerPairs = pitchLines[li].integerPairs;
-        if (tuningMode == TuningMode::Harmonic && li < lineStructural.size())
-            note->harmonicNumber = std::max(1, lineStructural[li]);
+        if (tuningMode == TuningMode::Harmonic && li < lineStructural.size()) {
+            note->tuningAnchorHarmonic = std::max(1, lineStructural[li]);
+        } else {
+            note->tuningAnchorHarmonic = 1;
+        }
+        if (tuningMode == TuningMode::EDO) {
+            note->tuningEdoSubdivisionSteps = region->tuningEdoSubdivisionSteps;
+            note->tuningEdoLowerVector = region->tuningEdoLowerVector;
+            note->tuningEdoUpperVector = region->tuningEdoUpperVector;
+        }
         movingNoteDragDirty = true;
     }
     stampNoteTuning(note);
