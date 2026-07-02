@@ -117,6 +117,7 @@ class Node : public EmbeddedWindow {
         uint32_t lastLeftClick;
         bool handleContentInput(SDL_Event&) override;
         virtual bool handleCustomInput(SDL_Event&) { return false; }
+        bool customInputHandled_ = false;
         virtual bool showConnectionPorts() const { return true; }
         virtual bool blocksDoubleClick(float, float) const { return false; }
         void clickMouse(SDL_Event&);

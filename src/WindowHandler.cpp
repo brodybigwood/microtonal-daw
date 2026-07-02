@@ -100,7 +100,7 @@ bool WindowHandler::tick() {
                     continue;
                 }
 
-                const SDL_Keymod mods = SDL_GetModState();
+                const SDL_Keymod mods = e.key.mod;
                 const bool ctrlDown = (mods & SDL_KMOD_CTRL) != 0;
                 const bool shiftDown = (mods & SDL_KMOD_SHIFT) != 0;
                 // Use scancode (physical Z) — e.key.key == SDLK_Z often misses with modifiers / some layouts / SDL3.
@@ -146,6 +146,9 @@ bool WindowHandler::tick() {
                 } else {
                     ctxMenuEvent = e;
                     ctxMenuHadEvent = true;
+                    // Don't let mouse/key events pass through to nodes while context menu is active
+                    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_KEY_DOWN)
+                        continue;
                 }
             }
 

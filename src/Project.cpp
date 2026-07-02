@@ -3,6 +3,7 @@
 #include <memory>
 #include <filesystem>
 #include <fstream>
+#include <stdexcept>
 #include "AudioManager.h"
 #include "TrackManager.h"
 #include "ElementManager.h"
@@ -30,6 +31,7 @@ void Project::renderPresent() {
 }
 
 Project::Project() {
+    startupCWD = std::filesystem::current_path().string();
     processor = new NodeProcessor(this);
     window = processor ? processor->getHostWindow() : nullptr;
     renderer = processor ? processor->getHostRenderer() : nullptr;
@@ -49,6 +51,8 @@ Project::~Project() {
 void Project::load(std::string path) {
 
     std::filesystem::path folder(path);
+    if (folder.is_relative())
+        folder = std::filesystem::path(startupCWD) / folder;
     std::filesystem::path file = folder / "save.json";
 
     std::ifstream inFile(file);
@@ -66,9 +70,16 @@ void Project::load(std::string path) {
 
     tempo = j.value("tempo", 120.0f);
 
-
-    if (processor && j.contains("nodeManager")) processor->deSerialize(j["nodeManager"]);
+    // Restore undo tree first (walks to version)
     um->deSerialize(j["undoManager"], this);
+
+    // Restore NM state from current action's snapshot (falls back to legacy top-level)
+    if (processor) {
+        if (!um->current->savedMainManager.is_null())
+            processor->deSerialize(um->current->savedMainManager);
+        else if (j.contains("nodeManager"))
+            processor->deSerialize(j["nodeManager"]);
+    }
 
     loading.store(false);
 }
@@ -77,19 +88,36 @@ void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {
 
     auto save_l = [this] {
         std::filesystem::path folder(this->filepath);
-        std::filesystem::create_directories(folder);
+        if (folder.is_relative())
+            folder = std::filesystem::path(this->startupCWD) / folder;
+        std::error_code ec;
+        std::filesystem::create_directories(folder, ec);
+        if (ec) {
+            std::cerr << "[save] create_directories failed: " << ec.message() << " path=" << folder << std::endl;
+            return;
+        }
         std::filesystem::path file = folder / "save.json";
-    
+
         json j;
         j["tempo"] = this->tempo;
-        
-        if (this->processor) j["nodeManager"] = this->processor->serialize();
-        else j["nodeManager"] = json::object();
+
+        // Snapshot NM state onto current action before serializing the tree
+        if (this->processor && this->um && this->um->current)
+            this->um->current->savedMainManager = this->processor->serialize();
+
         j["undoManager"] = this->um->serialize();
-        
+
         std::ofstream outFile(file);
         if (outFile.is_open()) {
             outFile << j.dump(2);
+            outFile.flush();
+            if (outFile.fail()) {
+                std::cerr << "[save] WRITE FAILED for " << file << std::endl;
+            } else {
+                std::cout << "[save] wrote " << file << std::endl;
+            }
+        } else {
+            std::cerr << "[save] failed to open " << file << std::endl;
         }
     };
 
@@ -101,6 +129,11 @@ void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {
 
     if (filepath.empty()) {
         auto ctxMenu = ContextMenu::get();
+        // Raise project window and grab focus so the text input gets keyboard events
+        if (this->window) {
+            SDL_RaiseWindow(this->window);
+            SDL_SetWindowKeyboardGrab(this->window, true);
+        }
         ctxMenu->activate();
         if (this->window) SDL_StartTextInput(this->window);
         int w = 0, h = 0;
@@ -109,10 +142,18 @@ void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {
         ctxMenu->locY = h * 0.5f;
 
 
-        ctxMenu->dynamicTick = getTextInputTicker([this, save_l] (std::string text) {
-            this->filepath = text;
-            save_l();
-        });
+        ctxMenu->dynamicTick = getTextInputTicker(
+            [this, save_l] (std::string text) {
+                std::filesystem::path p(text);
+                if (p.is_relative())
+                    p = std::filesystem::path(this->startupCWD) / p;
+                this->filepath = p.string();
+                save_l();
+            },
+            [this] () {
+                if (this->window) SDL_SetWindowKeyboardGrab(this->window, false);
+            }
+        );
     
     } else save_l();
 }

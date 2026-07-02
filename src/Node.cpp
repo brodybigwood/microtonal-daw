@@ -546,7 +546,11 @@ bool Node::handleContentInput(SDL_Event& e) {
     if (handled) {
         switch (e.type) {
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
-                clickMouse(e);
+                customInputHandled_ = false;
+                if (!handleCustomInput(e))
+                    clickMouse(e);
+                else
+                    customInputHandled_ = true;
                 break;
             case SDL_EVENT_MOUSE_WHEEL:
                 break;
@@ -1320,7 +1324,9 @@ void Node::handleWindowInput(SDL_Event& e) {
             }
         }
     }
-    handleCustomInput(e);
+    if (!customInputHandled_)
+        handleCustomInput(e);
+    customInputHandled_ = false;
 }
 
 void Node::clearParamTextures() {

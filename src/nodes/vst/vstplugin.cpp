@@ -194,12 +194,12 @@ Steinberg::tresult PLUGIN_API EditorHostFrame::resizeView(Steinberg::IPlugView*,
 }
 
 Steinberg::tresult PLUGIN_API EditorHostFrame::beginEdit(Steinberg::Vst::ParamID id) {
-    if (onBeginEdit) onBeginEdit(id);
+    if (!suppressCallbacks && onBeginEdit) onBeginEdit(id);
     return Steinberg::kResultTrue;
 }
 
 Steinberg::tresult PLUGIN_API EditorHostFrame::performEdit(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue valueNormalized) {
-    std::cout << "[EditorHostFrame] performEdit id=" << id << " value=" << valueNormalized << std::endl;
+    if (suppressCallbacks) return Steinberg::kResultTrue;
     if (onPerformEdit) {
         // Look up pre-edit value captured by VstNode in beginEdit callback
         auto it = preEditValues.find(id);
@@ -291,6 +291,10 @@ void EditorHostFrame::pollRunLoop() {
             }
         }
     }
+
+    // Clear suppression AFTER timer/fd processing so async plugin callbacks
+    // triggered by setParamNormalized (undo/redo) remain suppressed.
+    suppressCallbacks = false;
 }
 
 // ============================================================================
@@ -479,6 +483,11 @@ VstPlugin::VstPlugin(const std::string& pluginPath) : pluginPath(pluginPath) {
     if (!createController()) return;
     connectComponentController();
     if (editController) {
+        // Sync component state to controller so getParamNormalized() returns
+        // the actual parameter values (not all zeros).
+        auto compState = getComponentState();
+        if (!compState.empty()) setControllerState(compState);
+
         editController->setComponentHandler(hostFrame.get());
         view = editController->createView(Steinberg::Vst::ViewType::kEditor);
     }
@@ -778,6 +787,9 @@ void VstPlugin::showEditor() {
             createController();
             connectComponentController();
             if (!view && editController) {
+                auto compState = getComponentState();
+                if (!compState.empty()) setControllerState(compState);
+
                 editController->setComponentHandler(frame);
                 view = editController->createView(Steinberg::Vst::ViewType::kEditor);
             }
@@ -792,6 +804,9 @@ void VstPlugin::showEditor() {
     }
 
     // Native: view created in constructor, full X11 embedding on GUI thread
+    if (!view && editController) {
+        view = editController->createView(Steinberg::Vst::ViewType::kEditor);
+    }
     if (!view) {
         std::cerr << "[VstPlugin::showEditor] no view" << std::endl;
         return;
@@ -824,6 +839,8 @@ void VstPlugin::hideEditor() {
     unregisterEditor(this);
     if (view) {
         view->removed();
+        view->release();
+        view = nullptr;
     }
     editorHost.reset();
     editorOpen = false;
@@ -928,9 +945,12 @@ float VstPlugin::getParameterValue(int paramID) const {
 }
 
 void VstPlugin::setParameterValue(int paramID, float valueNormalized) {
-    if (!editController) return;
+    if (!editController || !hostFrame) return;
+    hostFrame->suppressCallbacks = true;
     editController->setParamNormalized(static_cast<Steinberg::Vst::ParamID>(paramID),
-                                        static_cast<Steinberg::Vst::ParamValue>(valueNormalized));
+                                       static_cast<Steinberg::Vst::ParamValue>(valueNormalized));
+    // Don't clear suppressCallbacks here — pollRunLoop() clears it next frame
+    // so async timer callbacks triggered by setParamNormalized are also suppressed.
 }
 
 std::vector<uint8_t> VstPlugin::getComponentState() const {

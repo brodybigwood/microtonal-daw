@@ -693,6 +693,8 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
     pa->last_index = j.at("last_index").get<int>();
     pa->name = j.at("name").get<std::string>();
     pa->undoTreeExpanded = j.value("undoTreeExpanded", false);
+    if (j.contains("savedMainManager"))
+        pa->savedMainManager = j["savedMainManager"];
     return pa;
 }
 
@@ -1053,6 +1055,8 @@ json ProjectAction::serialize(ProjectAction* pa) {
     j["name"] = pa->name;
     j["last_index"] = pa->last_index;
     j["undoTreeExpanded"] = pa->undoTreeExpanded;
+    if (!pa->savedMainManager.is_null())
+        j["savedMainManager"] = pa->savedMainManager;
     return j;
 }
 
@@ -2591,19 +2595,23 @@ VstParameterChangeAction::VstParameterChangeAction(Project* p, std::vector<int> 
     name = "VST Parameter Change";
 
     doAction = [this]() {
-        NodeManager& nm = requireManager(this->p, this->managerPath);
-        Node* node = nm.getNode(static_cast<uint16_t>(this->nodeID));
-        auto* vst = dynamic_cast<VstNode*>(node);
-        if (!vst || !vst->plugin) return;
-        vst->plugin->setParameterValue(static_cast<int>(this->paramID), this->newValue);
+        try {
+            NodeManager& nm = requireManager(this->p, this->managerPath);
+            Node* node = nm.getNode(static_cast<uint16_t>(this->nodeID));
+            auto* vst = dynamic_cast<VstNode*>(node);
+            if (!vst || !vst->plugin) return;
+            vst->plugin->setParameterValue(static_cast<int>(this->paramID), this->newValue);
+        } catch (const std::runtime_error&) {}
     };
 
     undoAction = [this]() {
-        NodeManager& nm = requireManager(this->p, this->managerPath);
-        Node* node = nm.getNode(static_cast<uint16_t>(this->nodeID));
-        auto* vst = dynamic_cast<VstNode*>(node);
-        if (!vst || !vst->plugin) return;
-        vst->plugin->setParameterValue(static_cast<int>(this->paramID), this->oldValue);
+        try {
+            NodeManager& nm = requireManager(this->p, this->managerPath);
+            Node* node = nm.getNode(static_cast<uint16_t>(this->nodeID));
+            auto* vst = dynamic_cast<VstNode*>(node);
+            if (!vst || !vst->plugin) return;
+            vst->plugin->setParameterValue(static_cast<int>(this->paramID), this->oldValue);
+        } catch (const std::runtime_error&) {}
     };
 }
 
@@ -2649,6 +2657,7 @@ VstLoadPluginAction::VstLoadPluginAction(Project* p, std::vector<int> managerPat
         Node* node = nm.getNode(static_cast<uint16_t>(this->nodeID));
         auto* vst = dynamic_cast<VstNode*>(node);
         if (!vst) return;
+        if (vst->plugin) vst->plugin->hideEditor();
         std::string path = this->oldState.is_null() ? "" : this->oldState.value("path", "");
         vst->loadPlugin(path);
         if (!this->oldState.is_null()) {

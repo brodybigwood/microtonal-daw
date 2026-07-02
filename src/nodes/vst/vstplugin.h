@@ -138,6 +138,10 @@ public:
     std::function<void(Steinberg::Vst::ParamID)> onBeginEdit;
     std::function<void(Steinberg::Vst::ParamID, Steinberg::Vst::ParamValue, Steinberg::Vst::ParamValue)> onPerformEdit; // (paramID, oldValue, newValue)
 
+    // Suppress callbacks during programmatic parameter sets (undo/redo).
+    // Cleared by pollRunLoop() so async timer callbacks are also suppressed.
+    bool suppressCallbacks = false;
+
     // Called by VstNode to snapshot pre-edit parameter value
     void capturePreEditValue(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue val);
     std::unordered_map<Steinberg::Vst::ParamID, Steinberg::Vst::ParamValue> preEditValues;
@@ -245,6 +249,7 @@ public:
     void setControllerState(const std::vector<uint8_t>& data);
 
     EditorHostFrame* getHostFrame() { return hostFrame.get(); }
+    Steinberg::Vst::IEditController* getEditController() { return editController.get(); }
 
 private:
     bool valid = false;

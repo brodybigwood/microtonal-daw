@@ -74,6 +74,9 @@ struct ProjectAction {
     int index;
     int last_index = 0;
 
+    /** NodeManager snapshot stored only on the current action at save time. */
+    json savedMainManager;
+
     std::vector<int> version() {
         std::vector<int> v;
         if (parent) {
@@ -150,9 +153,15 @@ struct UndoManager {
         undoTreeViewRoot = nullptr;
         head = ProjectAction::deSerialize(j["head"], p);
         current = head;
-        const std::vector<int> version = j.at("version").get<std::vector<int>>();
-        for (int i : version) {
-            current = current->children[static_cast<size_t>(i)];
+        if (j.contains("version")) {
+            const std::vector<int> version = j.at("version").get<std::vector<int>>();
+            for (int i : version) {
+                if (current->children.empty()) break;
+                size_t idx = static_cast<size_t>(i);
+                if (idx >= current->children.size())
+                    idx = current->children.size() - 1;
+                current = current->children[idx];
+            }
         }
     }
 

@@ -13,6 +13,7 @@ bool isEventForWindow(const SDL_Event& e, uint32_t windowID) {
         case SDL_EVENT_KEY_UP:
             return e.key.windowID == windowID;
         case SDL_EVENT_TEXT_INPUT:
+            return e.text.windowID == windowID;
         case SDL_EVENT_TEXT_EDITING:
             return e.edit.windowID == windowID;
         case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
@@ -50,6 +51,7 @@ uint32_t getEventWindowID(const SDL_Event& e) {
         case SDL_EVENT_KEY_UP:
             return e.key.windowID;
         case SDL_EVENT_TEXT_INPUT:
+            return e.text.windowID;
         case SDL_EVENT_TEXT_EDITING:
             return e.edit.windowID;
         case SDL_EVENT_WINDOW_CLOSE_REQUESTED:

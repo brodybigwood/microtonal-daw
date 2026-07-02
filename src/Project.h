@@ -37,6 +37,7 @@ class Project : public Window {
         int beatsToSamples(float);
 
         std::string filepath = "";
+        std::string startupCWD = "";  // captured before VST plugins can chdir()
 
         float tempo = 120;
 

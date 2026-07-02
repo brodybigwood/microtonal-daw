@@ -40,6 +40,7 @@ VstNode::VstNode(uint16_t id, NodeManager* nm)
 }
 
 VstNode::~VstNode() {
+    if (plugin) plugin->hideEditor();
     plugin = nullptr;
     VstPluginCache::instance().removePlugin(static_cast<int>(id), nm ? nm->managerPath : std::vector<int>{});
 }
@@ -500,6 +501,7 @@ void VstNode::loadPlugin(const std::string& path, bool createUndo) {
         // --- Undo/audio thread: retrieve existing instance, don't destroy ---
         std::cout << "[VstNode::loadPlugin] sync-path nodeID=" << static_cast<int>(id)
                   << " path=" << path << " ne=" << (ne ? "gui" : "audio") << std::endl;
+        if (plugin) plugin->hideEditor();
         loadedPath = path;
         plugin = VstPluginCache::instance().getOrCreatePlugin(static_cast<int>(id), nm ? nm->managerPath : std::vector<int>{}, path);
         if (plugin && plugin->isValid()) {
@@ -565,6 +567,8 @@ void VstNode::wirePluginCallbacks() {
     frame->onPerformEdit = [this](Steinberg::Vst::ParamID paramID,
                                     Steinberg::Vst::ParamValue oldVal,
                                     Steinberg::Vst::ParamValue newVal) {
+        if (plugin && plugin->getEditController())
+            plugin->getEditController()->setParamNormalized(paramID, newVal);
         onPluginParameterChange(static_cast<int>(paramID),
                                 static_cast<float>(oldVal), static_cast<float>(newVal));
     };
@@ -595,6 +599,9 @@ void VstNode::extraDeSerialize(const json& j) {
         if (plugin && plugin->isValid()) {
             name = plugin->getName();
             wirePluginCallbacks();
+            // Suppress callbacks during state restoration to avoid spurious undo actions
+            auto* frame = plugin->getHostFrame();
+            if (frame) frame->suppressCallbacks = true;
             if (j.contains("compState")) {
                 auto& arr = j["compState"];
                 std::vector<uint8_t> data(arr.begin(), arr.end());
@@ -605,6 +612,7 @@ void VstNode::extraDeSerialize(const json& j) {
                 std::vector<uint8_t> data(arr.begin(), arr.end());
                 plugin->setControllerState(data);
             }
+            if (frame) frame->suppressCallbacks = false;
             rebuildConnections();
             int sr = sampleRate > 0 ? sampleRate : 48000;
             int bs = bufferSize > 0 ? bufferSize : 1024;
