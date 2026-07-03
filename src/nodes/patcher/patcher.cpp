@@ -464,14 +464,11 @@ json PatcherNode::extraSerialize() {
         jc["type"] = c->type;
         j["outputs"].push_back(jc);
     }
-    std::cout << "[DBG_DESER] PatcherNode::extraSerialize node=" << id
-              << " outputs=" << outputs.connections.size() << std::endl;
     return j;
 }
 
 void PatcherNode::extraDeSerialize(const json& j) {
     if (!j.contains("mainManager")) return;
-    std::cout << "[DBG_DESER] PatcherNode::extraDeSerialize node=" << id << " begin" << std::endl;
     mainManager->deSerialize(j["mainManager"]);
 
     if (j.contains("outputs")) {
@@ -513,7 +510,6 @@ void PatcherNode::extraDeSerialize(const json& j) {
             outputs.id_pool.reserveID(c->id);
         }
         makeConnectionRects();
-        std::cout << "[DBG_DESER]  patcher outputs restored count=" << outputs.connections.size() << std::endl;
     }
     setLinkedWaveformChannelCount(mainManager->outNode->countWaveformInputs());
     {
@@ -532,5 +528,4 @@ void PatcherNode::extraDeSerialize(const json& j) {
         setLinkedEventInputCount(evSockets);
     }
     nm->markTopologyDirty();
-    std::cout << "[DBG_DESER] PatcherNode::extraDeSerialize node=" << id << " end" << std::endl;
 }

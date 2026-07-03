@@ -149,7 +149,6 @@ json ArrangerNode::extraSerialize() {
 }
 
 void ArrangerNode::extraDeSerialize(const json& j) {
-    std::cout << "[DBG_DESER] ArrangerNode::extraDeSerialize node=" << id << " begin" << std::endl;
     for (auto* c : outputs.connections) {
         delete c;
     }
@@ -182,14 +181,11 @@ void ArrangerNode::extraDeSerialize(const json& j) {
             outputs.connections.push_back(c);
             outputs.id_pool.reserveID(c->id);
             outputs.ids[c->id] = outputs.connections.size() - 1;
-            std::cout << "[DBG_DESER]  arranger out restored id=" << c->id << " type=" << static_cast<int>(c->type) << std::endl;
         }
     }
     makeConnectionRects();
-    std::cout << "[DBG_DESER]  arranger outputs count=" << outputs.connections.size() << std::endl;
 
     rebuildState(j);
-    std::cout << "[DBG_DESER]  arranger rebuildState done node=" << id << std::endl;
 
     if (sl) {
         sl->tracks = tracks;
@@ -200,11 +196,9 @@ void ArrangerNode::extraDeSerialize(const json& j) {
 void ArrangerNode::ensureSongRoll() {
     if (sl || !ne) return;
     sl = new SongRoll(slRect, project, project, this);
-    std::cout << "[DBG_DESER] ArrangerNode::ensureSongRoll node=" << id << " created" << std::endl;
 }
 
 void ArrangerNode::rebuildState(json j) {
-    std::cout << "[DBG_DESER]  rebuildState begin node=" << id << std::endl;
     if (elements) {
         delete elements;
         elements = nullptr;
@@ -216,16 +210,11 @@ void ArrangerNode::rebuildState(json j) {
     tracks = new TrackManager(this);
     elements = new ElementManager(project, tracks, this);
     if (j.contains("TrackManager")) {
-        std::cout << "[DBG_DESER]  rebuildState TrackManager begin" << std::endl;
         tracks->fromJSON(j["TrackManager"]);
-        std::cout << "[DBG_DESER]  rebuildState TrackManager done" << std::endl;
     }
     if (j.contains("ElementManager")) {
-        std::cout << "[DBG_DESER]  rebuildState ElementManager begin" << std::endl;
         elements->fromJSON(j["ElementManager"]);
-        std::cout << "[DBG_DESER]  rebuildState ElementManager done" << std::endl;
     }
-    std::cout << "[DBG_DESER]  rebuildState end node=" << id << std::endl;
 }
 
 void ArrangerNode::syncSongRollContext() {

@@ -126,7 +126,6 @@ bool GridView::handleInput(SDL_Event& e) {
             dropFile(e.drop);
             break;
         default:
-//            std::cout << e.type << std::endl;
             break;
     }
 

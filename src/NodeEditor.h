@@ -14,8 +14,6 @@
 #define SINE_SIZE 2000
 
 class Node;
-class PreferencesWindow;
-class UndoTreeWindow;
 
 class NodeEditor {
     public:
@@ -102,10 +100,6 @@ class NodeEditor {
 
         bool routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mouseY);
 
-        PreferencesWindow* existingPreferencesWindow();
-
-        UndoTreeWindow* existingUndoTreeWindow();
-
         EmbeddedWindow* focusedEmbeddedWindow() const { return focusedEmbeddedWindow_; }
 
         void registerEmbeddedWindow(EmbeddedWindow* ew) {
@@ -116,7 +110,6 @@ class NodeEditor {
                 ew->id = static_cast<int>(ewIdPool_.newID());
                 embeddedWindowById_[ew->id] = ew;
             }
-            std::cerr << "[EWREG] id=" << ew->id << " ptr=" << ew << std::endl;
         }
         void unregisterEmbeddedWindow(EmbeddedWindow* ew) {
             if (ew->id >= 0) {

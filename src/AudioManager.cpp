@@ -75,7 +75,7 @@ void SDLCALL AudioManager::sdlCallback(void *userdata, SDL_AudioStream *stream, 
 
         // Apply queued actions before DSP
         if (project->um) {
-            project->processor->setThreadActiveRoot(project->processor->audioManager);
+            project->processor->setThreadActiveRoot(project->processor->dspGraph);
             project->um->flushAudioSync();
         }
 
@@ -136,7 +136,7 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
 
     // Apply queued actions to the audio copy before DSP.
     if (project->um) {
-        project->processor->setThreadActiveRoot(project->processor->audioManager);
+        project->processor->setThreadActiveRoot(project->processor->dspGraph);
         project->um->flushAudioSync();
     }
 

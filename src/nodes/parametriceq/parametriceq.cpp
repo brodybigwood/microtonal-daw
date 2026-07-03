@@ -265,7 +265,7 @@ void ParametricEQNode::syncToGui() {
     auto* proj = project;
     if (!proj || !proj->processor) return;
     proj->processor->enqueueProcessorAction([path, nodeId, dryRingCopy, wetRingCopy, rw, proj]() mutable {
-        NodeManager* mgr = proj->processor->guiManager;
+        NodeManager* mgr = proj->processor->guiGraph;
         for (int patcherId : path) {
             auto* patcher = dynamic_cast<PatcherNode*>(mgr->getNode(static_cast<uint16_t>(patcherId)));
             if (!patcher || !patcher->mainManager) return;

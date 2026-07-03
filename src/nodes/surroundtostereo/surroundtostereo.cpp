@@ -228,7 +228,7 @@ void SurroundToStereoNode::syncToGui() {
     auto* proj = project;
     if (!proj || !proj->processor) return;
     proj->processor->enqueueProcessorAction([mgrPath, nodeId, amps, op, proj]() mutable {
-        NodeManager* mgr = proj->processor->guiManager;
+        NodeManager* mgr = proj->processor->guiGraph;
         for (int patcherId : mgrPath) {
             auto* patcher = dynamic_cast<PatcherNode*>(mgr->getNode(static_cast<uint16_t>(patcherId)));
             if (!patcher || !patcher->mainManager) return;

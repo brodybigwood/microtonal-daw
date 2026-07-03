@@ -87,21 +87,13 @@ json NodeManager::serialize() {
 }
 
 void NodeManager::deSerialize(json j) {
-    std::cout << "[DBG_DESER] NodeManager::deSerialize begin path=";
-    for (size_t i = 0; i < managerPath.size(); ++i) {
-        std::cout << managerPath[i] << (i + 1 < managerPath.size() ? "/" : "");
-    }
-    if (managerPath.empty()) std::cout << "root";
-    std::cout << " nodesSize=" << j["nodes"].size() << std::endl;
     id_pool.fromJSON(j["idManager"]);
-    std::cout << "[DBG_DESER]  id_pool done" << std::endl;
     if (ne && j.contains("ewIdPool")) ne->ewIdPoolFromJSON(j["ewIdPool"]);
 
     // Pass 1: create all nodes (skip extraDeSerialize so cross-node ID lookups work)
     std::vector<std::pair<Node*, json>> pendingExtra;
     int nodeIdx = 0;
     for (auto n : j["nodes"]) {
-        std::cout << "[DBG_DESER]  creating node " << nodeIdx << " type=" << n.value("nodeType", -1) << std::endl;
         auto node = Node::deSerialize(n, this, true);
         if (node) {
             nodes.push_back(node);
@@ -123,7 +115,6 @@ void NodeManager::deSerialize(json j) {
 
     outNode->deSerialize(j["outNode"]);
     if (j.contains("inNode")) inNode->deSerialize(j["inNode"]);
-    std::cout << "[DBG_DESER]  outNode inputs=" << outNode->inputs.connections.size() << std::endl;
 
     for (auto s : j["connections"]) {
         Node* dstNode;
@@ -139,10 +130,6 @@ void NodeManager::deSerialize(json j) {
         else if (srcNodeID == 1) srcNode = inNode;
         else srcNode = getNode(srcNodeID);
         auto srcConID = s["srcConID"];
-        std::cout << "[DBG_DESER]  replay conn srcNode=" << s["srcNodeID"] << " srcCon=" << srcConID
-                  << " -> dstNode=" << dstNodeID << " dstCon=" << dstConID
-                  << " srcNodeExists=" << (srcNode ? 1 : 0) << " dstNodeExists=" << (dstNode ? 1 : 0)
-                  << std::endl;
         if (!srcNode || !dstNode) {
             std::cerr << "[ERR] deSerialize connection: node not found src=" << srcNodeID << " dst=" << dstNodeID << std::endl;
             continue;
@@ -152,12 +139,6 @@ void NodeManager::deSerialize(json j) {
     outNode->makeConnectionRects();
     inNode->makeConnectionRects();
     for (auto n : nodes) n->makeConnectionRects();
-    std::cout << "[DBG_DESER] NodeManager::deSerialize end path=";
-    for (size_t i = 0; i < managerPath.size(); ++i) {
-        std::cout << managerPath[i] << (i + 1 < managerPath.size() ? "/" : "");
-    }
-    if (managerPath.empty()) std::cout << "root";
-    std::cout << std::endl;
     topologyDirty = true;
 }
 
@@ -364,23 +345,23 @@ void NodeManager::makeNodeConnectionNow(uint16_t srcNodeID, uint16_t srcConID, u
                     : (dstNodeID == 1) ? static_cast<Node*>(inNode)
                     : getNode(dstNodeID);
     if (!srcNode || !dstNode) {
-        std::cout << "[DBG_DESER] makeNodeConnectionNow skip missing node src=" << srcNodeID << " dst=" << dstNodeID << std::endl;
+        std::cout << "[WARN] makeNodeConnectionNow skip missing node src=" << srcNodeID << " dst=" << dstNodeID << std::endl;
         return;
     }
     if (srcNode->depends(dstNode)) {
-        std::cout << "[DBG_DESER] makeNodeConnectionNow skip cycle src=" << srcNodeID << " dst=" << dstNodeID << std::endl;
+        std::cout << "[WARN] makeNodeConnectionNow skip cycle src=" << srcNodeID << " dst=" << dstNodeID << std::endl;
         return;
     }
 
     Connection* srcCon = srcNode->outputs.getConnection(srcConID);
     Connection* dstCon = dstNode->inputs.getConnection(dstConID);
     if (!srcCon || !dstCon) {
-        std::cout << "[DBG_DESER] makeNodeConnectionNow skip missing con srcCon=" << srcConID << " dstCon=" << dstConID
+        std::cout << "[WARN] makeNodeConnectionNow skip missing con srcCon=" << srcConID << " dstCon=" << dstConID
                   << " srcNode=" << srcNodeID << " dstNode=" << dstNodeID << std::endl;
         return;
     }
     if (srcCon->type != dstCon->type || srcCon->is_connected || dstCon->is_connected) {
-        std::cout << "[DBG_DESER] makeNodeConnectionNow skip state mismatch srcNode=" << srcNodeID
+        std::cout << "[WARN] makeNodeConnectionNow skip state mismatch srcNode=" << srcNodeID
                   << " srcCon=" << srcConID << " dstNode=" << dstNodeID << " dstCon=" << dstConID
                   << " srcType=" << srcCon->type << " dstType=" << dstCon->type
                   << " srcConnected=" << srcCon->is_connected << " dstConnected=" << dstCon->is_connected
@@ -397,8 +378,6 @@ void NodeManager::makeNodeConnectionNow(uint16_t srcNodeID, uint16_t srcConID, u
     srcCon->output_connection = dstConID;
     srcCon->is_connected = true;
     dstCon->is_connected = true;
-    std::cout << "[DBG_DESER] makeNodeConnectionNow ok srcNode=" << srcNodeID << " srcCon=" << srcConID
-              << " -> dstNode=" << dstNodeID << " dstCon=" << dstConID << std::endl;
 }
 
 void NodeManager::severConnectionNow(uint16_t srcNodeID, uint16_t srcConID, uint16_t dstNodeID, uint16_t dstConID) {

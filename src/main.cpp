@@ -54,7 +54,7 @@ int main(int argc, char* argv[]) {
 #ifdef __EMSCRIPTEN__
     static Project* g_project = project;
     emscripten_set_main_loop([]() {
-        g_project->processor->setThreadActiveRoot(g_project->processor->guiManager);
+        g_project->processor->setThreadActiveRoot(g_project->processor->guiGraph);
         WindowHandler::instance()->tick();
     }, 0, 1);
 #else

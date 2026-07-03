@@ -11,12 +11,12 @@ NodeProcessor::NodeProcessor(Project* p) : project(p) {
     hostRenderer = SDL_CreateRenderer(hostWindow, NULL);
 
     // GUI copy: owns SDL resources, used for rendering/editing.
-    guiManager = new NodeManager(project);
-    guiManager->setNE(editor);
-    setThreadActiveRoot(guiManager);
+    guiGraph = new NodeManager(project);
+    guiGraph->setNE(editor);
+    setThreadActiveRoot(guiGraph);
 
     // Audio copy: separate project graph, no SDL resources.
-    audioManager = new NodeManager(project);
+    dspGraph = new NodeManager(project);
 
     // Expanded window manager for pop-out windows (PianoRoll, Preferences, etc.)
     windowManager = new WindowManager;
@@ -27,15 +27,15 @@ NodeProcessor::~NodeProcessor() {
     delete windowManager;
     windowManager = nullptr;
 
-    if (guiManager) {
-        guiManager->resetNE();
-        delete guiManager;
-        guiManager = nullptr;
+    if (guiGraph) {
+        guiGraph->resetNE();
+        delete guiGraph;
+        guiGraph = nullptr;
     }
-    if (audioManager) {
-        audioManager->resetNE();
-        delete audioManager;
-        audioManager = nullptr;
+    if (dspGraph) {
+        dspGraph->resetNE();
+        delete dspGraph;
+        dspGraph = nullptr;
     }
     if (hostRenderer) {
         SDL_DestroyRenderer(hostRenderer);
@@ -50,8 +50,8 @@ NodeProcessor::~NodeProcessor() {
 }
 
 json NodeProcessor::serialize() const {
-    if (!guiManager) return json::object();
-    return guiManager->serialize();
+    if (!guiGraph) return json::object();
+    return guiGraph->serialize();
 }
 
 void NodeProcessor::deSerialize(const json& j) {
@@ -73,25 +73,25 @@ void NodeProcessor::deSerialize(const json& j) {
     }
 
     // Wipe and rebuild GUI copy.
-    if (guiManager) {
-        guiManager->resetNE();
-        delete guiManager;
-        guiManager = nullptr;
+    if (guiGraph) {
+        guiGraph->resetNE();
+        delete guiGraph;
+        guiGraph = nullptr;
     }
-    guiManager = new NodeManager(project);
-    guiManager->setNE(editor);
-    guiManager->deSerialize(transformed);
+    guiGraph = new NodeManager(project);
+    guiGraph->setNE(editor);
+    guiGraph->deSerialize(transformed);
 
     // Wipe and rebuild audio copy from the same JSON.
-    if (audioManager) {
-        audioManager->resetNE();
-        delete audioManager;
-        audioManager = nullptr;
+    if (dspGraph) {
+        dspGraph->resetNE();
+        delete dspGraph;
+        dspGraph = nullptr;
     }
-    audioManager = new NodeManager(project);
-    audioManager->deSerialize(transformed);
+    dspGraph = new NodeManager(project);
+    dspGraph->deSerialize(transformed);
 
-    setThreadActiveRoot(guiManager);
+    setThreadActiveRoot(guiGraph);
 }
 
 void NodeProcessor::render() {
@@ -124,7 +124,7 @@ void NodeProcessor::handleWindowInput(SDL_Event& e) {
 void NodeProcessor::process(float* in, float* out, int numIn, int numOut, int bufferSize, int sampleRate) {
     if (!out || bufferSize <= 0 || numOut <= 0) return;
 
-    NodeManager* mgr = audioManager;
+    NodeManager* mgr = dspGraph;
     if (!mgr) {
         std::memset(out, 0, static_cast<size_t>(bufferSize) * static_cast<size_t>(numOut) * sizeof(float));
         return;

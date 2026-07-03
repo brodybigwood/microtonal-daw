@@ -16,12 +16,12 @@ public:
     explicit NodeProcessor(Project*);
     ~NodeProcessor();
 
-    NodeManager* getManager() const { return guiManager; }
+    NodeManager* getManager() const { return guiGraph; }
 
     /** GUI-owned project copy (rendering, editing). */
-    NodeManager* guiManager = nullptr;
+    NodeManager* guiGraph = nullptr;
     /** Audio-owned project copy (DSP, must not have SDL resources). */
-    NodeManager* audioManager = nullptr;
+    NodeManager* dspGraph = nullptr;
 
     /** Set the thread-local active manager. Call once per thread before any action. */
     static void setThreadActiveRoot(NodeManager* r);
