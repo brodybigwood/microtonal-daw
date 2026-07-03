@@ -482,7 +482,7 @@ void SongRoll::doubleClick() {
             movingPosition = nullptr;
             positionDragKind = PositionDragKind::None;
             lmb = false;
-            createPianoRoll(reg);
+            createPianoRoll(reg, false);
         }
     } else {
         auto trackID = getHoveredTrack();

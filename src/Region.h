@@ -30,7 +30,7 @@ class Region : public GridElement {
         std::string name = "MIDI Region FX Rack";
         std::vector<std::shared_ptr<Note>> notes;
 
-    int createNote(fract, fract, std::vector<std::pair<int, int>> pitchIntegerPairs = {});
+    int createNote(std::vector<std::pair<int, int>> rhythmPairs, float durationSeconds, std::vector<std::pair<int, int>> pitchIntegerPairs = {});
     void deleteNote(int);
     void restoreNoteAt(std::shared_ptr<Note> n, size_t insertIndex);
 
@@ -47,6 +47,10 @@ std::vector<std::pair<int, int>> tuningHarmonicAnchorVector;
 int tuningEdoSubdivisionSteps = 12;
 std::vector<std::pair<int, int>> tuningEdoLowerVector;
 std::vector<std::pair<int, int>> tuningEdoUpperVector;
+// Rhythm EDO state: equal subdivision of time from lower to upper in seconds.
+int rhythmEdoSubdivisionSteps = 1;
+std::vector<std::pair<int, int>> rhythmEdoLowerVector; // default empty = time 0
+std::vector<std::pair<int, int>> rhythmEdoUpperVector; // default [(1,1)] = 1 second
 
 void draw(SDL_Renderer*, float, int) override;
 

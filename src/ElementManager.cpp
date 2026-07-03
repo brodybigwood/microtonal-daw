@@ -71,8 +71,8 @@ void ElementManager::process(int bufferSize) {
                         auto* region = static_cast<Region*>(element);
                         const float trim = static_cast<float>(static_cast<double>(pos.startOffset));
                         for (auto& note : region->notes) {
-                            float start = (float)note->start + regTime - trim;
-                            float end = (float)note->end + regTime - trim;
+                            float start = note->startSeconds() + regTime - trim;
+                            float end = note->endSeconds() + regTime - trim;
 
                             if (std::find(dispatched.begin(), dispatched.end(), note) == dispatched.end() && start < time+window+epsilon && start+epsilon >= time) {
                                

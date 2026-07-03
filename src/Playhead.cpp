@@ -33,5 +33,5 @@ void Playhead::getTimePx(float barWidth) {
     } else {
         barOffset = static_cast<double>(*startTime);
     }
-    timePx = (project->tempo * project->effectiveTime.load() / 60 - barOffset) * barWidth  + 1 + gridRect->x;
+    timePx = (project->effectiveTime.load() - barOffset) * barWidth + 1 + gridRect->x;
 }

@@ -28,9 +28,9 @@ void Region::draw(SDL_Renderer* renderer, float pixelsPerSecond, int h) {
     SDL_RenderClear(renderer);
 
     for(std::shared_ptr<Note> note : notes) {
-        float noteX = (float)note->start * 100;
+        float noteX = note->startSeconds() * 100;
         float noteY = (128-note->num)/128.0f * 100;
-        float noteEnd = (float)note->end * 100;
+        float noteEnd = note->endSeconds() * 100;
         SDL_SetRenderDrawColor(renderer, colors.note[0],colors.note[1],colors.note[2],colors.note[3]);
         SDL_FRect noteRect = { noteX, noteY - 1, noteEnd - noteX, 2};
         SDL_RenderFillRect(renderer, &noteRect);
@@ -63,6 +63,13 @@ json Region::toJSON() {
     j["tuningEdoUpperVector"] = json::array();
     for (const auto& pr : tuningEdoUpperVector)
         j["tuningEdoUpperVector"].push_back(json::array({pr.first, pr.second}));
+    j["rhythmEdoSubdivisionSteps"] = rhythmEdoSubdivisionSteps;
+    j["rhythmEdoLowerVector"] = json::array();
+    for (const auto& pr : rhythmEdoLowerVector)
+        j["rhythmEdoLowerVector"].push_back(json::array({pr.first, pr.second}));
+    j["rhythmEdoUpperVector"] = json::array();
+    for (const auto& pr : rhythmEdoUpperVector)
+        j["rhythmEdoUpperVector"].push_back(json::array({pr.first, pr.second}));
 
     return j;
 }
@@ -102,6 +109,21 @@ void Region::fromJSON(json j) {
                 tuningEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
         }
     }
+    rhythmEdoSubdivisionSteps = j.value("rhythmEdoSubdivisionSteps", 1);
+    rhythmEdoLowerVector.clear();
+    if (j.contains("rhythmEdoLowerVector") && j["rhythmEdoLowerVector"].is_array()) {
+        for (const auto& el : j["rhythmEdoLowerVector"]) {
+            if (el.is_array() && el.size() >= 2)
+                rhythmEdoLowerVector.push_back({el[0].get<int>(), el[1].get<int>()});
+        }
+    }
+    rhythmEdoUpperVector.clear();
+    if (j.contains("rhythmEdoUpperVector") && j["rhythmEdoUpperVector"].is_array()) {
+        for (const auto& el : j["rhythmEdoUpperVector"]) {
+            if (el.is_array() && el.size() >= 2)
+                rhythmEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
+        }
+    }
 }
 
 json Region::tuningUndoToJSON() const {
@@ -118,6 +140,13 @@ json Region::tuningUndoToJSON() const {
     j["tuningHarmonicAnchorVector"] = json::array();
     for (const auto& pr : tuningHarmonicAnchorVector)
         j["tuningHarmonicAnchorVector"].push_back(json::array({pr.first, pr.second}));
+    j["rhythmEdoSubdivisionSteps"] = rhythmEdoSubdivisionSteps;
+    j["rhythmEdoLowerVector"] = json::array();
+    for (const auto& pr : rhythmEdoLowerVector)
+        j["rhythmEdoLowerVector"].push_back(json::array({pr.first, pr.second}));
+    j["rhythmEdoUpperVector"] = json::array();
+    for (const auto& pr : rhythmEdoUpperVector)
+        j["rhythmEdoUpperVector"].push_back(json::array({pr.first, pr.second}));
     return j;
 }
 
@@ -146,10 +175,25 @@ void Region::applyTuningUndoFromJSON(const json& j) {
                 tuningHarmonicAnchorVector.push_back({el[0].get<int>(), el[1].get<int>()});
         }
     }
+    rhythmEdoSubdivisionSteps = j.value("rhythmEdoSubdivisionSteps", 1);
+    rhythmEdoLowerVector.clear();
+    if (j.contains("rhythmEdoLowerVector") && j["rhythmEdoLowerVector"].is_array()) {
+        for (const auto& el : j["rhythmEdoLowerVector"]) {
+            if (el.is_array() && el.size() >= 2)
+                rhythmEdoLowerVector.push_back({el[0].get<int>(), el[1].get<int>()});
+        }
+    }
+    rhythmEdoUpperVector.clear();
+    if (j.contains("rhythmEdoUpperVector") && j["rhythmEdoUpperVector"].is_array()) {
+        for (const auto& el : j["rhythmEdoUpperVector"]) {
+            if (el.is_array() && el.size() >= 2)
+                rhythmEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
+        }
+    }
 }
 
-int Region::createNote(fract start, fract length, std::vector<std::pair<int, int>> pitchIntegerPairs) {
-    auto n = std::make_shared<Note>(start, start + length, 0.f);
+int Region::createNote(std::vector<std::pair<int, int>> rhythmPairs, float durationSeconds, std::vector<std::pair<int, int>> pitchIntegerPairs) {
+    auto n = std::make_shared<Note>(rhythmPairs, durationSeconds, 0.f);
     n->pitchIntegerPairs = std::move(pitchIntegerPairs);
     n->syncNumFromPitchIntegerPairs();
     notes.push_back(n);

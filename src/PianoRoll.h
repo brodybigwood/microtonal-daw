@@ -24,6 +24,13 @@ struct PianoRollPitchLine {
     explicit PianoRollPitchLine(float m) : midi(m), integerPairs{{1, 1}} {}
 };
 
+struct PianoRollRhythmLine {
+    float seconds = 0.f;
+    std::vector<std::pair<int, int>> integerPairs;
+    bool isBeat = false;
+    explicit PianoRollRhythmLine(float s) : seconds(s) {}
+};
+
 class PianoRoll : public GridView, public EmbeddedWindow {
 
     public:
@@ -73,6 +80,7 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         bool movingNoteHasUndoSnapshot = false;
         bool movingNoteDragDirty = false;
         std::optional<float> movingNotePitchPreviewLineMidi;
+        std::optional<size_t> movingNoteRhythmPreviewLineIdx;
         json stretchingNoteUndoBefore;
         bool stretchingNoteHasUndoSnapshot = false;
         bool stretchingNoteDragDirty = false;
@@ -87,7 +95,8 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         bool movingMultipleNotes = false;
         std::map<int, json> multiMoveBefores;                // noteId -> JSON snapshot at mousedown
         std::map<int, std::vector<std::pair<int,int>>> multiPitchPreviews; // noteId -> preview integerPairs
-        std::vector<std::pair<int,int>> dragStartPairs;      // integerPairs at drag start (from note or grid line)
+        std::vector<std::pair<int,int>> dragStartPairs;      // pitch integerPairs at drag start
+        std::vector<std::pair<int,int>> rhythmDragStartPairs; // rhythm pairs at drag start
 
         // Multi-note resize state
         bool stretchingMultipleNotes = false;
@@ -165,6 +174,20 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         std::vector<std::pair<int, int>> intervalDialogFrozenEndVertexPairs;
         SDL_FRect modeButtonRect{8.0f, 0.0f, 180.0f, 0.0f};
 
+        // Rhythm interval drag (Ctrl+Shift)
+        bool selectingRhythmInterval = false;
+        std::shared_ptr<Note> rhythmIntervalStartNote = nullptr;
+        float rhythmIntervalStartSec = 0.0f;
+        float rhythmIntervalEndSec = 0.0f;
+        std::vector<std::pair<int, int>> rhythmDragStartVertexPairs;
+        std::vector<std::pair<int, int>> rhythmDragEndVertexPairs;
+        bool rhythmIntervalDragMoved = false;
+        bool rhythmEdoDefineDialogOpen = false;
+        float rhythmDialogFrozenStartSec = 0.0f;
+        float rhythmDialogFrozenEndSec = 0.0f;
+        std::vector<std::pair<int, int>> rhythmDialogFrozenStartPairs;
+        std::vector<std::pair<int, int>> rhythmDialogFrozenEndPairs;
+
         size_t closestLineIndexForMidi(float midiPitch) const;
         std::vector<std::pair<int, int>> pitchIntegerPairsAtGridMidi(float midiPitch) const;
         void refreshHoveredPitchLineIndex();
@@ -181,8 +204,9 @@ class PianoRoll : public GridView, public EmbeddedWindow {
 
         bool getStretchingNote();
         void stretchElement(int amount);
-        void moveNoteTime(std::shared_ptr<Note> note, int moveX);
+        void moveNoteTime(std::shared_ptr<Note> note);
         void commitNotePitchSnap(std::shared_ptr<Note> note, float targetLineMidi);
+        void snapNoteRhythm(const std::shared_ptr<Note>& note);
         float noteMidiForRender(const std::shared_ptr<Note>& note) const;
 
         std::shared_ptr<Note> hoveredElement;
@@ -206,6 +230,12 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         size_t hoveredPitchLineIndex = SIZE_MAX;
 
         std::vector<PianoRollPitchLine> pitchLines;
+        std::vector<PianoRollRhythmLine> rhythmLines;
+        std::vector<std::string> rhythmLineLabels;
+        size_t hoveredRhythmLineIndex = SIZE_MAX;
+        void updateRhythmLines();
+        void refreshHoveredRhythmLineIndex();
+        size_t closestRhythmLineIndexForSeconds(float seconds);
         void renderPianoRollGridTexture(SDL_Renderer* renderer);
 
     public:
