@@ -268,22 +268,31 @@ bool NodeEditor::routeEmbeddedWindowEvent(SDL_Event& e, float mouseX, float mous
 
 json NodeEditor::serializeOpenPianoRolls(const std::vector<int>& managerPath) const {
     json arr = json::array();
-    for (auto& ew : embeddedWindows_) {
-        auto* pr = dynamic_cast<PianoRoll*>(ew.get());
-        if (!pr || !pr->region) continue;
-        auto* arrNode = dynamic_cast<ArrangerNode*>(pr->region->parentNode);
-        if (!arrNode) continue;
-        json j;
-        j["managerPath"] = managerPath;
-        j["arrangerNodeID"] = static_cast<int>(arrNode->id);
-        j["regionID"] = static_cast<int>(pr->region->id);
-        j["ewID"] = ew->id;
-        j["x"] = ew->x;
-        j["y"] = ew->y;
-        j["w"] = ew->w;
-        j["h"] = ew->h;
-        j["zOrder"] = ew->zOrder;
-        arr.push_back(j);
+    if (!nm) return arr;
+    for (auto* node : nm->getNodes()) {
+        auto* arrNode = dynamic_cast<ArrangerNode*>(node);
+        if (!arrNode || !arrNode->sl) continue;
+        for (auto* prw : arrNode->sl->pianoRollWindows) {
+            if (!prw) continue;
+            PianoRoll* pr = prw->getPianoRoll();
+            if (!pr || !pr->region) continue;
+            json j;
+            j["managerPath"] = managerPath;
+            j["arrangerNodeID"] = static_cast<int>(arrNode->id);
+            j["regionID"] = static_cast<int>(pr->region->id);
+            j["ewID"] = prw->id;
+            int wx = 100, wy = 100, ww = 800, wh = 600;
+            if (prw->window) {
+                SDL_GetWindowPosition(prw->window, &wx, &wy);
+                SDL_GetWindowSize(prw->window, &ww, &wh);
+            }
+            j["x"] = static_cast<float>(wx);
+            j["y"] = static_cast<float>(wy);
+            j["w"] = static_cast<float>(ww);
+            j["h"] = static_cast<float>(wh);
+            j["zOrder"] = 0;
+            arr.push_back(j);
+        }
     }
     return arr;
 }

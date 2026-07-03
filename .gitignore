@@ -5,3 +5,4 @@ submodules/tracktion_engine/*
 assets/settings.json
 .clangd
 compile_commands.json
+cc.sh

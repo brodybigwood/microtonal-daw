@@ -63,11 +63,6 @@ void SDLCALL AudioManager::sdlCallback(void *userdata, SDL_AudioStream *stream, 
 
         project->sampleTime += frames;
 
-        if (project->isPlaying.load()) {
-            const double dt = static_cast<double>(frames) / sr;
-            project->timeSeconds.store(project->timeSeconds.load() + dt);
-        }
-
         am->streamTimeSeconds += static_cast<double>(frames) / sr;
 
         size_t bufSize = static_cast<size_t>(frames) * static_cast<size_t>(outCh);
@@ -82,6 +77,13 @@ void SDLCALL AudioManager::sdlCallback(void *userdata, SDL_AudioStream *stream, 
         int ic = 0;
         int bs = frames;
         project->process(nullptr, am->sdlScratch_.data(), bs, ic, outCh, sr);
+
+        // Advance AFTER processing: the block [t, t+dt) must be processed at
+        // time t, or notes starting exactly at the play position are skipped.
+        if (project->isPlaying.load()) {
+            const double dt = static_cast<double>(frames) / sr;
+            project->timeSeconds.store(project->timeSeconds.load() + dt);
+        }
 
         // Interleave
         float* dst = am->sdlInterleaved_.data();
@@ -123,11 +125,6 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
 
     project->sampleTime += bufferSize;
 
-    if(project->isPlaying.load()) {
-        const double dt = static_cast<double>(bufferSize) / audioManager->sampleRate;
-        project->timeSeconds.store(project->timeSeconds.load() + dt);
-    }
-
     AudioManager::instance()->streamTimeSeconds += static_cast<double>(bufferSize) / audioManager->sampleRate;
 
     unsigned int numChannels = audioManager->outputChannels;
@@ -154,6 +151,13 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
     int sr = static_cast<int>(audioManager->sampleRate);
 
     project->process(inBuffer, outBuffer, bs, ic, oc, sr);
+
+    // Advance AFTER processing: the block [t, t+dt) must be processed at
+    // time t, or notes starting exactly at the play position are skipped.
+    if(project->isPlaying.load()) {
+        const double dt = static_cast<double>(bufferSize) / audioManager->sampleRate;
+        project->timeSeconds.store(project->timeSeconds.load() + dt);
+    }
 
     if(project->isPlaying.load()) {
         project->effectiveTime.store(
