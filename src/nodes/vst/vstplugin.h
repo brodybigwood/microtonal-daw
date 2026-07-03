@@ -16,8 +16,10 @@
 
 #include <string>
 #include <vector>
+#include <deque>
 #include <memory>
 #include <map>
+#include <mutex>
 #include <functional>
 #include <atomic>
 
@@ -83,6 +85,68 @@ public:
     Steinberg::uint32 PLUGIN_API release() override { return 1; }
 
     std::vector<Steinberg::Vst::Event> events;
+};
+
+// ---------------------------------------------------------------------------
+// HostParameterChanges — IParameterChanges fed into process() so host-initiated
+// parameter edits (undo/redo, scripted actions) reach the audio processor, not
+// just the edit controller. One value point per parameter at sample offset 0.
+// ---------------------------------------------------------------------------
+class HostParamValueQueue : public Steinberg::Vst::IParamValueQueue {
+public:
+    Steinberg::Vst::ParamID paramId = 0;
+    Steinberg::Vst::ParamValue value = 0.0;
+
+    Steinberg::Vst::ParamID PLUGIN_API getParameterId() override { return paramId; }
+    Steinberg::int32 PLUGIN_API getPointCount() override { return 1; }
+    Steinberg::tresult PLUGIN_API getPoint(Steinberg::int32 index, Steinberg::int32& sampleOffset,
+                                           Steinberg::Vst::ParamValue& v) override {
+        if (index != 0) return Steinberg::kInvalidArgument;
+        sampleOffset = 0;
+        v = value;
+        return Steinberg::kResultTrue;
+    }
+    Steinberg::tresult PLUGIN_API addPoint(Steinberg::int32, Steinberg::Vst::ParamValue v,
+                                           Steinberg::int32& index) override {
+        value = v;
+        index = 0;
+        return Steinberg::kResultTrue;
+    }
+
+    Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID, void**) override { return Steinberg::kNoInterface; }
+    Steinberg::uint32 PLUGIN_API addRef() override { return 1; }
+    Steinberg::uint32 PLUGIN_API release() override { return 1; }
+};
+
+class HostParameterChanges : public Steinberg::Vst::IParameterChanges {
+public:
+    Steinberg::int32 PLUGIN_API getParameterCount() override { return static_cast<Steinberg::int32>(queues.size()); }
+    Steinberg::Vst::IParamValueQueue* PLUGIN_API getParameterData(Steinberg::int32 index) override {
+        if (index < 0 || index >= static_cast<Steinberg::int32>(queues.size())) return nullptr;
+        return &queues[static_cast<size_t>(index)];
+    }
+    Steinberg::Vst::IParamValueQueue* PLUGIN_API addParameterData(const Steinberg::Vst::ParamID& id,
+                                                                  Steinberg::int32& index) override {
+        for (size_t i = 0; i < queues.size(); ++i) {
+            if (queues[i].paramId == id) {
+                index = static_cast<Steinberg::int32>(i);
+                return &queues[i];
+            }
+        }
+        queues.emplace_back();
+        queues.back().paramId = id;
+        index = static_cast<Steinberg::int32>(queues.size() - 1);
+        return &queues.back();
+    }
+    void clear() { queues.clear(); }
+
+    Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID, void**) override { return Steinberg::kNoInterface; }
+    Steinberg::uint32 PLUGIN_API addRef() override { return 1; }
+    Steinberg::uint32 PLUGIN_API release() override { return 1; }
+
+    // deque: addParameterData hands out pointers that must stay valid while
+    // more queues are appended during the same block.
+    std::deque<HostParamValueQueue> queues;
 };
 #endif
 
@@ -236,7 +300,10 @@ public:
     // Parameter access
     int getParameterCount() const;
     float getParameterValue(int index) const;
+    /** Updates the edit controller AND queues the change for the processor
+        (delivered via inputParameterChanges on the next audio block). */
     void setParameterValue(int index, float valueNormalized);
+    void queueParameterChange(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue value);
 
     // State serialization
     std::vector<uint8_t> getComponentState() const;
@@ -276,6 +343,11 @@ private:
     int processBufferSize = 0;
     int processSampleRate = 0;
     bool processingActive = false;
+
+    // Host-initiated parameter changes pending delivery to the processor.
+    std::mutex pendingParamMutex_;
+    std::vector<std::pair<Steinberg::Vst::ParamID, Steinberg::Vst::ParamValue>> pendingParamChanges_;
+    HostParameterChanges paramChanges_;   // reused each block, audio thread only
 
     bool createComponent();
     bool createController();

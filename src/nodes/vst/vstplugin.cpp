@@ -752,6 +752,22 @@ void VstPlugin::processAudio(int bufferSize, Steinberg::Vst::IEventList* inputEv
     processData.numOutputs = static_cast<Steinberg::int32>(outputBuses.size());
     processData.inputEvents = inputEvents;
 
+    // Deliver host-initiated parameter changes (undo/redo etc.) to the processor.
+    paramChanges_.clear();
+    {
+        std::lock_guard<std::mutex> lock(pendingParamMutex_);
+        for (const auto& pc : pendingParamChanges_) {
+            Steinberg::int32 qi = 0;
+            if (auto* q = paramChanges_.addParameterData(pc.first, qi)) {
+                Steinberg::int32 pi = 0;
+                q->addPoint(0, pc.second, pi);
+            }
+        }
+        pendingParamChanges_.clear();
+    }
+    if (paramChanges_.getParameterCount() > 0)
+        processData.inputParameterChanges = &paramChanges_;
+
     Steinberg::Vst::ProcessContext context{};
     context.state = Steinberg::Vst::ProcessContext::kPlaying
                   | Steinberg::Vst::ProcessContext::kProjectTimeMusicValid;
@@ -943,6 +959,21 @@ void VstPlugin::setParameterValue(int paramID, float valueNormalized) {
     if (!editController || !hostFrame) return;
     editController->setParamNormalized(static_cast<Steinberg::Vst::ParamID>(paramID),
                                        static_cast<Steinberg::Vst::ParamValue>(valueNormalized));
+    // The controller call above only updates the plugin GUI; the processor
+    // hears the change via inputParameterChanges on the next audio block.
+    queueParameterChange(static_cast<Steinberg::Vst::ParamID>(paramID),
+                         static_cast<Steinberg::Vst::ParamValue>(valueNormalized));
+}
+
+void VstPlugin::queueParameterChange(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue value) {
+    std::lock_guard<std::mutex> lock(pendingParamMutex_);
+    for (auto& pc : pendingParamChanges_) {
+        if (pc.first == id) {
+            pc.second = value;
+            return;
+        }
+    }
+    pendingParamChanges_.push_back({id, value});
 }
 
 std::vector<uint8_t> VstPlugin::getComponentState() const {

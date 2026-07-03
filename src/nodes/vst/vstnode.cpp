@@ -1,4 +1,5 @@
 #include "vstnode.h"
+#include "JsonBytes.h"
 #include "NodeManager.h"
 #include "styles.h"
 #include "Settings.h"
@@ -454,10 +455,8 @@ void VstNode::loadPlugin(const std::string& path, bool createUndo) {
         if (plugin && plugin->isValid()) {
             oldState["path"] = loadedPath;
             oldState["bypass"] = bypass.value;
-            auto compState = plugin->getComponentState();
-            auto ctrlState = plugin->getControllerState();
-            oldState["compState"] = compState;
-            oldState["ctrlState"] = ctrlState;
+            oldState["compState"] = jsonBytesEncode(plugin->getComponentState());
+            oldState["ctrlState"] = jsonBytesEncode(plugin->getControllerState());
         }
 
         if (plugin) {
@@ -488,10 +487,8 @@ void VstNode::loadPlugin(const std::string& path, bool createUndo) {
             newState["path"] = loadedPath;
             newState["bypass"] = bypass.value;
             if (plugin && plugin->isValid()) {
-                auto compState = plugin->getComponentState();
-                auto ctrlState = plugin->getControllerState();
-                newState["compState"] = compState;
-                newState["ctrlState"] = ctrlState;
+                newState["compState"] = jsonBytesEncode(plugin->getComponentState());
+                newState["ctrlState"] = jsonBytesEncode(plugin->getControllerState());
             }
             auto* pa = new VstLoadPluginAction(project, std::move(mgrPath), static_cast<int>(id),
                                                 std::move(oldState), std::move(newState));
@@ -582,10 +579,8 @@ json VstNode::extraSerialize() {
     j["bypass"] = bypass.value;
     if (plugin && plugin->isValid()) {
         j["pluginPath"] = loadedPath;
-        auto compState = plugin->getComponentState();
-        auto ctrlState = plugin->getControllerState();
-        j["compState"] = compState;
-        j["ctrlState"] = ctrlState;
+        j["compState"] = jsonBytesEncode(plugin->getComponentState());
+        j["ctrlState"] = jsonBytesEncode(plugin->getControllerState());
     }
     return j;
 }
@@ -599,16 +594,10 @@ void VstNode::extraDeSerialize(const json& j) {
             name = plugin->getName();
             wirePluginCallbacks();
             restoringState = true;
-            if (j.contains("compState")) {
-                auto& arr = j["compState"];
-                std::vector<uint8_t> data(arr.begin(), arr.end());
-                plugin->setComponentState(data);
-            }
-            if (j.contains("ctrlState")) {
-                auto& arr = j["ctrlState"];
-                std::vector<uint8_t> data(arr.begin(), arr.end());
-                plugin->setControllerState(data);
-            }
+            if (j.contains("compState"))
+                plugin->setComponentState(jsonBytesDecode(j["compState"]));
+            if (j.contains("ctrlState"))
+                plugin->setControllerState(jsonBytesDecode(j["ctrlState"]));
             restoringState = false;
             rebuildConnections();
             int sr = sampleRate > 0 ? sampleRate : 48000;

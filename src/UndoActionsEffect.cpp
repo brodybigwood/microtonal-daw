@@ -1,4 +1,5 @@
 #include "UndoManager.h"
+#include "JsonBytes.h"
 #include "nodes/parametriceq/parametriceq.h"
 #include "nodes/vst/vstnode.h"
 #include "nodes/arranger/arranger.h"
@@ -117,11 +118,8 @@ VstParameterChangeAction::VstParameterChangeAction(Project* p, std::vector<int> 
         auto* vst = dynamic_cast<VstNode*>(node);
         if (!vst) throw std::runtime_error("VstParameterChangeAction::doAction: node not found or not VstNode");
         if (!vst->plugin) throw std::runtime_error("VstParameterChangeAction::doAction: plugin is null");
-        auto* ec = vst->plugin->getEditController();
-        if (!ec) throw std::runtime_error("VstParameterChangeAction::doAction: no edit controller");
         vst->restoringState = true;
-        ec->setParamNormalized(static_cast<Steinberg::Vst::ParamID>(this->paramID),
-                               static_cast<Steinberg::Vst::ParamValue>(this->newValue));
+        vst->plugin->setParameterValue(static_cast<int>(this->paramID), this->newValue);
         vst->restoringState = false;
     };
 
@@ -131,11 +129,8 @@ VstParameterChangeAction::VstParameterChangeAction(Project* p, std::vector<int> 
         auto* vst = dynamic_cast<VstNode*>(node);
         if (!vst) throw std::runtime_error("VstParameterChangeAction::undoAction: node not found or not VstNode");
         if (!vst->plugin) throw std::runtime_error("VstParameterChangeAction::undoAction: plugin is null");
-        auto* ec = vst->plugin->getEditController();
-        if (!ec) throw std::runtime_error("VstParameterChangeAction::undoAction: no edit controller");
         vst->restoringState = true;
-        ec->setParamNormalized(static_cast<Steinberg::Vst::ParamID>(this->paramID),
-                               static_cast<Steinberg::Vst::ParamValue>(this->oldValue));
+        vst->plugin->setParameterValue(static_cast<int>(this->paramID), this->oldValue);
         vst->restoringState = false;
     };
 }
@@ -164,16 +159,10 @@ VstLoadPluginAction::VstLoadPluginAction(Project* p, std::vector<int> managerPat
         vst->loadPlugin(path);
         if (!this->newState.is_null()) {
             vst->bypass.value = this->newState.value("bypass", 0.0f);
-            if (this->newState.contains("compState") && vst->plugin) {
-                auto& arr = this->newState["compState"];
-                std::vector<uint8_t> data(arr.begin(), arr.end());
-                vst->plugin->setComponentState(data);
-            }
-            if (this->newState.contains("ctrlState") && vst->plugin) {
-                auto& arr = this->newState["ctrlState"];
-                std::vector<uint8_t> data(arr.begin(), arr.end());
-                vst->plugin->setControllerState(data);
-            }
+            if (this->newState.contains("compState") && vst->plugin)
+                vst->plugin->setComponentState(jsonBytesDecode(this->newState["compState"]));
+            if (this->newState.contains("ctrlState") && vst->plugin)
+                vst->plugin->setControllerState(jsonBytesDecode(this->newState["ctrlState"]));
         }
     };
 
@@ -187,16 +176,10 @@ VstLoadPluginAction::VstLoadPluginAction(Project* p, std::vector<int> managerPat
         vst->loadPlugin(path);
         if (!this->oldState.is_null()) {
             vst->bypass.value = this->oldState.value("bypass", 0.0f);
-            if (this->oldState.contains("compState") && vst->plugin) {
-                auto& arr = this->oldState["compState"];
-                std::vector<uint8_t> data(arr.begin(), arr.end());
-                vst->plugin->setComponentState(data);
-            }
-            if (this->oldState.contains("ctrlState") && vst->plugin) {
-                auto& arr = this->oldState["ctrlState"];
-                std::vector<uint8_t> data(arr.begin(), arr.end());
-                vst->plugin->setControllerState(data);
-            }
+            if (this->oldState.contains("compState") && vst->plugin)
+                vst->plugin->setComponentState(jsonBytesDecode(this->oldState["compState"]));
+            if (this->oldState.contains("ctrlState") && vst->plugin)
+                vst->plugin->setControllerState(jsonBytesDecode(this->oldState["ctrlState"]));
         }
     };
 }

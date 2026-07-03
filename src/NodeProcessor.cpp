@@ -57,8 +57,10 @@ json NodeProcessor::serialize() const {
 void NodeProcessor::deSerialize(const json& j) {
     if (!editor) return;
 
-    // Backward compat: old format wrapped the real graph inside a root PatcherNode's mainManager.
-    json transformed = j;
+    // Backward compat: old format wrapped the real graph inside a root PatcherNode's
+    // mainManager. Only copy the DOM when that rewrite is actually needed.
+    const json* src = &j;
+    json transformed;
     if (j.contains("nodes") && j["nodes"].is_array() && j["nodes"].size() == 1) {
         const auto& n = j["nodes"][0];
         if (n.value("nodeType", -1) == static_cast<int>(NodeType::Patcher) &&
@@ -69,6 +71,7 @@ void NodeProcessor::deSerialize(const json& j) {
             transformed["connections"] = inner["connections"];
             transformed["idManager"] = inner["idManager"];
             // Keep top-level outNode/inNode (they have 2 channels vs inner's 0).
+            src = &transformed;
         }
     }
 
@@ -80,7 +83,7 @@ void NodeProcessor::deSerialize(const json& j) {
     }
     guiGraph = new NodeManager(project);
     guiGraph->setNE(editor);
-    guiGraph->deSerialize(transformed);
+    guiGraph->deSerialize(*src);
 
     // Wipe and rebuild audio copy from the same JSON.
     if (dspGraph) {
@@ -89,7 +92,7 @@ void NodeProcessor::deSerialize(const json& j) {
         dspGraph = nullptr;
     }
     dspGraph = new NodeManager(project);
-    dspGraph->deSerialize(transformed);
+    dspGraph->deSerialize(*src);
 
     setThreadActiveRoot(guiGraph);
 }

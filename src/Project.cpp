@@ -109,7 +109,7 @@ void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {
 
         std::ofstream outFile(file);
         if (outFile.is_open()) {
-            outFile << j.dump(2);
+            outFile << j.dump();
             outFile.flush();
             if (outFile.fail()) {
                 std::cerr << "[save] WRITE FAILED for " << file << std::endl;
