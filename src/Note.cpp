@@ -243,39 +243,24 @@ json Note::tuningFieldsUndoToJSON() const {
 }
 
 void Note::applyTuningFieldsUndoFromJSON(const json& j) {
+    // Absent keys leave the field untouched: tuning snapshots carry only the
+    // tuning vectors, and clearing e.g. rhythmIntegerPairs here would silently
+    // move the note start to 0 (empty pair vector = log2(1) seconds).
+    auto applyPairVector = [&j](const char* key, std::vector<std::pair<int, int>>& out) {
+        if (!j.contains(key) || !j[key].is_array()) return;
+        out.clear();
+        for (const auto& el : j[key])
+            if (el.is_array() && el.size() >= 2)
+                out.push_back({el[0].get<int>(), el[1].get<int>()});
+    };
     tuningMode = j.value("tuningMode", tuningMode);
     tuningAnchorHarmonic = j.value("tuningAnchorHarmonic", tuningAnchorHarmonic);
     tuningEdoSubdivisionSteps = j.value("tuningEdoSubdivisionSteps", tuningEdoSubdivisionSteps);
-    tuningEdoLowerVector.clear();
-    if (j.contains("tuningEdoLowerVector") && j["tuningEdoLowerVector"].is_array()) {
-        for (const auto& el : j["tuningEdoLowerVector"])
-            if (el.is_array() && el.size() >= 2)
-                tuningEdoLowerVector.push_back({el[0].get<int>(), el[1].get<int>()});
-    }
-    tuningEdoUpperVector.clear();
-    if (j.contains("tuningEdoUpperVector") && j["tuningEdoUpperVector"].is_array()) {
-        for (const auto& el : j["tuningEdoUpperVector"])
-            if (el.is_array() && el.size() >= 2)
-                tuningEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
-    }
+    applyPairVector("tuningEdoLowerVector", tuningEdoLowerVector);
+    applyPairVector("tuningEdoUpperVector", tuningEdoUpperVector);
     rhythmEdoSubdivisionSteps = j.value("rhythmEdoSubdivisionSteps", rhythmEdoSubdivisionSteps);
-    rhythmIntegerPairs.clear();
-    if (j.contains("rhythmIntegerPairs") && j["rhythmIntegerPairs"].is_array()) {
-        for (const auto& el : j["rhythmIntegerPairs"])
-            if (el.is_array() && el.size() >= 2)
-                rhythmIntegerPairs.push_back({el[0].get<int>(), el[1].get<int>()});
-    }
-    rhythmEdoLowerVector.clear();
-    if (j.contains("rhythmEdoLowerVector") && j["rhythmEdoLowerVector"].is_array()) {
-        for (const auto& el : j["rhythmEdoLowerVector"])
-            if (el.is_array() && el.size() >= 2)
-                rhythmEdoLowerVector.push_back({el[0].get<int>(), el[1].get<int>()});
-    }
-    rhythmEdoUpperVector.clear();
-    if (j.contains("rhythmEdoUpperVector") && j["rhythmEdoUpperVector"].is_array()) {
-        for (const auto& el : j["rhythmEdoUpperVector"])
-            if (el.is_array() && el.size() >= 2)
-                rhythmEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
-    }
+    applyPairVector("rhythmIntegerPairs", rhythmIntegerPairs);
+    applyPairVector("rhythmEdoLowerVector", rhythmEdoLowerVector);
+    applyPairVector("rhythmEdoUpperVector", rhythmEdoUpperVector);
     syncNumFromPitchIntegerPairs();
 }
