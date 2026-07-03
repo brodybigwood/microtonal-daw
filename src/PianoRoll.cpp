@@ -1294,8 +1294,6 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                         auto& note = region->notes[idx];
                         note->pitchIntegerPairs = previewPairs;
                         note->syncNumFromPitchIntegerPairs();
-                        note->tuningAnchorHarmonic = harmonicAnchorNumber;
-                        stampNoteTuning(note);
                     }
                     // Also handle the primary note's pitch preview if it was single-tracked
                     if (movingNotePitchPreviewLineMidi) {
@@ -1328,7 +1326,6 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                         if (it == region->id_to_index.end()) continue;
                         const size_t idx = static_cast<size_t>(it->second);
                         if (idx >= region->notes.size() || !region->notes[idx]) continue;
-                        snapNoteRhythm(region->notes[idx]);
                         json after = region->notes[idx]->toJSON();
                         if (after != before) anyDirty = true;
                         ids.push_back(nid);
@@ -1898,7 +1895,7 @@ bool PianoRoll::getExistingNote() {
 
 
 float PianoRoll::getNotePosX(std::shared_ptr<Note> note) {
-    if (movingNote && selectedNoteIds.count(note->id) && movingNoteRhythmPreviewLineIdx) {
+    if (movingNote && (selectedNoteIds.count(note->id) || movingNote.get() == note.get()) && movingNoteRhythmPreviewLineIdx) {
         const size_t rli = *movingNoteRhythmPreviewLineIdx;
         if (rli < rhythmLines.size()) {
             const auto startDelta = alignedRatSubVectors(rhythmLines[rli].integerPairs, rhythmDragStartPairs);
@@ -1909,7 +1906,7 @@ float PianoRoll::getNotePosX(std::shared_ptr<Note> note) {
 }
 
 float PianoRoll::getNoteEnd(std::shared_ptr<Note> note) {
-    if (movingNote && selectedNoteIds.count(note->id) && movingNoteRhythmPreviewLineIdx) {
+    if (movingNote && (selectedNoteIds.count(note->id) || movingNote.get() == note.get()) && movingNoteRhythmPreviewLineIdx) {
         const size_t rli = *movingNoteRhythmPreviewLineIdx;
         if (rli < rhythmLines.size()) {
             const auto startDelta = alignedRatSubVectors(rhythmLines[rli].integerPairs, rhythmDragStartPairs);
