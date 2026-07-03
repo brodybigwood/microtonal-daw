@@ -11,11 +11,10 @@ using json = nlohmann::json;
 
 class Note {
     public:
-        Note(const std::vector<std::pair<int, int>>& rhythmPairs, float durationSeconds, float num);
+        Note(const std::vector<std::pair<int, int>>& startPairs, const std::vector<std::pair<int, int>>& endPairs);
         ~Note();
 
         float num;  // Frequency or pitch of the note
-        float durationSeconds = 1.0f;
 
         int id;
         int channel;
@@ -24,8 +23,9 @@ class Note {
         int tuningEdoSubdivisionSteps = 12;
         std::vector<std::pair<int, int>> tuningEdoLowerVector;
         std::vector<std::pair<int, int>> tuningEdoUpperVector;
-        // Rhythm: start time from t=0 as product of primes^(num/den) seconds.
+        // Rhythm: start and end time from t=0 as product of primes^(num/den) seconds.
         std::vector<std::pair<int, int>> rhythmIntegerPairs;
+        std::vector<std::pair<int, int>> rhythmEndIntegerPairs;
         int rhythmEdoSubdivisionSteps = 1;
         std::vector<std::pair<int, int>> rhythmEdoLowerVector;
         std::vector<std::pair<int, int>> rhythmEdoUpperVector;
@@ -40,6 +40,7 @@ class Note {
 
         float startSeconds() const;
         float endSeconds() const;
+        float durationSeconds() const;
 
         json toJSON();
         static std::shared_ptr<Note> fromJSON(json&);

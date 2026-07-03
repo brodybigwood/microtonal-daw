@@ -96,7 +96,9 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         std::map<int, json> multiMoveBefores;                // noteId -> JSON snapshot at mousedown
         std::map<int, std::vector<std::pair<int,int>>> multiPitchPreviews; // noteId -> preview integerPairs
         std::vector<std::pair<int,int>> dragStartPairs;      // pitch integerPairs at drag start
-        std::vector<std::pair<int,int>> rhythmDragStartPairs; // rhythm pairs at drag start
+        std::vector<std::pair<int,int>> rhythmDragStartPairs; // rhythm start pairs at drag start
+        std::vector<std::pair<int,int>> rhythmDragEndPairs;   // rhythm end pairs at drag start
+        float rhythmDragGrabOffsetPx = 0.0f;
 
         // Multi-note resize state
         bool stretchingMultipleNotes = false;
@@ -132,6 +134,7 @@ class PianoRoll : public GridView, public EmbeddedWindow {
 
 
         fract lastLength = fract(1, 1);
+        std::vector<std::pair<int, int>> lastRhythmDurationPairs;
 
         SDL_Texture* layers[4];
 

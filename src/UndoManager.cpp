@@ -421,8 +421,15 @@ bool UndoManager::runRegisteredAction(const std::string& actionName, const json&
                     if (el.is_array() && el.size() >= 2)
                         rPairs.push_back({el[0].get<int>(), el[1].get<int>()});
             }
+            std::vector<std::pair<int,int>> rEndPairs;
+            if (params.contains("rhythmEndIntegerPairs") && params["rhythmEndIntegerPairs"].is_array()) {
+                for (const auto& el : params["rhythmEndIntegerPairs"])
+                    if (el.is_array() && el.size() >= 2)
+                        rEndPairs.push_back({el[0].get<int>(), el[1].get<int>()});
+            }
+            if (rEndPairs.empty()) rEndPairs = rPairs;
             pa = new CreateNoteAction(head->p, managerPath, params.at("nodeID").get<int>(), params.at("regionID").get<int>(),
-                std::move(rPairs), params.value("durationSeconds", 1.0f),
+                std::move(rPairs), std::move(rEndPairs),
                 std::move(pairs));
             break;
         }
@@ -468,8 +475,15 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
                     if (el.is_array() && el.size() >= 2)
                         rhythmPairs.push_back({el[0].get<int>(), el[1].get<int>()});
             }
+            std::vector<std::pair<int,int>> endRPairs;
+            if (j.contains("rhythmEndIntegerPairs") && j["rhythmEndIntegerPairs"].is_array()) {
+                for (const auto& el : j["rhythmEndIntegerPairs"])
+                    if (el.is_array() && el.size() >= 2)
+                        endRPairs.push_back({el[0].get<int>(), el[1].get<int>()});
+            }
+            if (endRPairs.empty()) endRPairs = rhythmPairs;
             auto cn = new CreateNoteAction(p, managerPath, j.at("nodeID").get<int>(), j.at("regionID").get<int>(), std::move(rhythmPairs),
-                j.value("durationSeconds", 1.0f), std::move(pairs));
+                std::move(endRPairs), std::move(pairs));
             cn->noteID = j.at("noteID").get<int>();
             if (j.contains("noteStampedSnapshot") && !j["noteStampedSnapshot"].is_null())
                 cn->noteStampedSnapshot = j["noteStampedSnapshot"];
@@ -728,7 +742,9 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["rhythmIntegerPairs"] = json::array();
             for (const auto& pr : cn->rhythmIntegerPairs)
                 j["rhythmIntegerPairs"].push_back(json::array({pr.first, pr.second}));
-            j["durationSeconds"] = cn->durationSeconds;
+            j["rhythmEndIntegerPairs"] = json::array();
+            for (const auto& pr : cn->rhythmEndIntegerPairs)
+                j["rhythmEndIntegerPairs"].push_back(json::array({pr.first, pr.second}));
             j["pitchIntegerPairs"] = json::array();
             for (const auto& pr : cn->pitchIntegerPairs)
                 j["pitchIntegerPairs"].push_back(json::array({pr.first, pr.second}));
@@ -1412,18 +1428,18 @@ void UndoManager::goTo(ProjectAction* target) {
 }
 
 
-CreateNoteAction::CreateNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, std::vector<std::pair<int,int>> rhythmPairs,
-                                   float durSec, std::vector<std::pair<int, int>> pitchIntegerPairs) :
+CreateNoteAction::CreateNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, std::vector<std::pair<int,int>> startPairs,
+                                   std::vector<std::pair<int,int>> endPairs, std::vector<std::pair<int, int>> pitchIntegerPairs) :
         ProjectAction(p, CreateNote),
         managerPath(std::move(managerPath)),
         regionID(regionID),
-        rhythmIntegerPairs(std::move(rhythmPairs)),
-        durationSeconds(durSec),
+        rhythmIntegerPairs(std::move(startPairs)),
+        rhythmEndIntegerPairs(std::move(endPairs)),
         pitchIntegerPairs(std::move(pitchIntegerPairs)),
         nodeID(nodeID) {
     doAction = [this]() {
         Region& region = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
-        noteID = region.createNote(this->rhythmIntegerPairs, this->durationSeconds, this->pitchIntegerPairs);
+        noteID = region.createNote(this->rhythmIntegerPairs, this->rhythmEndIntegerPairs, this->pitchIntegerPairs);
         name = "Create Note " + std::to_string(noteID) + " " + std::to_string(this->regionID);
         if (!noteStampedSnapshot.is_null()) {
             auto it = region.id_to_index.find(noteID);

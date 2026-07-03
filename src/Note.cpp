@@ -49,9 +49,9 @@ void Note::syncNumFromPitchIntegerPairs() {
     num = midiFromPitchIntegerPairs(pitchIntegerPairs);
 }
 
-Note::Note(const std::vector<std::pair<int, int>>& rhythmPairs, float durSec, float /*legacy pitch*/) {
-    rhythmIntegerPairs = rhythmPairs;
-    durationSeconds = std::max(0.0f, durSec);
+Note::Note(const std::vector<std::pair<int, int>>& startPairs, const std::vector<std::pair<int, int>>& endPairs) {
+    rhythmIntegerPairs = startPairs;
+    rhythmEndIntegerPairs = endPairs;
     pitchIntegerPairs.clear();
     syncNumFromPitchIntegerPairs();
 }
@@ -64,13 +64,16 @@ float Note::startSeconds() const {
 }
 
 float Note::endSeconds() const {
-    return startSeconds() + durationSeconds;
+    return secondsFromIntegerPairs(rhythmEndIntegerPairs);
+}
+
+float Note::durationSeconds() const {
+    return endSeconds() - startSeconds();
 }
 
 json Note::toJSON() {
     json j;
     j["id"] = id;
-    j["durationSeconds"] = durationSeconds;
     j["channel"] = channel;
     j["tuningMode"] = tuningMode;
     j["tuningAnchorHarmonic"] = tuningAnchorHarmonic;
@@ -87,6 +90,9 @@ json Note::toJSON() {
     j["rhythmIntegerPairs"] = json::array();
     for (const auto& pr : rhythmIntegerPairs)
         j["rhythmIntegerPairs"].push_back(json::array({pr.first, pr.second}));
+    j["rhythmEndIntegerPairs"] = json::array();
+    for (const auto& pr : rhythmEndIntegerPairs)
+        j["rhythmEndIntegerPairs"].push_back(json::array({pr.first, pr.second}));
     j["rhythmEdoSubdivisionSteps"] = rhythmEdoSubdivisionSteps;
     j["rhythmEdoLowerVector"] = json::array();
     for (const auto& pr : rhythmEdoLowerVector)
@@ -98,16 +104,25 @@ json Note::toJSON() {
 }
 
 std::shared_ptr<Note> Note::fromJSON(json& input) {
-    std::vector<std::pair<int, int>> rhythmPairs;
+    std::vector<std::pair<int, int>> startPairs;
     if (input.contains("rhythmIntegerPairs") && input["rhythmIntegerPairs"].is_array()) {
         for (const auto& el : input["rhythmIntegerPairs"])
             if (el.is_array() && el.size() >= 2)
-                rhythmPairs.push_back({el[0].get<int>(), el[1].get<int>()});
+                startPairs.push_back({el[0].get<int>(), el[1].get<int>()});
+    }
+    std::vector<std::pair<int, int>> endPairs;
+    if (input.contains("rhythmEndIntegerPairs") && input["rhythmEndIntegerPairs"].is_array()) {
+        for (const auto& el : input["rhythmEndIntegerPairs"])
+            if (el.is_array() && el.size() >= 2)
+                endPairs.push_back({el[0].get<int>(), el[1].get<int>()});
+    }
+    if (endPairs.empty()) {
+        endPairs = startPairs;
     }
     auto nid = input.at("id").get<int>();
     auto channel = input.at("channel").get<int>();
 
-    std::shared_ptr<Note> n = std::make_shared<Note>(rhythmPairs, input.value("durationSeconds", 1.0f), 0.f);
+    std::shared_ptr<Note> n = std::make_shared<Note>(startPairs, endPairs);
     n->id = nid;
     n->channel = channel;
     n->tuningMode = input.value("tuningMode", 0);
@@ -152,7 +167,6 @@ std::shared_ptr<Note> Note::fromJSON(json& input) {
 }
 
 void Note::applyUndoSnapshot(const json& j) {
-    durationSeconds = j.value("durationSeconds", 1.0f);
     channel = j.value("channel", channel);
     tuningMode = j.value("tuningMode", 0);
     tuningAnchorHarmonic = j.value("tuningAnchorHarmonic", 1);
@@ -182,6 +196,12 @@ void Note::applyUndoSnapshot(const json& j) {
         for (const auto& el : j["rhythmIntegerPairs"])
             if (el.is_array() && el.size() >= 2)
                 rhythmIntegerPairs.push_back({el[0].get<int>(), el[1].get<int>()});
+    }
+    rhythmEndIntegerPairs.clear();
+    if (j.contains("rhythmEndIntegerPairs") && j["rhythmEndIntegerPairs"].is_array()) {
+        for (const auto& el : j["rhythmEndIntegerPairs"])
+            if (el.is_array() && el.size() >= 2)
+                rhythmEndIntegerPairs.push_back({el[0].get<int>(), el[1].get<int>()});
     }
     rhythmEdoLowerVector.clear();
     if (j.contains("rhythmEdoLowerVector") && j["rhythmEdoLowerVector"].is_array()) {

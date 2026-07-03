@@ -336,12 +336,12 @@ struct CreateNoteAction : ProjectAction {
     int noteID;
     int regionID;
     std::vector<std::pair<int, int>> rhythmIntegerPairs;
-    float durationSeconds;
+    std::vector<std::pair<int, int>> rhythmEndIntegerPairs;
     std::vector<std::pair<int, int>> pitchIntegerPairs;
     /** Filled after PianoRoll::stampNoteTuning on first create; reapplied on redo (doAction) so tuningMode matches the lattice. */
     json noteStampedSnapshot = json();
 
-    CreateNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, std::vector<std::pair<int,int>> rhythmPairs, float durationSeconds,
+    CreateNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, std::vector<std::pair<int,int>> startPairs, std::vector<std::pair<int,int>> endPairs,
                      std::vector<std::pair<int, int>> pitchIntegerPairs);
 };
 

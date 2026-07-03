@@ -192,8 +192,8 @@ void Region::applyTuningUndoFromJSON(const json& j) {
     }
 }
 
-int Region::createNote(std::vector<std::pair<int, int>> rhythmPairs, float durationSeconds, std::vector<std::pair<int, int>> pitchIntegerPairs) {
-    auto n = std::make_shared<Note>(rhythmPairs, durationSeconds, 0.f);
+int Region::createNote(std::vector<std::pair<int, int>> startPairs, std::vector<std::pair<int, int>> endPairs, std::vector<std::pair<int, int>> pitchIntegerPairs) {
+    auto n = std::make_shared<Note>(startPairs, endPairs);
     n->pitchIntegerPairs = std::move(pitchIntegerPairs);
     n->syncNumFromPitchIntegerPairs();
     notes.push_back(n);

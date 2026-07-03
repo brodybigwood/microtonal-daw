@@ -41,16 +41,16 @@ json ElementManager::toJSON() {
 void ElementManager::process(int bufferSize) {
     float epsilon = 1e-6;
 
-    float window = (project->tempo * (float)AudioManager::instance()->bufferSize / AudioManager::instance()->sampleRate) / 60.0f;
-    float time = project->tempo * project->timeSeconds.load()/60.0f;
+    float window = static_cast<float>(AudioManager::instance()->bufferSize) / AudioManager::instance()->sampleRate;
+    float time = static_cast<float>(project->timeSeconds.load());
 
     for (auto* element : elements)
         for (auto position : element->positions) {
             auto& pos = *position;
-            float regTime = pos.start;
+            const float regTimeSec = (float)pos.start * 60.0f / project->tempo;
 
-            Track* track = tm->getTrack(pos.trackID);            
-            auto& dispatched = track->dispatched;            
+            Track* track = tm->getTrack(pos.trackID);
+            auto& dispatched = track->dispatched;
             switch (element->type) {
                 case ElementType::region:
                     {
@@ -69,14 +69,14 @@ void ElementManager::process(int bufferSize) {
                             break;
                         }
                         auto* region = static_cast<Region*>(element);
-                        const float trim = static_cast<float>(static_cast<double>(pos.startOffset));
+                        const float trim = static_cast<float>(pos.startOffset) * 60.0f / project->tempo;
                         for (auto& note : region->notes) {
-                            float start = note->startSeconds() + regTime - trim;
-                            float end = note->endSeconds() + regTime - trim;
+                            float start = note->startSeconds() + regTimeSec - trim;
+                            float end = note->endSeconds() + regTimeSec - trim;
 
                             if (std::find(dispatched.begin(), dispatched.end(), note) == dispatched.end() && start < time+window+epsilon && start+epsilon >= time) {
-                               
-                                int offset = AudioManager::instance()->sampleRate * 60.0f * (start - time)/project->tempo;
+
+                                int offset = static_cast<int>(AudioManager::instance()->sampleRate * (start - time));
  
                                 Event event {
                                     noteEventType::noteOn,
@@ -90,7 +90,7 @@ void ElementManager::process(int bufferSize) {
                                 dispatched.push_back(note);
                             } else if (std::find(dispatched.begin(), dispatched.end(), note) != dispatched.end() && end < time+window+epsilon && end+epsilon >= time) {
 
-                                int offset = AudioManager::instance()->sampleRate * 60.0f * (end - time)/project->tempo;
+                                int offset = static_cast<int>(AudioManager::instance()->sampleRate * (end - time));
 
 
                                 Event event {

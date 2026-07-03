@@ -1143,6 +1143,8 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                             // Store start pairs: prefer hovered note's pairs, else grid line
                             dragStartPairs = n->pitchIntegerPairs;
                             rhythmDragStartPairs = n->rhythmIntegerPairs;
+                            rhythmDragEndPairs = n->rhythmEndIntegerPairs;
+                            rhythmDragGrabOffsetPx = mouseX - getNotePosX(n);
                             for (auto& sn : region->notes) {
                                 if (selectedNoteIds.count(sn->id))
                                     multiMoveBefores[sn->id] = sn->toJSON();
@@ -1161,6 +1163,8 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                             movingNoteRhythmPreviewLineIdx.reset();
                             dragStartPairs = n->pitchIntegerPairs;
                             rhythmDragStartPairs = n->rhythmIntegerPairs;
+                            rhythmDragEndPairs = n->rhythmEndIntegerPairs;
+                            rhythmDragGrabOffsetPx = mouseX - getNotePosX(n);
                         }
                         last_lmb_x = mouseX;
                     }
@@ -1298,35 +1302,19 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                         commitNotePitchSnap(movingNote, *movingNotePitchPreviewLineMidi);
                         movingNotePitchPreviewLineMidi.reset();
                     }
-                    if (movingNoteRhythmPreviewLineIdx && !rhythmDragStartPairs.empty()) {
+                    if (movingNoteRhythmPreviewLineIdx) {
                         const size_t rli = *movingNoteRhythmPreviewLineIdx;
                         if (rli < rhythmLines.size()) {
                             const auto& previewPairs = rhythmLines[rli].integerPairs;
-                            movingNote->rhythmIntegerPairs = previewPairs;
+                            const auto startDelta = alignedRatSubVectors(previewPairs, rhythmDragStartPairs);
                             for (auto& [nid, before] : multiMoveBefores) {
                                 auto it = region->id_to_index.find(nid);
                                 if (it == region->id_to_index.end()) continue;
                                 const size_t idx = static_cast<size_t>(it->second);
                                 if (idx >= region->notes.size() || !region->notes[idx]) continue;
                                 auto& sn = region->notes[idx];
-                                if (sn->id == movingNote->id) continue;
-                                const size_t n = std::max({rhythmDragStartPairs.size(), previewPairs.size(), sn->rhythmIntegerPairs.size()});
-                                std::vector<std::pair<int,int>> result(n, {0,1});
-                                for (size_t j = 0; j < n; ++j) {
-                                    const int dN = (j < previewPairs.size() ? previewPairs[j].first : 0);
-                                    const int dD = (j < previewPairs.size() ? std::max(1, previewPairs[j].second) : 1);
-                                    const int oN = (j < rhythmDragStartPairs.size() ? rhythmDragStartPairs[j].first : 0);
-                                    const int oD = (j < rhythmDragStartPairs.size() ? std::max(1, rhythmDragStartPairs[j].second) : 1);
-                                    const int sN = (j < sn->rhythmIntegerPairs.size() ? sn->rhythmIntegerPairs[j].first : 0);
-                                    const int sD = (j < sn->rhythmIntegerPairs.size() ? std::max(1, sn->rhythmIntegerPairs[j].second) : 1);
-                                    const long long deltaN = (long long)dN * oD - (long long)oN * dD;
-                                    const long long deltaD = (long long)dD * oD;
-                                    const long long newN = (long long)sN * deltaD + deltaN * (long long)sD;
-                                    const long long newD = (long long)sD * deltaD;
-                                    result[j] = ratNorm(newN, newD);
-                                }
-                                while (!result.empty() && result.back().first == 0) result.pop_back();
-                                sn->rhythmIntegerPairs = std::move(result);
+                                sn->rhythmIntegerPairs = alignedRatAddVectors(sn->rhythmIntegerPairs, startDelta);
+                                sn->rhythmEndIntegerPairs = alignedRatAddVectors(sn->rhythmEndIntegerPairs, startDelta);
                             }
                         }
                         movingNoteRhythmPreviewLineIdx.reset();
@@ -1363,8 +1351,16 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     }
                     if (movingNoteRhythmPreviewLineIdx) {
                         const size_t rli = *movingNoteRhythmPreviewLineIdx;
-                        if (rli < rhythmLines.size())
+                        if (rli < rhythmLines.size()) {
                             movingNote->rhythmIntegerPairs = rhythmLines[rli].integerPairs;
+                            const auto delta = alignedRatSubVectors(rhythmLines[rli].integerPairs, rhythmDragStartPairs);
+                            auto newEndPairs = alignedRatAddVectors(rhythmDragEndPairs, delta);
+                            const size_t erli = closestRhythmLineIndexForSeconds(Note::secondsFromIntegerPairs(newEndPairs));
+                            if (erli != SIZE_MAX && erli < rhythmLines.size())
+                                movingNote->rhythmEndIntegerPairs = rhythmLines[erli].integerPairs;
+                            else
+                                movingNote->rhythmEndIntegerPairs = std::move(newEndPairs);
+                        }
                         movingNoteRhythmPreviewLineIdx.reset();
                     }
                     json after = movingNote->toJSON();
@@ -1661,29 +1657,32 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                     refreshGrid = true;
                     float dX = mouseX - last_lmb_x;
                     if(dX >= dW/notesPerBar) {
+                        const auto beforeStart = stretchingNote->rhythmIntegerPairs;
+                        const auto beforeEnd = stretchingNote->rhythmEndIntegerPairs;
                         stretchElement(1);
-                        // Also stretch all other selected notes
+                        const auto startDelta = alignedRatSubVectors(stretchingNote->rhythmIntegerPairs, beforeStart);
+                        const auto endDelta = alignedRatSubVectors(stretchingNote->rhythmEndIntegerPairs, beforeEnd);
                         if (stretchingMultipleNotes) {
                             for (auto& sn : region->notes) {
                                 if (sn->id == stretchingNote->id) continue;
                                 if (!selectedNoteIds.count(sn->id)) continue;
-                                const float endSec = sn->startSeconds() + sn->durationSeconds + 0.02f;
-                                const size_t rli = closestRhythmLineIndexForSeconds(endSec);
-                                if (rli != SIZE_MAX && rli < rhythmLines.size())
-                                    sn->durationSeconds = std::max(0.02f, rhythmLines[rli].seconds - sn->startSeconds());
+                                sn->rhythmIntegerPairs = alignedRatAddVectors(sn->rhythmIntegerPairs, startDelta);
+                                sn->rhythmEndIntegerPairs = alignedRatAddVectors(sn->rhythmEndIntegerPairs, endDelta);
                             }
                         }
                         last_lmb_x += dW/notesPerBar;
                     } else if(dX <= -dW/notesPerBar) {
+                        const auto beforeStart = stretchingNote->rhythmIntegerPairs;
+                        const auto beforeEnd = stretchingNote->rhythmEndIntegerPairs;
                         stretchElement(-1);
+                        const auto startDelta = alignedRatSubVectors(stretchingNote->rhythmIntegerPairs, beforeStart);
+                        const auto endDelta = alignedRatSubVectors(stretchingNote->rhythmEndIntegerPairs, beforeEnd);
                         if (stretchingMultipleNotes) {
                             for (auto& sn : region->notes) {
                                 if (sn->id == stretchingNote->id) continue;
                                 if (!selectedNoteIds.count(sn->id)) continue;
-                                const float endSec = sn->startSeconds() + sn->durationSeconds - 0.02f;
-                                const size_t rli = closestRhythmLineIndexForSeconds(endSec);
-                                if (rli != SIZE_MAX && rli < rhythmLines.size())
-                                    sn->durationSeconds = std::max(0.02f, rhythmLines[rli].seconds - sn->startSeconds());
+                                sn->rhythmIntegerPairs = alignedRatAddVectors(sn->rhythmIntegerPairs, startDelta);
+                                sn->rhythmEndIntegerPairs = alignedRatAddVectors(sn->rhythmEndIntegerPairs, endDelta);
                             }
                         }
                         last_lmb_x -= dW/notesPerBar;
@@ -1708,7 +1707,7 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                 }
 
                 // Pitch preview: compute delta in integer pairs, apply same delta to all selected notes
-                if (movingMultipleNotes && !dragStartPairs.empty() &&
+                if (movingMultipleNotes &&
                     hoveredPitchLineIndex != SIZE_MAX && hoveredPitchLineIndex < pitchLines.size()) {
                     auto& currentPairs = pitchLines[hoveredPitchLineIndex].integerPairs;
                     size_t maxLen = std::max(dragStartPairs.size(), currentPairs.size());
@@ -1777,10 +1776,17 @@ void PianoRoll::createElement() {
         rhythmPairs = rhythmLines[rli].integerPairs;
     const int anchorHarmonic = (tuningMode == TuningMode::Harmonic && li != SIZE_MAX && li < lineStructural.size())
         ? std::max(1, lineStructural[li]) : 1;
+    std::vector<std::pair<int,int>> endPairs;
+    if (!lastRhythmDurationPairs.empty())
+        endPairs = alignedRatAddVectors(rhythmPairs, lastRhythmDurationPairs);
+    else if (rli != SIZE_MAX && rli + 1 < rhythmLines.size())
+        endPairs = rhythmLines[rli + 1].integerPairs;
+    else
+        endPairs = rhythmPairs;
     project->createNote(
         region->parentNode->id,
         rhythmPairs,
-        1.0f,
+        endPairs,
         region->id,
         region->parentNode->nm->managerPath,
         std::move(pitchPairs)
@@ -1800,6 +1806,7 @@ void PianoRoll::createElement() {
         note->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
         note->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
         note->rhythmEdoUpperVector = region->rhythmEdoUpperVector;
+        lastRhythmDurationPairs = alignedRatSubVectors(note->rhythmEndIntegerPairs, note->rhythmIntegerPairs);
         stampNoteTuning(note);
         // CreateNoteAction::doAction does not rerun stampNoteTuning on redo; persist post-stamp state on the action.
         if (project && project->um && project->um->current && project->um->current->type == CreateNote)
@@ -1891,15 +1898,24 @@ bool PianoRoll::getExistingNote() {
 
 
 float PianoRoll::getNotePosX(std::shared_ptr<Note> note) {
-    if (movingNote && movingNote.get() == note.get() && movingNoteRhythmPreviewLineIdx) {
+    if (movingNote && selectedNoteIds.count(note->id) && movingNoteRhythmPreviewLineIdx) {
         const size_t rli = *movingNoteRhythmPreviewLineIdx;
-        if (rli < rhythmLines.size())
-            return getX(rhythmLines[rli].seconds);
+        if (rli < rhythmLines.size()) {
+            const auto startDelta = alignedRatSubVectors(rhythmLines[rli].integerPairs, rhythmDragStartPairs);
+            return getX(Note::secondsFromIntegerPairs(alignedRatAddVectors(note->rhythmIntegerPairs, startDelta)));
+        }
     }
     return getX(note->startSeconds());
 }
 
 float PianoRoll::getNoteEnd(std::shared_ptr<Note> note) {
+    if (movingNote && selectedNoteIds.count(note->id) && movingNoteRhythmPreviewLineIdx) {
+        const size_t rli = *movingNoteRhythmPreviewLineIdx;
+        if (rli < rhythmLines.size()) {
+            const auto startDelta = alignedRatSubVectors(rhythmLines[rli].integerPairs, rhythmDragStartPairs);
+            return getX(Note::secondsFromIntegerPairs(alignedRatAddVectors(note->rhythmEndIntegerPairs, startDelta)));
+        }
+    }
     return getX(note->endSeconds());
 }
 
@@ -1964,12 +1980,13 @@ bool PianoRoll::getStretchingNote() {
         const int noteY = getY(noteMidiForRender(note));
 
         if ((mouseY >= noteY - noteRadius && mouseY <= (noteY + noteRadius))) {
-            if(mouseX >= notePosX - selectThresholdX/2 && mouseX <= notePosX + selectThresholdX/2) {
+            const float edgeZone = std::min(noteRadius, (noteEnd - notePosX) * 0.3f);
+            if(mouseX >= notePosX - edgeZone && mouseX <= notePosX + edgeZone) {
                 stretchingNote = note;
                 resizeDir = -1;
                 isStretchingNote = true;
                 return true;
-            } else if (mouseX >= noteEnd - selectThresholdX/2 && mouseX <= noteEnd + selectThresholdX/2) {
+            } else if (mouseX >= noteEnd - edgeZone && mouseX <= noteEnd + edgeZone) {
                 stretchingNote = note;
                 resizeDir = 1;
                 isStretchingNote = true;
@@ -1991,14 +2008,13 @@ void PianoRoll::stretchElement(int amount) {
     refreshHoveredRhythmLineIndex();
     if (hoveredRhythmLineIndex != SIZE_MAX && hoveredRhythmLineIndex < rhythmLines.size()) {
         const float lineSec = rhythmLines[hoveredRhythmLineIndex].seconds;
-        const float endSec = stretchingNote->startSeconds() + stretchingNote->durationSeconds;
-        if (resizeDir == -1 && lineSec < endSec - 0.001f) {
+        if (resizeDir == -1 && lineSec < stretchingNote->endSeconds() - 0.001f) {
             stretchingNote->rhythmIntegerPairs = rhythmLines[hoveredRhythmLineIndex].integerPairs;
-            stretchingNote->durationSeconds = std::max(0.02f, endSec - lineSec);
         } else if (resizeDir == 1 && lineSec > stretchingNote->startSeconds() + 0.001f) {
-            stretchingNote->durationSeconds = std::max(0.02f, lineSec - stretchingNote->startSeconds());
+            stretchingNote->rhythmEndIntegerPairs = rhythmLines[hoveredRhythmLineIndex].integerPairs;
         }
     }
+    lastRhythmDurationPairs = alignedRatSubVectors(stretchingNote->rhythmEndIntegerPairs, stretchingNote->rhythmIntegerPairs);
     Scroll();
 }
 
@@ -2016,7 +2032,9 @@ float PianoRoll::noteMidiForRender(const std::shared_ptr<Note>& note) const {
 
 void PianoRoll::moveNoteTime(std::shared_ptr<Note> note) {
     movingNoteDragDirty = true;
+    mouseX -= rhythmDragGrabOffsetPx;
     refreshHoveredRhythmLineIndex();
+    mouseX += rhythmDragGrabOffsetPx;
     if (hoveredRhythmLineIndex != SIZE_MAX && hoveredRhythmLineIndex < rhythmLines.size())
         movingNoteRhythmPreviewLineIdx = hoveredRhythmLineIndex;
     Scroll();
