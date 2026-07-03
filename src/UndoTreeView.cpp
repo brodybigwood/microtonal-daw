@@ -272,6 +272,11 @@ bool UndoManager::render(SDL_Renderer* renderer) {
     undoTreePendingRight = false;
     const float rowH = undoTreeRowH > 1.f ? undoTreeRowH : 20.f;
     auto viewRoot = [&]() -> ProjectAction* { return undoTreeViewRoot ? undoTreeViewRoot : head; };
+
+    // A collapsed view root renders as a lone row with its subtree hidden —
+    // useless and confusing. The root is always expanded.
+    viewRoot()->undoTreeExpanded = true;
+
     UndoTreeLayoutBox box =
         layoutUndoTreeGeom(renderer, baseRect->x, baseRect->y, baseRect->w, rowH, viewRoot());
     ProjectAction* const tipBeforeClick = current;

@@ -179,9 +179,19 @@ void UndoManager::newAction(ProjectAction* pa) {
     current->newAction(pa);
     current->last_index = pa->index;
     current = pa;
+    // Auto-expand: a new action and its ancestor chain are immediately visible
+    // in the undo tree, regardless of where the view root or the tree window
+    // state was when the action was created.
+    for (ProjectAction* n = pa; n; n = n->parent)
+        n->undoTreeExpanded = true;
     // Apply to GUI copy (active root defaults to GUI), unless already done via direct mutation.
-    if (!pa->skipInitialDo)
-        pa->doAction();
+    if (!pa->skipInitialDo) {
+        try {
+            pa->doAction();
+        } catch (const std::exception& e) {
+            std::cerr << "[undo] doAction failed (" << pa->name << "): " << e.what() << std::endl;
+        }
+    }
     // Always enqueue for audio copy replay before next DSP pass.
     if (pa->p && pa->p->processor && pa->p->processor->dspGraph) {
         ProjectAction* cap = pa;
@@ -192,7 +202,11 @@ void UndoManager::newAction(ProjectAction* pa) {
 void UndoManager::undo() {
     if (current == head) return;
     // Apply undo to GUI copy (active root is already GUI).
-    current->undoAction();
+    try {
+        current->undoAction();
+    } catch (const std::exception& e) {
+        std::cerr << "[undo] undoAction failed (" << current->name << "): " << e.what() << std::endl;
+    }
     // Enqueue for audio copy (applied before next DSP callback).
     ProjectAction* cap = current;
     enqueueAudioSync([cap]() { cap->undoAction(); });
@@ -241,7 +255,11 @@ void UndoManager::redo(int childIndex) {
         idx = static_cast<int>(current->children.size()) - 1;
     current = current->children[static_cast<size_t>(idx)];
     // Apply to GUI copy.
-    current->doAction();
+    try {
+        current->doAction();
+    } catch (const std::exception& e) {
+        std::cerr << "[undo] doAction failed (" << current->name << "): " << e.what() << std::endl;
+    }
     // Enqueue for audio copy.
     ProjectAction* cap = current;
     enqueueAudioSync([cap]() { cap->doAction(); });

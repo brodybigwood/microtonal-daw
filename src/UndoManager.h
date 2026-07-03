@@ -7,6 +7,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <iostream>
 
 class Project;
 class ArrangerNode;
@@ -132,7 +133,18 @@ struct UndoManager {
             std::lock_guard<std::mutex> lock(audioSyncMutex);
             actions.swap(pendingAudioSync);
         }
-        for (auto& fn : actions) fn();
+        // Runs on the audio thread — an escaping exception would terminate the
+        // process (e.g. replaying a VST param change when the plugin failed to
+        // load on this machine). Log and keep going.
+        for (auto& fn : actions) {
+            try {
+                fn();
+            } catch (const std::exception& e) {
+                std::cerr << "[undo] audio-sync action failed: " << e.what() << std::endl;
+            } catch (...) {
+                std::cerr << "[undo] audio-sync action failed: unknown exception" << std::endl;
+            }
+        }
     }
 
     UndoManager(Project* p) {
@@ -187,6 +199,7 @@ struct UndoManager {
     float undoTreeRowH = 20.f;
     /** Optional top of the drawn subtree; nullptr means the real undo `head`. Wheel scroll shifts this toward parent/child. */
     ProjectAction* undoTreeViewRoot = nullptr;
+
 
     bool mouseHitsRect(SDL_FRect* rect) const;
     /** Window-client hit test (`mouse_xy` vs this window): positive wheel Y scrolls deeper, negative moves view toward parent. */
