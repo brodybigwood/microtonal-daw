@@ -691,14 +691,18 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                     isStretchingNote = false;
                 } else {
                     refreshGrid = true;
-                    float dX = mouseX - last_lmb_x;
-                    if(dX >= dW/notesPerBar) {
-                        const auto beforeStart = stretchingNote->rhythmIntegerPairs;
-                        const auto beforeEnd = stretchingNote->rhythmEndIntegerPairs;
-                        stretchElement(1);
-                        const auto startDelta = alignedRatSubVectors(stretchingNote->rhythmIntegerPairs, beforeStart);
-                        const auto endDelta = alignedRatSubVectors(stretchingNote->rhythmEndIntegerPairs, beforeEnd);
+                    // Snap the dragged edge to the nearest grid line on every
+                    // motion event (no pixel-step gating).
+                    const auto beforeStart = stretchingNote->rhythmIntegerPairs;
+                    const auto beforeEnd = stretchingNote->rhythmEndIntegerPairs;
+                    stretchElement(0);
+                    const bool moved = stretchingNote->rhythmIntegerPairs != beforeStart ||
+                                       stretchingNote->rhythmEndIntegerPairs != beforeEnd;
+                    if (moved) {
+                        stretchingNoteDragDirty = true;
                         if (stretchingMultipleNotes) {
+                            const auto startDelta = alignedRatSubVectors(stretchingNote->rhythmIntegerPairs, beforeStart);
+                            const auto endDelta = alignedRatSubVectors(stretchingNote->rhythmEndIntegerPairs, beforeEnd);
                             for (auto& sn : region->notes) {
                                 if (sn->id == stretchingNote->id) continue;
                                 if (!selectedNoteIds.count(sn->id)) continue;
@@ -706,22 +710,6 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                                 sn->rhythmEndIntegerPairs = alignedRatAddVectors(sn->rhythmEndIntegerPairs, endDelta);
                             }
                         }
-                        last_lmb_x += dW/notesPerBar;
-                    } else if(dX <= -dW/notesPerBar) {
-                        const auto beforeStart = stretchingNote->rhythmIntegerPairs;
-                        const auto beforeEnd = stretchingNote->rhythmEndIntegerPairs;
-                        stretchElement(-1);
-                        const auto startDelta = alignedRatSubVectors(stretchingNote->rhythmIntegerPairs, beforeStart);
-                        const auto endDelta = alignedRatSubVectors(stretchingNote->rhythmEndIntegerPairs, beforeEnd);
-                        if (stretchingMultipleNotes) {
-                            for (auto& sn : region->notes) {
-                                if (sn->id == stretchingNote->id) continue;
-                                if (!selectedNoteIds.count(sn->id)) continue;
-                                sn->rhythmIntegerPairs = alignedRatAddVectors(sn->rhythmIntegerPairs, startDelta);
-                                sn->rhythmEndIntegerPairs = alignedRatAddVectors(sn->rhythmEndIntegerPairs, endDelta);
-                            }
-                        }
-                        last_lmb_x -= dW/notesPerBar;
                     }
                 }
 
@@ -942,6 +930,13 @@ void PianoRoll::stretchElement(int amount) {
         const float lineSec = rhythmLines[hoveredRhythmLineIndex].seconds;
         if (resizeDir == -1 && lineSec < stretchingNote->endSeconds() - 0.001f) {
             stretchingNote->rhythmIntegerPairs = rhythmLines[hoveredRhythmLineIndex].integerPairs;
+            // Dragging the start re-anchors the note onto this line: adopt the
+            // grid's rhythm temperament. End drags leave the temperament alone.
+            if (region) {
+                stretchingNote->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
+                stretchingNote->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
+                stretchingNote->rhythmEdoUpperVector = region->rhythmEdoUpperVector;
+            }
         } else if (resizeDir == 1 && lineSec > stretchingNote->startSeconds() + 0.001f) {
             stretchingNote->rhythmEndIntegerPairs = rhythmLines[hoveredRhythmLineIndex].integerPairs;
         }
