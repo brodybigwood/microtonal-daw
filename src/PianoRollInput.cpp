@@ -737,11 +737,9 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                     size_t maxLen = std::max(dragStartPairs.size(), currentPairs.size());
                     std::vector<std::pair<int,int>> deltaPairs(maxLen, {0, 1});
                     for (size_t i = 0; i < maxLen; ++i) {
-                        int sN = i < dragStartPairs.size() ? dragStartPairs[i].first : 0;
-                        int sD = i < dragStartPairs.size() ? dragStartPairs[i].second : 1;
-                        int eN = i < currentPairs.size() ? currentPairs[i].first : 0;
-                        int eD = i < currentPairs.size() ? currentPairs[i].second : 1;
-                        deltaPairs[i] = { eN * sD - sN * eD, eD * sD };
+                        auto a = i < dragStartPairs.size() ? dragStartPairs[i] : std::pair<int,int>{0, 1};
+                        auto b = i < currentPairs.size() ? currentPairs[i] : std::pair<int,int>{0, 1};
+                        deltaPairs[i] = ratSub(b, a);
                     }
                     bool allZero = true;
                     for (auto& d : deltaPairs)
@@ -752,11 +750,9 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                             size_t noteMax = std::max(sn->pitchIntegerPairs.size(), deltaPairs.size());
                             std::vector<std::pair<int,int>> preview(noteMax, {0, 1});
                             for (size_t i = 0; i < noteMax; ++i) {
-                                int nN = i < sn->pitchIntegerPairs.size() ? sn->pitchIntegerPairs[i].first : 0;
-                                int nD = i < sn->pitchIntegerPairs.size() ? sn->pitchIntegerPairs[i].second : 1;
-                                int dN = i < deltaPairs.size() ? deltaPairs[i].first : 0;
-                                int dD = i < deltaPairs.size() ? deltaPairs[i].second : 1;
-                                preview[i] = { nN * dD + dN * nD, nD * dD };
+                                auto a = i < sn->pitchIntegerPairs.size() ? sn->pitchIntegerPairs[i] : std::pair<int,int>{0, 1};
+                                auto b = i < deltaPairs.size() ? deltaPairs[i] : std::pair<int,int>{0, 1};
+                                preview[i] = ratAdd(a, b);
                             }
                             multiPitchPreviews[sn->id] = std::move(preview);
                         }
