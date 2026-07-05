@@ -490,7 +490,14 @@ VstPlugin::VstPlugin(const std::string& pluginPath) : pluginPath(pluginPath) {
 }
 
 VstPlugin::~VstPlugin() {
-    hideEditor();
+    // Clean up view resources directly — never touch the static openEditors
+    // list here, since the destructor may run on the audio thread.
+    if (view) {
+        view->removed();
+        view->release();
+        view = nullptr;
+    }
+    editorHost.reset();
     if (audioProcessor) {
         audioProcessor->setProcessing(false);
     }
@@ -508,10 +515,6 @@ VstPlugin::~VstPlugin() {
     outputBusData.clear();
     inputBuses.clear();
     outputBuses.clear();
-    if (view) {
-        view->release();
-        view = nullptr;
-    }
     hostFrame.reset();
 }
 
