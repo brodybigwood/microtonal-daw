@@ -46,6 +46,7 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         void renderContent(SDL_Renderer* r) override;
         bool handleInput(SDL_Event& e) override;
         bool handleContentInput(SDL_Event& e) override;
+        float adjustTransportSeekSec(float rawSec) override;
 
         SDL_Texture* backgroundTexture = nullptr;
         SDL_Texture* PianoTexture = nullptr;
@@ -229,7 +230,6 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         size_t hoveredPitchLineIndex = SIZE_MAX;
 
         std::vector<PianoRollPitchLine> pitchLines;
-        std::vector<RhythmGridLine> rhythmLines;
         std::vector<std::string> rhythmLineLabels;
         size_t hoveredRhythmLineIndex = SIZE_MAX;
         void updateRhythmLines();

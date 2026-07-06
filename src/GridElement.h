@@ -38,7 +38,8 @@ class GridElement {
         ElementType type;
 
         void createPos(std::vector<std::pair<int, int>> startPairs, std::vector<std::pair<int, int>> endPairs, uint16_t,
-                       int rhythmEdoSteps, std::vector<std::pair<int, int>> rhythmEdoLower, std::vector<std::pair<int, int>> rhythmEdoUpper);
+                       int rhythmEdoSteps, std::vector<std::pair<int, int>> rhythmEdoLower, std::vector<std::pair<int, int>> rhythmEdoUpper,
+                       std::vector<std::pair<int, int>> startOffsetPairs = {});
 
         static json positionToJson(const Position& pos);
         static void applyPositionFromJson(Position* pos, const json& j);

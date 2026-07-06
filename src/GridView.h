@@ -1,7 +1,9 @@
 #pragma once
 #include <vector>
+#include <string>
 #include <SDL_ttf.h>
 #include "Window.h"
+#include "PianoRollInternal.h"
 
 class Playhead;
 class Project;
@@ -34,6 +36,7 @@ class GridView : public Window {
 
         std::vector<float> lines;
         std::vector<float> times;
+        std::vector<RhythmGridLine> rhythmLines;
 
         // Shared rhythm interval preview rendering
         void renderRhythmIntervalPreviewBand(SDL_Renderer* renderer, float startSec, float endSec);
@@ -106,6 +109,7 @@ class GridView : public Window {
         virtual float getY(float) = 0;
         float getX(float);
 
+        virtual float adjustTransportSeekSec(float rawSec) { return rawSec; }
         virtual void createElement() {};
         virtual void deleteElement() {};
 

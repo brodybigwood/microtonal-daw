@@ -146,14 +146,15 @@ DeleteRegionAction::DeleteRegionAction(Project* p, std::vector<int> managerPath,
     wireDeleteRegionLambdas();
 }
 
-CreatePositionAction::CreatePositionAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID, std::vector<std::pair<int, int>> startPairs, std::vector<std::pair<int, int>> endPairs, uint16_t trackID) :
+CreatePositionAction::CreatePositionAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID, std::vector<std::pair<int, int>> startPairs, std::vector<std::pair<int, int>> endPairs, uint16_t trackID, std::vector<std::pair<int, int>> startOffsetPairs) :
         ProjectAction(p, CreatePosition),
         managerPath(std::move(managerPath)),
         nodeID(nodeID),
         elementID(elementID),
         startPairs(std::move(startPairs)),
         endPairs(std::move(endPairs)),
-        trackID(trackID) {
+        trackID(trackID),
+        startOffsetPairs(std::move(startOffsetPairs)) {
     ArrangerNode* arr = undoResolveArrangerNode(p, this->managerPath, nodeID);
     if (arr) {
         rhythmEdoSteps = arr->rhythmEdoSubdivisionSteps;
@@ -163,7 +164,8 @@ CreatePositionAction::CreatePositionAction(Project* p, std::vector<int> managerP
     doAction = [this]() {
         GridElement* ge = undoResolveGridElement(this->p, this->managerPath, this->nodeID, this->elementID);
         ge->createPos(this->startPairs, this->endPairs, this->trackID,
-                      this->rhythmEdoSteps, this->rhythmEdoLower, this->rhythmEdoUpper);
+                      this->rhythmEdoSteps, this->rhythmEdoLower, this->rhythmEdoUpper,
+                      this->startOffsetPairs);
         this->positionID = ge->positions.back()->id;
         this->name = "Create Position " + std::to_string(this->positionID);
     };

@@ -194,9 +194,7 @@ bool SongRoll::customTick(SDL_Renderer* renderer) {
         renderRhythmIntervalEndLine(renderer, endSec);
     }
 
-    if(project->processing) {
-        playHead->render(renderer, dW, scrollX);
-    }
+    playHead->render(renderer, dW, scrollX);
 
     renderMargins(renderer);
     return true;
@@ -291,12 +289,13 @@ void SongRoll::RenderGridTexture(SDL_Renderer* renderer) {
     for (const auto& rl : rhythmLines) {
         float x = getX(rl.seconds);
         if (x < 0 || x > width) continue;
+        setRenderColor(renderer, colors.grid);
         if (rl.isBeat) {
-            SDL_SetRenderDrawColor(renderer, 60, 60, 60, 255);
+            SDL_FRect lineRect{x - 1.f, 0, 2.f, static_cast<float>(height)};
+            SDL_RenderFillRect(renderer, &lineRect);
         } else {
-            setRenderColor(renderer, colors.grid);
+            SDL_RenderLine(renderer, x, 0, x, static_cast<float>(height));
         }
-        SDL_RenderLine(renderer, x, 0, x, height);
     }
 
     for (auto line : lines) {
@@ -555,7 +554,7 @@ void SongRoll::createElement() {
     }
     auto startPairs = pairsAtMouseX();
     auto endPairs = lastPositionDurationPairs.empty()
-        ? addVec(startPairs, std::vector<std::pair<int,int>>{{2,1}}) // default 4s
+        ? addVec(startPairs, std::vector<std::pair<int,int>>{{2,1}}) // default 2s
         : addVec(startPairs, lastPositionDurationPairs);
 
     auto trackID = getHoveredTrack();
@@ -568,11 +567,13 @@ void SongRoll::createElement() {
     if (elem->type == ElementType::region && track->getType() != TrackType::Notes) return;
 
     project->um->newAction(new CreatePositionAction(project, parentNode->nm->managerPath, static_cast<int>(parentNode->id),
-        static_cast<int>(id), startPairs, endPairs, static_cast<uint16_t>(trackID)));
+        static_cast<int>(id), startPairs, endPairs, static_cast<uint16_t>(trackID), lastPositionStartOffsetPairs));
 
     if (elem && !elem->positions.empty()) {
         auto* pos = elem->positions.back();
         lastPositionDurationPairs = subVec(pos->rhythmEndIntegerPairs, pos->rhythmIntegerPairs);
+        lastPositionStartOffsetPairs = pos->startOffsetPairs;
+        em->currentElement = id;
     }
 
     refreshGrid = true;
@@ -599,11 +600,13 @@ void SongRoll::doubleClick() {
             auto* cra = new CreateRegionAction(project, parentNode->nm->managerPath, static_cast<int>(parentNode->id));
             project->um->newAction(cra);
             project->um->newAction(new CreatePositionAction(project, parentNode->nm->managerPath, static_cast<int>(parentNode->id),
-                cra->regionID, startPairs, endPairs, static_cast<uint16_t>(trackID)));
+                cra->regionID, startPairs, endPairs, static_cast<uint16_t>(trackID), lastPositionStartOffsetPairs));
             auto* elem = em->getElement(cra->regionID);
             if (elem && !elem->positions.empty()) {
                 auto* pos = elem->positions.back();
                 lastPositionDurationPairs = subVec(pos->rhythmEndIntegerPairs, pos->rhythmIntegerPairs);
+                lastPositionStartOffsetPairs = pos->startOffsetPairs;
+                em->currentElement = cra->regionID;
             }
             refreshGrid = true;
         }
@@ -797,6 +800,9 @@ void SongRoll::clickMouse(SDL_Event& e) {
                             static_cast<int>(parentNode->id), static_cast<int>(el->id), movingPosition->id, std::move(before),
                             std::move(after)));
                         lastPositionDurationPairs = subVec(movingPosition->rhythmEndIntegerPairs, movingPosition->rhythmIntegerPairs);
+                        lastPositionStartOffsetPairs = movingPosition->startOffsetPairs;
+                        if (el)
+                            em->currentElement = static_cast<int>(el->id);
                         refreshGrid = true;
                     }
                 }

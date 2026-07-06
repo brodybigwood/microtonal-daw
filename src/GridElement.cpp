@@ -8,13 +8,14 @@ GridElement::GridElement(Project* p, ArrangerNode* n) : project(p), parentNode(n
 }
 
 void GridElement::createPos(std::vector<std::pair<int, int>> startPairs, std::vector<std::pair<int, int>> endPairs, uint16_t trackID,
-                            int rhythmEdoSteps, std::vector<std::pair<int, int>> rhythmEdoLower, std::vector<std::pair<int, int>> rhythmEdoUpper) {
+                            int rhythmEdoSteps, std::vector<std::pair<int, int>> rhythmEdoLower, std::vector<std::pair<int, int>> rhythmEdoUpper,
+                            std::vector<std::pair<int, int>> startOffsetPairs) {
     uint16_t pid = pos_id_pool->newID();
 
     Position* pos = new Position{
         startPairs,
         endPairs,
-        std::vector<std::pair<int, int>>{},
+        std::move(startOffsetPairs),
         trackID,
         static_cast<int>(pid),
         this,

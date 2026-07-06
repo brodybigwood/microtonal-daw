@@ -7,6 +7,8 @@ class GridView;
 
 class Transport {
     public:
+        static constexpr float kTimelineHeight = 18.f;
+
         Transport(GridView*);
         ~Transport();
 
@@ -20,4 +22,7 @@ class Transport {
 
         void moveMouse(float, float);
         void clickMouse();
+        void handleMotion();
+
+        bool draggingTimeline = false;
 };

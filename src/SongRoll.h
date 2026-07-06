@@ -91,7 +91,6 @@ class SongRoll : public GridView{
 
         // Rhythm grid — same model as PianoRoll
         void RenderGridTexture(SDL_Renderer* renderer) override;
-        std::vector<RhythmGridLine> rhythmLines;
         std::vector<std::string> rhythmLineLabels;
         size_t hoveredRhythmLineIndex = SIZE_MAX;
         void updateRhythmLines();
@@ -117,8 +116,9 @@ class SongRoll : public GridView{
         std::vector<std::pair<int, int>> positionDragEndPairs;
         float positionDragGrabOffsetPx = 0.f;
 
-        // Last created position duration, for consecutive placements
+        // Last created position state, for consecutive placements
         std::vector<std::pair<int, int>> lastPositionDurationPairs;
+        std::vector<std::pair<int, int>> lastPositionStartOffsetPairs;
 
     private:
         int timelineHoverElementId = -1;

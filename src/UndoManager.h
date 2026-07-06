@@ -378,13 +378,14 @@ struct CreatePositionAction : ProjectAction {
     int elementID = 0;
     std::vector<std::pair<int, int>> startPairs;
     std::vector<std::pair<int, int>> endPairs;
+    std::vector<std::pair<int, int>> startOffsetPairs;
     uint16_t trackID = 0;
     int positionID = -1;
     int rhythmEdoSteps = 1;
     std::vector<std::pair<int, int>> rhythmEdoLower;
     std::vector<std::pair<int, int>> rhythmEdoUpper;
 
-    CreatePositionAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID, std::vector<std::pair<int, int>> startPairs, std::vector<std::pair<int, int>> endPairs, uint16_t trackID);
+    CreatePositionAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID, std::vector<std::pair<int, int>> startPairs, std::vector<std::pair<int, int>> endPairs, uint16_t trackID, std::vector<std::pair<int, int>> startOffsetPairs = {});
 };
 
 struct SongRollRhythmEdoAction : ProjectAction {

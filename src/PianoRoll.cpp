@@ -110,6 +110,25 @@ bool PianoRoll::handleInput(SDL_Event& e) {
     return GridView::handleInput(e) || consumed;
 }
 
+float PianoRoll::adjustTransportSeekSec(float rawSec) {
+    if (!region || region->positions.empty()) return rawSec;
+    // Find the position whose playhead is closest to mouseX.
+    double curEff = project->effectiveTime.load();
+    float bestDist = FLT_MAX;
+    float bestOffset = 0.f;
+    for (auto* pos : region->positions) {
+        float posStart = Note::secondsFromIntegerPairs(pos->rhythmIntegerPairs);
+        float off = Note::secondsFromIntegerPairs(pos->startOffsetPairs);
+        float phX = static_cast<float>(curEff - static_cast<double>(posStart) + static_cast<double>(off)) * dW + leftMargin - scrollX;
+        float dist = std::abs(mouseX - phX);
+        if (dist < bestDist) {
+            bestDist = dist;
+            bestOffset = posStart - off;
+        }
+    }
+    return rawSec + bestOffset;
+}
+
 void PianoRoll::renderContent(SDL_Renderer* r) {
     pianoRollSyncCoords(this);
     customTick(r);
@@ -152,12 +171,12 @@ void PianoRoll::renderPianoRollGridTexture(SDL_Renderer* renderer) {
     for (const auto& rl : rhythmLines) {
         float x = getX(rl.seconds);
         if (x < leftMargin) continue;
+        setRenderColor(renderer, colors.grid);
         if (rl.isBeat) {
-            SDL_SetRenderDrawColor(renderer, 60, 60, 60, 255);
-            SDL_RenderLine(renderer, x, 0, x, height);
+            SDL_FRect lineRect{x - 1.f, 0, 2.f, static_cast<float>(height)};
+            SDL_RenderFillRect(renderer, &lineRect);
         } else {
-            setRenderColor(renderer, colors.grid);
-            SDL_RenderLine(renderer, x, 0, x, height);
+            SDL_RenderLine(renderer, x, 0, x, static_cast<float>(height));
         }
     }
 
@@ -306,12 +325,12 @@ bool PianoRoll::customTick(SDL_Renderer* renderer) {
     SDL_RenderTexture(renderer, gridTexture, nullptr, dstRect);
     SDL_RenderTexture(renderer, NotesTexture, nullptr, dstRect);
 
-    if(project->processing) {
-       for(auto pos : region->positions) {
-           float posStart = Note::secondsFromIntegerPairs(pos->rhythmIntegerPairs);
-           float off = Note::secondsFromIntegerPairs(pos->startOffsetPairs);
-           playHead->render(renderer, dW, scrollX + (posStart - off) * dW);
-        }
+    transport->render(renderer);
+
+    for(auto pos : region->positions) {
+        float posStart = Note::secondsFromIntegerPairs(pos->rhythmIntegerPairs);
+        float off = Note::secondsFromIntegerPairs(pos->startOffsetPairs);
+        playHead->render(renderer, dW, scrollX + (posStart - off) * dW);
     }
 
     SDL_RenderTexture(renderer, PianoTexture, nullptr, dstRect);
@@ -326,8 +345,6 @@ bool PianoRoll::customTick(SDL_Renderer* renderer) {
         const float endSec = selectingRhythmInterval ? rhythmIntervalEndSec : rhythmDialogFrozenEndSec;
         renderRhythmIntervalEndLine(renderer, endSec);
     }
-
-    transport->render(renderer);
 
     SDL_FRect bottomRect{
         dstRect->x,
