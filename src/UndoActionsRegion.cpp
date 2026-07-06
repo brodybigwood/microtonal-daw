@@ -146,16 +146,24 @@ DeleteRegionAction::DeleteRegionAction(Project* p, std::vector<int> managerPath,
     wireDeleteRegionLambdas();
 }
 
-CreatePositionAction::CreatePositionAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID, fract start, uint16_t trackID) :
+CreatePositionAction::CreatePositionAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID, std::vector<std::pair<int, int>> startPairs, std::vector<std::pair<int, int>> endPairs, uint16_t trackID) :
         ProjectAction(p, CreatePosition),
         managerPath(std::move(managerPath)),
         nodeID(nodeID),
         elementID(elementID),
-        start(std::move(start)),
+        startPairs(std::move(startPairs)),
+        endPairs(std::move(endPairs)),
         trackID(trackID) {
+    ArrangerNode* arr = undoResolveArrangerNode(p, this->managerPath, nodeID);
+    if (arr) {
+        rhythmEdoSteps = arr->rhythmEdoSubdivisionSteps;
+        rhythmEdoLower = arr->rhythmEdoLowerVector;
+        rhythmEdoUpper = arr->rhythmEdoUpperVector;
+    }
     doAction = [this]() {
         GridElement* ge = undoResolveGridElement(this->p, this->managerPath, this->nodeID, this->elementID);
-        ge->createPos(this->start, this->trackID);
+        ge->createPos(this->startPairs, this->endPairs, this->trackID,
+                      this->rhythmEdoSteps, this->rhythmEdoLower, this->rhythmEdoUpper);
         this->positionID = ge->positions.back()->id;
         this->name = "Create Position " + std::to_string(this->positionID);
     };
@@ -163,6 +171,46 @@ CreatePositionAction::CreatePositionAction(Project* p, std::vector<int> managerP
         GridElement* ge = undoResolveGridElement(this->p, this->managerPath, this->nodeID, this->elementID);
         if (!ge->removePositionById(this->positionID))
             throw std::runtime_error("CreatePositionAction::undoAction: position id missing");
+    };
+}
+
+SongRollRhythmEdoAction::SongRollRhythmEdoAction(Project* p, std::vector<int> managerPath, int nodeID, json before, json after) :
+        ProjectAction(p, SongRollRhythmEdo),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        before(std::move(before)),
+        after(std::move(after)) {
+    skipInitialDo = true;
+    name = "SongRoll Rhythm EDO";
+    doAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        auto* node = dynamic_cast<ArrangerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!node) return;
+        node->rhythmEdoSubdivisionSteps = this->after["steps"].get<int>();
+        node->rhythmEdoLowerVector.clear();
+        for (const auto& el : this->after["lower"])
+            if (el.is_array() && el.size() >= 2)
+                node->rhythmEdoLowerVector.push_back({el[0].get<int>(), el[1].get<int>()});
+        node->rhythmEdoUpperVector.clear();
+        for (const auto& el : this->after["upper"])
+            if (el.is_array() && el.size() >= 2)
+                node->rhythmEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
+        if (node->sl) node->sl->updateRhythmLines();
+    };
+    undoAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        auto* node = dynamic_cast<ArrangerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!node) return;
+        node->rhythmEdoSubdivisionSteps = this->before["steps"].get<int>();
+        node->rhythmEdoLowerVector.clear();
+        for (const auto& el : this->before["lower"])
+            if (el.is_array() && el.size() >= 2)
+                node->rhythmEdoLowerVector.push_back({el[0].get<int>(), el[1].get<int>()});
+        node->rhythmEdoUpperVector.clear();
+        for (const auto& el : this->before["upper"])
+            if (el.is_array() && el.size() >= 2)
+                node->rhythmEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
+        if (node->sl) node->sl->updateRhythmLines();
     };
 }
 

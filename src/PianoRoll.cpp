@@ -300,13 +300,7 @@ bool PianoRoll::customTick(SDL_Renderer* renderer) {
     if (showRhythmIntervalPreview) {
         const float startSec = selectingRhythmInterval ? rhythmIntervalStartSec : rhythmDialogFrozenStartSec;
         const float endSec = selectingRhythmInterval ? rhythmIntervalEndSec : rhythmDialogFrozenEndSec;
-        const float xLeft = std::min(getX(startSec), getX(endSec));
-        const float xRight = std::max(getX(startSec), getX(endSec));
-        SDL_FRect band{dstRect->x + xLeft, dstRect->y + topMargin, std::max(1.0f, xRight - xLeft), height - topMargin - bottomMargin};
-        SDL_SetRenderDrawColor(renderer, 45, 110, 210, 32);
-        SDL_RenderFillRect(renderer, &band);
-        SDL_SetRenderDrawColor(renderer, 70, 150, 235, 78);
-        SDL_RenderRect(renderer, &band);
+        renderRhythmIntervalPreviewBand(renderer, startSec, endSec);
     }
 
     SDL_RenderTexture(renderer, gridTexture, nullptr, dstRect);
@@ -314,7 +308,9 @@ bool PianoRoll::customTick(SDL_Renderer* renderer) {
 
     if(project->processing) {
        for(auto pos : region->positions) {
-           playHead->render(renderer, dW, scrollX + (float)pos->start * dW);
+           float posStart = Note::secondsFromIntegerPairs(pos->rhythmIntegerPairs);
+           float off = Note::secondsFromIntegerPairs(pos->startOffsetPairs);
+           playHead->render(renderer, dW, scrollX + (posStart - off) * dW);
         }
     }
 
@@ -328,9 +324,7 @@ bool PianoRoll::customTick(SDL_Renderer* renderer) {
 
     if (showRhythmIntervalPreview) {
         const float endSec = selectingRhythmInterval ? rhythmIntervalEndSec : rhythmDialogFrozenEndSec;
-        const float xEnd = getX(endSec);
-        SDL_SetRenderDrawColor(renderer, 65, 190, 240, 128);
-        SDL_RenderLine(renderer, dstRect->x + xEnd, dstRect->y + topMargin, dstRect->x + xEnd, dstRect->y + height - bottomMargin);
+        renderRhythmIntervalEndLine(renderer, endSec);
     }
 
     transport->render(renderer);
@@ -525,8 +519,8 @@ float PianoRoll::getNotePosX(std::shared_ptr<Note> note) {
     if (movingNote && (selectedNoteIds.count(note->id) || movingNote.get() == note.get()) && movingNoteRhythmPreviewLineIdx) {
         const size_t rli = *movingNoteRhythmPreviewLineIdx;
         if (rli < rhythmLines.size()) {
-            const auto startDelta = alignedRatSubVectors(rhythmLines[rli].integerPairs, rhythmDragStartPairs);
-            return getX(Note::secondsFromIntegerPairs(alignedRatAddVectors(note->rhythmIntegerPairs, startDelta)));
+            const auto startDelta = subVec(rhythmLines[rli].integerPairs, rhythmDragStartPairs);
+            return getX(Note::secondsFromIntegerPairs(addVec(note->rhythmIntegerPairs, startDelta)));
         }
     }
     return getX(note->startSeconds());
@@ -536,8 +530,8 @@ float PianoRoll::getNoteEnd(std::shared_ptr<Note> note) {
     if (movingNote && (selectedNoteIds.count(note->id) || movingNote.get() == note.get()) && movingNoteRhythmPreviewLineIdx) {
         const size_t rli = *movingNoteRhythmPreviewLineIdx;
         if (rli < rhythmLines.size()) {
-            const auto startDelta = alignedRatSubVectors(rhythmLines[rli].integerPairs, rhythmDragStartPairs);
-            return getX(Note::secondsFromIntegerPairs(alignedRatAddVectors(note->rhythmEndIntegerPairs, startDelta)));
+            const auto startDelta = subVec(rhythmLines[rli].integerPairs, rhythmDragStartPairs);
+            return getX(Note::secondsFromIntegerPairs(addVec(note->rhythmEndIntegerPairs, startDelta)));
         }
     }
     return getX(note->endSeconds());

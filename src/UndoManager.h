@@ -52,7 +52,8 @@ enum ActionType {
     TogglePianoRollWindow = 31,
     ReassignNodeConnection = 32,
     RemoveArrangerTrack = 33,
-    MoveMultipleNotes = 34
+    MoveMultipleNotes = 34,
+    SongRollRhythmEdo = 35
 };
 
 
@@ -375,11 +376,24 @@ struct CreatePositionAction : ProjectAction {
     std::vector<int> managerPath;
     int nodeID = 0;
     int elementID = 0;
-    fract start;
+    std::vector<std::pair<int, int>> startPairs;
+    std::vector<std::pair<int, int>> endPairs;
     uint16_t trackID = 0;
     int positionID = -1;
+    int rhythmEdoSteps = 1;
+    std::vector<std::pair<int, int>> rhythmEdoLower;
+    std::vector<std::pair<int, int>> rhythmEdoUpper;
 
-    CreatePositionAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID, fract start, uint16_t trackID);
+    CreatePositionAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID, std::vector<std::pair<int, int>> startPairs, std::vector<std::pair<int, int>> endPairs, uint16_t trackID);
+};
+
+struct SongRollRhythmEdoAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID;
+    json before;
+    json after;
+
+    SongRollRhythmEdoAction(Project* p, std::vector<int> managerPath, int nodeID, json before, json after);
 };
 
 struct DeletePositionAction : ProjectAction {

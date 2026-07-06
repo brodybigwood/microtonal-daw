@@ -1,8 +1,7 @@
 #pragma once
 #include <vector>
-#include "fract.h"
+#include <utility>
 #include <SDL3/SDL.h>
-class fract;
 #include "idManager.h"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
@@ -17,7 +16,7 @@ class ArrangerNode;
 
 class GridElement {
     public:
-    
+
         Project* project;
         ArrangerNode* parentNode;
 
@@ -25,18 +24,21 @@ class GridElement {
         virtual ~GridElement();
 
         struct Position {
-            fract startOffset;
-            fract start;
-            fract end;
-            fract length;
+            std::vector<std::pair<int, int>> rhythmIntegerPairs;
+            std::vector<std::pair<int, int>> rhythmEndIntegerPairs;
+            std::vector<std::pair<int, int>> startOffsetPairs;
             uint16_t trackID;
             int id;
             GridElement* element = nullptr;
+            int rhythmEdoSubdivisionSteps = 1;
+            std::vector<std::pair<int, int>> rhythmEdoLowerVector;
+            std::vector<std::pair<int, int>> rhythmEdoUpperVector;
         };
 
         ElementType type;
 
-        void createPos(fract, uint16_t);
+        void createPos(std::vector<std::pair<int, int>> startPairs, std::vector<std::pair<int, int>> endPairs, uint16_t,
+                       int rhythmEdoSteps, std::vector<std::pair<int, int>> rhythmEdoLower, std::vector<std::pair<int, int>> rhythmEdoUpper);
 
         static json positionToJson(const Position& pos);
         static void applyPositionFromJson(Position* pos, const json& j);

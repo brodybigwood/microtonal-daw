@@ -23,6 +23,11 @@ class ArrangerNode : public Node {
         TrackManager* tracks = nullptr;
         ElementManager* elements = nullptr;
 
+        // Rhythm EDO — same model as Region
+        int rhythmEdoSubdivisionSteps = 1;
+        std::vector<std::pair<int, int>> rhythmEdoLowerVector; // default empty = time 0
+        std::vector<std::pair<int, int>> rhythmEdoUpperVector = {{1,1}}; // default = 1 second
+
         json extraSerialize() override;
         void extraDeSerialize(const json&) override;
 

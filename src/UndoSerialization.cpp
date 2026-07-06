@@ -217,8 +217,16 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
             break;
         case CreatePosition: {
             const auto managerPath = j.at("managerPath").get<std::vector<int>>();
+            auto readPairs = [](const json& j) {
+                std::vector<std::pair<int,int>> out;
+                for (const auto& el : j)
+                    if (el.is_array() && el.size() >= 2)
+                        out.push_back({el[0].get<int>(), el[1].get<int>()});
+                return out;
+            };
             auto cpp = new CreatePositionAction(p, managerPath, j.at("nodeID").get<int>(), j.at("elementID").get<int>(),
-                fract::fromJSON(j.at("start")), static_cast<uint16_t>(j.at("trackID").get<int>()));
+                readPairs(j.at("startPairs")), readPairs(j.value("endPairs", json::array())),
+                static_cast<uint16_t>(j.at("trackID").get<int>()));
             cpp->positionID = j.at("positionID").get<int>();
             pa = cpp;
             break;
@@ -278,6 +286,10 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
                 j.value("zOrder", 0), j.at("open").get<bool>());
             break;
         }
+        case SongRollRhythmEdo:
+            pa = new SongRollRhythmEdoAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(), j.at("before"), j.at("after"));
+            break;
         default:
             throw std::runtime_error("invalid undo action type in save");
     }
@@ -549,7 +561,12 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["managerPath"] = cp->managerPath;
             j["nodeID"] = cp->nodeID;
             j["elementID"] = cp->elementID;
-            j["start"] = cp->start.toJSON();
+            j["startPairs"] = json::array();
+            for (const auto& pr : cp->startPairs)
+                j["startPairs"].push_back(json::array({pr.first, pr.second}));
+            j["endPairs"] = json::array();
+            for (const auto& pr : cp->endPairs)
+                j["endPairs"].push_back(json::array({pr.first, pr.second}));
             j["trackID"] = cp->trackID;
             j["positionID"] = cp->positionID;
             break;
@@ -649,6 +666,14 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["h"] = tw->h;
             j["zOrder"] = tw->zOrder;
             j["open"] = tw->open;
+            break;
+        }
+        case SongRollRhythmEdo: {
+            auto* sr = static_cast<SongRollRhythmEdoAction*>(pa);
+            j["managerPath"] = sr->managerPath;
+            j["nodeID"] = sr->nodeID;
+            j["before"] = sr->before;
+            j["after"] = sr->after;
             break;
         }
         default:

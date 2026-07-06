@@ -7,6 +7,9 @@
 #include "AudioManager.h"
 #include "TrackManager.h"
 #include "AudioClip.h"
+#include "Note.h"
+#include "NodeManager.h"
+#include "nodes/arranger/arranger.h"
 
 ElementManager::~ElementManager() {
     for (auto e : elements) {
@@ -47,7 +50,7 @@ void ElementManager::process(int bufferSize) {
     for (auto* element : elements)
         for (auto position : element->positions) {
             auto& pos = *position;
-            const float regTimeSec = (float)pos.start * 60.0f / project->tempo;
+            const float regTimeSec = Note::secondsFromIntegerPairs(pos.rhythmIntegerPairs);
 
             Track* track = tm->getTrack(pos.trackID);
             auto& dispatched = track->dispatched;
@@ -69,7 +72,7 @@ void ElementManager::process(int bufferSize) {
                             break;
                         }
                         auto* region = static_cast<Region*>(element);
-                        const float trim = static_cast<float>(pos.startOffset) * 60.0f / project->tempo;
+                        const float trim = Note::secondsFromIntegerPairs(pos.startOffsetPairs);
                         for (auto& note : region->notes) {
                             float start = note->startSeconds() + regTimeSec - trim;
                             float end = note->endSeconds() + regTimeSec - trim;
@@ -118,9 +121,9 @@ void ElementManager::process(int bufferSize) {
                         if (!project->isPlaying.load()) break;
                         if (!(*track->buffer)) break;
 
-                        const double localBeats = time - static_cast<double>(pos.start);
-                        const double fileBeats = localBeats + static_cast<double>(pos.startOffset);
-                        int readIdx = project->beatsToSamples(static_cast<float>(fileBeats));
+                        const double localSec = time - static_cast<double>(Note::secondsFromIntegerPairs(pos.rhythmIntegerPairs));
+                        const double fileSec = localSec + static_cast<double>(Note::secondsFromIntegerPairs(pos.startOffsetPairs));
+                        int readIdx = static_cast<int>(fileSec * AudioManager::instance()->sampleRate);
                         if (readIdx < 0) break;
                         AudioClip* ac = static_cast<AudioClip*>(element);
                         float* rbuffer = ac->buffer;
@@ -179,7 +182,10 @@ void ElementManager::fromJSON(json j) {
 }
 
 uint16_t ElementManager::getIndex(uint16_t id) {
-    return ids[id];
+    auto it = ids.find(id);
+    if (it == ids.end())
+        throw std::runtime_error("ElementManager::getIndex: unknown id " + std::to_string(id));
+    return it->second;
 }
 
 Region* ElementManager::newRegion() {
@@ -369,7 +375,7 @@ bool ElementManager::handleInput(SDL_Event& e) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             if (e.button.button == SDL_BUTTON_LEFT) {
                 if(hoverNew) {
-                    newRegion();
+                    project->um->newAction(new CreateRegionAction(project, parentNode->nm->managerPath, static_cast<int>(parentNode->id)));
                     break;
                 }
                 if(hoveredElement != -1) {

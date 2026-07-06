@@ -31,7 +31,7 @@ GridView::GridView(SDL_FRect* rect, float leftMargin, Window* w, Project* p) :
     window = w->window;
     renderer = w->renderer;
 
-    this->playHead = new Playhead(&gridRect, dstRect, startTime, project);
+    this->playHead = new Playhead(&gridRect, dstRect, project);
     this->transport = new Transport(this);
 }
 
@@ -47,7 +47,6 @@ void GridView::createGridRect() {
 GridView::~GridView() {
     delete playHead;
     delete transport;
-    delete startTime;
 }
 
 bool GridView::tick(SDL_Renderer* renderer) {
@@ -159,6 +158,22 @@ void GridView::RenderGridTexture(SDL_Renderer* renderer) {
     SDL_SetRenderTarget(renderer, target);
 }
 
+void GridView::renderRhythmIntervalPreviewBand(SDL_Renderer* renderer, float startSec, float endSec) {
+    const float xLeft = std::min(getX(startSec), getX(endSec));
+    const float xRight = std::max(getX(startSec), getX(endSec));
+    SDL_FRect band{dstRect->x + xLeft, dstRect->y + topMargin, std::max(1.0f, xRight - xLeft), height - topMargin - bottomMargin};
+    SDL_SetRenderDrawColor(renderer, 45, 110, 210, 32);
+    SDL_RenderFillRect(renderer, &band);
+    SDL_SetRenderDrawColor(renderer, 70, 150, 235, 78);
+    SDL_RenderRect(renderer, &band);
+}
+
+void GridView::renderRhythmIntervalEndLine(SDL_Renderer* renderer, float endSec) {
+    const float xEnd = getX(endSec);
+    SDL_SetRenderDrawColor(renderer, 65, 190, 240, 128);
+    SDL_RenderLine(renderer, dstRect->x + xEnd, dstRect->y + topMargin, dstRect->x + xEnd, dstRect->y + height - bottomMargin);
+}
+
 void GridView::setRenderColor(SDL_Renderer* renderer, uint8_t code[4]) {
     SDL_SetRenderDrawColor(renderer,
                            code[0],
@@ -181,8 +196,8 @@ void GridView::toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar) {
     }
 }
 
-fract GridView::getHoveredTime() {
-    return fract(std::floor((mouseX+scrollX-leftMargin)/(dW / notesPerBar)),notesPerBar);
+float GridView::getHoveredTimeSec() {
+    return (mouseX + scrollX - leftMargin) / dW;
 }
 
 float GridView::getX(float time) {

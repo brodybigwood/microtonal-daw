@@ -9,6 +9,7 @@
 #include "EmbeddedWindow.h"
 #include "Region.h"
 #include "Note.h"
+#include "PianoRollInternal.h"
 #include "fract.h"
 #include "styles.h"
 #include "Project.h"
@@ -24,12 +25,7 @@ struct PianoRollPitchLine {
     explicit PianoRollPitchLine(float m) : midi(m), integerPairs{{1, 1}} {}
 };
 
-struct PianoRollRhythmLine {
-    float seconds = 0.f;
-    std::vector<std::pair<int, int>> integerPairs;
-    bool isBeat = false;
-    explicit PianoRollRhythmLine(float s) : seconds(s) {}
-};
+// PianoRollRhythmLine -> RhythmGridLine defined in PianoRollInternal.h
 
 class PianoRoll : public GridView, public EmbeddedWindow {
 
@@ -233,7 +229,7 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         size_t hoveredPitchLineIndex = SIZE_MAX;
 
         std::vector<PianoRollPitchLine> pitchLines;
-        std::vector<PianoRollRhythmLine> rhythmLines;
+        std::vector<RhythmGridLine> rhythmLines;
         std::vector<std::string> rhythmLineLabels;
         size_t hoveredRhythmLineIndex = SIZE_MAX;
         void updateRhythmLines();

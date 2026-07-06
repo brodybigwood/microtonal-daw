@@ -343,15 +343,20 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                         const size_t rli = *movingNoteRhythmPreviewLineIdx;
                         if (rli < rhythmLines.size()) {
                             const auto& previewPairs = rhythmLines[rli].integerPairs;
-                            const auto startDelta = alignedRatSubVectors(previewPairs, rhythmDragStartPairs);
+                            const auto startDelta = subVec(previewPairs, rhythmDragStartPairs);
                             for (auto& [nid, before] : multiMoveBefores) {
                                 auto it = region->id_to_index.find(nid);
                                 if (it == region->id_to_index.end()) continue;
                                 const size_t idx = static_cast<size_t>(it->second);
                                 if (idx >= region->notes.size() || !region->notes[idx]) continue;
                                 auto& sn = region->notes[idx];
-                                sn->rhythmIntegerPairs = alignedRatAddVectors(sn->rhythmIntegerPairs, startDelta);
-                                sn->rhythmEndIntegerPairs = alignedRatAddVectors(sn->rhythmEndIntegerPairs, startDelta);
+                                sn->rhythmIntegerPairs = addVec(sn->rhythmIntegerPairs, startDelta);
+                                sn->rhythmEndIntegerPairs = addVec(sn->rhythmEndIntegerPairs, startDelta);
+                                if (region) {
+                                    sn->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
+                                    sn->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
+                                    sn->rhythmEdoUpperVector = region->rhythmEdoUpperVector;
+                                }
                             }
                         }
                         movingNoteRhythmPreviewLineIdx.reset();
@@ -389,13 +394,18 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                         const size_t rli = *movingNoteRhythmPreviewLineIdx;
                         if (rli < rhythmLines.size()) {
                             movingNote->rhythmIntegerPairs = rhythmLines[rli].integerPairs;
-                            const auto delta = alignedRatSubVectors(rhythmLines[rli].integerPairs, rhythmDragStartPairs);
-                            auto newEndPairs = alignedRatAddVectors(rhythmDragEndPairs, delta);
+                            const auto delta = subVec(rhythmLines[rli].integerPairs, rhythmDragStartPairs);
+                            auto newEndPairs = addVec(rhythmDragEndPairs, delta);
                             const size_t erli = closestRhythmLineIndexForSeconds(Note::secondsFromIntegerPairs(newEndPairs));
                             if (erli != SIZE_MAX && erli < rhythmLines.size())
                                 movingNote->rhythmEndIntegerPairs = rhythmLines[erli].integerPairs;
                             else
                                 movingNote->rhythmEndIntegerPairs = std::move(newEndPairs);
+                            if (region) {
+                                movingNote->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
+                                movingNote->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
+                                movingNote->rhythmEdoUpperVector = region->rhythmEdoUpperVector;
+                            }
                         }
                         movingNoteRhythmPreviewLineIdx.reset();
                     }
@@ -701,13 +711,16 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                     if (moved) {
                         stretchingNoteDragDirty = true;
                         if (stretchingMultipleNotes) {
-                            const auto startDelta = alignedRatSubVectors(stretchingNote->rhythmIntegerPairs, beforeStart);
-                            const auto endDelta = alignedRatSubVectors(stretchingNote->rhythmEndIntegerPairs, beforeEnd);
+                            const auto startDelta = subVec(stretchingNote->rhythmIntegerPairs, beforeStart);
+                            const auto endDelta = subVec(stretchingNote->rhythmEndIntegerPairs, beforeEnd);
                             for (auto& sn : region->notes) {
                                 if (sn->id == stretchingNote->id) continue;
                                 if (!selectedNoteIds.count(sn->id)) continue;
-                                sn->rhythmIntegerPairs = alignedRatAddVectors(sn->rhythmIntegerPairs, startDelta);
-                                sn->rhythmEndIntegerPairs = alignedRatAddVectors(sn->rhythmEndIntegerPairs, endDelta);
+                                sn->rhythmIntegerPairs = addVec(sn->rhythmIntegerPairs, startDelta);
+                                sn->rhythmEndIntegerPairs = addVec(sn->rhythmEndIntegerPairs, endDelta);
+                                sn->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
+                                sn->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
+                                sn->rhythmEdoUpperVector = region->rhythmEdoUpperVector;
                             }
                         }
                     }
@@ -798,7 +811,7 @@ void PianoRoll::createElement() {
         ? std::max(1, lineStructural[li]) : 1;
     std::vector<std::pair<int,int>> endPairs;
     if (!lastRhythmDurationPairs.empty())
-        endPairs = alignedRatAddVectors(rhythmPairs, lastRhythmDurationPairs);
+        endPairs = addVec(rhythmPairs, lastRhythmDurationPairs);
     else if (rli != SIZE_MAX && rli + 1 < rhythmLines.size())
         endPairs = rhythmLines[rli + 1].integerPairs;
     else
@@ -826,7 +839,7 @@ void PianoRoll::createElement() {
         note->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
         note->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
         note->rhythmEdoUpperVector = region->rhythmEdoUpperVector;
-        lastRhythmDurationPairs = alignedRatSubVectors(note->rhythmEndIntegerPairs, note->rhythmIntegerPairs);
+        lastRhythmDurationPairs = subVec(note->rhythmEndIntegerPairs, note->rhythmIntegerPairs);
         stampNoteTuning(note);
         // CreateNoteAction::doAction does not rerun stampNoteTuning on redo; persist post-stamp state on the action.
         if (project && project->um && project->um->current && project->um->current->type == CreateNote)
@@ -926,8 +939,7 @@ void PianoRoll::stretchElement(int amount) {
         const float lineSec = rhythmLines[hoveredRhythmLineIndex].seconds;
         if (resizeDir == -1 && lineSec < stretchingNote->endSeconds() - 0.001f) {
             stretchingNote->rhythmIntegerPairs = rhythmLines[hoveredRhythmLineIndex].integerPairs;
-            // Dragging the start re-anchors the note onto this line: adopt the
-            // grid's rhythm temperament. End drags leave the temperament alone.
+            // Re-anchor the note onto this line: adopt the grid's rhythm temperament.
             if (region) {
                 stretchingNote->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
                 stretchingNote->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
@@ -935,9 +947,14 @@ void PianoRoll::stretchElement(int amount) {
             }
         } else if (resizeDir == 1 && lineSec > stretchingNote->startSeconds() + 0.001f) {
             stretchingNote->rhythmEndIntegerPairs = rhythmLines[hoveredRhythmLineIndex].integerPairs;
+            if (region) {
+                stretchingNote->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
+                stretchingNote->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
+                stretchingNote->rhythmEdoUpperVector = region->rhythmEdoUpperVector;
+            }
         }
     }
-    lastRhythmDurationPairs = alignedRatSubVectors(stretchingNote->rhythmEndIntegerPairs, stretchingNote->rhythmIntegerPairs);
+    lastRhythmDurationPairs = subVec(stretchingNote->rhythmEndIntegerPairs, stretchingNote->rhythmIntegerPairs);
     Scroll();
 }
 

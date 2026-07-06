@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <sstream>
+#include <cfloat>
 #include <numeric>
 #include <algorithm>
 #include <cmath>
@@ -149,7 +150,7 @@ inline std::vector<std::pair<int, int>> edoVectorForK(int k, int nSteps,
     return out;
 }
 
-inline std::vector<std::pair<int, int>> alignedRatAddVectors(const std::vector<std::pair<int, int>>& a,
+inline std::vector<std::pair<int, int>> addVec(const std::vector<std::pair<int, int>>& a,
                                                            const std::vector<std::pair<int, int>>& b) {
     const size_t N = std::max(a.size(), b.size());
     std::vector<std::pair<int, int>> aa(a);
@@ -165,7 +166,7 @@ inline std::vector<std::pair<int, int>> alignedRatAddVectors(const std::vector<s
     return out;
 }
 
-inline std::vector<std::pair<int, int>> alignedRatSubVectors(const std::vector<std::pair<int, int>>& a,
+inline std::vector<std::pair<int, int>> subVec(const std::vector<std::pair<int, int>>& a,
                                                            const std::vector<std::pair<int, int>>& b) {
     const size_t N = std::max(a.size(), b.size());
     std::vector<std::pair<int, int>> aa(a);
@@ -296,5 +297,48 @@ inline void applyNoteTuningSnapshot(const std::shared_ptr<Note>& n, const NoteTu
     n->tuningEdoSubdivisionSteps = s.tuningEdoSubdivisionSteps;
     n->tuningEdoLowerVector = s.tuningEdoLowerVector;
     n->tuningEdoUpperVector = s.tuningEdoUpperVector;
+}
+
+// ---------------------------------------------------------------------------
+// Shared rhythm grid — used by both PianoRoll and SongRoll
+// ---------------------------------------------------------------------------
+struct RhythmGridLine {
+    float seconds = 0.f;
+    std::vector<std::pair<int, int>> integerPairs;
+    bool isBeat = false;
+    explicit RhythmGridLine(float s) : seconds(s) {}
+};
+
+/// Generate EDO rhythm lines within the given second range.
+inline void generateRhythmLines(std::vector<RhythmGridLine>& outLines,
+                                std::vector<std::string>& outLabels,
+                                int steps,
+                                const std::vector<std::pair<int, int>>& lower,
+                                const std::vector<std::pair<int, int>>& upper,
+                                float minSec = -60.f, float maxSec = 3600.f) {
+    outLines.clear();
+    outLabels.clear();
+    if (steps <= 0) return;
+    for (int k = -1024; k <= 1024; ++k) {
+        auto pairs = edoVectorForK(k, steps, lower, upper);
+        const float seconds = Note::secondsFromIntegerPairs(pairs);
+        if (seconds < minSec || seconds > maxSec) continue;
+        outLines.emplace_back(seconds);
+        outLines.back().integerPairs = std::move(pairs);
+        outLines.back().isBeat = (steps > 0 && k % steps == 0);
+        outLabels.push_back(std::to_string(k));
+    }
+}
+
+/// Find the index of the rhythm line closest to the given seconds value.
+inline size_t closestRhythmLineIndexForSeconds(const std::vector<RhythmGridLine>& lines, float seconds) {
+    if (lines.empty()) return SIZE_MAX;
+    size_t best = 0;
+    float bd = FLT_MAX;
+    for (size_t i = 0; i < lines.size(); ++i) {
+        const float d = std::fabs(lines[i].seconds - seconds);
+        if (d < bd) { bd = d; best = i; }
+    }
+    return best;
 }
 

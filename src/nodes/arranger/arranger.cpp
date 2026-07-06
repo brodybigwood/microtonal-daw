@@ -135,6 +135,13 @@ json ArrangerNode::extraSerialize() {
     json j;
     j["TrackManager"] = tracks ? tracks->toJSON() : json::object();
     j["ElementManager"] = elements ? elements->toJSON() : json::object();
+    j["rhythmEdoSubdivisionSteps"] = rhythmEdoSubdivisionSteps;
+    j["rhythmEdoLowerVector"] = json::array();
+    for (const auto& pr : rhythmEdoLowerVector)
+        j["rhythmEdoLowerVector"].push_back(json::array({pr.first, pr.second}));
+    j["rhythmEdoUpperVector"] = json::array();
+    for (const auto& pr : rhythmEdoUpperVector)
+        j["rhythmEdoUpperVector"].push_back(json::array({pr.first, pr.second}));
 
     json o = json::array();
     for (auto c : outputs.connections) {
@@ -184,6 +191,21 @@ void ArrangerNode::extraDeSerialize(const json& j) {
         }
     }
     makeConnectionRects();
+
+    rhythmEdoSubdivisionSteps = j.value("rhythmEdoSubdivisionSteps", 1);
+    rhythmEdoLowerVector.clear();
+    if (j.contains("rhythmEdoLowerVector") && j["rhythmEdoLowerVector"].is_array()) {
+        for (const auto& el : j["rhythmEdoLowerVector"])
+            if (el.is_array() && el.size() >= 2)
+                rhythmEdoLowerVector.push_back({el[0].get<int>(), el[1].get<int>()});
+    }
+    rhythmEdoUpperVector.clear();
+    if (j.contains("rhythmEdoUpperVector") && j["rhythmEdoUpperVector"].is_array()) {
+        for (const auto& el : j["rhythmEdoUpperVector"])
+            if (el.is_array() && el.size() >= 2)
+                rhythmEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
+    }
+    if (rhythmEdoUpperVector.empty()) rhythmEdoUpperVector = {{1,1}};
 
     rebuildState(j);
 

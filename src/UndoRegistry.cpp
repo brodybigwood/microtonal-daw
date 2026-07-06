@@ -218,11 +218,20 @@ bool UndoManager::runRegisteredAction(const std::string& actionName, const json&
             pa = new DeleteRegionAction(head->p, params.at("managerPath").get<std::vector<int>>(), params.at("nodeID").get<int>(),
                 params.at("regionID").get<int>());
             break;
-        case CreatePosition:
+        case CreatePosition: {
+            auto readPairs = [](const json& j) {
+                std::vector<std::pair<int,int>> out;
+                for (const auto& el : j)
+                    if (el.is_array() && el.size() >= 2)
+                        out.push_back({el[0].get<int>(), el[1].get<int>()});
+                return out;
+            };
             pa = new CreatePositionAction(head->p, params.at("managerPath").get<std::vector<int>>(), params.at("nodeID").get<int>(),
-                params.at("elementID").get<int>(), fract::fromJSON(params.at("start")),
+                params.at("elementID").get<int>(), readPairs(params.at("startPairs")),
+                readPairs(params.value("endPairs", json::array())),
                 static_cast<uint16_t>(params.at("trackID").get<int>()));
             break;
+        }
         case DeletePosition:
             pa = new DeletePositionAction(head->p, params.at("managerPath").get<std::vector<int>>(), params.at("nodeID").get<int>(),
                 params.at("elementID").get<int>(), params.at("positionID").get<int>());

@@ -114,9 +114,9 @@ void PianoRoll::updateLines() {
 
     if (tuningMode == TuningMode::Harmonic) {
         const auto& anchorVec = region->tuningHarmonicAnchorVector;
-        const auto anchorBase = alignedRatSubVectors(anchorVec, densePrimeExponentPairsForHarmonic(harmonicAnchorNumber));
+        const auto anchorBase = subVec(anchorVec, densePrimeExponentPairsForHarmonic(harmonicAnchorNumber));
         for (int h = 1; h <= 512; ++h) {
-            auto pairs = alignedRatAddVectors(anchorBase, densePrimeExponentPairsForHarmonic(h));
+            auto pairs = addVec(anchorBase, densePrimeExponentPairsForHarmonic(h));
             const float midi = Note::midiFromPitchIntegerPairs(pairs);
             if (midi < -24.0f || midi > 152.0f) continue;
             pitchLines.emplace_back(midi);
@@ -145,36 +145,16 @@ void PianoRoll::updateLines() {
 }
 
 void PianoRoll::updateRhythmLines() {
-    rhythmLines.clear();
-    rhythmLineLabels.clear();
-
     const int steps = region ? region->rhythmEdoSubdivisionSteps : 1;
-    if (steps <= 0) return;
-    const auto& lower = region ? region->rhythmEdoLowerVector : std::vector<std::pair<int,int>>{};
     static const std::vector<std::pair<int,int>> kOneSec{{1,1}};
+    const auto& lower = region ? region->rhythmEdoLowerVector : std::vector<std::pair<int,int>>{};
     const auto& upper = (region && !region->rhythmEdoUpperVector.empty())
         ? region->rhythmEdoUpperVector : kOneSec;
-
-    for (int k = -1024; k <= 1024; ++k) {
-        auto pairs = edoVectorForK(k, steps, lower, upper);
-        const float seconds = Note::secondsFromIntegerPairs(pairs);
-        if (seconds < -60.0f || seconds > 3600.0f) continue;
-        rhythmLines.emplace_back(seconds);
-        rhythmLines.back().integerPairs = std::move(pairs);
-        rhythmLines.back().isBeat = (steps > 0 && k % steps == 0);
-        rhythmLineLabels.push_back(std::to_string(k));
-    }
+    generateRhythmLines(rhythmLines, rhythmLineLabels, steps, lower, upper);
 }
 
 size_t PianoRoll::closestRhythmLineIndexForSeconds(float seconds) {
-    if (rhythmLines.empty()) return SIZE_MAX;
-    size_t best = 0;
-    float bd = FLT_MAX;
-    for (size_t i = 0; i < rhythmLines.size(); ++i) {
-        const float d = std::fabs(rhythmLines[i].seconds - seconds);
-        if (d < bd) { bd = d; best = i; }
-    }
-    return best;
+    return ::closestRhythmLineIndexForSeconds(rhythmLines, seconds);
 }
 
 void PianoRoll::refreshHoveredRhythmLineIndex() {

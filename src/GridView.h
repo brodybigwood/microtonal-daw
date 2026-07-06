@@ -1,7 +1,6 @@
 #pragma once
 #include <vector>
 #include <SDL_ttf.h>
-#include "fract.h"
 #include "Window.h"
 
 class Playhead;
@@ -31,10 +30,14 @@ class GridView : public Window {
 
         bool refreshGrid = false;
         virtual void UpdateGrid() {};
-        void RenderGridTexture(SDL_Renderer* renderer);
+        virtual void RenderGridTexture(SDL_Renderer* renderer);
 
         std::vector<float> lines;
         std::vector<float> times;
+
+        // Shared rhythm interval preview rendering
+        void renderRhythmIntervalPreviewBand(SDL_Renderer* renderer, float startSec, float endSec);
+        void renderRhythmIntervalEndLine(SDL_Renderer* renderer, float endSec);
 
         int yOffset = 0;
         int xOffset = 0;
@@ -59,8 +62,7 @@ class GridView : public Window {
         float cellHeight;
         float dW = 40;
 
-        double notesPerBar = 4;
-        fract* startTime = new fract;
+        double notesPerBar = 4; // deprecated, kept for old code compatibility
 
         float width;
         float height;
@@ -109,7 +111,7 @@ class GridView : public Window {
 
         void createGridRect();
 
-        fract getHoveredTime();
+        float getHoveredTimeSec();
 
         float lastHoveredLine;
         float lastHoveredTime;
