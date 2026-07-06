@@ -50,7 +50,7 @@ void ElementManager::process(int bufferSize) {
     for (auto* element : elements)
         for (auto position : element->positions) {
             auto& pos = *position;
-            const float regTimeSec = Note::secondsFromIntegerPairs(pos.rhythmIntegerPairs);
+            const float regTimeSec = Note::secondsFromVector(pos.rhythmVector);
 
             Track* track = tm->getTrack(pos.trackID);
             auto& dispatched = track->dispatched;
@@ -72,7 +72,7 @@ void ElementManager::process(int bufferSize) {
                             break;
                         }
                         auto* region = static_cast<Region*>(element);
-                        const float trim = Note::secondsFromIntegerPairs(pos.startOffsetPairs);
+                        const float trim = Note::secondsFromVector(pos.startOffsetPairs);
                         for (auto& note : region->notes) {
                             float start = note->startSeconds() + regTimeSec - trim;
                             float end = note->endSeconds() + regTimeSec - trim;
@@ -121,8 +121,8 @@ void ElementManager::process(int bufferSize) {
                         if (!project->isPlaying.load()) break;
                         if (!(*track->buffer)) break;
 
-                        const double localSec = time - static_cast<double>(Note::secondsFromIntegerPairs(pos.rhythmIntegerPairs));
-                        const double fileSec = localSec + static_cast<double>(Note::secondsFromIntegerPairs(pos.startOffsetPairs));
+                        const double localSec = time - static_cast<double>(Note::secondsFromVector(pos.rhythmVector));
+                        const double fileSec = localSec + static_cast<double>(Note::secondsFromVector(pos.startOffsetPairs));
                         int readIdx = static_cast<int>(fileSec * AudioManager::instance()->sampleRate);
                         if (readIdx < 0) break;
                         AudioClip* ac = static_cast<AudioClip*>(element);
@@ -209,6 +209,8 @@ void ElementManager::removeElementById(uint16_t elementId) {
     GridElement* ge = elements[idx];
     if (ge->id != elementId)
         throw std::runtime_error("ElementManager::removeElementById: id mismatch");
+    if (currentElement == static_cast<int>(elementId))
+        currentElement = -1;
     elements.erase(elements.begin() + static_cast<std::ptrdiff_t>(idx));
     id_pool.releaseID(elementId);
     delete ge;

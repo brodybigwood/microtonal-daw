@@ -21,7 +21,7 @@ static void primesForSlots(int slotCount, std::vector<int>& out) {
     }
 }
 
-float Note::midiFromPitchIntegerPairs(const std::vector<std::pair<int, int>>& pairs) {
+float Note::midiFromPitchVector(const std::vector<std::pair<int, int>>& pairs) {
     double prod = 1.0;
     std::vector<int> primes;
     primesForSlots(static_cast<int>(pairs.size()), primes);
@@ -33,7 +33,7 @@ float Note::midiFromPitchIntegerPairs(const std::vector<std::pair<int, int>>& pa
     return 69.0f + static_cast<float>(12.0 * std::log2(prod));
 }
 
-float Note::secondsFromIntegerPairs(const std::vector<std::pair<int, int>>& pairs) {
+float Note::secondsFromVector(const std::vector<std::pair<int, int>>& pairs) {
     double prod = 1.0;
     std::vector<int> primes;
     primesForSlots(static_cast<int>(pairs.size()), primes);
@@ -45,26 +45,26 @@ float Note::secondsFromIntegerPairs(const std::vector<std::pair<int, int>>& pair
     return static_cast<float>(std::log2(prod));
 }
 
-void Note::syncNumFromPitchIntegerPairs() {
-    num = midiFromPitchIntegerPairs(pitchIntegerPairs);
+void Note::syncNumFromPitchVector() {
+    num = midiFromPitchVector(pitchVector);
 }
 
 Note::Note(const std::vector<std::pair<int, int>>& startPairs, const std::vector<std::pair<int, int>>& endPairs) {
-    rhythmIntegerPairs = startPairs;
-    rhythmEndIntegerPairs = endPairs;
-    pitchIntegerPairs.clear();
-    syncNumFromPitchIntegerPairs();
+    rhythmVector = startPairs;
+    rhythmEndVector = endPairs;
+    pitchVector.clear();
+    syncNumFromPitchVector();
 }
 
 Note::~Note() {
 }
 
 float Note::startSeconds() const {
-    return secondsFromIntegerPairs(rhythmIntegerPairs);
+    return secondsFromVector(rhythmVector);
 }
 
 float Note::endSeconds() const {
-    return secondsFromIntegerPairs(rhythmEndIntegerPairs);
+    return secondsFromVector(rhythmEndVector);
 }
 
 float Note::durationSeconds() const {
@@ -84,15 +84,15 @@ json Note::toJSON() {
     j["tuningEdoUpperVector"] = json::array();
     for (const auto& pr : tuningEdoUpperVector)
         j["tuningEdoUpperVector"].push_back(json::array({pr.first, pr.second}));
-    j["pitchIntegerPairs"] = json::array();
-    for (const auto& pr : pitchIntegerPairs)
-        j["pitchIntegerPairs"].push_back(json::array({pr.first, pr.second}));
-    j["rhythmIntegerPairs"] = json::array();
-    for (const auto& pr : rhythmIntegerPairs)
-        j["rhythmIntegerPairs"].push_back(json::array({pr.first, pr.second}));
-    j["rhythmEndIntegerPairs"] = json::array();
-    for (const auto& pr : rhythmEndIntegerPairs)
-        j["rhythmEndIntegerPairs"].push_back(json::array({pr.first, pr.second}));
+    j["pitchVector"] = json::array();
+    for (const auto& pr : pitchVector)
+        j["pitchVector"].push_back(json::array({pr.first, pr.second}));
+    j["rhythmVector"] = json::array();
+    for (const auto& pr : rhythmVector)
+        j["rhythmVector"].push_back(json::array({pr.first, pr.second}));
+    j["rhythmEndVector"] = json::array();
+    for (const auto& pr : rhythmEndVector)
+        j["rhythmEndVector"].push_back(json::array({pr.first, pr.second}));
     j["rhythmEdoSubdivisionSteps"] = rhythmEdoSubdivisionSteps;
     j["rhythmEdoLowerVector"] = json::array();
     for (const auto& pr : rhythmEdoLowerVector)
@@ -105,14 +105,14 @@ json Note::toJSON() {
 
 std::shared_ptr<Note> Note::fromJSON(json& input) {
     std::vector<std::pair<int, int>> startPairs;
-    if (input.contains("rhythmIntegerPairs") && input["rhythmIntegerPairs"].is_array()) {
-        for (const auto& el : input["rhythmIntegerPairs"])
+    if (input.contains("rhythmVector") && input["rhythmVector"].is_array()) {
+        for (const auto& el : input["rhythmVector"])
             if (el.is_array() && el.size() >= 2)
                 startPairs.push_back({el[0].get<int>(), el[1].get<int>()});
     }
     std::vector<std::pair<int, int>> endPairs;
-    if (input.contains("rhythmEndIntegerPairs") && input["rhythmEndIntegerPairs"].is_array()) {
-        for (const auto& el : input["rhythmEndIntegerPairs"])
+    if (input.contains("rhythmEndVector") && input["rhythmEndVector"].is_array()) {
+        for (const auto& el : input["rhythmEndVector"])
             if (el.is_array() && el.size() >= 2)
                 endPairs.push_back({el[0].get<int>(), el[1].get<int>()});
     }
@@ -138,19 +138,19 @@ std::shared_ptr<Note> Note::fromJSON(json& input) {
             if (el.is_array() && el.size() >= 2)
                 n->tuningEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
     }
-    if (input.contains("pitchIntegerPairs") && input["pitchIntegerPairs"].is_array()) {
-        n->pitchIntegerPairs.clear();
-        for (const auto& el : input["pitchIntegerPairs"]) {
+    if (input.contains("pitchVector") && input["pitchVector"].is_array()) {
+        n->pitchVector.clear();
+        for (const auto& el : input["pitchVector"]) {
             if (el.is_array() && el.size() >= 2)
-                n->pitchIntegerPairs.push_back({el[0].get<int>(), el[1].get<int>()});
+                n->pitchVector.push_back({el[0].get<int>(), el[1].get<int>()});
         }
     }
     n->rhythmEdoSubdivisionSteps = input.value("rhythmEdoSubdivisionSteps", 1);
-    if (input.contains("rhythmIntegerPairs") && input["rhythmIntegerPairs"].is_array()) {
-        n->rhythmIntegerPairs.clear();
-        for (const auto& el : input["rhythmIntegerPairs"])
+    if (input.contains("rhythmVector") && input["rhythmVector"].is_array()) {
+        n->rhythmVector.clear();
+        for (const auto& el : input["rhythmVector"])
             if (el.is_array() && el.size() >= 2)
-                n->rhythmIntegerPairs.push_back({el[0].get<int>(), el[1].get<int>()});
+                n->rhythmVector.push_back({el[0].get<int>(), el[1].get<int>()});
     }
     if (input.contains("rhythmEdoLowerVector") && input["rhythmEdoLowerVector"].is_array()) {
         for (const auto& el : input["rhythmEdoLowerVector"])
@@ -162,7 +162,7 @@ std::shared_ptr<Note> Note::fromJSON(json& input) {
             if (el.is_array() && el.size() >= 2)
                 n->rhythmEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
     }
-    n->syncNumFromPitchIntegerPairs();
+    n->syncNumFromPitchVector();
     return n;
 }
 
@@ -183,25 +183,25 @@ void Note::applyUndoSnapshot(const json& j) {
             if (el.is_array() && el.size() >= 2)
                 tuningEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
     }
-    if (j.contains("pitchIntegerPairs") && j["pitchIntegerPairs"].is_array()) {
-        pitchIntegerPairs.clear();
-        for (const auto& el : j["pitchIntegerPairs"]) {
+    if (j.contains("pitchVector") && j["pitchVector"].is_array()) {
+        pitchVector.clear();
+        for (const auto& el : j["pitchVector"]) {
             if (el.is_array() && el.size() >= 2)
-                pitchIntegerPairs.push_back({el[0].get<int>(), el[1].get<int>()});
+                pitchVector.push_back({el[0].get<int>(), el[1].get<int>()});
         }
     }
     rhythmEdoSubdivisionSteps = j.value("rhythmEdoSubdivisionSteps", 1);
-    rhythmIntegerPairs.clear();
-    if (j.contains("rhythmIntegerPairs") && j["rhythmIntegerPairs"].is_array()) {
-        for (const auto& el : j["rhythmIntegerPairs"])
+    rhythmVector.clear();
+    if (j.contains("rhythmVector") && j["rhythmVector"].is_array()) {
+        for (const auto& el : j["rhythmVector"])
             if (el.is_array() && el.size() >= 2)
-                rhythmIntegerPairs.push_back({el[0].get<int>(), el[1].get<int>()});
+                rhythmVector.push_back({el[0].get<int>(), el[1].get<int>()});
     }
-    rhythmEndIntegerPairs.clear();
-    if (j.contains("rhythmEndIntegerPairs") && j["rhythmEndIntegerPairs"].is_array()) {
-        for (const auto& el : j["rhythmEndIntegerPairs"])
+    rhythmEndVector.clear();
+    if (j.contains("rhythmEndVector") && j["rhythmEndVector"].is_array()) {
+        for (const auto& el : j["rhythmEndVector"])
             if (el.is_array() && el.size() >= 2)
-                rhythmEndIntegerPairs.push_back({el[0].get<int>(), el[1].get<int>()});
+                rhythmEndVector.push_back({el[0].get<int>(), el[1].get<int>()});
     }
     rhythmEdoLowerVector.clear();
     if (j.contains("rhythmEdoLowerVector") && j["rhythmEdoLowerVector"].is_array()) {
@@ -215,7 +215,7 @@ void Note::applyUndoSnapshot(const json& j) {
             if (el.is_array() && el.size() >= 2)
                 rhythmEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
     }
-    syncNumFromPitchIntegerPairs();
+    syncNumFromPitchVector();
 }
 
 json Note::tuningFieldsUndoToJSON() const {
@@ -229,9 +229,9 @@ json Note::tuningFieldsUndoToJSON() const {
     j["tuningEdoUpperVector"] = json::array();
     for (const auto& pr : tuningEdoUpperVector)
         j["tuningEdoUpperVector"].push_back(json::array({pr.first, pr.second}));
-    j["rhythmIntegerPairs"] = json::array();
-    for (const auto& pr : rhythmIntegerPairs)
-        j["rhythmIntegerPairs"].push_back(json::array({pr.first, pr.second}));
+    j["rhythmVector"] = json::array();
+    for (const auto& pr : rhythmVector)
+        j["rhythmVector"].push_back(json::array({pr.first, pr.second}));
     j["rhythmEdoSubdivisionSteps"] = rhythmEdoSubdivisionSteps;
     j["rhythmEdoLowerVector"] = json::array();
     for (const auto& pr : rhythmEdoLowerVector)
@@ -244,7 +244,7 @@ json Note::tuningFieldsUndoToJSON() const {
 
 void Note::applyTuningFieldsUndoFromJSON(const json& j) {
     // Absent keys leave the field untouched: tuning snapshots carry only the
-    // tuning vectors, and clearing e.g. rhythmIntegerPairs here would silently
+    // tuning vectors, and clearing e.g. rhythmVector here would silently
     // move the note start to 0 (empty pair vector = log2(1) seconds).
     auto applyPairVector = [&j](const char* key, std::vector<std::pair<int, int>>& out) {
         if (!j.contains(key) || !j[key].is_array()) return;
@@ -259,8 +259,8 @@ void Note::applyTuningFieldsUndoFromJSON(const json& j) {
     applyPairVector("tuningEdoLowerVector", tuningEdoLowerVector);
     applyPairVector("tuningEdoUpperVector", tuningEdoUpperVector);
     rhythmEdoSubdivisionSteps = j.value("rhythmEdoSubdivisionSteps", rhythmEdoSubdivisionSteps);
-    applyPairVector("rhythmIntegerPairs", rhythmIntegerPairs);
+    applyPairVector("rhythmVector", rhythmVector);
     applyPairVector("rhythmEdoLowerVector", rhythmEdoLowerVector);
     applyPairVector("rhythmEdoUpperVector", rhythmEdoUpperVector);
-    syncNumFromPitchIntegerPairs();
+    syncNumFromPitchVector();
 }

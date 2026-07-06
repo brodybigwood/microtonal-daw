@@ -46,7 +46,7 @@ class Project : public Window {
         void save(uint32_t triggerWindowID = 0, SDL_Renderer* triggerRenderer = nullptr);
 
         void createNote(int, std::vector<std::pair<int,int>>, std::vector<std::pair<int,int>>, int, std::vector<int> managerPath = {},
-                        std::vector<std::pair<int, int>> pitchIntegerPairs = {});
+                        std::vector<std::pair<int, int>> pitchVector = {});
 
         void deleteNote(int nodeID, int regionID, int noteID, std::vector<int> managerPath = {});
 

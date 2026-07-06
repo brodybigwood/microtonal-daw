@@ -321,7 +321,7 @@ inline void generateRhythmLines(std::vector<RhythmGridLine>& outLines,
     if (steps <= 0) return;
     for (int k = -1024; k <= 1024; ++k) {
         auto pairs = edoVectorForK(k, steps, lower, upper);
-        const float seconds = Note::secondsFromIntegerPairs(pairs);
+        const float seconds = Note::secondsFromVector(pairs);
         if (seconds < minSec || seconds > maxSec) continue;
         outLines.emplace_back(seconds);
         outLines.back().integerPairs = std::move(pairs);

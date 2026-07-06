@@ -30,7 +30,7 @@ class Region : public GridElement {
         std::string name = "MIDI Region FX Rack";
         std::vector<std::shared_ptr<Note>> notes;
 
-    int createNote(std::vector<std::pair<int, int>> startPairs, std::vector<std::pair<int, int>> endPairs, std::vector<std::pair<int, int>> pitchIntegerPairs = {});
+    int createNote(std::vector<std::pair<int, int>> startPairs, std::vector<std::pair<int, int>> endPairs, std::vector<std::pair<int, int>> pitchVector = {});
     void deleteNote(int);
     void restoreNoteAt(std::shared_ptr<Note> n, size_t insertIndex);
 

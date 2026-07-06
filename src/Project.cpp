@@ -158,9 +158,9 @@ void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {
 }
 
 void Project::createNote(int nodeID, std::vector<std::pair<int,int>> startPairs, std::vector<std::pair<int,int>> endPairs, int regionID, std::vector<int> managerPath,
-                         std::vector<std::pair<int, int>> pitchIntegerPairs) {
+                         std::vector<std::pair<int, int>> pitchVector) {
     auto pa = new CreateNoteAction(this, std::move(managerPath), nodeID, regionID, std::move(startPairs), std::move(endPairs),
-                                   std::move(pitchIntegerPairs));
+                                   std::move(pitchVector));
     um->newAction(pa);
 }
 

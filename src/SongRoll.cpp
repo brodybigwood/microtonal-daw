@@ -316,8 +316,8 @@ void SongRoll::movePosition() {
         case PositionDragKind::ResizeLeft: {
             size_t li = closestRhythmLineIndexForSeconds(rhythmLines, secondsFromMouseX());
             if (li != SIZE_MAX && li < rhythmLines.size())
-                movingPosition->rhythmIntegerPairs = rhythmLines[li].integerPairs;
-            auto startDelta = subVec(movingPosition->rhythmIntegerPairs, lastPosition.rhythmIntegerPairs);
+                movingPosition->rhythmVector = rhythmLines[li].integerPairs;
+            auto startDelta = subVec(movingPosition->rhythmVector, lastPosition.rhythmVector);
             movingPosition->startOffsetPairs = addVec(lastPosition.startOffsetPairs, startDelta);
             if (parentNode) {
                 movingPosition->rhythmEdoSubdivisionSteps = parentNode->rhythmEdoSubdivisionSteps;
@@ -327,15 +327,15 @@ void SongRoll::movePosition() {
             break;
         }
         case PositionDragKind::ResizeRight: {
-            float startSec = Note::secondsFromIntegerPairs(lastPosition.rhythmIntegerPairs);
-            float newEndSec = Note::secondsFromIntegerPairs(lastPosition.rhythmEndIntegerPairs) + deltaSec;
+            float startSec = Note::secondsFromVector(lastPosition.rhythmVector);
+            float newEndSec = Note::secondsFromVector(lastPosition.rhythmEndVector) + deltaSec;
             const float minLenSec = 1.0f / static_cast<float>(std::max(1, parentNode ? parentNode->rhythmEdoSubdivisionSteps : 1));
             if (newEndSec - startSec < minLenSec)
                 newEndSec = startSec + minLenSec;
             size_t li = closestRhythmLineIndexForSeconds(rhythmLines, newEndSec);
             if (li != SIZE_MAX && li < rhythmLines.size())
-                movingPosition->rhythmEndIntegerPairs = rhythmLines[li].integerPairs;
-            movingPosition->rhythmIntegerPairs = lastPosition.rhythmIntegerPairs;
+                movingPosition->rhythmEndVector = rhythmLines[li].integerPairs;
+            movingPosition->rhythmVector = lastPosition.rhythmVector;
             if (parentNode) {
                 movingPosition->rhythmEdoSubdivisionSteps = parentNode->rhythmEdoSubdivisionSteps;
                 movingPosition->rhythmEdoLowerVector = parentNode->rhythmEdoLowerVector;
@@ -345,12 +345,12 @@ void SongRoll::movePosition() {
         }
         case PositionDragKind::Move:
         default: {
-            float startSec = Note::secondsFromIntegerPairs(lastPosition.rhythmIntegerPairs) + deltaSec;
+            float startSec = Note::secondsFromVector(lastPosition.rhythmVector) + deltaSec;
             size_t sli = closestRhythmLineIndexForSeconds(rhythmLines, startSec);
             if (sli != SIZE_MAX && sli < rhythmLines.size()) {
-                auto startDelta = subVec(rhythmLines[sli].integerPairs, lastPosition.rhythmIntegerPairs);
-                movingPosition->rhythmIntegerPairs = rhythmLines[sli].integerPairs;
-                movingPosition->rhythmEndIntegerPairs = addVec(lastPosition.rhythmEndIntegerPairs, startDelta);
+                auto startDelta = subVec(rhythmLines[sli].integerPairs, lastPosition.rhythmVector);
+                movingPosition->rhythmVector = rhythmLines[sli].integerPairs;
+                movingPosition->rhythmEndVector = addVec(lastPosition.rhythmEndVector, startDelta);
             }
             if (parentNode) {
                 movingPosition->rhythmEdoSubdivisionSteps = parentNode->rhythmEdoSubdivisionSteps;
@@ -398,8 +398,8 @@ void SongRoll::handleCustomInput(SDL_Event& e) {
                                               positionDragKind == PositionDragKind::ResizeRight);
                 bool overResize = resizing;
                 if (!overResize && hoveredPosition) {
-                    const float xL = getX(Note::secondsFromIntegerPairs(hoveredPosition->rhythmIntegerPairs));
-                    const float xR = getX(Note::secondsFromIntegerPairs(hoveredPosition->rhythmEndIntegerPairs));
+                    const float xL = getX(Note::secondsFromVector(hoveredPosition->rhythmVector));
+                    const float xR = getX(Note::secondsFromVector(hoveredPosition->rhythmEndVector));
                     const float edge = std::max(kPositionResizeEdgePx, kTimelinePosBorderV + 1.0f);
                     if (mouseX <= xL + edge || mouseX >= xR - edge)
                         overResize = true;
@@ -457,9 +457,9 @@ void SongRoll::renderElement(SDL_Renderer* renderer, GridElement* element) {
             SDL_SetRenderDrawColor(renderer, 20,20,100,127);
         }
 
-        const float startSec = Note::secondsFromIntegerPairs(pos.rhythmIntegerPairs);
-        const float endSec = Note::secondsFromIntegerPairs(pos.rhythmEndIntegerPairs);
-        float offSec = Note::secondsFromIntegerPairs(pos.startOffsetPairs);
+        const float startSec = Note::secondsFromVector(pos.rhythmVector);
+        const float endSec = Note::secondsFromVector(pos.rhythmEndVector);
+        float offSec = Note::secondsFromVector(pos.startOffsetPairs);
         uint16_t index = tracks->getIndex(pos.trackID);
         float topLeftCornerY = getY(index);
         float fullW = (endSec - startSec) * dW;
@@ -516,8 +516,8 @@ void SongRoll::getHoveredPosition() {
         for(auto position :e->positions) {
             auto& pos = *position;
             uint16_t index = tracks->getIndex(pos.trackID);
-            const float startSec = Note::secondsFromIntegerPairs(pos.rhythmIntegerPairs);
-            const float endSec = Note::secondsFromIntegerPairs(pos.rhythmEndIntegerPairs);
+            const float startSec = Note::secondsFromVector(pos.rhythmVector);
+            const float endSec = Note::secondsFromVector(pos.rhythmEndVector);
             if(
                 mouseX < rightRect.x &&
                 mouseX > getX(startSec) &&
@@ -549,7 +549,8 @@ int SongRoll::getHoveredTrack() {
 void SongRoll::createElement() {
     int id = em->currentElement;
 
-    if(id == -1) {
+    if (id == -1 || !em->ids.count(static_cast<uint16_t>(id))) {
+        em->currentElement = -1;
         return;
     }
     auto startPairs = pairsAtMouseX();
@@ -571,7 +572,7 @@ void SongRoll::createElement() {
 
     if (elem && !elem->positions.empty()) {
         auto* pos = elem->positions.back();
-        lastPositionDurationPairs = subVec(pos->rhythmEndIntegerPairs, pos->rhythmIntegerPairs);
+        lastPositionDurationPairs = subVec(pos->rhythmEndVector, pos->rhythmVector);
         lastPositionStartOffsetPairs = pos->startOffsetPairs;
         em->currentElement = id;
     }
@@ -604,7 +605,7 @@ void SongRoll::doubleClick() {
             auto* elem = em->getElement(cra->regionID);
             if (elem && !elem->positions.empty()) {
                 auto* pos = elem->positions.back();
-                lastPositionDurationPairs = subVec(pos->rhythmEndIntegerPairs, pos->rhythmIntegerPairs);
+                lastPositionDurationPairs = subVec(pos->rhythmEndVector, pos->rhythmVector);
                 lastPositionStartOffsetPairs = pos->startOffsetPairs;
                 em->currentElement = cra->regionID;
             }
@@ -648,8 +649,8 @@ void SongRoll::clickMouse(SDL_Event& e) {
                     lastPosition = *movingPosition;
                     timelineDragElementId = static_cast<int>(movingPosition->element->id);
                     timelineDragPositionId = movingPosition->id;
-                    const float xL = getX(Note::secondsFromIntegerPairs(movingPosition->rhythmIntegerPairs));
-                    const float xR = getX(Note::secondsFromIntegerPairs(movingPosition->rhythmEndIntegerPairs));
+                    const float xL = getX(Note::secondsFromVector(movingPosition->rhythmVector));
+                    const float xR = getX(Note::secondsFromVector(movingPosition->rhythmEndVector));
                     const float handlePx = std::max(kPositionResizeEdgePx, kTimelinePosBorderV + 1.0f);
                     if (mouseX <= xL + handlePx)
                         positionDragKind = PositionDragKind::ResizeLeft;
@@ -799,7 +800,7 @@ void SongRoll::clickMouse(SDL_Event& e) {
                         project->um->newAction(new MoveElementPositionAction(project, parentNode->nm->managerPath,
                             static_cast<int>(parentNode->id), static_cast<int>(el->id), movingPosition->id, std::move(before),
                             std::move(after)));
-                        lastPositionDurationPairs = subVec(movingPosition->rhythmEndIntegerPairs, movingPosition->rhythmIntegerPairs);
+                        lastPositionDurationPairs = subVec(movingPosition->rhythmEndVector, movingPosition->rhythmVector);
                         lastPositionStartOffsetPairs = movingPosition->startOffsetPairs;
                         if (el)
                             em->currentElement = static_cast<int>(el->id);
@@ -866,7 +867,7 @@ void SongRoll::dropFile(SDL_DropEvent& d) {
     auto* elem = em->getElement(e->id);
     if (elem && !elem->positions.empty()) {
         auto* pos = elem->positions.back();
-        lastPositionDurationPairs = subVec(pos->rhythmEndIntegerPairs, pos->rhythmIntegerPairs);
+        lastPositionDurationPairs = subVec(pos->rhythmEndVector, pos->rhythmVector);
     }
 
     refreshGrid = true;

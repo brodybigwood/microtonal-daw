@@ -55,7 +55,7 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     rhythmIntervalStartNote = std::dynamic_pointer_cast<Note>(hoveredElement);
                     refreshHoveredRhythmLineIndex();
                     if (rhythmIntervalStartNote)
-                        rhythmIntervalStartSec = Note::secondsFromIntegerPairs(rhythmIntervalStartNote->rhythmIntegerPairs);
+                        rhythmIntervalStartSec = Note::secondsFromVector(rhythmIntervalStartNote->rhythmVector);
                     else if (hoveredRhythmLineIndex != SIZE_MAX && hoveredRhythmLineIndex < rhythmLines.size())
                         rhythmIntervalStartSec = rhythmLines[hoveredRhythmLineIndex].seconds;
                     else
@@ -63,7 +63,7 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     rhythmIntervalEndSec = rhythmIntervalStartSec;
                     rhythmDragEndVertexPairs.clear();
                     if (rhythmIntervalStartNote)
-                        rhythmDragStartVertexPairs = rhythmIntervalStartNote->rhythmIntegerPairs;
+                        rhythmDragStartVertexPairs = rhythmIntervalStartNote->rhythmVector;
                     else if (hoveredRhythmLineIndex != SIZE_MAX && hoveredRhythmLineIndex < rhythmLines.size())
                         rhythmDragStartVertexPairs = rhythmLines[hoveredRhythmLineIndex].integerPairs;
                     else
@@ -80,7 +80,7 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     intervalEndLine = intervalStartLine;
                     intervalDragEndVertexPairs.clear();
                     if (intervalStartNote)
-                        intervalDragStartVertexPairs = intervalStartNote->pitchIntegerPairs;
+                        intervalDragStartVertexPairs = intervalStartNote->pitchVector;
                     else
                         intervalDragStartVertexPairs.clear();
                     intervalDragMoved = false;
@@ -156,7 +156,7 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                             after.mode = n->tuningMode;
                             after.harmonicAnchorNumber = n->tuningAnchorHarmonic;
                             if (after.mode == 0) {
-                                after.harmonicAnchorVector = n->pitchIntegerPairs;
+                                after.harmonicAnchorVector = n->pitchVector;
                             } else {
                                 after.harmonicAnchorVector.clear();
                                 after.edoSubdivisionSteps = n->tuningEdoSubdivisionSteps;
@@ -180,9 +180,9 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                             movingNotePitchPreviewLineMidi.reset();
                             movingNoteRhythmPreviewLineIdx.reset();
                             // Store start pairs: prefer hovered note's pairs, else grid line
-                            dragStartPairs = n->pitchIntegerPairs;
-                            rhythmDragStartPairs = n->rhythmIntegerPairs;
-                            rhythmDragEndPairs = n->rhythmEndIntegerPairs;
+                            dragStartPairs = n->pitchVector;
+                            rhythmDragStartPairs = n->rhythmVector;
+                            rhythmDragEndPairs = n->rhythmEndVector;
                             rhythmDragGrabOffsetPx = mouseX - getNotePosX(n);
                             for (auto& sn : region->notes) {
                                 if (selectedNoteIds.count(sn->id))
@@ -200,9 +200,9 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                             movingNoteDragDirty = false;
                             movingNotePitchPreviewLineMidi.reset();
                             movingNoteRhythmPreviewLineIdx.reset();
-                            dragStartPairs = n->pitchIntegerPairs;
-                            rhythmDragStartPairs = n->rhythmIntegerPairs;
-                            rhythmDragEndPairs = n->rhythmEndIntegerPairs;
+                            dragStartPairs = n->pitchVector;
+                            rhythmDragStartPairs = n->rhythmVector;
+                            rhythmDragEndPairs = n->rhythmEndVector;
                             rhythmDragGrabOffsetPx = mouseX - getNotePosX(n);
                         }
                         last_lmb_x = mouseX;
@@ -244,7 +244,7 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                                 auto afterRegion = beforeRegion;
                                 afterRegion.mode = 0;
                                 afterRegion.harmonicAnchorNumber = h;
-                                afterRegion.harmonicAnchorVector = note->pitchIntegerPairs;
+                                afterRegion.harmonicAnchorVector = note->pitchVector;
                                 auto afterNote = beforeNote;
                                 afterNote.tuningMode = 0;
                                 afterNote.tuningAnchorHarmonic = h;
@@ -331,8 +331,8 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                         const size_t idx = static_cast<size_t>(it->second);
                         if (idx >= region->notes.size() || !region->notes[idx]) continue;
                         auto& note = region->notes[idx];
-                        note->pitchIntegerPairs = previewPairs;
-                        note->syncNumFromPitchIntegerPairs();
+                        note->pitchVector = previewPairs;
+                        note->syncNumFromPitchVector();
                     }
                     // Also handle the primary note's pitch preview if it was single-tracked
                     if (movingNotePitchPreviewLineMidi) {
@@ -350,8 +350,8 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                                 const size_t idx = static_cast<size_t>(it->second);
                                 if (idx >= region->notes.size() || !region->notes[idx]) continue;
                                 auto& sn = region->notes[idx];
-                                sn->rhythmIntegerPairs = addVec(sn->rhythmIntegerPairs, startDelta);
-                                sn->rhythmEndIntegerPairs = addVec(sn->rhythmEndIntegerPairs, startDelta);
+                                sn->rhythmVector = addVec(sn->rhythmVector, startDelta);
+                                sn->rhythmEndVector = addVec(sn->rhythmEndVector, startDelta);
                                 if (region) {
                                     sn->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
                                     sn->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
@@ -393,14 +393,14 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     if (movingNoteRhythmPreviewLineIdx) {
                         const size_t rli = *movingNoteRhythmPreviewLineIdx;
                         if (rli < rhythmLines.size()) {
-                            movingNote->rhythmIntegerPairs = rhythmLines[rli].integerPairs;
+                            movingNote->rhythmVector = rhythmLines[rli].integerPairs;
                             const auto delta = subVec(rhythmLines[rli].integerPairs, rhythmDragStartPairs);
                             auto newEndPairs = addVec(rhythmDragEndPairs, delta);
-                            const size_t erli = closestRhythmLineIndexForSeconds(Note::secondsFromIntegerPairs(newEndPairs));
+                            const size_t erli = closestRhythmLineIndexForSeconds(Note::secondsFromVector(newEndPairs));
                             if (erli != SIZE_MAX && erli < rhythmLines.size())
-                                movingNote->rhythmEndIntegerPairs = rhythmLines[erli].integerPairs;
+                                movingNote->rhythmEndVector = rhythmLines[erli].integerPairs;
                             else
-                                movingNote->rhythmEndIntegerPairs = std::move(newEndPairs);
+                                movingNote->rhythmEndVector = std::move(newEndPairs);
                             if (region) {
                                 movingNote->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
                                 movingNote->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
@@ -517,11 +517,11 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                         intervalStartNote->id != endNote->id) {
                         intervalFromTwoNotes = true;
                         if (intervalStartNote->num <= endNote->num) {
-                            intervalLoNotePairs = intervalStartNote->pitchIntegerPairs;
-                            intervalHiNotePairs = endNote->pitchIntegerPairs;
+                            intervalLoNotePairs = intervalStartNote->pitchVector;
+                            intervalHiNotePairs = endNote->pitchVector;
                         } else {
-                            intervalLoNotePairs = endNote->pitchIntegerPairs;
-                            intervalHiNotePairs = intervalStartNote->pitchIntegerPairs;
+                            intervalLoNotePairs = endNote->pitchVector;
+                            intervalHiNotePairs = intervalStartNote->pitchVector;
                         }
                     }
                     auto ctxMenu = ContextMenu::get();
@@ -542,14 +542,14 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                         try {
                             const int steps = std::max(1, std::stoi(text));
                             // Snapshots track rational endpoints while dragging; b can be off-grid note MIDI with
-                            // hoveredElement on the staff (endNote null) — never pitchIntegerPairsAtGridMidi(note->num).
+                            // hoveredElement on the staff (endNote null) — never pitchVectorAtGridMidi(note->num).
                             const std::vector<std::pair<int, int>> vecAtA =
-                                capIntervalStartNote ? capDragStartVertexPairs : pitchIntegerPairsAtGridMidi(a);
+                                capIntervalStartNote ? capDragStartVertexPairs : pitchVectorAtGridMidi(a);
                             const std::vector<std::pair<int, int>> vecAtB =
                                 !capDragEndVertexPairs.empty()
                                     ? capDragEndVertexPairs
-                                    : (capIntervalEndNote ? capIntervalEndNote->pitchIntegerPairs
-                                                          : pitchIntegerPairsAtGridMidi(b));
+                                    : (capIntervalEndNote ? capIntervalEndNote->pitchVector
+                                                          : pitchVectorAtGridMidi(b));
                             const std::vector<std::pair<int, int>> lowerLineVec =
                                 intervalFromTwoNotes ? intervalLoNotePairs : (a <= b ? vecAtA : vecAtB);
                             const std::vector<std::pair<int, int>> upperLineVec =
@@ -636,8 +636,8 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                 auto endNote = std::dynamic_pointer_cast<Note>(hoveredElement);
                 refreshHoveredRhythmLineIndex();
                 if (endNote) {
-                    rhythmIntervalEndSec = Note::secondsFromIntegerPairs(endNote->rhythmIntegerPairs);
-                    rhythmDragEndVertexPairs = endNote->rhythmIntegerPairs;
+                    rhythmIntervalEndSec = Note::secondsFromVector(endNote->rhythmVector);
+                    rhythmDragEndVertexPairs = endNote->rhythmVector;
                     if (!intervalStartNote || endNote->id != intervalStartNote->id)
                         rhythmIntervalDragMoved = true;
                 } else if (hoveredRhythmLineIndex != SIZE_MAX && hoveredRhythmLineIndex < rhythmLines.size()) {
@@ -654,14 +654,14 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                 auto endNote = std::dynamic_pointer_cast<Note>(hoveredElement);
                 if (endNote) {
                     intervalEndLine = endNote->num;
-                    intervalDragEndVertexPairs = endNote->pitchIntegerPairs;
+                    intervalDragEndVertexPairs = endNote->pitchVector;
                     if (!intervalStartNote || endNote->id != intervalStartNote->id) {
                         intervalDragMoved = true;
                     }
                 } else {
                     // Always follow the hovered lattice line. The old dNearest<dStart rule kept intervalEndLine
                     // pinned to intervalStartLine while the cursor was still nearer in Y to the start note, so loF
-                    // stayed at the note MIDI and pitchIntegerPairsAtGridMidi(loF) used the wrong lattice row.
+                    // stayed at the note MIDI and pitchVectorAtGridMidi(loF) used the wrong lattice row.
                     const float nearest = getHoveredLine();
                     intervalEndLine = nearest;
                     intervalDragEndVertexPairs.clear();
@@ -703,21 +703,21 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                     refreshGrid = true;
                     // Snap the dragged edge to the nearest grid line on every
                     // motion event (no pixel-step gating).
-                    const auto beforeStart = stretchingNote->rhythmIntegerPairs;
-                    const auto beforeEnd = stretchingNote->rhythmEndIntegerPairs;
+                    const auto beforeStart = stretchingNote->rhythmVector;
+                    const auto beforeEnd = stretchingNote->rhythmEndVector;
                     stretchElement(0);
-                    const bool moved = stretchingNote->rhythmIntegerPairs != beforeStart ||
-                                       stretchingNote->rhythmEndIntegerPairs != beforeEnd;
+                    const bool moved = stretchingNote->rhythmVector != beforeStart ||
+                                       stretchingNote->rhythmEndVector != beforeEnd;
                     if (moved) {
                         stretchingNoteDragDirty = true;
                         if (stretchingMultipleNotes) {
-                            const auto startDelta = subVec(stretchingNote->rhythmIntegerPairs, beforeStart);
-                            const auto endDelta = subVec(stretchingNote->rhythmEndIntegerPairs, beforeEnd);
+                            const auto startDelta = subVec(stretchingNote->rhythmVector, beforeStart);
+                            const auto endDelta = subVec(stretchingNote->rhythmEndVector, beforeEnd);
                             for (auto& sn : region->notes) {
                                 if (sn->id == stretchingNote->id) continue;
                                 if (!selectedNoteIds.count(sn->id)) continue;
-                                sn->rhythmIntegerPairs = addVec(sn->rhythmIntegerPairs, startDelta);
-                                sn->rhythmEndIntegerPairs = addVec(sn->rhythmEndIntegerPairs, endDelta);
+                                sn->rhythmVector = addVec(sn->rhythmVector, startDelta);
+                                sn->rhythmEndVector = addVec(sn->rhythmEndVector, endDelta);
                                 sn->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
                                 sn->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
                                 sn->rhythmEdoUpperVector = region->rhythmEdoUpperVector;
@@ -760,10 +760,10 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                     if (!allZero) {
                         for (auto& sn : region->notes) {
                             if (!selectedNoteIds.count(sn->id)) continue;
-                            size_t noteMax = std::max(sn->pitchIntegerPairs.size(), deltaPairs.size());
+                            size_t noteMax = std::max(sn->pitchVector.size(), deltaPairs.size());
                             std::vector<std::pair<int,int>> preview(noteMax, {0, 1});
                             for (size_t i = 0; i < noteMax; ++i) {
-                                auto a = i < sn->pitchIntegerPairs.size() ? sn->pitchIntegerPairs[i] : std::pair<int,int>{0, 1};
+                                auto a = i < sn->pitchVector.size() ? sn->pitchVector[i] : std::pair<int,int>{0, 1};
                                 auto b = i < deltaPairs.size() ? deltaPairs[i] : std::pair<int,int>{0, 1};
                                 preview[i] = ratAdd(a, b);
                             }
@@ -835,11 +835,11 @@ void PianoRoll::createElement() {
         refreshHoveredRhythmLineIndex();
         const size_t rli = hoveredRhythmLineIndex;
         if (rli != SIZE_MAX && rli < rhythmLines.size())
-            note->rhythmIntegerPairs = rhythmLines[rli].integerPairs;
+            note->rhythmVector = rhythmLines[rli].integerPairs;
         note->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
         note->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
         note->rhythmEdoUpperVector = region->rhythmEdoUpperVector;
-        lastRhythmDurationPairs = subVec(note->rhythmEndIntegerPairs, note->rhythmIntegerPairs);
+        lastRhythmDurationPairs = subVec(note->rhythmEndVector, note->rhythmVector);
         stampNoteTuning(note);
         // CreateNoteAction::doAction does not rerun stampNoteTuning on redo; persist post-stamp state on the action.
         if (project && project->um && project->um->current && project->um->current->type == CreateNote)
@@ -938,7 +938,7 @@ void PianoRoll::stretchElement(int amount) {
     if (hoveredRhythmLineIndex != SIZE_MAX && hoveredRhythmLineIndex < rhythmLines.size()) {
         const float lineSec = rhythmLines[hoveredRhythmLineIndex].seconds;
         if (resizeDir == -1 && lineSec < stretchingNote->endSeconds() - 0.001f) {
-            stretchingNote->rhythmIntegerPairs = rhythmLines[hoveredRhythmLineIndex].integerPairs;
+            stretchingNote->rhythmVector = rhythmLines[hoveredRhythmLineIndex].integerPairs;
             // Re-anchor the note onto this line: adopt the grid's rhythm temperament.
             if (region) {
                 stretchingNote->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
@@ -946,7 +946,7 @@ void PianoRoll::stretchElement(int amount) {
                 stretchingNote->rhythmEdoUpperVector = region->rhythmEdoUpperVector;
             }
         } else if (resizeDir == 1 && lineSec > stretchingNote->startSeconds() + 0.001f) {
-            stretchingNote->rhythmEndIntegerPairs = rhythmLines[hoveredRhythmLineIndex].integerPairs;
+            stretchingNote->rhythmEndVector = rhythmLines[hoveredRhythmLineIndex].integerPairs;
             if (region) {
                 stretchingNote->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
                 stretchingNote->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
@@ -954,7 +954,7 @@ void PianoRoll::stretchElement(int amount) {
             }
         }
     }
-    lastRhythmDurationPairs = subVec(stretchingNote->rhythmEndIntegerPairs, stretchingNote->rhythmIntegerPairs);
+    lastRhythmDurationPairs = subVec(stretchingNote->rhythmEndVector, stretchingNote->rhythmVector);
     Scroll();
 }
 
@@ -963,7 +963,7 @@ float PianoRoll::noteMidiForRender(const std::shared_ptr<Note>& note) const {
     // Multi-note pitch preview (integer pairs)
     auto pit = multiPitchPreviews.find(note->id);
     if (pit != multiPitchPreviews.end())
-        return Note::midiFromPitchIntegerPairs(pit->second);
+        return Note::midiFromPitchVector(pit->second);
     // Single-note pitch preview (legacy path)
     if (movingNote && movingNote.get() == note.get() && movingNotePitchPreviewLineMidi)
         return *movingNotePitchPreviewLineMidi;
@@ -983,7 +983,7 @@ void PianoRoll::moveNoteTime(std::shared_ptr<Note> note) {
 void PianoRoll::commitNotePitchSnap(std::shared_ptr<Note> note, float targetLineMidi) {
     const size_t li = closestLineIndexForMidi(targetLineMidi);
     if (li != SIZE_MAX && li < pitchLines.size()) {
-        note->pitchIntegerPairs = pitchLines[li].integerPairs;
+        note->pitchVector = pitchLines[li].integerPairs;
         if (tuningMode == TuningMode::Harmonic && li < lineStructural.size()) {
             note->tuningAnchorHarmonic = std::max(1, lineStructural[li]);
         } else {
@@ -1004,7 +1004,7 @@ void PianoRoll::snapNoteRhythm(const std::shared_ptr<Note>& note) {
     if (!note || !region || rhythmLines.empty()) return;
     const size_t rli = closestRhythmLineIndexForSeconds(note->startSeconds());
     if (rli != SIZE_MAX && rli < rhythmLines.size()) {
-        note->rhythmIntegerPairs = rhythmLines[rli].integerPairs;
+        note->rhythmVector = rhythmLines[rli].integerPairs;
         note->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
         note->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
         note->rhythmEdoUpperVector = region->rhythmEdoUpperVector;

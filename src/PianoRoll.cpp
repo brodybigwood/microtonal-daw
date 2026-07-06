@@ -117,8 +117,8 @@ float PianoRoll::adjustTransportSeekSec(float rawSec) {
     float bestDist = FLT_MAX;
     float bestOffset = 0.f;
     for (auto* pos : region->positions) {
-        float posStart = Note::secondsFromIntegerPairs(pos->rhythmIntegerPairs);
-        float off = Note::secondsFromIntegerPairs(pos->startOffsetPairs);
+        float posStart = Note::secondsFromVector(pos->rhythmVector);
+        float off = Note::secondsFromVector(pos->startOffsetPairs);
         float phX = static_cast<float>(curEff - static_cast<double>(posStart) + static_cast<double>(off)) * dW + leftMargin - scrollX;
         float dist = std::abs(mouseX - phX);
         if (dist < bestDist) {
@@ -328,8 +328,8 @@ bool PianoRoll::customTick(SDL_Renderer* renderer) {
     transport->render(renderer);
 
     for(auto pos : region->positions) {
-        float posStart = Note::secondsFromIntegerPairs(pos->rhythmIntegerPairs);
-        float off = Note::secondsFromIntegerPairs(pos->startOffsetPairs);
+        float posStart = Note::secondsFromVector(pos->rhythmVector);
+        float off = Note::secondsFromVector(pos->startOffsetPairs);
         playHead->render(renderer, dW, scrollX + (posStart - off) * dW);
     }
 
@@ -537,7 +537,7 @@ float PianoRoll::getNotePosX(std::shared_ptr<Note> note) {
         const size_t rli = *movingNoteRhythmPreviewLineIdx;
         if (rli < rhythmLines.size()) {
             const auto startDelta = subVec(rhythmLines[rli].integerPairs, rhythmDragStartPairs);
-            return getX(Note::secondsFromIntegerPairs(addVec(note->rhythmIntegerPairs, startDelta)));
+            return getX(Note::secondsFromVector(addVec(note->rhythmVector, startDelta)));
         }
     }
     return getX(note->startSeconds());
@@ -548,7 +548,7 @@ float PianoRoll::getNoteEnd(std::shared_ptr<Note> note) {
         const size_t rli = *movingNoteRhythmPreviewLineIdx;
         if (rli < rhythmLines.size()) {
             const auto startDelta = subVec(rhythmLines[rli].integerPairs, rhythmDragStartPairs);
-            return getX(Note::secondsFromIntegerPairs(addVec(note->rhythmEndIntegerPairs, startDelta)));
+            return getX(Note::secondsFromVector(addVec(note->rhythmEndVector, startDelta)));
         }
     }
     return getX(note->endSeconds());

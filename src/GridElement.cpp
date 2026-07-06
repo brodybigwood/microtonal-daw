@@ -64,8 +64,8 @@ void GridElement::fromJSON(json j) {
     for (json& p : j) {
         auto* pos = new Position{
             pairsFromJson(p.value("startOffsetPairs", json::array())),
-            pairsFromJson(p.value("rhythmIntegerPairs", json::array())),
-            pairsFromJson(p.value("rhythmEndIntegerPairs", json::array())),
+            pairsFromJson(p.value("rhythmVector", json::array())),
+            pairsFromJson(p.value("rhythmEndVector", json::array())),
             static_cast<uint16_t>(p.value("trackID", 0)),
             p.value("id", 0),
             this,
@@ -81,8 +81,8 @@ void GridElement::fromJSON(json j) {
 json GridElement::positionToJson(const Position& pos) {
     json p;
     p["startOffsetPairs"] = pairsToJson(pos.startOffsetPairs);
-    p["rhythmIntegerPairs"] = pairsToJson(pos.rhythmIntegerPairs);
-    p["rhythmEndIntegerPairs"] = pairsToJson(pos.rhythmEndIntegerPairs);
+    p["rhythmVector"] = pairsToJson(pos.rhythmVector);
+    p["rhythmEndVector"] = pairsToJson(pos.rhythmEndVector);
     p["trackID"] = pos.trackID;
     p["id"] = pos.id;
     p["rhythmEdoSubdivisionSteps"] = pos.rhythmEdoSubdivisionSteps;
@@ -94,8 +94,8 @@ json GridElement::positionToJson(const Position& pos) {
 void GridElement::applyPositionFromJson(Position* pos, const json& j) {
     if (!pos) return;
     pos->startOffsetPairs = pairsFromJson(j.at("startOffsetPairs"));
-    pos->rhythmIntegerPairs = pairsFromJson(j.at("rhythmIntegerPairs"));
-    pos->rhythmEndIntegerPairs = pairsFromJson(j.at("rhythmEndIntegerPairs"));
+    pos->rhythmVector = pairsFromJson(j.at("rhythmVector"));
+    pos->rhythmEndVector = pairsFromJson(j.at("rhythmEndVector"));
     pos->trackID = static_cast<uint16_t>(j.at("trackID").get<int>());
     pos->rhythmEdoSubdivisionSteps = j.value("rhythmEdoSubdivisionSteps", 1);
     pos->rhythmEdoLowerVector = pairsFromJson(j.value("rhythmEdoLowerVector", json::array()));
@@ -119,8 +119,8 @@ bool GridElement::removePositionById(int positionId, size_t* removedIndex) {
 void GridElement::insertPositionAt(size_t index, const json& p) {
     auto* pos = new Position{
         pairsFromJson(p.at("startOffsetPairs")),
-        pairsFromJson(p.at("rhythmIntegerPairs")),
-        pairsFromJson(p.at("rhythmEndIntegerPairs")),
+        pairsFromJson(p.at("rhythmVector")),
+        pairsFromJson(p.at("rhythmEndVector")),
         static_cast<uint16_t>(p.at("trackID").get<int>()),
         p.at("id").get<int>(),
         this,

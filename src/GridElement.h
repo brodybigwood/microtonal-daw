@@ -24,8 +24,8 @@ class GridElement {
         virtual ~GridElement();
 
         struct Position {
-            std::vector<std::pair<int, int>> rhythmIntegerPairs;
-            std::vector<std::pair<int, int>> rhythmEndIntegerPairs;
+            std::vector<std::pair<int, int>> rhythmVector;
+            std::vector<std::pair<int, int>> rhythmEndVector;
             std::vector<std::pair<int, int>> startOffsetPairs;
             uint16_t trackID;
             int id;

@@ -26,17 +26,17 @@
 // Note actions: create/move/delete, tuning, harmonic assignment (split from UndoManager.cpp).
 
 CreateNoteAction::CreateNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, std::vector<std::pair<int,int>> startPairs,
-                                   std::vector<std::pair<int,int>> endPairs, std::vector<std::pair<int, int>> pitchIntegerPairs) :
+                                   std::vector<std::pair<int,int>> endPairs, std::vector<std::pair<int, int>> pitchVector) :
         ProjectAction(p, CreateNote),
         managerPath(std::move(managerPath)),
         regionID(regionID),
-        rhythmIntegerPairs(std::move(startPairs)),
-        rhythmEndIntegerPairs(std::move(endPairs)),
-        pitchIntegerPairs(std::move(pitchIntegerPairs)),
+        rhythmVector(std::move(startPairs)),
+        rhythmEndVector(std::move(endPairs)),
+        pitchVector(std::move(pitchVector)),
         nodeID(nodeID) {
     doAction = [this]() {
         Region& region = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
-        noteID = region.createNote(this->rhythmIntegerPairs, this->rhythmEndIntegerPairs, this->pitchIntegerPairs);
+        noteID = region.createNote(this->rhythmVector, this->rhythmEndVector, this->pitchVector);
         name = "Create Note " + std::to_string(noteID) + " " + std::to_string(this->regionID);
         if (!noteStampedSnapshot.is_null()) {
             auto it = region.id_to_index.find(noteID);

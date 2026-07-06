@@ -31,18 +31,18 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
         case CreateNote: {
             auto managerPath = j.at("managerPath").get<std::vector<int>>();
             std::vector<std::pair<int, int>> pairs;
-            for (const auto& el : j.at("pitchIntegerPairs")) {
+            for (const auto& el : j.at("pitchVector")) {
                 pairs.push_back({el.at(0).get<int>(), el.at(1).get<int>()});
             }
             std::vector<std::pair<int,int>> rhythmPairs;
-            if (j.contains("rhythmIntegerPairs") && j["rhythmIntegerPairs"].is_array()) {
-                for (const auto& el : j["rhythmIntegerPairs"])
+            if (j.contains("rhythmVector") && j["rhythmVector"].is_array()) {
+                for (const auto& el : j["rhythmVector"])
                     if (el.is_array() && el.size() >= 2)
                         rhythmPairs.push_back({el[0].get<int>(), el[1].get<int>()});
             }
             std::vector<std::pair<int,int>> endRPairs;
-            if (j.contains("rhythmEndIntegerPairs") && j["rhythmEndIntegerPairs"].is_array()) {
-                for (const auto& el : j["rhythmEndIntegerPairs"])
+            if (j.contains("rhythmEndVector") && j["rhythmEndVector"].is_array()) {
+                for (const auto& el : j["rhythmEndVector"])
                     if (el.is_array() && el.size() >= 2)
                         endRPairs.push_back({el[0].get<int>(), el[1].get<int>()});
             }
@@ -316,15 +316,15 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["managerPath"] = cn->managerPath;
             j["nodeID"] = cn->nodeID;
             j["regionID"] = cn->regionID;
-            j["rhythmIntegerPairs"] = json::array();
-            for (const auto& pr : cn->rhythmIntegerPairs)
-                j["rhythmIntegerPairs"].push_back(json::array({pr.first, pr.second}));
-            j["rhythmEndIntegerPairs"] = json::array();
-            for (const auto& pr : cn->rhythmEndIntegerPairs)
-                j["rhythmEndIntegerPairs"].push_back(json::array({pr.first, pr.second}));
-            j["pitchIntegerPairs"] = json::array();
-            for (const auto& pr : cn->pitchIntegerPairs)
-                j["pitchIntegerPairs"].push_back(json::array({pr.first, pr.second}));
+            j["rhythmVector"] = json::array();
+            for (const auto& pr : cn->rhythmVector)
+                j["rhythmVector"].push_back(json::array({pr.first, pr.second}));
+            j["rhythmEndVector"] = json::array();
+            for (const auto& pr : cn->rhythmEndVector)
+                j["rhythmEndVector"].push_back(json::array({pr.first, pr.second}));
+            j["pitchVector"] = json::array();
+            for (const auto& pr : cn->pitchVector)
+                j["pitchVector"].push_back(json::array({pr.first, pr.second}));
             j["noteID"] = cn->noteID;
             if (!cn->noteStampedSnapshot.is_null())
                 j["noteStampedSnapshot"] = cn->noteStampedSnapshot;

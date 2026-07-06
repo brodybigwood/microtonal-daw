@@ -51,7 +51,7 @@ void PianoRoll::renderPitchFactorsHoverTooltip() {
     if (hoverPitchFactorsNoteId != note->id)
         return;
 
-    const std::string text = formatPrimePowerVector(note->pitchIntegerPairs);
+    const std::string text = formatPrimePowerVector(note->pitchVector);
     const SDL_FRect bounds{0.f, 0.f, static_cast<float>(width), static_cast<float>(height - bottomMargin)};
     renderTooltip(renderer, text, mouseX + dstRect->x, mouseY + dstRect->y, bounds);
 }
@@ -64,7 +64,7 @@ void PianoRoll::applyNoteTuning(const std::shared_ptr<Note>& note) {
     harmonicAnchorNumber = std::max(1, note->tuningAnchorHarmonic);
     if (region) {
         if (tuningMode == TuningMode::Harmonic) {
-            region->tuningHarmonicAnchorVector = note->pitchIntegerPairs;
+            region->tuningHarmonicAnchorVector = note->pitchVector;
         } else {
             region->tuningHarmonicAnchorVector.clear();
             region->tuningEdoSubdivisionSteps = note->tuningEdoSubdivisionSteps;
@@ -80,7 +80,7 @@ void PianoRoll::applyNoteTuning(const std::shared_ptr<Note>& note) {
 void PianoRoll::stampNoteTuning(const std::shared_ptr<Note>& note) {
     if (!note) return;
     note->tuningMode = (tuningMode == TuningMode::EDO) ? 1 : 0;
-    note->syncNumFromPitchIntegerPairs();
+    note->syncNumFromPitchVector();
 }
 
 void PianoRoll::syncTuningToRegion() {
@@ -117,7 +117,7 @@ void PianoRoll::updateLines() {
         const auto anchorBase = subVec(anchorVec, densePrimeExponentPairsForHarmonic(harmonicAnchorNumber));
         for (int h = 1; h <= 512; ++h) {
             auto pairs = addVec(anchorBase, densePrimeExponentPairsForHarmonic(h));
-            const float midi = Note::midiFromPitchIntegerPairs(pairs);
+            const float midi = Note::midiFromPitchVector(pairs);
             if (midi < -24.0f || midi > 152.0f) continue;
             pitchLines.emplace_back(midi);
             pitchLines.back().integerPairs = std::move(pairs);
@@ -130,7 +130,7 @@ void PianoRoll::updateLines() {
             for (int k = -1024; k <= 1024; ++k) {
                 std::vector<std::pair<int, int>> pairs =
                     edoVectorForK(k, subdiv, region->tuningEdoLowerVector, region->tuningEdoUpperVector);
-                const float midi = Note::midiFromPitchIntegerPairs(pairs);
+                const float midi = Note::midiFromPitchVector(pairs);
                 if (midi < -24.0f || midi > 152.0f) continue;
                 pitchLines.emplace_back(midi);
                 pitchLines.back().integerPairs = std::move(pairs);
@@ -185,7 +185,7 @@ size_t PianoRoll::closestLineIndexForMidi(float midiPitch) const {
     return best;
 }
 
-std::vector<std::pair<int, int>> PianoRoll::pitchIntegerPairsAtGridMidi(float midiPitch) const {
+std::vector<std::pair<int, int>> PianoRoll::pitchVectorAtGridMidi(float midiPitch) const {
     const size_t li = closestLineIndexForMidi(midiPitch);
     if (li != SIZE_MAX && li < pitchLines.size())
         return pitchLines[li].integerPairs;

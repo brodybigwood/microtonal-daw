@@ -163,7 +163,7 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         int intervalDragHarmB = 0;
         int intervalDragEdoKA = INT_MAX;
         int intervalDragEdoKB = INT_MAX;
-        /** Rational snapshot at mousedown / while hovering end note; avoids pitchIntegerPairsAtGridMidi(note->num). */
+        /** Rational snapshot at mousedown / while hovering end note; avoids pitchVectorAtGridMidi(note->num). */
         std::vector<std::pair<int, int>> intervalDragStartVertexPairs;
         std::vector<std::pair<int, int>> intervalDragEndVertexPairs;
         /** Define-EDO text dialog: keep band + commit vectors frozen from last drag frame until dialog closes. */
@@ -189,7 +189,7 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         std::vector<std::pair<int, int>> rhythmDialogFrozenEndPairs;
 
         size_t closestLineIndexForMidi(float midiPitch) const;
-        std::vector<std::pair<int, int>> pitchIntegerPairsAtGridMidi(float midiPitch) const;
+        std::vector<std::pair<int, int>> pitchVectorAtGridMidi(float midiPitch) const;
         void refreshHoveredPitchLineIndex();
         int hoveredHarmonicFromGrid();
         int hoveredEdoKFromGrid();

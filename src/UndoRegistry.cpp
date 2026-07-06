@@ -72,7 +72,7 @@ std::string UndoManager::actionSchema(const std::string& actionName) {
         return R"({"managerPath":[int,...],"nodeID":int,"trackType":int})";
     }
     if (actionName == "create_note") {
-        return R"({"managerPath":[int,...],"nodeID":int,"regionID":int,"start":fract_json,"length":fract_json,"pitch":float,"pitchIntegerPairs":[[int,int],...]})";
+        return R"({"managerPath":[int,...],"nodeID":int,"regionID":int,"start":fract_json,"length":fract_json,"pitch":float,"pitchVector":[[int,int],...]})";
     }
     if (actionName == "create_region") {
         return R"({"managerPath":[int,...],"nodeID":int})";
@@ -190,18 +190,18 @@ bool UndoManager::runRegisteredAction(const std::string& actionName, const json&
             auto managerPath = params.at("managerPath").get<std::vector<int>>();
             requireManager(head->p, managerPath);
             std::vector<std::pair<int, int>> pairs;
-            for (const auto& el : params.at("pitchIntegerPairs")) {
+            for (const auto& el : params.at("pitchVector")) {
                 pairs.push_back({el.at(0).get<int>(), el.at(1).get<int>()});
             }
             std::vector<std::pair<int,int>> rPairs;
-            if (params.contains("rhythmIntegerPairs") && params["rhythmIntegerPairs"].is_array()) {
-                for (const auto& el : params["rhythmIntegerPairs"])
+            if (params.contains("rhythmVector") && params["rhythmVector"].is_array()) {
+                for (const auto& el : params["rhythmVector"])
                     if (el.is_array() && el.size() >= 2)
                         rPairs.push_back({el[0].get<int>(), el[1].get<int>()});
             }
             std::vector<std::pair<int,int>> rEndPairs;
-            if (params.contains("rhythmEndIntegerPairs") && params["rhythmEndIntegerPairs"].is_array()) {
-                for (const auto& el : params["rhythmEndIntegerPairs"])
+            if (params.contains("rhythmEndVector") && params["rhythmEndVector"].is_array()) {
+                for (const auto& el : params["rhythmEndVector"])
                     if (el.is_array() && el.size() >= 2)
                         rEndPairs.push_back({el[0].get<int>(), el[1].get<int>()});
             }
