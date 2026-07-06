@@ -310,22 +310,40 @@ struct RhythmGridLine {
 };
 
 /// Generate EDO rhythm lines within the given second range.
+/// Expands outward from k=0 until both directions are beyond [minSec, maxSec].
 inline void generateRhythmLines(std::vector<RhythmGridLine>& outLines,
                                 std::vector<std::string>& outLabels,
                                 int steps,
                                 const std::vector<std::pair<int, int>>& lower,
                                 const std::vector<std::pair<int, int>>& upper,
-                                float minSec = -60.f, float maxSec = 3600.f) {
+                                float minSec, float maxSec) {
     outLines.clear();
     outLabels.clear();
     if (steps <= 0) return;
-    for (int k = -1024; k <= 1024; ++k) {
+
+    const float lowerSec = Note::secondsFromVector(lower);
+    const float upperSec = Note::secondsFromVector(upper);
+    const float stepSec = (upperSec - lowerSec) / static_cast<float>(steps);
+    if (stepSec == 0.f) {
+        if (lowerSec >= minSec && lowerSec <= maxSec) {
+            auto pairs = lower;
+            outLines.emplace_back(lowerSec);
+            outLines.back().integerPairs = std::move(pairs);
+            outLines.back().isBeat = true;
+            outLabels.push_back("0");
+        }
+        return;
+    }
+
+    const int kFirst = static_cast<int>(std::ceil((minSec - lowerSec) / stepSec));
+    const int kLast  = static_cast<int>(std::floor((maxSec - lowerSec) / stepSec));
+
+    for (int k = kFirst; k <= kLast; ++k) {
         auto pairs = edoVectorForK(k, steps, lower, upper);
-        const float seconds = Note::secondsFromVector(pairs);
-        if (seconds < minSec || seconds > maxSec) continue;
-        outLines.emplace_back(seconds);
+        const float s = Note::secondsFromVector(pairs);
+        outLines.emplace_back(s);
         outLines.back().integerPairs = std::move(pairs);
-        outLines.back().isBeat = (steps > 0 && k % steps == 0);
+        outLines.back().isBeat = (k % steps == 0);
         outLabels.push_back(std::to_string(k));
     }
 }

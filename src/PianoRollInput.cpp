@@ -460,11 +460,28 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     ctxMenu->dynamicTick = getTextInputTicker(
                         [this, a, b, capStartPairs, capEndPairs](std::string text) {
                         try {
-                            const int steps = std::max(1, std::stoi(text));
-                            const float lo = std::min(a, b);
-                            const float hi = std::max(a, b);
-                            const auto& lowerPairs = (a <= b) ? capStartPairs : capEndPairs;
-                            const auto& upperPairs = (a <= b) ? capEndPairs : capStartPairs;
+                            int num = 1, den = 1;
+                            auto slash = text.find('/');
+                            if (slash != std::string::npos) {
+                                num = std::max(1, std::stoi(text.substr(0, slash)));
+                                den = std::max(1, std::stoi(text.substr(slash + 1)));
+                                int g = std::gcd(num, den);
+                                num /= g;
+                                den /= g;
+                            } else {
+                                num = std::max(1, std::stoi(text));
+                            }
+                            auto diffVec = subVec(capEndPairs, capStartPairs);
+                            std::vector<std::pair<int, int>> scaledDiff;
+                            scaledDiff.reserve(diffVec.size());
+                            for (auto& p : diffVec)
+                                scaledDiff.push_back(ratMulInt(p, den));
+                            auto otherPairs = addVec(capStartPairs, scaledDiff);
+                            const float fixedSec = a;
+                            const float otherSec = Note::secondsFromVector(otherPairs);
+                            const auto& lowerPairs = (fixedSec <= otherSec) ? capStartPairs : otherPairs;
+                            const auto& upperPairs = (fixedSec <= otherSec) ? otherPairs : capStartPairs;
+                            int steps = num;
                             auto before = captureRegionTuning(region);
                             auto after = before;
                             after.rhythmEdoSubdivisionSteps = steps;

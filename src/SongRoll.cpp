@@ -1,6 +1,7 @@
 #include "SongRoll.h"
 #include <algorithm>
 #include <cmath>
+#include <numeric>
 #include <sstream>
 #include <iomanip>
 #include "GridElement.h"
@@ -24,6 +25,7 @@
 #include "nodes/arranger/arranger.h"
 #include "NodeManager.h"
 #include "Note.h"
+#include "PianoRollInternal.h"
 
 namespace {
 constexpr float kTimelinePosBorderH = 4.0f;
@@ -171,6 +173,8 @@ bool SongRoll::customTick(SDL_Renderer* renderer) {
     syncLayout();
     validateTimelinePointers();
 
+    updateRhythmLines();
+
     auto target = SDL_GetRenderTarget(renderer);
 
     RenderGridTexture(renderer);
@@ -267,8 +271,9 @@ void SongRoll::updateRhythmLines() {
     const auto& lower = parentNode ? parentNode->rhythmEdoLowerVector : std::vector<std::pair<int,int>>{};
     const auto& upper = (parentNode && !parentNode->rhythmEdoUpperVector.empty())
         ? parentNode->rhythmEdoUpperVector : kOneSec;
-    generateRhythmLines(rhythmLines, rhythmLineLabels, steps, lower, upper);
-    // Also update the legacy `times` vector for grid rendering
+    const float minSec = (static_cast<float>(scrollX) - leftMargin) / static_cast<float>(dW);
+    const float maxSec = (static_cast<float>(scrollX) + width - leftMargin) / static_cast<float>(dW);
+    generateRhythmLines(rhythmLines, rhythmLineLabels, steps, lower, upper, minSec, maxSec);
     times.clear();
     for (const auto& rl : rhythmLines)
         times.push_back(rl.seconds);
@@ -757,11 +762,28 @@ void SongRoll::clickMouse(SDL_Event& e) {
                         ctxMenu->dynamicTick = getTextInputTicker(
                             [this, a, b, capStartPairs, capEndPairs](std::string text) {
                             try {
-                                const int steps = std::max(1, std::stoi(text));
-                                const float lo = std::min(a, b);
-                                const float hi = std::max(a, b);
-                                const auto& lowerPairs = (a <= b) ? capStartPairs : capEndPairs;
-                                const auto& upperPairs = (a <= b) ? capEndPairs : capStartPairs;
+                                int num = 1, den = 1;
+                                auto slash = text.find('/');
+                                if (slash != std::string::npos) {
+                                    num = std::max(1, std::stoi(text.substr(0, slash)));
+                                    den = std::max(1, std::stoi(text.substr(slash + 1)));
+                                    int g = std::gcd(num, den);
+                                    num /= g;
+                                    den /= g;
+                                } else {
+                                    num = std::max(1, std::stoi(text));
+                                }
+                                auto diffVec = subVec(capEndPairs, capStartPairs);
+                                std::vector<std::pair<int, int>> scaledDiff;
+                                scaledDiff.reserve(diffVec.size());
+                                for (auto& p : diffVec)
+                                    scaledDiff.push_back(ratMulInt(p, den));
+                                auto otherPairs = addVec(capStartPairs, scaledDiff);
+                                const float fixedSec = a;
+                                const float otherSec = Note::secondsFromVector(otherPairs);
+                                const auto& lowerPairs = (fixedSec <= otherSec) ? capStartPairs : otherPairs;
+                                const auto& upperPairs = (fixedSec <= otherSec) ? otherPairs : capStartPairs;
+                                int steps = num;
                                 json before;
                                 before["steps"] = parentNode->rhythmEdoSubdivisionSteps;
                                 before["lower"] = json::array();

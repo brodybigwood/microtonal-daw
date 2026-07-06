@@ -288,6 +288,8 @@ bool PianoRoll::customTick(SDL_Renderer* renderer) {
         initWindow(renderer);
     }
 
+    updateRhythmLines();
+
     if(refreshGrid) {
         refreshGrid = false;
         renderPianoRollGridTexture(renderer);
