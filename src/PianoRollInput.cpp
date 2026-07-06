@@ -47,6 +47,22 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                         if (canSwitchToEdo)
                             newTuning();
                     }
+                    // Channel picker left arrow
+                    if (mouseX + dstRect->x >= channelLeftRect.x &&
+                        mouseX + dstRect->x <= channelLeftRect.x + channelLeftRect.w &&
+                        mouseY + dstRect->y >= channelLeftRect.y &&
+                        mouseY + dstRect->y <= channelLeftRect.y + channelLeftRect.h) {
+                        if (currentChannel > 0) currentChannel--;
+                        refreshGrid = true;
+                    }
+                    // Channel picker right arrow
+                    if (mouseX + dstRect->x >= channelRightRect.x &&
+                        mouseX + dstRect->x <= channelRightRect.x + channelRightRect.w &&
+                        mouseY + dstRect->y >= channelRightRect.y &&
+                        mouseY + dstRect->y <= channelRightRect.y + channelRightRect.h) {
+                        currentChannel++;
+                        refreshGrid = true;
+                    }
                     return;
                 }
                 if (isCtrlPressed && isShiftPressed && mouseX > leftMargin) {
@@ -100,6 +116,22 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     return;
                 }
                 if (isCtrlPressed && mouseX > leftMargin) {
+                    // Check for background-channel note first: ctrl+click switches channel
+                    if (!isShiftPressed) {
+                        for (auto& note : region->notes) {
+                            if (note->channel == currentChannel) continue;
+                            const int notePosX = getNotePosX(note);
+                            const int noteEnd = getNoteEnd(note);
+                            const int noteY = getY(noteMidiForRender(note));
+                            if (mouseX >= notePosX && mouseX <= noteEnd &&
+                                mouseY <= noteY + noteRadius && mouseY >= (noteY - noteRadius)) {
+                                currentChannel = note->channel;
+                                handleMouse();
+                                refreshGrid = true;
+                                return;
+                            }
+                        }
+                    }
                     getExistingNote();
                     if (hoveredElement != nullptr) {
                         auto n = std::dynamic_pointer_cast<Note>(hoveredElement);
@@ -279,6 +311,7 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     float bx2 = std::max(rubberBandStartX, rubberBandEndX);
                     float by2 = std::max(rubberBandStartY, rubberBandEndY);
                     for (auto& note : region->notes) {
+                        if (note->channel != currentChannel) continue;
                         float nx = getNotePosX(note);
                         float ne = getNoteEnd(note);
                         float ny = getY(noteMidiForRender(note));
@@ -843,6 +876,7 @@ void PianoRoll::createElement() {
     );
     if (!region->notes.empty()) {
         auto note = region->notes.back();
+        note->channel = currentChannel;
         note->tuningAnchorHarmonic = anchorHarmonic;
         if (tuningMode == TuningMode::EDO) {
             note->tuningEdoSubdivisionSteps = region->tuningEdoSubdivisionSteps;
@@ -921,6 +955,8 @@ bool PianoRoll::getStretchingNote() {
         return true;
     }
     for (std::shared_ptr<Note> note : region->notes) {
+        if (note->channel != currentChannel) continue;
+
         const int notePosX = getNotePosX(note);
         const int noteEnd = getNoteEnd(note);
         const int noteY = getY(noteMidiForRender(note));

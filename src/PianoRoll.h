@@ -174,6 +174,12 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         std::vector<std::pair<int, int>> intervalDialogFrozenEndVertexPairs;
         SDL_FRect modeButtonRect{8.0f, 0.0f, 180.0f, 0.0f};
 
+        // Channel focus
+        int currentChannel = 0;
+        SDL_FRect channelLeftRect{0.0f, 0.0f, 0.0f, 0.0f};
+        SDL_FRect channelRightRect{0.0f, 0.0f, 0.0f, 0.0f};
+        SDL_FRect channelLabelRect{0.0f, 0.0f, 0.0f, 0.0f};
+
         // Rhythm interval drag (Ctrl+Shift)
         bool selectingRhythmInterval = false;
         std::shared_ptr<Note> rhythmIntervalStartNote = nullptr;

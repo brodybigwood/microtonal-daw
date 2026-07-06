@@ -18,6 +18,7 @@ struct Event {
     float num;
     int id;
     int sampleOffset;
+    int channel = 0;
 };
 
 enum DataType{

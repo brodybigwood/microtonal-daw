@@ -17,7 +17,7 @@ class Note {
         float num;  // Frequency or pitch of the note
 
         int id;
-        int channel;
+        int channel = 0;
         int tuningMode = 0; // 0=harmonic, 1=edo
         int tuningAnchorHarmonic = 1;
         int tuningEdoSubdivisionSteps = 12;

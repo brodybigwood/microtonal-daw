@@ -120,7 +120,7 @@ std::shared_ptr<Note> Note::fromJSON(json& input) {
         endPairs = startPairs;
     }
     auto nid = input.at("id").get<int>();
-    auto channel = input.at("channel").get<int>();
+    auto channel = input.value("channel", 0);
 
     std::shared_ptr<Note> n = std::make_shared<Note>(startPairs, endPairs);
     n->id = nid;

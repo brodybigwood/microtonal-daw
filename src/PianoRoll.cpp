@@ -393,6 +393,79 @@ bool PianoRoll::customTick(SDL_Renderer* renderer) {
         }
     }
 
+    // Channel picker (right of mode button)
+    {
+        const float chPickerX = modeButtonRect.x + modeButtonRect.w + 12.0f;
+        const float chPickerY = dstRect->y + height - bottomMargin + 3.0f;
+        const float chPickerH = std::max(12.0f, bottomMargin - 6.0f);
+        const float btnW = 22.0f;
+
+        channelLeftRect = {chPickerX, chPickerY, btnW, chPickerH};
+        channelLabelRect = {chPickerX + btnW, chPickerY, 36.0f, chPickerH};
+        channelRightRect = {chPickerX + btnW + 36.0f, chPickerY, btnW, chPickerH};
+
+        // Left arrow button
+        SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
+        SDL_RenderFillRect(renderer, &channelLeftRect);
+        SDL_SetRenderDrawColor(renderer, 130, 130, 130, 255);
+        SDL_RenderRect(renderer, &channelLeftRect);
+        if (fonts.mainFont) {
+            SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, "<", 0, {230, 230, 230, 255});
+            if (surf) {
+                SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
+                if (tex) {
+                    SDL_FRect tr{channelLeftRect.x + (channelLeftRect.w - surf->w) * 0.5f,
+                                 channelLeftRect.y + (channelLeftRect.h - surf->h) * 0.5f,
+                                 (float)surf->w, (float)surf->h};
+                    SDL_RenderTexture(renderer, tex, nullptr, &tr);
+                    SDL_DestroyTexture(tex);
+                }
+                SDL_DestroySurface(surf);
+            }
+        }
+
+        // Channel label
+        SDL_SetRenderDrawColor(renderer, 40, 40, 44, 255);
+        SDL_RenderFillRect(renderer, &channelLabelRect);
+        SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
+        SDL_RenderRect(renderer, &channelLabelRect);
+        if (fonts.mainFont) {
+            std::string chText = std::to_string(currentChannel);
+            SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, chText.c_str(), 0, {230, 230, 230, 255});
+            if (surf) {
+                SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
+                if (tex) {
+                    SDL_FRect tr{channelLabelRect.x + (channelLabelRect.w - surf->w) * 0.5f,
+                                 channelLabelRect.y + (channelLabelRect.h - surf->h) * 0.5f,
+                                 (float)surf->w, (float)surf->h};
+                    SDL_RenderTexture(renderer, tex, nullptr, &tr);
+                    SDL_DestroyTexture(tex);
+                }
+                SDL_DestroySurface(surf);
+            }
+        }
+
+        // Right arrow button
+        SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
+        SDL_RenderFillRect(renderer, &channelRightRect);
+        SDL_SetRenderDrawColor(renderer, 130, 130, 130, 255);
+        SDL_RenderRect(renderer, &channelRightRect);
+        if (fonts.mainFont) {
+            SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, ">", 0, {230, 230, 230, 255});
+            if (surf) {
+                SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
+                if (tex) {
+                    SDL_FRect tr{channelRightRect.x + (channelRightRect.w - surf->w) * 0.5f,
+                                 channelRightRect.y + (channelRightRect.h - surf->h) * 0.5f,
+                                 (float)surf->w, (float)surf->h};
+                    SDL_RenderTexture(renderer, tex, nullptr, &tr);
+                    SDL_DestroyTexture(tex);
+                }
+                SDL_DestroySurface(surf);
+            }
+        }
+    }
+
     renderPitchFactorsHoverTooltip();
 
     return true;
@@ -458,35 +531,73 @@ void PianoRoll::RenderNotes(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer,0,0,0,0);
     SDL_RenderClear(renderer);
 
-    //backgrounds first
-    for(std::shared_ptr<Note> note : region->notes) {
+    // Separate notes by channel: background channels first, then current channel on top
+    std::vector<std::shared_ptr<Note>> bgNotes, chNotes;
+    for (auto& note : region->notes) {
+        if (note->channel == currentChannel)
+            chNotes.push_back(note);
+        else
+            bgNotes.push_back(note);
+    }
 
+    // Background channel notes
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    for (auto& note : bgNotes) {
         float noteX = getNotePosX(note) +1;
         float noteY = getY(noteMidiForRender(note));
         float noteEnd = getNoteEnd(note) -2;
         float noteTop = noteY + noteHeight;
 
+        SDL_SetRenderDrawColor(renderer, colors.noteBackground[0], colors.noteBackground[1],
+                               colors.noteBackground[2], colors.noteBackground[3] / 4);
+        SDL_FRect noteBGRect = { noteX, noteY, noteEnd - noteX, noteTop-noteY};
+        SDL_RenderFillRect(renderer, &noteBGRect);
+    }
+
+    for (auto& note : bgNotes) {
+        float noteX = getNotePosX(note) +1;
+        float noteY = getY(noteMidiForRender(note));
+        float noteEnd = getNoteEnd(note) -2;
+
+        bool selected = selectedNoteIds.count(note->id) > 0;
+        auto& col = selected ? colors.noteSelected : colors.note;
+        auto& bcol = selected ? colors.noteSelectedBorder : colors.noteBorder;
+
+        SDL_SetRenderDrawColor(renderer, col[0], col[1], col[2], col[3] / 4);
+        SDL_FRect noteRect = { noteX, noteY - noteRadius, noteEnd - noteX, 2*noteRadius};
+        SDL_RenderFillRect(renderer, &noteRect);
+
+        SDL_SetRenderDrawColor(renderer, bcol[0], bcol[1], bcol[2], bcol[3] / 4);
+        SDL_RenderRect(renderer, &noteRect);
+    }
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+
+    // Current channel notes: backgrounds
+    for (auto& note : chNotes) {
+        float noteX = getNotePosX(note) +1;
+        float noteY = getY(noteMidiForRender(note));
+        float noteEnd = getNoteEnd(note) -2;
+        float noteTop = noteY + noteHeight;
 
         setRenderColor(renderer, colors.noteBackground);
         SDL_FRect noteBGRect = { noteX, noteY, noteEnd - noteX, noteTop-noteY};
         SDL_RenderFillRect(renderer, &noteBGRect);
     }
 
-    for(std::shared_ptr<Note> note : region->notes) {
-            float noteX = getNotePosX(note) +1;
-            float noteY = getY(noteMidiForRender(note));
-            float noteEnd = getNoteEnd(note) -2;
+    // Current channel notes: rects
+    for (auto& note : chNotes) {
+        float noteX = getNotePosX(note) +1;
+        float noteY = getY(noteMidiForRender(note));
+        float noteEnd = getNoteEnd(note) -2;
 
-            bool selected = selectedNoteIds.count(note->id) > 0;
+        bool selected = selectedNoteIds.count(note->id) > 0;
 
-            setRenderColor(renderer, selected ? colors.noteSelected : colors.note);
-            SDL_FRect noteRect = { noteX, noteY - noteRadius, noteEnd - noteX, 2*noteRadius};
-            SDL_RenderFillRect(renderer, &noteRect);
+        setRenderColor(renderer, selected ? colors.noteSelected : colors.note);
+        SDL_FRect noteRect = { noteX, noteY - noteRadius, noteEnd - noteX, 2*noteRadius};
+        SDL_RenderFillRect(renderer, &noteRect);
 
-            setRenderColor(renderer, selected ? colors.noteSelectedBorder : colors.noteBorder);
-
-            SDL_RenderRect(renderer, &noteRect);
-
+        setRenderColor(renderer, selected ? colors.noteSelectedBorder : colors.noteBorder);
+        SDL_RenderRect(renderer, &noteRect);
     }
 
     // Rubber band selection rect
@@ -513,22 +624,19 @@ bool PianoRoll::getExistingNote() {
     if(mouseY < topMargin || mouseX < leftMargin) {
         return false;
     }
-    int i = 0;
     for (std::shared_ptr<Note> note : region->notes) {
-        
-        // Get the required positions and size once per iteration
+        if (note->channel != currentChannel) continue;
+
         const int notePosX = getNotePosX(note);
         const int noteEnd = getNoteEnd(note);
         const int noteY = getY(noteMidiForRender(note));
 
-        // Check if mouse is within note bounds
         if (mouseX >= notePosX && mouseX <= noteEnd &&
             mouseY <= noteY + noteRadius && mouseY >= (noteY - noteRadius)) {
-            hoveredElement = note; // Found the hovered note
+            hoveredElement = note;
             lastHoveredLine = getHoveredLine();
-            return true; // Exit early
+            return true;
         }
-        i++;
     }
     return false;
 }
