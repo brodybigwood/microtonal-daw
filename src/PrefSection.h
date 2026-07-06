@@ -77,6 +77,25 @@ public:
     const std::vector<SettingDesc>& settings() const override;
 };
 
+class ColorsSection : public PrefSection {
+public:
+    const char* title() const override { return "Colors"; }
+    bool hasContent() const override { return true; }
+    void drawSymbol(SDL_Renderer* r, float cx, float cy, float sz) const override;
+    void renderContent(SDL_Renderer* r, const SDL_FRect& b, float s) override;
+    bool handleContentInput(SDL_Event& e, float mx, float my,
+                            const SDL_FRect& innerBounds) override;
+
+private:
+    int viewLevel_ = 0;           // 0=presets, 1=colors, 2=picker
+    int selectedPresetIdx_ = -1;
+    int selectedColorIdx_ = -1;
+    float scrollOffset_ = 0.f;
+    float hue_ = 0.5f, sat_ = 0.5f, val_ = 0.5f;
+    bool draggingHSV_ = false, draggingHue_ = false;
+    void applyEdit();
+};
+
 class GeneralSection : public PrefSection {
 public:
     const char* title() const override { return "General"; }

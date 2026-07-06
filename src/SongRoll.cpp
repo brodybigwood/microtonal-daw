@@ -194,9 +194,9 @@ bool SongRoll::customTick(SDL_Renderer* renderer) {
         renderRhythmIntervalEndLine(renderer, endSec);
     }
 
-    playHead->render(renderer, dW, scrollX);
-
     renderMargins(renderer);
+
+    playHead->render(renderer, dW, scrollX);
     return true;
 }
 

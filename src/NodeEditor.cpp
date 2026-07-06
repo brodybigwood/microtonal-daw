@@ -297,7 +297,7 @@ void NodeEditor::render(SDL_Renderer* renderer, SDL_FRect* surfaceRect) {
     if (topMargin > 0.f)
         renderRootMenuBarSkeleton(renderer, surfaceRect);
 
-    SDL_SetRenderDrawColor(renderer, 220, 220, 220, 255);
+    SDL_SetRenderDrawColor(renderer, colors.nodeGraphBg[0], colors.nodeGraphBg[1], colors.nodeGraphBg[2], colors.nodeGraphBg[3]);
     SDL_RenderFillRect(renderer, &nodeRect);
 
     SDL_Rect clip{

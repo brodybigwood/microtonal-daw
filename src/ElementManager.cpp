@@ -288,7 +288,7 @@ void ElementManager::render(SDL_Renderer* renderer) {
         static_cast<int>(dstRect->h)
     };
     SDL_SetRenderClipRect(renderer, &clipRect);
-    SDL_SetRenderDrawColor(renderer, 40, 40, 40, 255);
+    SDL_SetRenderDrawColor(renderer, colors.elementListBg[0], colors.elementListBg[1], colors.elementListBg[2], colors.elementListBg[3]);
     SDL_RenderFillRect(renderer, dstRect);
 
 

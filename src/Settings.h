@@ -45,6 +45,14 @@ public:
     // Whether a backup exists (so UI can show/hide the restore button).
     bool hasBackup() const;
 
+    // Color presets
+    nlohmann::json getColorPresets() const;
+    nlohmann::json getDefaultColorPresets() const;
+    void setColorPreset(const std::string& name, const nlohmann::json& colors);
+    void deleteColorPreset(const std::string& name);
+    std::string currentColorPreset() const;
+    void setCurrentColorPreset(const std::string& name);
+
 private:
     Settings();
     void load();

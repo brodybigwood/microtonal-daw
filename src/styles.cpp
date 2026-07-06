@@ -1,11 +1,11 @@
 #include "styles.h"
+#include "Settings.h"
 #include <SDL3/SDL_mouse.h>
 int lineWidth = 1;
 
 ColorCodes colors {
     {66, 84, 95, 255}, //bg
     {29, 47, 57, 255}, //grid
-    {29, 47, 57, 127}, //subgrid
 
     {200,255,211,255}, //note
     {254,160,161,255},
@@ -13,21 +13,49 @@ ColorCodes colors {
     {187,111,111,255},
     {50,64,108,100},
 
-    {108,91,93,255},
-    {238,242,250,255},
-    {76,77,79,255},
-    {219,223,231,255},
-    {95,96,98,255},
-
-    {50,66,76,255},
+    {238,242,250,255}, //keyWhite
 
     {101, 182, 202, 255}, //playhead
 
-    {72, 77, 78, 255}, //editor background
-    {56, 56, 56, 255}
+    {38, 42, 48, 255},  //trackBackground
+    {48, 52, 58, 255},  //trackBody
+    {60, 64, 72, 255},  //trackBorder
+    {210, 90, 90, 255}, //trackAudio
+    {90, 200, 130, 255},//trackNotes
+    {210, 190, 55, 255},//trackAutomation
+    {32, 35, 40, 255},  //nodeGraphBg
+    {38, 42, 48, 255}   //elementListBg
 };
 
 Cursors cursors{};
+
+namespace {
+void setColorField(uint8_t* dst, const nlohmann::json& j, const char* key) {
+    if (j.contains(key) && j[key].is_array() && j[key].size() >= 4) {
+        for (int i = 0; i < 4; ++i) dst[i] = j[key][i].get<uint8_t>();
+    }
+}
+} // namespace
+
+void ColorCodes::loadFromJson(const nlohmann::json& j) {
+    setColorField(background, j, "background");
+    setColorField(grid, j, "grid");
+    setColorField(note, j, "note");
+    setColorField(noteSelected, j, "noteSelected");
+    setColorField(noteBorder, j, "noteBorder");
+    setColorField(noteSelectedBorder, j, "noteSelectedBorder");
+    setColorField(noteBackground, j, "noteBackground");
+    setColorField(keyWhite, j, "keyWhite");
+    setColorField(playHead, j, "playHead");
+    setColorField(trackBackground, j, "trackBackground");
+    setColorField(trackBody, j, "trackBody");
+    setColorField(trackBorder, j, "trackBorder");
+    setColorField(trackAudio, j, "trackAudio");
+    setColorField(trackNotes, j, "trackNotes");
+    setColorField(trackAutomation, j, "trackAutomation");
+    setColorField(nodeGraphBg, j, "nodeGraphBg");
+    setColorField(elementListBg, j, "elementListBg");
+}
 
 void createCursors() {
     cursors.grabber = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER);
@@ -120,4 +148,16 @@ void drawPendingTooltip() {
     SDL_SetRenderDrawBlendMode(r, prevBm);
     SDL_DestroyTexture(tex);
     SDL_DestroySurface(surf);
+}
+
+static ColorCodes defaultColors = colors;
+
+const ColorCodes& getDefaultColors() { return defaultColors; }
+
+void loadColorsFromSettings() {
+    auto& s = Settings::instance();
+    std::string presetName = s.currentColorPreset();
+    auto presets = s.getColorPresets();
+    if (presets.contains(presetName) && presets[presetName].contains("colors"))
+        colors.loadFromJson(presets[presetName]["colors"]);
 }

@@ -203,8 +203,8 @@ void OutputNode::renderContent(SDL_Renderer* renderer) {
 
     Node::renderContent(renderer);
 
-    const SDL_Color eventColor{140, 220, 140, 255};
-    const SDL_Color waveformColor{255, 170, 170, 255};
+    const SDL_Color eventColor{colors.trackNotes[0], colors.trackNotes[1], colors.trackNotes[2], 255};
+    const SDL_Color waveformColor{colors.trackAudio[0], colors.trackAudio[1], colors.trackAudio[2], 255};
     fillQuad(renderer, evAddQuad, hoverTint(eventColor, pointInQuad(msX, msY, evAddQuad)));
     fillQuad(renderer, evRemoveQuad, hoverTint(eventColor, pointInQuad(msX, msY, evRemoveQuad)));
     fillQuad(renderer, removeQuad, hoverTint(waveformColor, pointInQuad(msX, msY, removeQuad)));

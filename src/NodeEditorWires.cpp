@@ -423,8 +423,10 @@ void NodeEditor::renderConnector(SDL_Renderer* renderer) {
     }
 
     SDL_FColor color;
-    if (dtype == DataType::Events) color = {0.5f, 1.0f, 0.5f, 1.0f};
-    else color = {1.0f, 0.5f, 0.5f, 1.0f};
+    if (dtype == DataType::Events)
+        color = {colors.trackNotes[0]/255.f, colors.trackNotes[1]/255.f, colors.trackNotes[2]/255.f, 1.0f};
+    else
+        color = {colors.trackAudio[0]/255.f, colors.trackAudio[1]/255.f, colors.trackAudio[2]/255.f, 1.0f};
     renderSine(renderer, mouseX, mouseY, x, y, color);
 }
 

@@ -34,6 +34,7 @@ int main(int argc, char* argv[]) {
     }
 
     createCursors();
+    loadColorsFromSettings();
 
     Project* project = new Project;
     AudioManager* audioManager = AudioManager::instance();

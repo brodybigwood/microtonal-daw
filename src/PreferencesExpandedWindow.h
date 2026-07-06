@@ -22,6 +22,7 @@ private:
     AudioSection audio_;
     GUISection gui_;
     ControlsSection controls_;
+    ColorsSection colors_;
     GeneralSection general_;
     std::array<PrefSection*, kTeeth> sections_{};
 

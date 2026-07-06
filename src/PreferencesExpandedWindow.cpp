@@ -19,7 +19,8 @@ void PreferencesExpandedWindow::initSections() {
     sections_[0] = &audio_;
     sections_[1] = &gui_;
     sections_[2] = &controls_;
-    sections_[3] = &general_;
+    sections_[3] = &colors_;
+    sections_[4] = &general_;
 }
 
 int PreferencesExpandedWindow::hitTooth(float mx, float my, float w, float h) const {
@@ -244,6 +245,22 @@ bool PreferencesExpandedWindow::handleInput(SDL_Event& e) {
     SDL_GetWindowSize(window, &winW, &winH);
     float w = static_cast<float>(winW);
     float h = static_cast<float>(winH);
+
+    // Forward wheel, motion, and mouse-up events to the active section
+    if (e.type == SDL_EVENT_MOUSE_WHEEL || e.type == SDL_EVENT_MOUSE_MOTION || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+        float gx, gy; SDL_GetMouseState(&gx, &gy);
+        const float Ri = innerR(w, h);
+        float cx = w * 0.5f, cy = h * 0.5f;
+        float d2 = (gx - cx) * (gx - cx) + (gy - cy) * (gy - cy);
+        if (d2 <= Ri * Ri) {
+            PrefSection* sec = sections_[activeSection_];
+            if (sec) {
+                SDL_FRect innerBounds{cx - Ri, cy - Ri, Ri * 2.f, Ri * 2.f};
+                if (sec->handleContentInput(e, gx, gy, innerBounds))
+                    return true;
+            }
+        }
+    }
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         float mx = e.button.x;

@@ -160,12 +160,12 @@ void Connection::render(SDL_Renderer* renderer, bool hover) {
 
     switch (type) {
         case DataType::Events:
-            if (is_connected) c = {160, 255, 160, 255};
-            else c = {120, 255, 120, 255};
+            if (is_connected) c = {colors.trackNotes[0], colors.trackNotes[1], colors.trackNotes[2], 255};
+            else c = {colors.trackNotes[0], colors.trackNotes[1], colors.trackNotes[2], 160};
             break;
         case DataType::Waveform:
-            if (is_connected) c = {255, 160, 160, 255};
-            else c = {255, 120, 120, 255};
+            if (is_connected) c = {colors.trackAudio[0], colors.trackAudio[1], colors.trackAudio[2], 255};
+            else c = {colors.trackAudio[0], colors.trackAudio[1], colors.trackAudio[2], 160};
             break;
         default:
             break;
@@ -230,8 +230,10 @@ void Connection::render(SDL_Renderer* renderer, bool hover) {
         auto src = srcRect();
         if (src.w > 0.0f || src.h > 0.0f) {
             SDL_FColor color;
-            if (type == DataType::Events) color = {0.5f, 1.0f, 0.5f, 1.0f};
-            else color = {1.0f, 0.5f, 0.5f, 1.0f};
+            if (type == DataType::Events)
+                color = {colors.trackNotes[0]/255.f, colors.trackNotes[1]/255.f, colors.trackNotes[2]/255.f, 1.0f};
+            else
+                color = {colors.trackAudio[0]/255.f, colors.trackAudio[1]/255.f, colors.trackAudio[2]/255.f, 1.0f};
 
             NodeEditor::renderPatchCable(renderer, rect.x + rect.w * 0.5f, rect.y + rect.h * 0.5f,
                 src.x + src.w * 0.5f, src.y + src.h * 0.5f, color);

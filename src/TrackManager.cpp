@@ -29,7 +29,8 @@ void TrackManager::setGeometry(SDL_FRect* dstRect, SDL_Renderer*& r) {
     newTrackE = new Button();
     newTrackE->dstRect = &newTrackRectE;
     newTrackE->title = "New Track (notes)";
-
+    newTrackE->inactive = {colors.trackNotes[0], colors.trackNotes[1], colors.trackNotes[2], 180};
+    newTrackE->inactive_hover = {colors.trackNotes[0], colors.trackNotes[1], colors.trackNotes[2], 220};
     newTrackE->activated = [] { return false; };
     newTrackE->hover = [this] { return this->mouseOn(&(this->newTrackRectE)); };
     newTrackE->onClick = [this] { this->addTrack(TrackType::Notes); };
@@ -37,7 +38,8 @@ void TrackManager::setGeometry(SDL_FRect* dstRect, SDL_Renderer*& r) {
     newTrackW = new Button();
     newTrackW->dstRect = &newTrackRectW;
     newTrackW->title = "New Track (audio)";
-
+    newTrackW->inactive = {colors.trackAudio[0], colors.trackAudio[1], colors.trackAudio[2], 180};
+    newTrackW->inactive_hover = {colors.trackAudio[0], colors.trackAudio[1], colors.trackAudio[2], 220};
     newTrackW->activated = [] { return false; };
     newTrackW->hover = [this] { return this->mouseOn(&(this->newTrackRectW)); };
     newTrackW->onClick = [this] { this->addTrack(TrackType::Audio); };
@@ -223,7 +225,7 @@ void TrackManager::render(SDL_Renderer* renderer) {
         dstRect->x, dstRect->y - *scrollY, dstRect->w, *divHeight
     };
 
-    SDL_SetRenderDrawColor(renderer, 220, 220, 220, 255);
+    SDL_SetRenderDrawColor(renderer, colors.trackBackground[0], colors.trackBackground[1], colors.trackBackground[2], colors.trackBackground[3]);
     SDL_RenderFillRect(renderer, dstRect);
 
     for(auto track : tracks) {
@@ -242,8 +244,12 @@ void TrackManager::render(SDL_Renderer* renderer) {
         thickLineRGBA(renderer, dstRect->x, y, dstRect->x + dstRect->w, y, 3, 0, 0, 255, 255);
     }
 
+    newTrackE->inactive = {colors.trackNotes[0], colors.trackNotes[1], colors.trackNotes[2], 180};
+    newTrackE->inactive_hover = {colors.trackNotes[0], colors.trackNotes[1], colors.trackNotes[2], 220};
     newTrackE->renderer = renderer;
     newTrackE->render();
+    newTrackW->inactive = {colors.trackAudio[0], colors.trackAudio[1], colors.trackAudio[2], 180};
+    newTrackW->inactive_hover = {colors.trackAudio[0], colors.trackAudio[1], colors.trackAudio[2], 220};
     newTrackW->renderer = renderer;
     newTrackW->render();
 }
@@ -362,9 +368,12 @@ void TrackManager::renderTrack(SDL_Renderer* renderer, Track* track, SDL_FRect* 
     //body
 
     if (track == hoveredTrack) {
-        SDL_SetRenderDrawColor(renderer, 230, 230, 230, 255);
+        uint8_t r = std::min(255, colors.trackBody[0] + 10);
+        uint8_t g = std::min(255, colors.trackBody[1] + 10);
+        uint8_t b = std::min(255, colors.trackBody[2] + 10);
+        SDL_SetRenderDrawColor(renderer, r, g, b, 255);
     } else {
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        SDL_SetRenderDrawColor(renderer, colors.trackBody[0], colors.trackBody[1], colors.trackBody[2], colors.trackBody[3]);
     }
     SDL_RenderFillRect(renderer, rect);
 
@@ -374,13 +383,13 @@ void TrackManager::renderTrack(SDL_Renderer* renderer, Track* track, SDL_FRect* 
     };
     switch(track->type) {
         case TrackType::Audio:
-            SDL_SetRenderDrawColor(renderer, 255, 120, 120, 255);
+            SDL_SetRenderDrawColor(renderer, colors.trackAudio[0], colors.trackAudio[1], colors.trackAudio[2], colors.trackAudio[3]);
             break;
         case TrackType::Automation:
-            SDL_SetRenderDrawColor(renderer, 255, 220, 50, 255);
+            SDL_SetRenderDrawColor(renderer, colors.trackAutomation[0], colors.trackAutomation[1], colors.trackAutomation[2], colors.trackAutomation[3]);
             break;
         case TrackType::Notes:
-            SDL_SetRenderDrawColor(renderer, 120, 255, 120, 255);
+            SDL_SetRenderDrawColor(renderer, colors.trackNotes[0], colors.trackNotes[1], colors.trackNotes[2], colors.trackNotes[3]);
             break;
         default:
             break;
@@ -390,7 +399,7 @@ void TrackManager::renderTrack(SDL_Renderer* renderer, Track* track, SDL_FRect* 
     // bus text - needs optimization
 
     std::string text = std::to_string(track->id);
-    SDL_Color color{0, 0, 0, 255};    
+    SDL_Color color{0, 0, 0, 255};
 
     SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, text.c_str(), 0, color);
     SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
@@ -401,7 +410,7 @@ void TrackManager::renderTrack(SDL_Renderer* renderer, Track* track, SDL_FRect* 
     SDL_DestroyTexture(tex);
 
     //borders
-    SDL_SetRenderDrawColor(renderer, 120, 120, 120, 255);
+    SDL_SetRenderDrawColor(renderer, colors.trackBorder[0], colors.trackBorder[1], colors.trackBorder[2], colors.trackBorder[3]);
     SDL_RenderRect(renderer, &typeRect); //type
     SDL_RenderRect(renderer, rect); //outer
 }

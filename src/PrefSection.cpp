@@ -624,6 +624,401 @@ bool ControlsSection::handleContentInput(SDL_Event& e, float mx, float my,
     return false;
 }
 
+// --- ColorsSection ---------------------------------------------------------------
+
+static const char* kColorKeys[] = {
+    "background", "grid", "note", "noteSelected", "noteBorder",
+    "noteSelectedBorder", "noteBackground", "keyWhite", "playHead",
+    "trackBackground", "trackBody", "trackBorder",
+    "trackAudio", "trackNotes", "trackAutomation", "nodeGraphBg", "elementListBg"
+};
+static constexpr int kNumColorKeys = static_cast<int>(sizeof(kColorKeys) / sizeof(kColorKeys[0]));
+
+static void hsvToRgb(float h, float s, float v, uint8_t out[4]) {
+    float r, g, b;
+    int i = static_cast<int>(h * 6.f);
+    float f = h * 6.f - static_cast<float>(i);
+    float p = v * (1.f - s);
+    float q = v * (1.f - f * s);
+    float t = v * (1.f - (1.f - f) * s);
+    switch (i % 6) {
+        case 0: r = v; g = t; b = p; break;
+        case 1: r = q; g = v; b = p; break;
+        case 2: r = p; g = v; b = t; break;
+        case 3: r = p; g = q; b = v; break;
+        case 4: r = t; g = p; b = v; break;
+        default: r = v; g = p; b = q; break;
+    }
+    out[0] = static_cast<uint8_t>(r * 255.f);
+    out[1] = static_cast<uint8_t>(g * 255.f);
+    out[2] = static_cast<uint8_t>(b * 255.f);
+    out[3] = 255;
+}
+
+static void rgbToHsv(const uint8_t rgb[4], float& h, float& s, float& v) {
+    float r = rgb[0] / 255.f, g = rgb[1] / 255.f, b = rgb[2] / 255.f;
+    float mx = std::max({r, g, b}), mn = std::min({r, g, b});
+    float d = mx - mn;
+    v = mx;
+    s = mx < 0.001f ? 0.f : d / mx;
+    if (d < 0.001f) { h = 0.f; return; }
+    if (mx == r)      h = (g - b) / d + (g < b ? 6.f : 0.f);
+    else if (mx == g) h = (b - r) / d + 2.f;
+    else              h = (r - g) / d + 4.f;
+    h /= 6.f;
+}
+
+static uint8_t* colorKeyToField(int idx) {
+    switch (idx) {
+        case 0: return colors.background;
+        case 1: return colors.grid;
+        case 2: return colors.note;
+        case 3: return colors.noteSelected;
+        case 4: return colors.noteBorder;
+        case 5: return colors.noteSelectedBorder;
+        case 6: return colors.noteBackground;
+        case 7: return colors.keyWhite;
+        case 8: return colors.playHead;
+        case 9: return colors.trackBackground;
+        case 10: return colors.trackBody;
+        case 11: return colors.trackBorder;
+        case 12: return colors.trackAudio;
+        case 13: return colors.trackNotes;
+        case 14: return colors.trackAutomation;
+        case 15: return colors.nodeGraphBg;
+        case 16: return colors.elementListBg;
+        default: return nullptr;
+    }
+}
+
+void ColorsSection::drawSymbol(SDL_Renderer* r, float cx, float cy, float sz) const {
+    float s2 = sz * 0.25f;
+    SDL_SetRenderDrawColor(r, 220, 90, 90, 255);
+    SDL_FRect sq1{cx - sz * 0.35f, cy - sz * 0.15f, s2, s2}; SDL_RenderFillRect(r, &sq1);
+    SDL_SetRenderDrawColor(r, 90, 220, 120, 255);
+    SDL_FRect sq2{cx - s2 * 0.5f, cy + sz * 0.05f, s2, s2}; SDL_RenderFillRect(r, &sq2);
+    SDL_SetRenderDrawColor(r, 90, 120, 220, 255);
+    SDL_FRect sq3{cx + sz * 0.10f, cy + sz * 0.05f, s2, s2}; SDL_RenderFillRect(r, &sq3);
+}
+
+void ColorsSection::applyEdit() {
+    if (selectedColorIdx_ < 0 || selectedColorIdx_ >= kNumColorKeys) return;
+    uint8_t out[4]; hsvToRgb(hue_, sat_, val_, out);
+    auto& s = Settings::instance();
+    std::string presetName = s.currentColorPreset();
+    auto presets = s.getColorPresets();
+    nlohmann::json colorsJson;
+    if (presets.contains(presetName) && presets[presetName].contains("colors"))
+        colorsJson = presets[presetName]["colors"];
+    colorsJson[kColorKeys[selectedColorIdx_]] = {out[0], out[1], out[2], out[3]};
+    s.setColorPreset(presetName, colorsJson);
+    uint8_t* dst = colorKeyToField(selectedColorIdx_);
+    if (dst) { dst[0] = out[0]; dst[1] = out[1]; dst[2] = out[2]; dst[3] = out[3]; }
+}
+
+// --- shared list helpers ---
+
+struct ListItem {
+    std::string label;
+    uint8_t color[4]{128,128,128,255};
+    bool locked = false;
+};
+
+static void renderList(SDL_Renderer* r, const std::vector<ListItem>& items,
+                       const SDL_FRect& b, float scale, int selected,
+                       const std::string& subtitle, float listStartY, float maxY, float scrollY) {
+    const float rowH = 15.f * scale, gap = 3.f * scale, swatchSz = rowH;
+    const float totalH = static_cast<float>(items.size()) * (rowH + gap);
+    const float clampedScroll = std::max(0.f, std::min(scrollY, totalH - (maxY - listStartY)));
+    for (size_t i = 0; i < items.size(); ++i) {
+        float iy = listStartY + static_cast<float>(i) * (rowH + gap) - clampedScroll;
+        if (iy + rowH < listStartY || iy > maxY) continue;
+        bool hover = false;
+        { float mx, my; SDL_GetMouseState(&mx, &my);
+          hover = (mx >= b.x && mx < b.x + b.w && my >= iy && my < iy + rowH); }
+        if (hover) {
+            SDL_SetRenderDrawColor(r, 60, 70, 90, 100);
+            SDL_FRect bg{b.x, iy, b.w, rowH}; SDL_RenderFillRect(r, &bg);
+        }
+        SDL_FRect sw{b.x + 4.f * scale, iy, swatchSz, swatchSz};
+        SDL_SetRenderDrawColor(r, items[i].color[0], items[i].color[1], items[i].color[2], items[i].color[3]);
+        SDL_RenderFillRect(r, &sw);
+        SDL_SetRenderDrawColor(r, selected == (int)i ? 200 : 80, selected == (int)i ? 200 : 80, selected == (int)i ? 200 : 80, 255);
+        SDL_RenderRect(r, &sw);
+        if (fonts.mainFont) {
+            SDL_Color lc = items[i].locked ? SDL_Color{130,130,140,255} : SDL_Color{200,200,210,255};
+            SDL_Surface* sf = TTF_RenderText_Blended(fonts.mainFont, items[i].label.c_str(), (int)items[i].label.size(), lc);
+            if (sf) {
+                SDL_Texture* tx = SDL_CreateTextureFromSurface(r, sf);
+                if (tx) {
+                    SDL_FRect tr{b.x + 4.f * scale + swatchSz + 4.f * scale, iy, static_cast<float>(sf->w) * scale, static_cast<float>(sf->h) * scale};
+                    SDL_RenderTexture(r, tx, nullptr, &tr);
+                    SDL_DestroyTexture(tx);
+                }
+                SDL_DestroySurface(sf);
+            }
+            if (items[i].locked) {
+                SDL_Surface* s2 = TTF_RenderText_Blended(fonts.mainFont, " (locked)", 9, SDL_Color{130,130,140,255});
+                if (s2) {
+                    SDL_Texture* t2 = SDL_CreateTextureFromSurface(r, s2);
+                    if (t2) {
+                        SDL_FRect tr2{b.x + 4.f * scale + swatchSz + 4.f * scale + 100.f * scale, iy,
+                                      static_cast<float>(s2->w) * scale, static_cast<float>(s2->h) * scale};
+                        SDL_RenderTexture(r, t2, nullptr, &tr2);
+                        SDL_DestroyTexture(t2);
+                    }
+                    SDL_DestroySurface(s2);
+                }
+            }
+        }
+    }
+}
+
+static int hitList(const std::vector<ListItem>& items, float mx, float my,
+                   const SDL_FRect& b, float scale, float listStartY, float scrollY, float maxY) {
+    if (mx < b.x || mx > b.x + b.w) return -1;
+    const float rowH = 15.f * scale, gap = 3.f * scale;
+    const float totalH = static_cast<float>(items.size()) * (rowH + gap);
+    const float clampedScroll = std::max(0.f, std::min(scrollY, totalH - (maxY - listStartY)));
+    for (size_t i = 0; i < items.size(); ++i) {
+        float iy = listStartY + static_cast<float>(i) * (rowH + gap) - clampedScroll;
+        if (iy + rowH < listStartY || iy > maxY) continue;
+        if (my >= iy && my < iy + rowH) return static_cast<int>(i);
+    }
+    return -1;
+}
+
+// --- ColorsSection render / input ---
+
+void ColorsSection::renderContent(SDL_Renderer* renderer, const SDL_FRect& b_, float scale) {
+    // b_ is the circle bounding box — inset to stay inside the circle
+    const float inset = 0.15f;
+    SDL_FRect b{b_.x + b_.w * inset, b_.y + b_.h * inset, b_.w * (1.f - 2.f * inset), b_.h * (1.f - 2.f * inset)};
+
+    auto& s = Settings::instance();
+    std::string curPreset = s.currentColorPreset();
+    auto presets = s.getColorPresets();
+    const bool isDefault = (curPreset == "Default");
+
+    float afterTitle = renderSectionTitle(renderer, "Colors", b, scale);
+    const float barY = afterTitle + 4.f * scale;
+    const float btnH = 16.f * scale;
+    const float barW = b.w - 8.f * scale;
+    const float listY = barY + btnH + 4.f * scale;
+
+    // Back button — in the header area, top-left corner
+    if (viewLevel_ > 0) {
+        SDL_FRect backBtn{b.x + 4.f * scale, b.y + 2.f * scale, 28.f * scale, btnH};
+        SDL_SetRenderDrawColor(renderer, 60, 60, 70, 255); SDL_RenderFillRect(renderer, &backBtn);
+        SDL_SetRenderDrawColor(renderer, 120, 120, 140, 255); SDL_RenderRect(renderer, &backBtn);
+        if (fonts.mainFont) {
+            SDL_Surface* sf = TTF_RenderText_Blended(fonts.mainFont, "<", 1, SDL_Color{200,200,210,255});
+            if (sf) {
+                SDL_Texture* tx = SDL_CreateTextureFromSurface(renderer, sf);
+                if (tx) {
+                    SDL_FRect tr{backBtn.x + 8.f * scale, backBtn.y, static_cast<float>(sf->w) * scale, static_cast<float>(sf->h) * scale};
+                    SDL_RenderTexture(renderer, tx, nullptr, &tr);
+                    SDL_DestroyTexture(tx);
+                }
+                SDL_DestroySurface(sf);
+            }
+        }
+    }
+
+    if (viewLevel_ == 0) {
+        // Preset list
+        SDL_FRect newBtn{b.x + barW - 44.f * scale, barY, 42.f * scale, btnH};
+        SDL_SetRenderDrawColor(renderer, 50, 140, 60, 255); SDL_RenderFillRect(renderer, &newBtn);
+        SDL_SetRenderDrawColor(renderer, 100, 200, 120, 255); SDL_RenderRect(renderer, &newBtn);
+        if (fonts.mainFont) {
+            SDL_Surface* sf = TTF_RenderText_Blended(fonts.mainFont, "New", 3, SDL_Color{230,255,230,255});
+            if (sf) { SDL_Texture* tx = SDL_CreateTextureFromSurface(renderer, sf);
+                if (tx) { SDL_FRect tr{newBtn.x + 4.f, newBtn.y + 1.f, static_cast<float>(sf->w) * scale, static_cast<float>(sf->h) * scale};
+                    SDL_RenderTexture(renderer, tx, nullptr, &tr); SDL_DestroyTexture(tx); } SDL_DestroySurface(sf); }
+        }
+        if (!isDefault) {
+            SDL_FRect editBtn{b.x + barW - 44.f * scale - 46.f * scale, barY, 42.f * scale, btnH};
+            SDL_SetRenderDrawColor(renderer, 50, 100, 160, 255); SDL_RenderFillRect(renderer, &editBtn);
+            SDL_SetRenderDrawColor(renderer, 100, 160, 220, 255); SDL_RenderRect(renderer, &editBtn);
+            if (fonts.mainFont) {
+                SDL_Surface* sf = TTF_RenderText_Blended(fonts.mainFont, "Edit", 4, SDL_Color{220,230,255,255});
+                if (sf) { SDL_Texture* tx = SDL_CreateTextureFromSurface(renderer, sf);
+                    if (tx) { SDL_FRect tr{editBtn.x + 4.f, editBtn.y + 1.f, static_cast<float>(sf->w) * scale, static_cast<float>(sf->h) * scale};
+                        SDL_RenderTexture(renderer, tx, nullptr, &tr); SDL_DestroyTexture(tx); } SDL_DestroySurface(sf); }
+            }
+            SDL_FRect delBtn{b.x + barW - 44.f * scale - 46.f * scale - 48.f * scale, barY, 42.f * scale, btnH};
+            SDL_SetRenderDrawColor(renderer, 140, 50, 50, 255); SDL_RenderFillRect(renderer, &delBtn);
+            SDL_SetRenderDrawColor(renderer, 200, 100, 100, 255); SDL_RenderRect(renderer, &delBtn);
+            if (fonts.mainFont) {
+                SDL_Surface* sf = TTF_RenderText_Blended(fonts.mainFont, "Del", 3, SDL_Color{255,230,230,255});
+                if (sf) { SDL_Texture* tx = SDL_CreateTextureFromSurface(renderer, sf);
+                    if (tx) { SDL_FRect tr{delBtn.x + 4.f, delBtn.y + 1.f, static_cast<float>(sf->w) * scale, static_cast<float>(sf->h) * scale};
+                        SDL_RenderTexture(renderer, tx, nullptr, &tr); SDL_DestroyTexture(tx); } SDL_DestroySurface(sf); }
+            }
+        }
+
+        std::vector<ListItem> items;
+        std::vector<std::string> names;
+        for (auto& [k, v] : presets.items()) {
+            names.push_back(k);
+            ListItem it; it.label = k; it.locked = v.value("immutable", false);
+            if (v.contains("colors") && v["colors"].contains("background") && v["colors"]["background"].is_array() && v["colors"]["background"].size() >= 3) {
+                for (int c = 0; c < 3; ++c) it.color[c] = v["colors"]["background"][c].get<uint8_t>();
+                it.color[3] = v["colors"]["background"].size() >= 4 ? v["colors"]["background"][3].get<uint8_t>() : 255;
+            }
+            items.push_back(it);
+        }
+        renderList(renderer, items, b, scale, selectedPresetIdx_, "Presets", listY, b.y + b.h, scrollOffset_);
+    } else if (viewLevel_ == 1) {
+        // Color list
+        nlohmann::json curColors;
+        if (presets.contains(curPreset) && presets[curPreset].contains("colors"))
+            curColors = presets[curPreset]["colors"];
+        std::vector<ListItem> items;
+        for (int i = 0; i < kNumColorKeys; ++i) {
+            ListItem it; it.label = kColorKeys[i];
+            if (curColors.contains(kColorKeys[i]) && curColors[kColorKeys[i]].is_array() && curColors[kColorKeys[i]].size() >= 3) {
+                for (int c = 0; c < 3; ++c) it.color[c] = curColors[kColorKeys[i]][c].get<uint8_t>();
+                it.color[3] = curColors[kColorKeys[i]].size() >= 4 ? curColors[kColorKeys[i]][3].get<uint8_t>() : 255;
+            }
+            items.push_back(it);
+        }
+        renderList(renderer, items, b, scale, selectedColorIdx_, curPreset, listY, b.y + b.h, scrollOffset_);
+    } else if (viewLevel_ == 2) {
+        // HSV picker
+        const float px = b.x + 4.f * scale, py = barY + 4.f * scale;
+        const float pw = b.w - 8.f * scale, ph = b.y + b.h - py - 4.f * scale;
+        const float hueW = 12.f * scale, svW = pw - hueW - 4.f * scale, svH = ph - 22.f * scale;
+        int iw = static_cast<int>(svW), ih = static_cast<int>(svH);
+        for (int y2 = 0; y2 < ih; ++y2) {
+            float vv = 1.f - static_cast<float>(y2) / svH;
+            for (int x2 = 0; x2 < iw; ++x2) {
+                float ss = static_cast<float>(x2) / svW; uint8_t c[4]; hsvToRgb(hue_, ss, vv, c);
+                SDL_SetRenderDrawColor(renderer, c[0], c[1], c[2], 255);
+                SDL_RenderPoint(renderer, px + static_cast<float>(x2), py + static_cast<float>(y2));
+            }
+        }
+        float curX = px + sat_ * svW, curY = py + (1.f - val_) * svH;
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        SDL_FRect cs{curX - 3.f, curY - 3.f, 6.f, 6.f}; SDL_RenderRect(renderer, &cs);
+        float hx = px + svW + 4.f * scale;
+        for (int y2 = 0; y2 < ih; ++y2) {
+            float h = static_cast<float>(y2) / svH; uint8_t c[4]; hsvToRgb(h, 1.f, 1.f, c);
+            SDL_SetRenderDrawColor(renderer, c[0], c[1], c[2], 255);
+            SDL_RenderLine(renderer, hx, py + static_cast<float>(y2), hx + hueW, py + static_cast<float>(y2));
+        }
+        float hy = py + hue_ * svH;
+        SDL_FRect hc{hx - 1.f, hy - 2.f, hueW + 2.f, 4.f}; SDL_RenderRect(renderer, &hc);
+        uint8_t prev[4]; hsvToRgb(hue_, sat_, val_, prev);
+        SDL_FRect pr{px, py + svH + 4.f * scale, pw, 14.f * scale};
+        SDL_SetRenderDrawColor(renderer, prev[0], prev[1], prev[2], 255); SDL_RenderFillRect(renderer, &pr);
+        SDL_SetRenderDrawColor(renderer, 120, 120, 130, 255); SDL_RenderRect(renderer, &pr);
+        if (fonts.mainFont && selectedColorIdx_ >= 0 && selectedColorIdx_ < kNumColorKeys) {
+            SDL_Surface* sf = TTF_RenderText_Blended(fonts.mainFont, kColorKeys[selectedColorIdx_], strlen(kColorKeys[selectedColorIdx_]), SDL_Color{200,200,210,255});
+            if (sf) { SDL_Texture* tx = SDL_CreateTextureFromSurface(renderer, sf);
+                if (tx) { SDL_FRect tr{px, pr.y + pr.h + 2.f, static_cast<float>(sf->w) * scale, static_cast<float>(sf->h) * scale};
+                    SDL_RenderTexture(renderer, tx, nullptr, &tr); SDL_DestroyTexture(tx); } SDL_DestroySurface(sf); }
+        }
+    }
+}
+
+bool ColorsSection::handleContentInput(SDL_Event& e, float mx, float my,
+                                        const SDL_FRect& b_) {
+    const float inset = 0.15f;
+    SDL_FRect b{b_.x + b_.w * inset, b_.y + b_.h * inset, b_.w * (1.f - 2.f * inset), b_.h * (1.f - 2.f * inset)};
+
+    auto& s = Settings::instance();
+    std::string curPreset = s.currentColorPreset();
+    const bool isDefault = (curPreset == "Default");
+    float scale = contentScale_;
+
+    float afterTitle = 0.f; { int th=0; TTF_GetStringSize(fonts.mainFont, "Colors", 0, nullptr, &th);
+        afterTitle = b.y + 16.f * scale + static_cast<float>(th) * scale + 8.f * scale; }
+    const float barY = afterTitle + 4.f * scale, btnH = 16.f * scale, barW = b.w - 8.f * scale;
+    const float listY = barY + btnH + 4.f * scale;
+
+    // Wheel scrolling for list views (levels 0, 1)
+    if ((viewLevel_ == 0 || viewLevel_ == 1) && e.type == SDL_EVENT_MOUSE_WHEEL) {
+        scrollOffset_ = std::max(0.f, scrollOffset_ - e.wheel.y * 30.f);
+        return true;
+    }
+
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+        // Back
+        if (viewLevel_ > 0) {
+            SDL_FRect back{b.x + 4.f * scale, b.y + 2.f * scale, 28.f * scale, btnH};
+            if (mx >= back.x && mx < back.x + back.w && my >= back.y && my < back.y + back.h) { viewLevel_--; scrollOffset_ = 0.f; return true; }
+        }
+        if (viewLevel_ == 0) {
+            SDL_FRect nb{b.x + barW - 44.f * scale, barY, 42.f * scale, btnH};
+            if (mx >= nb.x && mx < nb.x + nb.w && my >= nb.y && my < nb.y + nb.h) {
+                auto presets = s.getColorPresets();
+                std::string nn = "Preset " + std::to_string(presets.size());
+                nlohmann::json cc; if (presets.contains(curPreset) && presets[curPreset].contains("colors")) cc = presets[curPreset]["colors"];
+                s.setColorPreset(nn, cc); s.setCurrentColorPreset(nn); loadColorsFromSettings(); return true;
+            }
+            if (!isDefault) {
+                SDL_FRect eb{b.x + barW - 44.f * scale - 46.f * scale, barY, 42.f * scale, btnH};
+                if (mx >= eb.x && mx < eb.x + eb.w && my >= eb.y && my < eb.y + eb.h) {
+                    viewLevel_ = 1; scrollOffset_ = 0.f; return true;
+                }
+                SDL_FRect db{b.x + barW - 44.f * scale - 46.f * scale - 48.f * scale, barY, 42.f * scale, btnH};
+                if (mx >= db.x && mx < db.x + db.w && my >= db.y && my < db.y + db.h) {
+                    s.deleteColorPreset(curPreset); selectedColorIdx_ = -1; selectedPresetIdx_ = -1; loadColorsFromSettings(); return true;
+                }
+            }
+            auto presets = s.getColorPresets();
+            std::vector<ListItem> items; std::vector<std::string> names;
+            for (auto& [k, v] : presets.items()) { names.push_back(k); ListItem it; it.label = k; it.locked = v.value("immutable", false); items.push_back(it); }
+            int hit = hitList(items, mx, my, b, scale, listY, scrollOffset_, b.y + b.h);
+            if (hit >= 0 && hit < (int)names.size()) {
+                s.setCurrentColorPreset(names[hit]); loadColorsFromSettings();
+                selectedPresetIdx_ = hit; scrollOffset_ = 0.f; return true;
+            }
+        } else if (viewLevel_ == 1) {
+            std::vector<ListItem> items;
+            for (int i = 0; i < kNumColorKeys; ++i) { ListItem it; it.label = kColorKeys[i]; items.push_back(it); }
+            int hit = hitList(items, mx, my, b, scale, listY, scrollOffset_, b.y + b.h);
+            if (hit >= 0 && hit < kNumColorKeys) {
+                selectedColorIdx_ = hit;
+                nlohmann::json curCols;
+                auto ps = s.getColorPresets();
+                if (ps.contains(curPreset) && ps[curPreset].contains("colors"))
+                    curCols = ps[curPreset]["colors"];
+                if (curCols.contains(kColorKeys[hit]) && curCols[kColorKeys[hit]].is_array() && curCols[kColorKeys[hit]].size() >= 3) {
+                    uint8_t cb[4];
+                    for (int c = 0; c < 3; ++c) cb[c] = curCols[kColorKeys[hit]][c].get<int>();
+                    cb[3] = curCols[kColorKeys[hit]].size() >= 4 ? curCols[kColorKeys[hit]][3].get<int>() : 255;
+                    rgbToHsv(cb, hue_, sat_, val_);
+                }
+                if (!isDefault) viewLevel_ = 2;
+                return true;
+            }
+        } else if (viewLevel_ == 2) {
+            const float px = b.x + 4.f * scale, py = barY + 4.f * scale;
+            const float pw = b.w - 8.f * scale, ph = b.y + b.h - py - 4.f * scale;
+            const float hueW = 12.f * scale, svW = pw - hueW - 4.f * scale, svH = ph - 22.f * scale;
+            float hx = px + svW + 4.f * scale;
+            if (mx >= hx && mx <= hx + hueW && my >= py && my <= py + svH) {
+                draggingHue_ = true; hue_ = std::clamp((my - py) / svH, 0.f, 1.f); applyEdit(); return true;
+            }
+            if (mx >= px && mx <= px + svW && my >= py && my <= py + svH) {
+                draggingHSV_ = true; sat_ = std::clamp((mx - px) / svW, 0.f, 1.f); val_ = 1.f - std::clamp((my - py) / svH, 0.f, 1.f); applyEdit(); return true;
+            }
+        }
+    }
+    if ((draggingHSV_ || draggingHue_) && e.type == SDL_EVENT_MOUSE_BUTTON_UP) { draggingHSV_ = false; draggingHue_ = false; return true; }
+    if (e.type == SDL_EVENT_MOUSE_MOTION && (draggingHSV_ || draggingHue_) && viewLevel_ == 2) {
+        const float px = b.x + 4.f * scale, py = barY + 4.f * scale;
+        const float pw = b.w - 8.f * scale, ph = b.y + b.h - py - 4.f * scale;
+        const float hueW = 12.f * scale, svW = pw - hueW - 4.f * scale, svH = ph - 22.f * scale;
+        if (draggingHSV_) { sat_ = std::clamp((mx - px) / svW, 0.f, 1.f); val_ = 1.f - std::clamp((my - py) / svH, 0.f, 1.f); }
+        else { hue_ = std::clamp((my - py) / svH, 0.f, 1.f); }
+        applyEdit(); return true;
+    }
+    return false;
+}
+
 // --- General section (Load Defaults / Restore) ---
 
 void GeneralSection::drawSymbol(SDL_Renderer* r, float cx, float cy, float sz) const {
