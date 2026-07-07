@@ -67,7 +67,7 @@ void wireCreateRegionDoUndo(CreateRegionAction* t) {
             throw std::runtime_error("CreateRegionAction::undoAction: element manager missing");
         ArrangerNode* arr = undoResolveArrangerNode(t->p, t->managerPath, t->nodeID);
         if (arr && arr->sl)
-            arr->sl->clearPianoRoll(t->regionID);
+            arr->sl->clearPianoRoll(t->regionID, false);
         em->removeElementById(static_cast<uint16_t>(t->regionID));
     };
 }
@@ -213,7 +213,7 @@ void DeleteRegionAction::wireDeleteRegionLambdas() {
             throw std::runtime_error("DeleteRegionAction::doAction: element manager missing");
         ArrangerNode* arr = undoResolveArrangerNode(this->p, this->managerPath, this->nodeID);
         if (arr && arr->sl)
-            arr->sl->clearPianoRoll(this->regionID);
+            arr->sl->clearPianoRoll(this->regionID, false);
         em->removeElementById(static_cast<uint16_t>(this->regionID));
     };
     undoAction = [this]() {
