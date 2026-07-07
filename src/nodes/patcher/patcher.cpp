@@ -462,6 +462,7 @@ json PatcherNode::extraSerialize() {
         json jc;
         jc["id"] = c->id;
         jc["type"] = c->type;
+        jc["numChannels"] = c->numChannels;
         j["outputs"].push_back(jc);
     }
     return j;
@@ -491,6 +492,7 @@ void PatcherNode::extraDeSerialize(const json& j) {
             c->nm = outputs.nm;
             c->id = jc["id"];
             c->type = jc["type"];
+            c->numChannels = jc.value("numChannels", 1);
             c->dir = Direction::output;
             c->is_connected = false;
             c->input_node = id;

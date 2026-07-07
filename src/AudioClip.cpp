@@ -36,8 +36,10 @@ void AudioClip::fromJSON(json j) {
     GridElement::fromJSON(j["positions"]);
 
     setFile(j["filepath"]);
-    sampleRate = j.value("sampleRate", 0);
-    numChannels = j.value("numChannels", 1);
+    if (!buffer) {
+        sampleRate = j.value("sampleRate", 0);
+        numChannels = j.value("numChannels", 1);
+    }
 }
 
 void AudioClip::draw(SDL_Renderer* renderer, float pixelsPerSecond, int h) {
@@ -77,13 +79,16 @@ void AudioClip::draw(SDL_Renderer* renderer, float pixelsPerSecond, int h) {
             size_t sample2 = x2 * samplesPerPixel;
 
             if (sample2 >= num_samples) break;
-            
-            int y1 = center - (int)(buffer[sample1] * center * wH);
-            int y2 = center - (int)(buffer[sample2] * center * wH);
 
-            aalineRGBA(renderer, x1, y1, x2, y2, 255, 255, 255, 255);
-            aalineRGBA(renderer, x1, y1, x2, y2, 255, 255, 255, 255);
-            aalineRGBA(renderer, x1, y1+1, x2, y2+1, 255, 255, 255 ,255);
+            for (int ch = 0; ch < numChannels; ++ch) {
+                int alpha = ch == 0 ? 255 : 100;
+                float* chBuf = buffer + static_cast<size_t>(ch) * num_samples;
+                int y1 = center - (int)(chBuf[sample1] * center * wH);
+                int y2 = center - (int)(chBuf[sample2] * center * wH);
+
+                aalineRGBA(renderer, x1, y1, x2, y2, 255, 255, 255, alpha);
+                aalineRGBA(renderer, x1, y1+1, x2, y2+1, 255, 255, 255, alpha);
+            }
         }
 
         SDL_SetRenderTarget(renderer, target);

@@ -6,6 +6,7 @@
 #include "PianoRollWindow.h"
 #include "GridElement.h"
 #include "AutomationCurve.h"
+#include "AudioClip.h"
 #include <cmath>
 #include "SDL_Events.h"
 #include "styles.h"
@@ -25,6 +26,21 @@
 #include "UndoInternal.h"
 
 // Region, timeline-position and arranger-track actions (split from UndoManager.cpp).
+
+static void recalcTrackChannels(ElementManager* em, uint16_t trackID) {
+    Track* track = em->tm->getTrack(trackID);
+    if (!track || !track->connection || track->connection->type != DataType::Waveform) return;
+    int maxCh = 1;
+    for (auto* el : em->elements) {
+        if (el->type != ElementType::audioClip) continue;
+        auto* ac = static_cast<AudioClip*>(el);
+        for (auto* pos : el->positions)
+            if (pos->trackID == trackID && ac->numChannels > maxCh)
+                maxCh = ac->numChannels;
+    }
+    track->connection->numChannels = maxCh;
+    em->parentNode->nm->markTopologyDirty();
+}
 
 static GridElement* undoResolveGridElement(Project* p, const std::vector<int>& managerPath, int nodeID, int elementID) {
     ElementManager* em = undoResolveArrangerElementManager(p, managerPath, nodeID);
@@ -283,11 +299,15 @@ CreatePositionAction::CreatePositionAction(Project* p, std::vector<int> managerP
                       this->startOffsetPairs);
         this->positionID = ge->positions.back()->id;
         this->name = "Create Position " + std::to_string(this->positionID);
+        ElementManager* em = undoResolveArrangerElementManager(this->p, this->managerPath, this->nodeID);
+        if (em) recalcTrackChannels(em, this->trackID);
     };
     undoAction = [this]() {
         GridElement* ge = undoResolveGridElement(this->p, this->managerPath, this->nodeID, this->elementID);
         if (!ge->removePositionById(this->positionID))
             throw std::runtime_error("CreatePositionAction::undoAction: position id missing");
+        ElementManager* em = undoResolveArrangerElementManager(this->p, this->managerPath, this->nodeID);
+        if (em) recalcTrackChannels(em, this->trackID);
     };
 }
 
@@ -333,13 +353,18 @@ SongRollRhythmEdoAction::SongRollRhythmEdoAction(Project* p, std::vector<int> ma
 
 void DeletePositionAction::wireLambdas() {
     doAction = [this]() {
+        uint16_t tid = static_cast<uint16_t>(this->positionSnapshot.value("trackID", 0));
         GridElement* ge = undoResolveGridElement(this->p, this->managerPath, this->nodeID, this->elementID);
         if (!ge->removePositionById(this->positionID))
             throw std::runtime_error("DeletePositionAction::doAction: position id missing");
+        ElementManager* em = undoResolveArrangerElementManager(this->p, this->managerPath, this->nodeID);
+        if (em) recalcTrackChannels(em, tid);
     };
     undoAction = [this]() {
         GridElement* ge = undoResolveGridElement(this->p, this->managerPath, this->nodeID, this->elementID);
         ge->insertPositionAt(this->insertIndex, this->positionSnapshot);
+        ElementManager* em = undoResolveArrangerElementManager(this->p, this->managerPath, this->nodeID);
+        if (em) recalcTrackChannels(em, static_cast<uint16_t>(this->positionSnapshot.value("trackID", 0)));
     };
 }
 
@@ -392,11 +417,25 @@ MoveElementPositionAction::MoveElementPositionAction(Project* p, std::vector<int
     name = "Move Position";
     doAction = [this]() {
         GridElement::Position* pos = undoResolveElementPosition(this->p, this->managerPath, this->nodeID, this->elementID, this->positionID);
+        uint16_t oldTid = static_cast<uint16_t>(this->before.value("trackID", 0));
         GridElement::applyPositionFromJson(pos, this->after);
+        uint16_t newTid = static_cast<uint16_t>(this->after.value("trackID", 0));
+        ElementManager* em = undoResolveArrangerElementManager(this->p, this->managerPath, this->nodeID);
+        if (em) {
+            if (oldTid != newTid) recalcTrackChannels(em, oldTid);
+            recalcTrackChannels(em, newTid);
+        }
     };
     undoAction = [this]() {
         GridElement::Position* pos = undoResolveElementPosition(this->p, this->managerPath, this->nodeID, this->elementID, this->positionID);
+        uint16_t newTid = static_cast<uint16_t>(this->after.value("trackID", 0));
         GridElement::applyPositionFromJson(pos, this->before);
+        uint16_t oldTid = static_cast<uint16_t>(this->before.value("trackID", 0));
+        ElementManager* em = undoResolveArrangerElementManager(this->p, this->managerPath, this->nodeID);
+        if (em) {
+            if (oldTid != newTid) recalcTrackChannels(em, newTid);
+            recalcTrackChannels(em, oldTid);
+        }
     };
 }
 

@@ -117,29 +117,26 @@ void ElementManager::process(int bufferSize) {
                     break;
                 case ElementType::audioClip:
                     {
-// first find out if there is overlap with current block
-// pos.start is start of this position in beats
-// pos.end is the end of this position in beats
-// time is current processing time in beats
-// audio range is pos.start to pos.end
-// time must be anywhere between    
                         if (!project->isPlaying.load()) break;
                         if (!(*track->buffer)) break;
+                        AudioClip* ac = static_cast<AudioClip*>(element);
+                        if (!ac->buffer) break;
 
                         const double localSec = time - static_cast<double>(Note::secondsFromVector(pos.rhythmVector));
                         const double fileSec = localSec + static_cast<double>(Note::secondsFromVector(pos.startOffsetPairs));
-                        int readIdx = static_cast<int>(fileSec * AudioManager::instance()->sampleRate);
-                        if (readIdx < 0) break;
-                        AudioClip* ac = static_cast<AudioClip*>(element);
-                        float* rbuffer = ac->buffer;
-                        float* wbuffer = *(track->buffer);
-                        for (size_t i = 0; i < bufferSize; ++i) {
-                            if (readIdx >= ac->num_samples) {
-                                wbuffer[i] += 0;
-                            } else {
-                                wbuffer[i] += rbuffer[readIdx];
+                        const double sr = AudioManager::instance()->sampleRate;
+                        int readIdx = static_cast<int>(fileSec * sr);
+                        int chans = std::min({ac->numChannels, track->connection->numChannels, track->connection->allocChannels});
+                        int stride = track->connection ? track->connection->bufferSize : bufferSize;
+                        for (int ch = 0; ch < chans; ++ch) {
+                            float* rbuf = ac->buffer + static_cast<size_t>(ch) * ac->num_samples;
+                            float* wbuf = *(track->buffer) + static_cast<size_t>(ch) * static_cast<size_t>(stride);
+                            int ri = readIdx;
+                            for (size_t i = 0; i < bufferSize; ++i) {
+                                if (ri >= 0 && ri < static_cast<int>(ac->num_samples))
+                                    wbuf[i] += rbuf[ri];
+                                ri++;
                             }
-                            readIdx++;
                         }
                     }
                     break;

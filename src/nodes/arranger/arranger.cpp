@@ -148,6 +148,7 @@ json ArrangerNode::extraSerialize() {
         json jc;
         jc["id"] = c->id;
         jc["type"] = c->type;
+        jc["numChannels"] = c->numChannels;
         o.push_back(jc);
     }
     j["outputs"] = o;
@@ -170,6 +171,7 @@ void ArrangerNode::extraDeSerialize(const json& j) {
             c->id = jc["id"];
             c->dir = Direction::output;
             c->type = jc["type"];
+            c->numChannels = jc.value("numChannels", 1);
             c->is_connected = false;
             c->output_node = -1;
             c->output_connection = -1;
