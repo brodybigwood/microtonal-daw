@@ -5,6 +5,7 @@
 
 class Region;
 class AudioClip;
+class AutomationCurve;
 class Project;
 class TrackManager;
 class ArrangerNode;
@@ -20,10 +21,13 @@ class ElementManager {
         GridElement* getElement(uint16_t);
         Region* newRegion();
         AudioClip* newAudioClip(std::string);
+        AutomationCurve* newAutomationCurve();
 
         void removeElementById(uint16_t elementId);
         void restoreRegionFromSnapshot(const json& regionJson);
         void restoreRegionFromSnapshotAt(size_t insertIndex, const json& regionJson);
+        void restoreAutomationCurveFromSnapshot(const json& curveJson);
+        void restoreAutomationCurveFromSnapshotAt(size_t insertIndex, const json& curveJson);
 
         uint16_t getIndex(uint16_t);
         idManager id_pool;
@@ -43,7 +47,8 @@ class ElementManager {
 
         float mouseX;
         float mouseY;
-        bool hoverNew = false;
+        bool hoverNewRegion = false;
+        bool hoverNewWaveform = false;
 
         int scrollY;
 

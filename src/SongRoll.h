@@ -3,6 +3,7 @@
 #include <cmath>
 #include <vector>
 #include <utility>
+#include <unordered_map>
 #include "GridElement.h"
 #include "GridView.h"
 #include "styles.h"
@@ -22,6 +23,7 @@ class ElementManager;
 class ArrangerNode;
 class PianoRoll;
 class PianoRollWindow;
+class CurveEditor;
 
 class SongRoll : public GridView{
 
@@ -119,6 +121,20 @@ class SongRoll : public GridView{
         // Last created position state, for consecutive placements
         std::vector<std::pair<int, int>> lastPositionDurationPairs;
         std::vector<std::pair<int, int>> lastPositionStartOffsetPairs;
+
+    // Curve editor state (for automation curve positions)
+    std::unordered_map<int, CurveEditor*> curveEditors;
+    int hoveredCurvePointIdx = -1;
+    int draggingCurvePointIdx = -1;
+    int draggingTensionSeg = -1;
+    float tensionDragStartY = 0.f;
+    float tensionDragStartParam = 0.f;
+    int activeCurveEditorPosId = -1;
+    json curveDragUndoBefore;
+    CurveEditor* getCurveEditor(GridElement::Position* pos);
+    void destroyCurveEditor(int posId);
+    json snapshotCurvePoints(AutomationCurve* ac);
+    void pushCurveUndo(AutomationCurve* ac, const json& before);
 
     private:
         int timelineHoverElementId = -1;

@@ -53,7 +53,9 @@ enum ActionType {
     ReassignNodeConnection = 32,
     RemoveArrangerTrack = 33,
     MoveMultipleNotes = 34,
-    SongRollRhythmEdo = 35
+    SongRollRhythmEdo = 35,
+    CreateAutomationCurve = 36,
+    ModifyCurvePoints = 37
 };
 
 
@@ -370,6 +372,28 @@ struct CreateRegionAction : ProjectAction {
     CreateRegionAction(Project* p, std::vector<int> managerPath, int nodeID);
     /** Restored from project / undo JSON (`skipInitialDo`, graph already matches "after" for current pointer). */
     CreateRegionAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, json regionSnapshot);
+};
+
+struct CreateAutomationCurveAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    int curveID = -1;
+    json curveSnapshot = json::object();
+    bool snapshotValid = false;
+
+    CreateAutomationCurveAction(Project* p, std::vector<int> managerPath, int nodeID);
+    CreateAutomationCurveAction(Project* p, std::vector<int> managerPath, int nodeID, int curveID, json curveSnapshot);
+};
+
+struct ModifyCurvePointsAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    int curveID = -1;
+    json before = json::array();
+    json after = json::array();
+
+    ModifyCurvePointsAction(Project* p, std::vector<int> managerPath, int nodeID, int curveID,
+                            json before, json after);
 };
 
 struct CreatePositionAction : ProjectAction {

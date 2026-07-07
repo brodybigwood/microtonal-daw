@@ -5,6 +5,7 @@
 #include "SongRoll.h"
 #include "PianoRollWindow.h"
 #include "GridElement.h"
+#include "AutomationCurve.h"
 #include <cmath>
 #include "SDL_Events.h"
 #include "styles.h"
@@ -89,6 +90,120 @@ CreateRegionAction::CreateRegionAction(Project* p, std::vector<int> managerPath,
     skipInitialDo = true;
     name = "Create Region " + std::to_string(this->regionID);
     wireCreateRegionDoUndo(this);
+}
+
+// ---------------------------------------------------------------------------
+// CreateAutomationCurveAction
+// ---------------------------------------------------------------------------
+namespace {
+void wireCreateAutomationCurveDoUndo(CreateAutomationCurveAction* t) {
+    t->doAction = [t]() {
+        ElementManager* em = undoResolveArrangerElementManager(t->p, t->managerPath, t->nodeID);
+        if (!em)
+            throw std::runtime_error("CreateAutomationCurveAction::doAction: element manager missing");
+        if (!t->snapshotValid) {
+            AutomationCurve* c = em->newAutomationCurve();
+            t->curveID = static_cast<int>(c->id);
+            t->curveSnapshot = c->toJSON();
+            t->snapshotValid = true;
+            t->name = "Create Automation Curve " + std::to_string(t->curveID);
+        } else {
+            em->restoreAutomationCurveFromSnapshot(t->curveSnapshot);
+        }
+    };
+    t->undoAction = [t]() {
+        if (!t->snapshotValid)
+            return;
+        ElementManager* em = undoResolveArrangerElementManager(t->p, t->managerPath, t->nodeID);
+        if (!em)
+            throw std::runtime_error("CreateAutomationCurveAction::undoAction: element manager missing");
+        em->removeElementById(static_cast<uint16_t>(t->curveID));
+    };
+}
+} // namespace
+
+CreateAutomationCurveAction::CreateAutomationCurveAction(Project* p, std::vector<int> managerPath, int nodeID) :
+        ProjectAction(p, CreateAutomationCurve),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID) {
+    wireCreateAutomationCurveDoUndo(this);
+}
+
+CreateAutomationCurveAction::CreateAutomationCurveAction(Project* p, std::vector<int> managerPath, int nodeID, int curveID, json curveSnapshot) :
+        ProjectAction(p, CreateAutomationCurve),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        curveID(curveID),
+        curveSnapshot(std::move(curveSnapshot)),
+        snapshotValid(true) {
+    skipInitialDo = true;
+    name = "Create Automation Curve " + std::to_string(this->curveID);
+    wireCreateAutomationCurveDoUndo(this);
+}
+
+// ---------------------------------------------------------------------------
+// ModifyCurvePointsAction
+// ---------------------------------------------------------------------------
+ModifyCurvePointsAction::ModifyCurvePointsAction(Project* p, std::vector<int> managerPath, int nodeID, int curveID,
+                                                 json before, json after) :
+        ProjectAction(p, ModifyCurvePoints),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        curveID(curveID),
+        before(std::move(before)),
+        after(std::move(after)) {
+    auto curveJsonToPoints = [](const json& pts) -> std::string {
+        std::string s;
+        for (const auto& pt : pts) {
+            if (!s.empty()) s += ",";
+            s += std::to_string(static_cast<int>(pt.value("v", 0.f) * 100.f));
+        }
+        return s;
+    };
+    name = "Edit Curve " + std::to_string(curveID) + " (" + curveJsonToPoints(before) + " -> " + curveJsonToPoints(after) + ")";
+    doAction = [this]() {
+        ElementManager* em = undoResolveArrangerElementManager(this->p, this->managerPath, this->nodeID);
+        if (!em) return;
+        GridElement* ge = em->getElement(static_cast<uint16_t>(this->curveID));
+        if (!ge || ge->type != ElementType::automationCurve) return;
+        auto* ac = static_cast<AutomationCurve*>(ge);
+        auto j = ac->toJSON();
+        if (this->after.is_array()) {
+            ac->points.clear();
+            for (const auto& el : this->after) {
+                CurvePoint pt;
+                pt.v = el.value("v", 0.f);
+                pt.shape.type = static_cast<CurveShape::Type>(el.value("shape", static_cast<int>(CurveShape::Single)));
+                pt.shape.param = el.value("shapeParam", 0.f);
+                if (el.contains("timeVec") && el["timeVec"].is_array())
+                    for (const auto& pr : el["timeVec"])
+                        if (pr.is_array() && pr.size() >= 2)
+                            pt.timeVec.push_back({pr[0].get<int>(), pr[1].get<int>()});
+                ac->points.push_back(std::move(pt));
+            }
+        }
+    };
+    undoAction = [this]() {
+        ElementManager* em = undoResolveArrangerElementManager(this->p, this->managerPath, this->nodeID);
+        if (!em) return;
+        GridElement* ge = em->getElement(static_cast<uint16_t>(this->curveID));
+        if (!ge || ge->type != ElementType::automationCurve) return;
+        auto* ac = static_cast<AutomationCurve*>(ge);
+        if (this->before.is_array()) {
+            ac->points.clear();
+            for (const auto& el : this->before) {
+                CurvePoint pt;
+                pt.v = el.value("v", 0.f);
+                pt.shape.type = static_cast<CurveShape::Type>(el.value("shape", static_cast<int>(CurveShape::Single)));
+                pt.shape.param = el.value("shapeParam", 0.f);
+                if (el.contains("timeVec") && el["timeVec"].is_array())
+                    for (const auto& pr : el["timeVec"])
+                        if (pr.is_array() && pr.size() >= 2)
+                            pt.timeVec.push_back({pr[0].get<int>(), pr[1].get<int>()});
+                ac->points.push_back(std::move(pt));
+            }
+        }
+    };
 }
 
 void DeleteRegionAction::wireDeleteRegionLambdas() {

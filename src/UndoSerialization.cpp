@@ -290,6 +290,15 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
             pa = new SongRollRhythmEdoAction(p, j.at("managerPath").get<std::vector<int>>(),
                 j.at("nodeID").get<int>(), j.at("before"), j.at("after"));
             break;
+        case CreateAutomationCurve:
+            pa = new CreateAutomationCurveAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(), j.at("curveID").get<int>(), j.at("curveSnapshot"));
+            break;
+        case ModifyCurvePoints:
+            pa = new ModifyCurvePointsAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(), j.at("curveID").get<int>(),
+                j.at("before"), j.at("after"));
+            break;
         default:
             throw std::runtime_error("invalid undo action type in save");
     }
@@ -674,6 +683,24 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["nodeID"] = sr->nodeID;
             j["before"] = sr->before;
             j["after"] = sr->after;
+            break;
+        }
+        case CreateAutomationCurve: {
+            auto* ca = static_cast<CreateAutomationCurveAction*>(pa);
+            j["managerPath"] = ca->managerPath;
+            j["nodeID"] = ca->nodeID;
+            j["curveID"] = ca->curveID;
+            j["curveSnapshot"] = ca->curveSnapshot;
+            j["snapshotValid"] = ca->snapshotValid;
+            break;
+        }
+        case ModifyCurvePoints: {
+            auto* mc = static_cast<ModifyCurvePointsAction*>(pa);
+            j["managerPath"] = mc->managerPath;
+            j["nodeID"] = mc->nodeID;
+            j["curveID"] = mc->curveID;
+            j["before"] = mc->before;
+            j["after"] = mc->after;
             break;
         }
         default:

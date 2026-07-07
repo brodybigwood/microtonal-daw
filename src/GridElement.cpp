@@ -63,9 +63,9 @@ json GridElement::toJSON() {
 void GridElement::fromJSON(json j) {
     for (json& p : j) {
         auto* pos = new Position{
-            pairsFromJson(p.value("startOffsetPairs", json::array())),
             pairsFromJson(p.value("rhythmVector", json::array())),
             pairsFromJson(p.value("rhythmEndVector", json::array())),
+            pairsFromJson(p.value("startOffsetPairs", json::array())),
             static_cast<uint16_t>(p.value("trackID", 0)),
             p.value("id", 0),
             this,
@@ -118,9 +118,9 @@ bool GridElement::removePositionById(int positionId, size_t* removedIndex) {
 
 void GridElement::insertPositionAt(size_t index, const json& p) {
     auto* pos = new Position{
-        pairsFromJson(p.at("startOffsetPairs")),
         pairsFromJson(p.at("rhythmVector")),
         pairsFromJson(p.at("rhythmEndVector")),
+        pairsFromJson(p.at("startOffsetPairs")),
         static_cast<uint16_t>(p.at("trackID").get<int>()),
         p.at("id").get<int>(),
         this,

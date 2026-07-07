@@ -45,6 +45,8 @@ const std::unordered_map<std::string, ActionType>& UndoManager::actionRegistry()
         {"vst_param_change", VstParameterChange},
         {"vst_load_plugin", VstLoadPlugin},
         {"toggle_piano_roll_window", TogglePianoRollWindow},
+        {"create_automation_curve", CreateAutomationCurve},
+        {"modify_curve_points", ModifyCurvePoints},
     };
     return reg;
 }

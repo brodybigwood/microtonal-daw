@@ -18,6 +18,9 @@
 #include "PianoRoll.h"
 #include "NodeProcessor.h"
 #include "NodeEditor.h"
+#include "CurveEditor.h"
+#include "AutomationCurve.h"
+#include "Note.h"
 #include "Preferences.h"
 #include "UndoManager.h"
 #include "ContextMenu.h"
@@ -30,6 +33,8 @@
 namespace {
 constexpr float kTimelinePosBorderH = 4.0f;
 constexpr float kTimelinePosBorderV = 4.0f;
+constexpr float kDragBarH = 14.f;
+constexpr float kDragBarResizeW = 10.f;
 /** Half-width of resize grab zone from each vertical edge (screen px). */
 constexpr float kPositionResizeEdgePx = 5.0f;
 
@@ -130,6 +135,23 @@ void SongRoll::validateTimelinePointers() {
             } else {
                 movingPosition = resolved;
             }
+        }
+    }
+
+    // Clean up curve editors whose positions no longer exist
+    for (auto it = curveEditors.begin(); it != curveEditors.end(); ) {
+        bool found = false;
+        for (auto* e : em->elements) {
+            for (auto* pos : e->positions) {
+                if (pos->id == it->first) { found = true; break; }
+            }
+            if (found) break;
+        }
+        if (!found) {
+            delete it->second;
+            it = curveEditors.erase(it);
+        } else {
+            ++it;
         }
     }
 }
@@ -255,6 +277,51 @@ SongRoll::~SongRoll() {
     }
     pianoRollWindows.clear();
     pianoRolls.clear();
+    for (auto& [id, ce] : curveEditors) delete ce;
+    curveEditors.clear();
+}
+
+CurveEditor* SongRoll::getCurveEditor(GridElement::Position* pos) {
+    if (!pos) return nullptr;
+    auto it = curveEditors.find(pos->id);
+    if (it != curveEditors.end()) return it->second;
+    auto* ac = static_cast<AutomationCurve*>(pos->element);
+    auto* ce = new CurveEditor(ac, this, &pos->rhythmVector, &pos->rhythmEndVector, &pos->startOffsetPairs);
+    curveEditors[pos->id] = ce;
+    return ce;
+}
+
+void SongRoll::destroyCurveEditor(int posId) {
+    auto it = curveEditors.find(posId);
+    if (it != curveEditors.end()) {
+        delete it->second;
+        curveEditors.erase(it);
+    }
+}
+
+json SongRoll::snapshotCurvePoints(AutomationCurve* ac) {
+    json pts = json::array();
+    for (const auto& pt : ac->points) {
+        json jpt;
+        jpt["v"] = pt.v;
+        jpt["shape"] = static_cast<int>(pt.shape.type);
+        jpt["shapeParam"] = pt.shape.param;
+        jpt["timeVec"] = json::array();
+        for (const auto& pr : pt.timeVec)
+            jpt["timeVec"].push_back(json::array({pr.first, pr.second}));
+        pts.push_back(jpt);
+    }
+    return pts;
+}
+
+void SongRoll::pushCurveUndo(AutomationCurve* ac, const json& before) {
+    if (!project || !project->um || !parentNode) return;
+    json after = snapshotCurvePoints(ac);
+    if (before != after) {
+        project->um->newAction(new ModifyCurvePointsAction(project,
+            parentNode->nm->managerPath, static_cast<int>(parentNode->id),
+            static_cast<int>(ac->id), before, after));
+    }
 }
 
 float SongRoll::secondsFromMouseX() {
@@ -385,6 +452,44 @@ void SongRoll::handleCustomInput(SDL_Event& e) {
             getHoveredPosition();
             refreshHoveredRhythmLineIndex();
 
+            // Curve point hover (only when not dragging)
+            if (draggingCurvePointIdx < 0 && draggingTensionSeg < 0) {
+                hoveredCurvePointIdx = -1;
+                activeCurveEditorPosId = -1;
+            }
+            if (hoveredCurvePointIdx < 0) {
+                for (auto& [id, ce] : curveEditors) ce->hoveredTensionSeg = -1;
+            }
+            if (hoveredPosition && hoveredPosition->element->type == ElementType::automationCurve &&
+                lmb == false && positionDragKind == PositionDragKind::None) {
+                auto* ce = getCurveEditor(hoveredPosition);
+                if (ce) {
+                    ce->updateArea(getY(tracks->getIndex(hoveredPosition->trackID)) + kDragBarH, divHeight - kDragBarH);
+                    int pt = ce->hitTestPoint(mouseX, mouseY);
+                    if (pt >= 0) {
+                        hoveredCurvePointIdx = pt;
+                        activeCurveEditorPosId = hoveredPosition->id;
+                    }
+                    ce->hoveredPointIdx = hoveredCurvePointIdx;
+                    ce->hoveredTensionSeg = ce->hitTestTension(mouseX, mouseY);
+                }
+            }
+
+            // Tension handle drag
+            if (lmb && draggingTensionSeg >= 0 && activeCurveEditorPosId >= 0) {
+                auto it = curveEditors.find(activeCurveEditorPosId);
+                if (it != curveEditors.end()) {
+                    auto* ce = it->second;
+                    if (draggingTensionSeg < static_cast<int>(ce->curve()->points.size()) - 1) {
+                        float dy = mouseY - tensionDragStartY;
+                        auto& segPt = ce->curve()->points[draggingTensionSeg];
+                        float dir = ce->curve()->points[draggingTensionSeg + 1].v >= segPt.v ? 1.f : -1.f;
+                        segPt.shape.param = std::max(-1.f, std::min(1.f, tensionDragStartParam - dy * dir / (ce->area.h * 0.5f)));
+                        refreshGrid = true;
+                    }
+                }
+            }
+
             if (selectingRhythmInterval) {
                 refreshHoveredRhythmLineIndex();
                 if (hoveredRhythmLineIndex != SIZE_MAX && hoveredRhythmLineIndex < rhythmLines.size()) {
@@ -397,6 +502,47 @@ void SongRoll::handleCustomInput(SDL_Event& e) {
                 break;
             }
 
+            // Curve point drag
+            if (lmb && draggingCurvePointIdx >= 0 && activeCurveEditorPosId >= 0) {
+                auto it = curveEditors.find(activeCurveEditorPosId);
+                if (it != curveEditors.end()) {
+                    auto* ce = it->second;
+                    auto* ac = ce->curve();
+                    if (draggingCurvePointIdx < static_cast<int>(ac->points.size())) {
+                        // Find the position to compute area
+                        for (auto* e : em->elements) {
+                            for (auto* p : e->positions) {
+                                if (p->id == activeCurveEditorPosId) {
+                                    ce->updateArea(getY(tracks->getIndex(p->trackID)) + kDragBarH, divHeight - kDragBarH);
+                                    break;
+                                }
+                            }
+                        }
+                        auto& pt = ac->points[draggingCurvePointIdx];
+                        refreshHoveredRhythmLineIndex();
+                        if (hoveredRhythmLineIndex != SIZE_MAX && hoveredRhythmLineIndex < rhythmLines.size()) {
+                            auto newVec = addVec(subVec(rhythmLines[hoveredRhythmLineIndex].integerPairs, *ce->startVec()), *ce->offsetVec());
+                            float newSec = Note::secondsFromVector(newVec);
+                            // Don't cross adjacent points
+                            if (draggingCurvePointIdx > 0) {
+                                float prevSec = Note::secondsFromVector(ac->points[draggingCurvePointIdx - 1].timeVec);
+                                if (newSec <= prevSec) newVec = ac->points[draggingCurvePointIdx - 1].timeVec;
+                            }
+                            if (draggingCurvePointIdx < static_cast<int>(ac->points.size()) - 1) {
+                                float nextSec = Note::secondsFromVector(ac->points[draggingCurvePointIdx + 1].timeVec);
+                                if (newSec >= nextSec) newVec = ac->points[draggingCurvePointIdx + 1].timeVec;
+                            }
+                            pt.timeVec = newVec;
+                        }
+                        if (ce->area.h > 0.f) {
+                            float relY = (mouseY - ce->area.y) / ce->area.h;
+                            pt.v = std::max(0.f, std::min(1.f, 1.f - relY));
+                        }
+                        refreshGrid = true;
+                    }
+                }
+            }
+
             movePosition();
             if (mouseX < rightRect.x) {
                 const bool resizing = lmb && (positionDragKind == PositionDragKind::ResizeLeft ||
@@ -405,9 +551,11 @@ void SongRoll::handleCustomInput(SDL_Event& e) {
                 if (!overResize && hoveredPosition) {
                     const float xL = getX(Note::secondsFromVector(hoveredPosition->rhythmVector));
                     const float xR = getX(Note::secondsFromVector(hoveredPosition->rhythmEndVector));
-                    const float edge = std::max(kPositionResizeEdgePx, kTimelinePosBorderV + 1.0f);
-                    if (mouseX <= xL + edge || mouseX >= xR - edge)
-                        overResize = true;
+                    const float yT = getY(tracks->getIndex(hoveredPosition->trackID));
+                    if (mouseY >= yT && mouseY <= yT + kDragBarH) {
+                        if (mouseX <= xL + kDragBarResizeW || mouseX >= xR - kDragBarResizeW)
+                            overResize = true;
+                    }
                 }
                 if (overResize)
                     SDL_SetCursor(cursors.resize);
@@ -499,20 +647,37 @@ void SongRoll::renderElement(SDL_Renderer* renderer, GridElement* element) {
         const float y0 = topLeftCornerY;
         const float hPx = divHeight;
 
-        const float midY = y0 + kTimelinePosBorderH;
-        const float midH = std::max(0.0f, hPx - 2.0f * kTimelinePosBorderH);
-        SDL_SetRenderDrawColor(renderer, 120, 200, 255, 255);
-        SDL_FRect vLeft{x0, midY, kTimelinePosBorderV, midH};
-        SDL_RenderFillRect(renderer, &vLeft);
-        SDL_SetRenderDrawColor(renderer, 255, 190, 140, 255);
-        SDL_FRect vRight{x0 + wPx - kTimelinePosBorderV, midY, kTimelinePosBorderV, midH};
-        SDL_RenderFillRect(renderer, &vRight);
+        // Drag bar (move handle) at top
+        SDL_SetRenderDrawColor(renderer, 80, 84, 94, 255);
+        SDL_FRect dragBar{x0, y0, wPx, kDragBarH};
+        SDL_RenderFillRect(renderer, &dragBar);
+        // Drag bar outline
+        SDL_SetRenderDrawColor(renderer, 140, 145, 155, 255);
+        SDL_RenderRect(renderer, &dragBar);
+        // Resize handles on left/right of drag bar
+        SDL_SetRenderDrawColor(renderer, 120, 200, 255, 180);
+        SDL_FRect rszL{x0, y0, kDragBarResizeW, kDragBarH};
+        SDL_RenderFillRect(renderer, &rszL);
+        SDL_SetRenderDrawColor(renderer, 255, 190, 140, 180);
+        SDL_FRect rszR{x0 + wPx - kDragBarResizeW, y0, kDragBarResizeW, kDragBarH};
+        SDL_RenderFillRect(renderer, &rszR);
 
+        const float contentY = y0 + kDragBarH;
+        const float contentH = std::max(0.0f, hPx - kDragBarH);
+
+        // Bottom edge
         SDL_SetRenderDrawColor(renderer, 52, 54, 62, 255);
-        SDL_FRect hTop{x0, y0, wPx, kTimelinePosBorderH};
         SDL_FRect hBot{x0, y0 + hPx - kTimelinePosBorderH, wPx, kTimelinePosBorderH};
-        SDL_RenderFillRect(renderer, &hTop);
         SDL_RenderFillRect(renderer, &hBot);
+
+        // Render curve for automation positions
+        if (element->type == ElementType::automationCurve) {
+            auto* ce = getCurveEditor(position);
+            if (ce) {
+                ce->updateArea(getY(tracks->getIndex(position->trackID)) + kDragBarH, divHeight - kDragBarH);
+                ce->render(renderer);
+            }
+        }
     }
 }
 
@@ -646,23 +811,103 @@ void SongRoll::clickMouse(SDL_Event& e) {
                     return;
                 }
 
+                // Curve point interaction for automation positions (below drag bar only)
+                {
+                    GridElement::Position* curvePos = hoveredPosition;
+                    if (!curvePos || curvePos->element->type != ElementType::automationCurve) {
+                        for (auto* e : em->elements) {
+                            if (e->type != ElementType::automationCurve) continue;
+                            for (auto* p : e->positions) {
+                                float xL = getX(Note::secondsFromVector(p->rhythmVector));
+                                float xR = getX(Note::secondsFromVector(p->rhythmEndVector));
+                                float yT = getY(tracks->getIndex(p->trackID)) + kDragBarH;
+                                float yB = yT + divHeight - kDragBarH;
+                                if (mouseX >= xL - CurveEditor::kHandleRadius * 3 &&
+                                    mouseX <= xR + CurveEditor::kHandleRadius * 3 &&
+                                    mouseY >= yT && mouseY <= yB) {
+                                    curvePos = p;
+                                    break;
+                                }
+                            }
+                            if (curvePos && curvePos->element->type == ElementType::automationCurve) break;
+                        }
+                    }
+                    // Only handle curve interaction below the drag bar
+                    bool inCurveZone = curvePos && curvePos->element->type == ElementType::automationCurve;
+                    if (inCurveZone) {
+                        float yT = getY(tracks->getIndex(curvePos->trackID));
+                        if (mouseY < yT + kDragBarH) inCurveZone = false;
+                    }
+                    if (inCurveZone) {
+                        auto* ce = getCurveEditor(curvePos);
+                        if (ce) {
+                            ce->updateArea(getY(tracks->getIndex(curvePos->trackID)) + kDragBarH, divHeight - kDragBarH);
+                            float ax = ce->area.x;
+                            float ay = ce->area.y;
+                            float aw = ce->area.w;
+                            float ah = ce->area.h;
+                            int tensSeg = ce->hitTestTension(mouseX, mouseY);
+                            if (tensSeg >= 0) {
+                                draggingTensionSeg = tensSeg;
+                                tensionDragStartY = mouseY;
+                                tensionDragStartParam = ce->curve()->points[tensSeg].shape.param;
+                                activeCurveEditorPosId = curvePos->id;
+                                auto* ac = static_cast<AutomationCurve*>(curvePos->element);
+                                curveDragUndoBefore = snapshotCurvePoints(ac);
+                                return;
+                            }
+                            int pt = ce->hitTestPoint(mouseX, mouseY);
+                            if (pt >= 0) {
+                                draggingCurvePointIdx = pt;
+                                activeCurveEditorPosId = curvePos->id;
+                                auto* ac = static_cast<AutomationCurve*>(curvePos->element);
+                                curveDragUndoBefore = snapshotCurvePoints(ac);
+                                return;
+                            }
+                            // Add point anywhere in the curve area
+                            if (mouseX >= ax && mouseX <= ax + aw &&
+                                mouseY >= ay && mouseY <= ay + ah) {
+                                refreshHoveredRhythmLineIndex();
+                                if (hoveredRhythmLineIndex == SIZE_MAX || hoveredRhythmLineIndex >= rhythmLines.size())
+                                    return;
+                                float v = std::max(0.f, std::min(1.f, 1.f - (mouseY - ay) / ah));
+                                auto* ac = static_cast<AutomationCurve*>(curvePos->element);
+                                auto before = snapshotCurvePoints(ac);
+                                auto relVec = addVec(subVec(rhythmLines[hoveredRhythmLineIndex].integerPairs, curvePos->rhythmVector), curvePos->startOffsetPairs);
+                                ac->addPoint(relVec, v, CurveShape::Single);
+                                pushCurveUndo(ac, before);
+                                refreshGrid = true;
+                                return;
+                            }
+                        }
+                    }
+                }
+
                 positionDragKind = PositionDragKind::None;
                 movingPosition = hoveredPosition;
                 timelineDragElementId = -1;
                 timelineDragPositionId = -1;
                 if (movingPosition) {
+                    const float xL = getX(Note::secondsFromVector(movingPosition->rhythmVector));
+                    const float xR = getX(Note::secondsFromVector(movingPosition->rhythmEndVector));
+                    const float yT = getY(tracks->getIndex(movingPosition->trackID));
+                    const float barY = yT;
+                    const float barH = kDragBarH;
+                    if (mouseY >= barY && mouseY <= barY + barH) {
+                        if (mouseX <= xL + kDragBarResizeW)
+                            positionDragKind = PositionDragKind::ResizeLeft;
+                        else if (mouseX >= xR - kDragBarResizeW)
+                            positionDragKind = PositionDragKind::ResizeRight;
+                        else
+                            positionDragKind = PositionDragKind::Move;
+                    } else {
+                        movingPosition = nullptr;
+                    }
+                }
+                if (movingPosition) {
                     lastPosition = *movingPosition;
                     timelineDragElementId = static_cast<int>(movingPosition->element->id);
                     timelineDragPositionId = movingPosition->id;
-                    const float xL = getX(Note::secondsFromVector(movingPosition->rhythmVector));
-                    const float xR = getX(Note::secondsFromVector(movingPosition->rhythmEndVector));
-                    const float handlePx = std::max(kPositionResizeEdgePx, kTimelinePosBorderV + 1.0f);
-                    if (mouseX <= xL + handlePx)
-                        positionDragKind = PositionDragKind::ResizeLeft;
-                    else if (mouseX >= xR - handlePx)
-                        positionDragKind = PositionDragKind::ResizeRight;
-                    else
-                        positionDragKind = PositionDragKind::Move;
                 }
 
                 if (SDL_GetTicks() - lastLmbTime < DCT) doubleClick();
@@ -676,6 +921,51 @@ void SongRoll::clickMouse(SDL_Event& e) {
             }
             if (e.button.button == SDL_BUTTON_RIGHT) {
                 rmb = true;
+                // Curve point deletion
+                if (hoveredCurvePointIdx >= 0 && hoveredPosition &&
+                    hoveredPosition->element->type == ElementType::automationCurve) {
+                    auto* ac = static_cast<AutomationCurve*>(hoveredPosition->element);
+                    int ptIdx = hoveredCurvePointIdx;
+                    auto menuRoot = std::make_shared<TreeEntry>("Point " + std::to_string(ptIdx));
+                    auto holdEntry = std::make_shared<TreeEntry>("Hold");
+                    auto singleEntry = std::make_shared<TreeEntry>("Single");
+                    auto doubleEntry = std::make_shared<TreeEntry>("Double");
+                    auto deleteEntry = std::make_shared<TreeEntry>("Delete");
+                    holdEntry->click = [this, ac, ptIdx]() {
+                        auto before = snapshotCurvePoints(ac);
+                        ac->points[ptIdx].shape.type = CurveShape::Hold;
+                        pushCurveUndo(ac, before);
+                        refreshGrid = true;
+                    };
+                    singleEntry->click = [this, ac, ptIdx]() {
+                        auto before = snapshotCurvePoints(ac);
+                        ac->points[ptIdx].shape.type = CurveShape::Single;
+                        pushCurveUndo(ac, before);
+                        refreshGrid = true;
+                    };
+                    doubleEntry->click = [this, ac, ptIdx]() {
+                        auto before = snapshotCurvePoints(ac);
+                        ac->points[ptIdx].shape.type = CurveShape::Double;
+                        pushCurveUndo(ac, before);
+                        refreshGrid = true;
+                    };
+                    deleteEntry->click = [this, ac, ptIdx]() {
+                        auto before = snapshotCurvePoints(ac);
+                        ac->removePoint(static_cast<size_t>(ptIdx));
+                        pushCurveUndo(ac, before);
+                        refreshGrid = true;
+                    };
+                    menuRoot->addChild(holdEntry);
+                    menuRoot->addChild(singleEntry);
+                    menuRoot->addChild(doubleEntry);
+                    menuRoot->addChild(deleteEntry);
+                    auto ctxMenu = ContextMenu::get();
+                    ctxMenu->skipNextEvent = true;
+                    ctxMenu->activate();
+                    ctxMenu->dynamicTick = getTreeMenuTicker(menuRoot);
+                    rmb = false;
+                    return;
+                }
                 if (hoveredPosition && mouseX < rightRect.x) {
                     GridElement* el = hoveredPosition->element;
                     const int elemId = static_cast<int>(el->id);
@@ -688,7 +978,7 @@ void SongRoll::clickMouse(SDL_Event& e) {
                     project->um->newAction(new DeletePositionAction(project, parentNode->nm->managerPath,
                         static_cast<int>(parentNode->id), elemId, posId));
                     refreshGrid = true;
-                } else if (MouseOn(&rightRect) && em->hoveredElement != -1 && !em->hoverNew) {
+                } else if (MouseOn(&rightRect) && em->hoveredElement != -1 && !em->hoverNewRegion) {
                     GridElement* ge = em->getElement(static_cast<uint16_t>(em->hoveredElement));
                     if (ge->type == ElementType::region) {
                         auto* ctxMenu = ContextMenu::get();
@@ -813,6 +1103,17 @@ void SongRoll::clickMouse(SDL_Event& e) {
                             [this]() { rhythmEdoDefineDialogOpen = false; });
                     }
                 }
+
+                if ((draggingCurvePointIdx >= 0 || draggingTensionSeg >= 0) && activeCurveEditorPosId >= 0) {
+                    auto it = curveEditors.find(activeCurveEditorPosId);
+                    if (it != curveEditors.end()) {
+                        auto* ac = it->second->curve();
+                        pushCurveUndo(ac, curveDragUndoBefore);
+                    }
+                }
+                draggingCurvePointIdx = -1;
+                draggingTensionSeg = -1;
+                activeCurveEditorPosId = -1;
 
                 if (movingPosition) {
                     json after = GridElement::positionToJson(*movingPosition);

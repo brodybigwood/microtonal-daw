@@ -8,7 +8,8 @@ using json = nlohmann::json;
 
 enum ElementType{
     region = 0,
-    audioClip = 1
+    audioClip = 1,
+    automationCurve = 2
 };
 
 class Project;

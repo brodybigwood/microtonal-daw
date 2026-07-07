@@ -1,5 +1,7 @@
 #include "ElementManager.h"
 #include "Region.h"
+#include "AutomationCurve.h"
+#include "UndoManager.h"
 #include <SDL3/SDL_events.h>
 #include <string>
 #include "styles.h"
@@ -141,6 +143,24 @@ void ElementManager::process(int bufferSize) {
                         }
                     }
                     break;
+                case ElementType::automationCurve:
+                    {
+                        if (!project->isPlaying.load()) break;
+                        if (!(*track->buffer)) break;
+                        AutomationCurve* ac = static_cast<AutomationCurve*>(element);
+                        if (ac->points.empty()) break;
+                        float posStart = Note::secondsFromVector(pos.rhythmVector);
+                        float posEnd = Note::secondsFromVector(pos.rhythmEndVector);
+                        float offSec = Note::secondsFromVector(pos.startOffsetPairs);
+                        float* wbuf = *(track->buffer);
+                        for (size_t i = 0; i < bufferSize; ++i) {
+                            float sec = static_cast<float>(time) + static_cast<float>(i) / AudioManager::instance()->sampleRate;
+                            if (sec < posStart - offSec || sec > posEnd + 0.001f) { wbuf[i] += 0.f; continue; }
+                            float v = ac->evaluateAtSec(sec, posStart - offSec, posEnd);
+                            wbuf[i] += v * 2.f - 1.f;  // 0..1 → -1..1
+                        }
+                    }
+                    break;
                 default:
                     break;
             }
@@ -171,6 +191,9 @@ void ElementManager::fromJSON(json j) {
                 break;
             case ElementType::audioClip:
                 ge = new AudioClip(project, parentNode);
+                break;
+            case ElementType::automationCurve:
+                ge = new AutomationCurve(project, parentNode);
                 break;
             default:
                 return; // unknown type, give up
@@ -244,6 +267,28 @@ void ElementManager::restoreRegionFromSnapshotAt(size_t insertIndex, const json&
         ids[elements[i]->id] = static_cast<uint16_t>(i);
 }
 
+void ElementManager::restoreAutomationCurveFromSnapshot(const json& curveJson) {
+    restoreAutomationCurveFromSnapshotAt(elements.size(), curveJson);
+}
+
+void ElementManager::restoreAutomationCurveFromSnapshotAt(size_t insertIndex, const json& curveJson) {
+    if (!curveJson.contains("type") || curveJson["type"].get<int>() != ElementType::automationCurve)
+        throw std::runtime_error("ElementManager::restoreAutomationCurveFromSnapshotAt: not an automation curve snapshot");
+    const uint16_t cid = curveJson.at("id").get<uint16_t>();
+    if (ids.count(cid))
+        throw std::runtime_error("ElementManager::restoreAutomationCurveFromSnapshotAt: id already in use");
+    if (insertIndex > elements.size())
+        insertIndex = elements.size();
+    auto* a = new AutomationCurve(project, parentNode);
+    a->pos_id_pool = &id_pool;
+    a->fromJSON(curveJson);
+    id_pool.reserveID(cid);
+    elements.insert(elements.begin() + static_cast<std::ptrdiff_t>(insertIndex), a);
+    ids.clear();
+    for (size_t i = 0; i < elements.size(); ++i)
+        ids[elements[i]->id] = static_cast<uint16_t>(i);
+}
+
 AudioClip* ElementManager::newAudioClip(std::string filepath) {
 
     auto a = new AudioClip(project, parentNode);
@@ -260,6 +305,15 @@ AudioClip* ElementManager::newAudioClip(std::string filepath) {
 
     ids[a->id] = elements.size() - 1;
 
+    return a;
+}
+
+AutomationCurve* ElementManager::newAutomationCurve() {
+    auto a = new AutomationCurve(project, parentNode);
+    a->pos_id_pool = &id_pool;
+    a->id = id_pool.newID();
+    elements.push_back(a);
+    ids[a->id] = elements.size() - 1;
     return a;
 }
 
@@ -355,21 +409,63 @@ void ElementManager::render(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 150, 150, 150, 255);
     SDL_RenderRect(renderer, dstRect);
 
-    //new region btn
-    SDL_FRect rect{dstRect->x, dstRect->y + dstRect->h - bottomMargin, dstRect->w, bottomMargin};
-    hoverNew = false;
-    if (mouseX >= rect.x && mouseX < (rect.x + rect.w) &&
-        mouseY >= rect.y && mouseY < (rect.y + rect.h)) {
-            SDL_SetRenderDrawColor(renderer, 40, 120, 40, 255);
-            hoveredElement = -1;
-            hoverNew = true;
+    // New Region button
+    float btnY = dstRect->y + dstRect->h - bottomMargin;
+    float btnHalfW = dstRect->w / 2.f;
+    SDL_FRect regionBtn{ dstRect->x, btnY, btnHalfW, bottomMargin };
+    hoverNewRegion = false;
+    if (mouseX >= regionBtn.x && mouseX < (regionBtn.x + regionBtn.w) &&
+        mouseY >= regionBtn.y && mouseY < (regionBtn.y + regionBtn.h)) {
+        SDL_SetRenderDrawColor(renderer, colors.trackNotes[0], colors.trackNotes[1], colors.trackNotes[2], 220);
+        hoverNewRegion = true;
     } else {
-            SDL_SetRenderDrawColor(renderer, 20, 60, 20, 255);
-            hoverNew = false;
+        SDL_SetRenderDrawColor(renderer, colors.trackNotes[0], colors.trackNotes[1], colors.trackNotes[2], 180);
     }
-    SDL_RenderFillRect(renderer, &rect);
+    SDL_RenderFillRect(renderer, &regionBtn);
     SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
-    SDL_RenderRect(renderer, &rect);
+    SDL_RenderRect(renderer, &regionBtn);
+    if (fonts.mainFont) {
+        SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, "+Region", 0, {255, 255, 255, 255});
+        if (surf) {
+            SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
+            if (tex) {
+                SDL_FRect tr{ regionBtn.x + (regionBtn.w - surf->w) * 0.5f,
+                              regionBtn.y + (regionBtn.h - surf->h) * 0.5f,
+                              (float)surf->w, (float)surf->h };
+                SDL_RenderTexture(renderer, tex, nullptr, &tr);
+                SDL_DestroyTexture(tex);
+            }
+            SDL_DestroySurface(surf);
+        }
+    }
+
+    // New Waveform button
+    SDL_FRect waveformBtn{ dstRect->x + btnHalfW, btnY, btnHalfW, bottomMargin };
+    hoverNewWaveform = false;
+    if (mouseX >= waveformBtn.x && mouseX < (waveformBtn.x + waveformBtn.w) &&
+        mouseY >= waveformBtn.y && mouseY < (waveformBtn.y + waveformBtn.h)) {
+        SDL_SetRenderDrawColor(renderer, colors.trackAudio[0], colors.trackAudio[1], colors.trackAudio[2], 220);
+        hoverNewWaveform = true;
+    } else {
+        SDL_SetRenderDrawColor(renderer, colors.trackAudio[0], colors.trackAudio[1], colors.trackAudio[2], 180);
+    }
+    SDL_RenderFillRect(renderer, &waveformBtn);
+    SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
+    SDL_RenderRect(renderer, &waveformBtn);
+    if (fonts.mainFont) {
+        SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, "+Wave", 0, {255, 255, 255, 255});
+        if (surf) {
+            SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
+            if (tex) {
+                SDL_FRect tr{ waveformBtn.x + (waveformBtn.w - surf->w) * 0.5f,
+                              waveformBtn.y + (waveformBtn.h - surf->h) * 0.5f,
+                              (float)surf->w, (float)surf->h };
+                SDL_RenderTexture(renderer, tex, nullptr, &tr);
+                SDL_DestroyTexture(tex);
+            }
+            SDL_DestroySurface(surf);
+        }
+    }
 
     SDL_SetRenderClipRect(renderer, NULL);
 }
@@ -379,8 +475,16 @@ bool ElementManager::handleInput(SDL_Event& e) {
     switch (e.type) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             if (e.button.button == SDL_BUTTON_LEFT) {
-                if(hoverNew) {
-                    project->um->newAction(new CreateRegionAction(project, parentNode->nm->managerPath, static_cast<int>(parentNode->id)));
+                if(hoverNewRegion) {
+                    auto* cra = new CreateRegionAction(project, parentNode->nm->managerPath, static_cast<int>(parentNode->id));
+                    project->um->newAction(cra);
+                    currentElement = cra->regionID;
+                    break;
+                }
+                if(hoverNewWaveform) {
+                    auto* cca = new CreateAutomationCurveAction(project, parentNode->nm->managerPath, static_cast<int>(parentNode->id));
+                    project->um->newAction(cca);
+                    currentElement = cca->curveID;
                     break;
                 }
                 if(hoveredElement != -1) {
