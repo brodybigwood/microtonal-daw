@@ -1171,8 +1171,10 @@ void SongRoll::beginDrop(SDL_DropEvent& d) {
 }
 
 void SongRoll::dropFile(SDL_DropEvent& d) {
-    AudioClip* e = em->newAudioClip(d.data);
-    if (!e) return;
+    auto* action = new CreateAudioClipAction(project, parentNode->nm->managerPath,
+        static_cast<int>(parentNode->id), d.data);
+    project->um->newAction(action);
+    if (!action->snapshotValid) return;
 
     auto startPairs = pairsAtMouseX();
     auto endPairs = lastPositionDurationPairs.empty()
@@ -1185,9 +1187,9 @@ void SongRoll::dropFile(SDL_DropEvent& d) {
     if (track->type != TrackType::Audio) return; // cant put audioclip on region track
 
     project->um->newAction(new CreatePositionAction(project, parentNode->nm->managerPath, static_cast<int>(parentNode->id),
-        static_cast<int>(e->id), startPairs, endPairs, static_cast<uint16_t>(trackID)));
+        action->clipID, startPairs, endPairs, static_cast<uint16_t>(trackID)));
 
-    auto* elem = em->getElement(e->id);
+    auto* elem = em->getElement(static_cast<uint16_t>(action->clipID));
     if (elem && !elem->positions.empty()) {
         auto* pos = elem->positions.back();
         lastPositionDurationPairs = subVec(pos->rhythmEndVector, pos->rhythmVector);

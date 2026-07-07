@@ -47,6 +47,7 @@ const std::unordered_map<std::string, ActionType>& UndoManager::actionRegistry()
         {"toggle_piano_roll_window", TogglePianoRollWindow},
         {"create_automation_curve", CreateAutomationCurve},
         {"modify_curve_points", ModifyCurvePoints},
+        {"create_audio_clip", CreateAudioClip},
     };
     return reg;
 }

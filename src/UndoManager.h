@@ -55,7 +55,8 @@ enum ActionType {
     MoveMultipleNotes = 34,
     SongRollRhythmEdo = 35,
     CreateAutomationCurve = 36,
-    ModifyCurvePoints = 37
+    ModifyCurvePoints = 37,
+    CreateAudioClip = 38
 };
 
 
@@ -394,6 +395,17 @@ struct ModifyCurvePointsAction : ProjectAction {
 
     ModifyCurvePointsAction(Project* p, std::vector<int> managerPath, int nodeID, int curveID,
                             json before, json after);
+};
+
+struct CreateAudioClipAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    int clipID = -1;
+    json clipSnapshot = json::object();
+    bool snapshotValid = false;
+
+    CreateAudioClipAction(Project* p, std::vector<int> managerPath, int nodeID, std::string filepath);
+    CreateAudioClipAction(Project* p, std::vector<int> managerPath, int nodeID, int clipID, json clipSnapshot);
 };
 
 struct CreatePositionAction : ProjectAction {

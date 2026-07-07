@@ -28,9 +28,12 @@ class ElementManager {
         void restoreRegionFromSnapshotAt(size_t insertIndex, const json& regionJson);
         void restoreAutomationCurveFromSnapshot(const json& curveJson);
         void restoreAutomationCurveFromSnapshotAt(size_t insertIndex, const json& curveJson);
+        void restoreAudioClipFromSnapshot(const json& clipJson);
+        void restoreAudioClipFromSnapshotAt(size_t insertIndex, const json& clipJson);
 
         uint16_t getIndex(uint16_t);
         idManager id_pool;
+        idManager position_id_pool;
         std::unordered_map<uint16_t, uint16_t> ids;
 
         json toJSON();

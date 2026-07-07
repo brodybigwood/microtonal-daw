@@ -158,6 +158,58 @@ CreateAutomationCurveAction::CreateAutomationCurveAction(Project* p, std::vector
 }
 
 // ---------------------------------------------------------------------------
+// CreateAudioClipAction
+// ---------------------------------------------------------------------------
+namespace {
+void wireCreateAudioClipDoUndo(CreateAudioClipAction* t) {
+    t->doAction = [t]() {
+        ElementManager* em = undoResolveArrangerElementManager(t->p, t->managerPath, t->nodeID);
+        if (!em)
+            throw std::runtime_error("CreateAudioClipAction::doAction: element manager missing");
+        if (!t->snapshotValid) {
+            AudioClip* c = em->newAudioClip(t->clipSnapshot["filepath"]);
+            if (!c)
+                throw std::runtime_error("CreateAudioClipAction::doAction: failed to load audio file");
+            t->clipID = static_cast<int>(c->id);
+            t->clipSnapshot = c->toJSON();
+            t->snapshotValid = true;
+            t->name = "Create Audio Clip " + std::to_string(t->clipID);
+        } else {
+            em->restoreAudioClipFromSnapshot(t->clipSnapshot);
+        }
+    };
+    t->undoAction = [t]() {
+        if (!t->snapshotValid)
+            return;
+        ElementManager* em = undoResolveArrangerElementManager(t->p, t->managerPath, t->nodeID);
+        if (!em)
+            throw std::runtime_error("CreateAudioClipAction::undoAction: element manager missing");
+        em->removeElementById(static_cast<uint16_t>(t->clipID));
+    };
+}
+} // namespace
+
+CreateAudioClipAction::CreateAudioClipAction(Project* p, std::vector<int> managerPath, int nodeID, std::string filepath) :
+        ProjectAction(p, CreateAudioClip),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID) {
+    clipSnapshot["filepath"] = std::move(filepath);
+    wireCreateAudioClipDoUndo(this);
+}
+
+CreateAudioClipAction::CreateAudioClipAction(Project* p, std::vector<int> managerPath, int nodeID, int clipID, json clipSnapshot) :
+        ProjectAction(p, CreateAudioClip),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        clipID(clipID),
+        clipSnapshot(std::move(clipSnapshot)),
+        snapshotValid(true) {
+    skipInitialDo = true;
+    name = "Create Audio Clip " + std::to_string(this->clipID);
+    wireCreateAudioClipDoUndo(this);
+}
+
+// ---------------------------------------------------------------------------
 // ModifyCurvePointsAction
 // ---------------------------------------------------------------------------
 ModifyCurvePointsAction::ModifyCurvePointsAction(Project* p, std::vector<int> managerPath, int nodeID, int curveID,

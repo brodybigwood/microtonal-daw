@@ -294,6 +294,10 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
             pa = new CreateAutomationCurveAction(p, j.at("managerPath").get<std::vector<int>>(),
                 j.at("nodeID").get<int>(), j.at("curveID").get<int>(), j.at("curveSnapshot"));
             break;
+        case CreateAudioClip:
+            pa = new CreateAudioClipAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(), j.at("clipID").get<int>(), j.at("clipSnapshot"));
+            break;
         case ModifyCurvePoints:
             pa = new ModifyCurvePointsAction(p, j.at("managerPath").get<std::vector<int>>(),
                 j.at("nodeID").get<int>(), j.at("curveID").get<int>(),
@@ -691,6 +695,15 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["nodeID"] = ca->nodeID;
             j["curveID"] = ca->curveID;
             j["curveSnapshot"] = ca->curveSnapshot;
+            j["snapshotValid"] = ca->snapshotValid;
+            break;
+        }
+        case CreateAudioClip: {
+            auto* ca = static_cast<CreateAudioClipAction*>(pa);
+            j["managerPath"] = ca->managerPath;
+            j["nodeID"] = ca->nodeID;
+            j["clipID"] = ca->clipID;
+            j["clipSnapshot"] = ca->clipSnapshot;
             j["snapshotValid"] = ca->snapshotValid;
             break;
         }

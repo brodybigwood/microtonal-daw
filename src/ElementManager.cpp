@@ -32,6 +32,7 @@ void ElementManager::clearTextures() {
 json ElementManager::toJSON() {
     json j;
     j["id_pool"] = id_pool.toJSON();
+    j["position_id_pool"] = position_id_pool.toJSON();
 
     j["elements"] = json::array();
 
@@ -176,8 +177,11 @@ void ElementManager::fromJSON(json j) {
     elements.clear();
     ids.clear();
     id_pool = idManager();
+    position_id_pool = idManager();
 
     id_pool.fromJSON(j["id_pool"]);
+    if (j.contains("position_id_pool"))
+        position_id_pool.fromJSON(j["position_id_pool"]);
 
     for(json e : j["elements"]) {
         GridElement* ge;
@@ -196,7 +200,6 @@ void ElementManager::fromJSON(json j) {
                 return; // unknown type, give up
         }
 
-        ge->pos_id_pool = &id_pool;
         ge->fromJSON(e);
         id_pool.reserveID(ge->id);
         elements.push_back(ge);
@@ -213,7 +216,7 @@ uint16_t ElementManager::getIndex(uint16_t id) {
 
 Region* ElementManager::newRegion() {
     auto r = new Region(project, parentNode);
-    r->pos_id_pool = &id_pool;
+    r->pos_id_pool = &position_id_pool;
     r->id = id_pool.newID();
     elements.push_back(r);
 
@@ -255,7 +258,7 @@ void ElementManager::restoreRegionFromSnapshotAt(size_t insertIndex, const json&
     if (insertIndex > elements.size())
         insertIndex = elements.size();
     auto* r = new Region(project, parentNode);
-    r->pos_id_pool = &id_pool;
+    r->pos_id_pool = &position_id_pool;
     r->fromJSON(regionJson);
     id_pool.reserveID(rid);
     elements.insert(elements.begin() + static_cast<std::ptrdiff_t>(insertIndex), r);
@@ -277,8 +280,30 @@ void ElementManager::restoreAutomationCurveFromSnapshotAt(size_t insertIndex, co
     if (insertIndex > elements.size())
         insertIndex = elements.size();
     auto* a = new AutomationCurve(project, parentNode);
-    a->pos_id_pool = &id_pool;
+    a->pos_id_pool = &position_id_pool;
     a->fromJSON(curveJson);
+    id_pool.reserveID(cid);
+    elements.insert(elements.begin() + static_cast<std::ptrdiff_t>(insertIndex), a);
+    ids.clear();
+    for (size_t i = 0; i < elements.size(); ++i)
+        ids[elements[i]->id] = static_cast<uint16_t>(i);
+}
+
+void ElementManager::restoreAudioClipFromSnapshot(const json& clipJson) {
+    restoreAudioClipFromSnapshotAt(elements.size(), clipJson);
+}
+
+void ElementManager::restoreAudioClipFromSnapshotAt(size_t insertIndex, const json& clipJson) {
+    if (!clipJson.contains("type") || clipJson["type"].get<int>() != ElementType::audioClip)
+        throw std::runtime_error("ElementManager::restoreAudioClipFromSnapshotAt: not an audio clip snapshot");
+    const uint16_t cid = clipJson.at("id").get<uint16_t>();
+    if (ids.count(cid))
+        throw std::runtime_error("ElementManager::restoreAudioClipFromSnapshotAt: id already in use");
+    if (insertIndex > elements.size())
+        insertIndex = elements.size();
+    auto* a = new AudioClip(project, parentNode);
+    a->pos_id_pool = &position_id_pool;
+    a->fromJSON(clipJson);
     id_pool.reserveID(cid);
     elements.insert(elements.begin() + static_cast<std::ptrdiff_t>(insertIndex), a);
     ids.clear();
@@ -290,7 +315,7 @@ AudioClip* ElementManager::newAudioClip(std::string filepath) {
 
     auto a = new AudioClip(project, parentNode);
 
-    a->pos_id_pool = &id_pool;
+    a->pos_id_pool = &position_id_pool;
     a->setFile(filepath);
     if (a->filepath == "") {
         delete a;
@@ -307,7 +332,7 @@ AudioClip* ElementManager::newAudioClip(std::string filepath) {
 
 AutomationCurve* ElementManager::newAutomationCurve() {
     auto a = new AutomationCurve(project, parentNode);
-    a->pos_id_pool = &id_pool;
+    a->pos_id_pool = &position_id_pool;
     a->id = id_pool.newID();
     elements.push_back(a);
     ids[a->id] = elements.size() - 1;
