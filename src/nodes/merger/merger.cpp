@@ -7,7 +7,8 @@ MergerNode::MergerNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::Me
     out = new Connection;
     out->type = DataType::Waveform;
     out->dir = Direction::output;
-    out->numChannels = NUM_INPUTS;
+    out->minChannels = NUM_INPUTS;
+    out->updateNumChannels();
     outputs.addConnection(out);
 }
 

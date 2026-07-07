@@ -10,7 +10,8 @@ PannerNode::PannerNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::Pa
     out = new Connection;
     out->type = DataType::Waveform;
     out->dir = Direction::output;
-    out->numChannels = 2;
+    out->minChannels = 2;
+    out->updateNumChannels();
     outputs.addConnection(out);
 
     params.push_back(&pan);

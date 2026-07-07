@@ -67,7 +67,8 @@ void VstNode::rebuildConnections() {
         auto* c = new Connection;
         c->type = DataType::Waveform;
         c->dir = Direction::input;
-        c->numChannels = channels;
+        c->minChannels = channels;
+        c->updateNumChannels();
         inputs.addConnection(c);
         audioInConns.push_back(c);
     }
@@ -78,7 +79,8 @@ void VstNode::rebuildConnections() {
         auto* c = new Connection;
         c->type = DataType::Waveform;
         c->dir = Direction::output;
-        c->numChannels = channels;
+        c->minChannels = channels;
+        c->updateNumChannels();
         outputs.addConnection(c);
         audioOutConns.push_back(c);
     }
@@ -87,6 +89,7 @@ void VstNode::rebuildConnections() {
     for (int b = 0; b < numAudioInBuses && b < static_cast<int>(audioInConns.size()); ++b) {
         int channels = plugin->getAudioInputChannels(b);
         auto* ic = audioInConns[b];
+        ic->minChannels = channels;
         ic->numChannels = channels;
         ic->allocChannels = channels;
         ic->label = "In " + std::to_string(b + 1) + " (" + std::to_string(channels) + "ch)";
@@ -97,13 +100,9 @@ void VstNode::rebuildConnections() {
     for (int b = 0; b < numAudioOutBuses && b < static_cast<int>(audioOutConns.size()); ++b) {
         int channels = plugin->getAudioOutputChannels(b);
         auto* c = audioOutConns[b];
-        if (c->numChannels != channels && c->buffer && bufferSize > 0) {
-            delete[] c->buffer;
-            c->buffer = new float[static_cast<size_t>(bufferSize) * static_cast<size_t>(channels)];
-            std::memset(c->buffer, 0, static_cast<size_t>(bufferSize) * static_cast<size_t>(channels) * sizeof(float));
-            c->allocChannels = channels;
-        }
-        c->numChannels = channels;
+        c->minChannels = channels;
+        if (c->numChannels != channels)
+            c->allocateBuffer(bufferSize, channels);
         c->label = "Out " + std::to_string(b + 1) + " (" + std::to_string(channels) + "ch)";
     }
     for (int b = numAudioOutBuses; b < static_cast<int>(audioOutConns.size()); ++b)

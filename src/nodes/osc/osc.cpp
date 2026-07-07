@@ -7,7 +7,8 @@ OscillatorNode::OscillatorNode(uint16_t id, NodeManager* nm) : Node(id, nm, Node
     output = new Connection;
     output->type = DataType::Waveform;
     output->dir = Direction::output;
-    output->numChannels = 2;
+    output->minChannels = 2;
+    output->updateNumChannels();
     outputs.addConnection(output);
 
     inputN = new Connection;

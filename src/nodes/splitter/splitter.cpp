@@ -7,7 +7,8 @@ SplitterNode::SplitterNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType
     in = new Connection;
     in->type = DataType::Waveform;
     in->dir = Direction::input;
-    in->numChannels = NUM_OUTPUTS;
+    in->minChannels = NUM_OUTPUTS;
+    in->updateNumChannels();
     inputs.addConnection(in);
 }
 

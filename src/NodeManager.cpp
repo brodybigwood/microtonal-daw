@@ -378,6 +378,10 @@ void NodeManager::makeNodeConnectionNow(uint16_t srcNodeID, uint16_t srcConID, u
     srcCon->output_connection = dstConID;
     srcCon->is_connected = true;
     dstCon->is_connected = true;
+
+    if (srcCon->type == DataType::Waveform)
+        srcCon->updateNumChannels();
+    topologyDirty = true;
 }
 
 void NodeManager::severConnectionNow(uint16_t srcNodeID, uint16_t srcConID, uint16_t dstNodeID, uint16_t dstConID) {

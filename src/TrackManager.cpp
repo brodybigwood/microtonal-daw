@@ -104,9 +104,7 @@ Track* TrackManager::addTrackNow(TrackType tp, int forcedTrackID, int forcedConn
             break;
         default:
             c->type = DataType::Waveform;
-            c->buffer = new float[static_cast<size_t>(parentNode->outputs.bufferSize) * static_cast<size_t>(c->numChannels)];
-            c->bufferSize = parentNode->outputs.bufferSize;
-            c->allocChannels = c->numChannels;
+            c->allocateBuffer(parentNode->outputs.bufferSize);
             c->events = nullptr;
             t->buffer = &(c->buffer);
             break;

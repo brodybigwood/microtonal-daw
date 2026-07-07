@@ -368,13 +368,7 @@ void connectionSet::addConnection(Connection* c) {
         if (c->type == DataType::Events) {
             c->events = new std::vector<Event>;
         } else {
-            int nch = c->numChannels;
-            c->buffer = new float[static_cast<size_t>(bufferSize) * static_cast<size_t>(nch)];
-            c->bufferSize = bufferSize;
-            c->allocChannels = nch;
-            if (bufferSize > 0) {
-                std::memset(c->buffer, 0, static_cast<size_t>(bufferSize) * static_cast<size_t>(nch) * sizeof(float));
-            }
+            c->allocateBuffer(bufferSize, c->numChannels);
         }
     }
 }
@@ -428,19 +422,8 @@ void Node::update(int bufferSize, int sampleRate) {
 
     outputs.bufferSize = bufferSize;
     for(auto c : outputs.connections) {
-        if (c->type == DataType::Waveform) {
-            if(c->buffer != nullptr) {
-                delete[] c->buffer;
-            }
-            int nch = c->numChannels;
-            size_t allocSize = static_cast<size_t>(bufferSize) * static_cast<size_t>(nch);
-            c->buffer = new float[allocSize];
-            c->bufferSize = bufferSize;
-            c->allocChannels = nch;
-            if (bufferSize > 0) {
-                std::memset(c->buffer, 0, allocSize * sizeof(float));
-            }
-        }
+        if (c->type == DataType::Waveform)
+            c->allocateBuffer(bufferSize, c->numChannels);
     }
 
     inputs.bufferSize = bufferSize;

@@ -38,7 +38,8 @@ static void recalcTrackChannels(ElementManager* em, uint16_t trackID) {
             if (pos->trackID == trackID && ac->numChannels > maxCh)
                 maxCh = ac->numChannels;
     }
-    track->connection->numChannels = maxCh;
+    track->connection->minChannels = maxCh;
+    track->connection->updateNumChannels();
     em->parentNode->nm->markTopologyDirty();
 }
 

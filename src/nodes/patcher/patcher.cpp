@@ -67,14 +67,8 @@ void PatcherNode::insertWaveformOutputAt(int index) {
     c->output_node = -1;
     c->output_connection = -1;
     c->events = nullptr;
-    c->bufferSize = bufferSize;
-    c->allocChannels = c->numChannels;
-    if (bufferSize > 0) {
-        c->buffer = new float[static_cast<size_t>(bufferSize) * static_cast<size_t>(c->numChannels)];
-        std::memset(c->buffer, 0, static_cast<size_t>(bufferSize) * static_cast<size_t>(c->numChannels) * sizeof(float));
-    } else {
-        c->buffer = nullptr;
-    }
+    c->allocateBuffer(bufferSize);
+
 
     outputs.connections.insert(outputs.connections.begin() + index, c);
     outputs.ids.clear();
@@ -463,7 +457,17 @@ json PatcherNode::extraSerialize() {
         jc["id"] = c->id;
         jc["type"] = c->type;
         jc["numChannels"] = c->numChannels;
+        jc["minChannels"] = c->minChannels;
         j["outputs"].push_back(jc);
+    }
+    j["inputs"] = json::array();
+    for (auto* c : inputs.connections) {
+        json jc;
+        jc["id"] = c->id;
+        jc["type"] = c->type;
+        jc["numChannels"] = c->numChannels;
+        jc["minChannels"] = c->minChannels;
+        j["inputs"].push_back(jc);
     }
     return j;
 }
@@ -493,6 +497,7 @@ void PatcherNode::extraDeSerialize(const json& j) {
             c->id = jc["id"];
             c->type = jc["type"];
             c->numChannels = jc.value("numChannels", 1);
+            c->minChannels = jc.value("minChannels", c->numChannels);
             c->dir = Direction::output;
             c->is_connected = false;
             c->input_node = id;
@@ -513,6 +518,57 @@ void PatcherNode::extraDeSerialize(const json& j) {
         }
         makeConnectionRects();
     }
+    if (j.contains("inputs")) {
+        for (auto* c : inputs.connections) {
+            if (c->type == DataType::Waveform && c->buffer) {
+                delete[] c->buffer;
+                c->buffer = nullptr;
+            } else if (c->type == DataType::Events && c->events) {
+                delete c->events;
+                c->events = nullptr;
+            }
+            delete c;
+        }
+        inputs.connections.clear();
+        inputs.ids.clear();
+        inputs.id_pool = idManager();
+
+        for (auto jc : j["inputs"]) {
+            auto* c = new Connection;
+            c->nm = inputs.nm;
+            c->id = jc["id"];
+            c->type = jc["type"];
+            c->numChannels = jc.value("numChannels", 1);
+            c->minChannels = jc.value("minChannels", c->numChannels);
+            c->dir = Direction::input;
+            c->is_connected = false;
+            c->output_connection = c->id;
+            c->output_node = inputs.nodeID;
+            c->input_node = -1;
+            c->input_connection = -1;
+            if (c->type == DataType::Events) {
+                c->events = new std::vector<Event>;
+                c->buffer = nullptr;
+            } else {
+                c->buffer = nullptr;
+                c->bufferSize = 0;
+                c->events = nullptr;
+            }
+            inputs.connections.push_back(c);
+            inputs.ids[c->id] = inputs.connections.size() - 1;
+            inputs.id_pool.reserveID(c->id);
+        }
+        makeConnectionRects();
+    } else {
+        setLinkedWaveformInputCount(mainManager->inNode->countWaveformOutputs());
+        {
+            size_t evSockets = 0;
+            for (auto* c : mainManager->inNode->outputs.connections) {
+                if (c && c->type == DataType::Events) ++evSockets;
+            }
+            setLinkedEventInputCount(evSockets);
+        }
+    }
     setLinkedWaveformChannelCount(mainManager->outNode->countWaveformInputs());
     {
         size_t evSockets = 0;
@@ -520,14 +576,6 @@ void PatcherNode::extraDeSerialize(const json& j) {
             if (c && c->type == DataType::Events) ++evSockets;
         }
         setLinkedEventOutputCount(evSockets);
-    }
-    setLinkedWaveformInputCount(mainManager->inNode->countWaveformOutputs());
-    {
-        size_t evSockets = 0;
-        for (auto* c : mainManager->inNode->outputs.connections) {
-            if (c && c->type == DataType::Events) ++evSockets;
-        }
-        setLinkedEventInputCount(evSockets);
     }
     nm->markTopologyDirty();
 }

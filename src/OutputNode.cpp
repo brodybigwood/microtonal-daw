@@ -459,13 +459,7 @@ void OutputNode::insertWaveformInputChannelAt(size_t index, uint16_t id) {
     c->input_connection = -1;
     c->input_node = -1;
     c->events = nullptr;
-    c->buffer = nullptr;
-    c->bufferSize = bufferSize;
-    c->allocChannels = c->numChannels;
-    if (bufferSize > 0) {
-        c->buffer = new float[static_cast<size_t>(bufferSize) * static_cast<size_t>(c->numChannels)];
-        std::memset(c->buffer, 0, static_cast<size_t>(bufferSize) * static_cast<size_t>(c->numChannels) * sizeof(float));
-    }
+    c->allocateBuffer(bufferSize, c->numChannels);
     inputs.connections.insert(inputs.connections.begin() + static_cast<ptrdiff_t>(index), c);
     inputs.ids.clear();
     for (size_t j = 0; j < inputs.connections.size(); ++j) {

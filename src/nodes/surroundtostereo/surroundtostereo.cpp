@@ -84,7 +84,8 @@ SurroundToStereoNode::SurroundToStereoNode(uint16_t id, NodeManager* nm)
     out = new Connection;
     out->type = DataType::Waveform;
     out->dir = Direction::output;
-    out->numChannels = 2;
+    out->minChannels = 2;
+    out->updateNumChannels();
     outputs.addConnection(out);
     name = "Surround->Stereo";
 }

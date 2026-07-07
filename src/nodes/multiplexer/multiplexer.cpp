@@ -41,7 +41,7 @@ void MultiplexerNode::syncPortsFromPatchers() {
     while (cur > wfOut) {
         for (int i = (int)outputs.connections.size() - 1; i >= 0; --i) {
             auto* c = outputs.connections[i];
-            if (c && c->type == DataType::Waveform) {
+            if (c && c->type == DataType::Waveform && !c->is_connected) {
                 if (c->buffer) { delete[] c->buffer; c->buffer = nullptr; }
                 outputs.id_pool.releaseID(c->id);
                 outputs.connections.erase(outputs.connections.begin() + i);
@@ -51,6 +51,7 @@ void MultiplexerNode::syncPortsFromPatchers() {
         --cur;
     }
     while (cur < wfOut) {
+        auto* refCon = ref->outputs.connections[cur];
         auto* c = new Connection;
         c->nm = outputs.nm;
         c->id = outputs.id_pool.newID();
@@ -61,9 +62,9 @@ void MultiplexerNode::syncPortsFromPatchers() {
         c->input_connection = c->id;
         c->output_node = -1;
         c->output_connection = -1;
-        c->bufferSize = bufferSize;
-        c->buffer = bufferSize > 0 ? new float[static_cast<size_t>(bufferSize) * static_cast<size_t>(c->numChannels)]() : nullptr;
-        c->allocChannels = c->numChannels;
+        c->numChannels = refCon ? refCon->numChannels : 1;
+        c->minChannels = refCon ? refCon->minChannels : 1;
+        c->allocateBuffer(bufferSize);
         c->events = nullptr;
         outputs.connections.insert(outputs.connections.begin() + cur, c);
         ++cur;
@@ -75,7 +76,7 @@ void MultiplexerNode::syncPortsFromPatchers() {
     while (curEv > evOut) {
         for (int i = (int)outputs.connections.size() - 1; i >= 0; --i) {
             auto* c = outputs.connections[i];
-            if (c && c->type == DataType::Events) {
+            if (c && c->type == DataType::Events && !c->is_connected) {
                 if (c->events) { delete c->events; c->events = nullptr; }
                 outputs.id_pool.releaseID(c->id);
                 outputs.connections.erase(outputs.connections.begin() + i);
@@ -101,7 +102,7 @@ void MultiplexerNode::syncPortsFromPatchers() {
     while (cur > wfIn) {
         for (int i = (int)inputs.connections.size() - 1; i >= 0; --i) {
             auto* c = inputs.connections[i];
-            if (c && c->type == DataType::Waveform) {
+            if (c && c->type == DataType::Waveform && !c->is_connected) {
                 if (c->buffer) { delete[] c->buffer; c->buffer = nullptr; }
                 inputs.id_pool.releaseID(c->id);
                 inputs.connections.erase(inputs.connections.begin() + i);
@@ -111,11 +112,14 @@ void MultiplexerNode::syncPortsFromPatchers() {
         --cur;
     }
     while (cur < wfIn) {
+        auto* refCon = ref->inputs.connections[cur];
         auto* c = new Connection;
         c->nm = inputs.nm;
         c->id = inputs.id_pool.newID();
         c->type = DataType::Waveform;
         c->dir = Direction::input;
+        c->numChannels = refCon ? refCon->numChannels : 1;
+        c->minChannels = refCon ? refCon->minChannels : 1;
         c->output_connection = c->id;
         c->output_node = inputs.nodeID;
         c->input_connection = -1;
@@ -133,7 +137,7 @@ void MultiplexerNode::syncPortsFromPatchers() {
     while (curEv > evIn) {
         for (int i = (int)inputs.connections.size() - 1; i >= 0; --i) {
             auto* c = inputs.connections[i];
-            if (c && c->type == DataType::Events) {
+            if (c && c->type == DataType::Events && !c->is_connected) {
                 if (c->events) { delete c->events; c->events = nullptr; }
                 inputs.id_pool.releaseID(c->id);
                 inputs.connections.erase(inputs.connections.begin() + i);
@@ -169,7 +173,7 @@ void MultiplexerNode::process() {
     for (auto* c : outputs.connections) {
         if (!c) continue;
         if (c->type == DataType::Waveform && c->buffer)
-            std::memset(c->buffer, 0, static_cast<size_t>(bs) * sizeof(float));
+            std::memset(c->buffer, 0, static_cast<size_t>(bs) * static_cast<size_t>(c->allocChannels) * sizeof(float));
         else if (c->type == DataType::Events && c->events)
             c->events->clear();
     }
@@ -197,9 +201,11 @@ void MultiplexerNode::process() {
             auto* src = p->outputs.connections[i];
             if (!src || !dst) continue;
             if (src->type == DataType::Waveform) {
+                int nch = std::min(dst->allocChannels, src->numChannels);
                 if (dst->buffer && src->buffer) {
-                    for (int j = 0; j < bs; ++j)
-                        dst->buffer[j] += src->buffer[j];
+                    for (int ch = 0; ch < nch; ++ch)
+                        for (int j = 0; j < bs; ++j)
+                            dst->channel(ch)[j] += src->channel(ch)[j];
                 }
             } else if (src->type == DataType::Events) {
                 if (dst->events && src->events)
@@ -299,6 +305,26 @@ json MultiplexerNode::extraSerialize() {
         pj["visible"] = p->visible;
         j["patchers"].push_back(pj);
     }
+    j["outConns"] = json::array();
+    for (auto* c : outputs.connections) {
+        json jc;
+        jc["id"] = c->id;
+        jc["type"] = c->type;
+        jc["numChannels"] = c->numChannels;
+        jc["minChannels"] = c->minChannels;
+        jc["connected"] = c->is_connected;
+        j["outConns"].push_back(jc);
+    }
+    j["inConns"] = json::array();
+    for (auto* c : inputs.connections) {
+        json jc;
+        jc["id"] = c->id;
+        jc["type"] = c->type;
+        jc["numChannels"] = c->numChannels;
+        jc["minChannels"] = c->minChannels;
+        jc["connected"] = c->is_connected;
+        j["inConns"].push_back(jc);
+    }
     return j;
 }
 
@@ -320,6 +346,76 @@ void MultiplexerNode::extraDeSerialize(const json& j) {
         patcher->visible = pj.value("visible", false);
         patchers.push_back(patcher);
     }
+
+    if (j.contains("outConns")) {
+        for (auto* c : outputs.connections) {
+            if (c->type == DataType::Waveform && c->buffer) { delete[] c->buffer; c->buffer = nullptr; }
+            else if (c->type == DataType::Events && c->events) { delete c->events; c->events = nullptr; }
+            delete c;
+        }
+        outputs.connections.clear();
+        outputs.ids.clear();
+        for (auto& jc : j["outConns"]) {
+            auto* c = new Connection;
+            c->nm = outputs.nm;
+            c->id = jc["id"];
+            c->type = jc["type"];
+            c->numChannels = jc.value("numChannels", 1);
+            c->minChannels = jc.value("minChannels", c->numChannels);
+            c->dir = Direction::output;
+            c->is_connected = jc.value("connected", false);
+            c->input_node = id;
+            c->input_connection = c->id;
+            c->output_node = -1;
+            c->output_connection = -1;
+            if (c->type == DataType::Events) {
+                c->events = new std::vector<Event>;
+                c->buffer = nullptr;
+            } else {
+                c->allocateBuffer(bufferSize);
+                c->events = nullptr;
+            }
+            outputs.connections.push_back(c);
+            outputs.ids[c->id] = outputs.connections.size() - 1;
+            outputs.id_pool.reserveID(c->id);
+        }
+    }
+
+    if (j.contains("inConns")) {
+        for (auto* c : inputs.connections) {
+            if (c->type == DataType::Waveform && c->buffer) { delete[] c->buffer; c->buffer = nullptr; }
+            else if (c->type == DataType::Events && c->events) { delete c->events; c->events = nullptr; }
+            delete c;
+        }
+        inputs.connections.clear();
+        inputs.ids.clear();
+        for (auto& jc : j["inConns"]) {
+            auto* c = new Connection;
+            c->nm = inputs.nm;
+            c->id = jc["id"];
+            c->type = jc["type"];
+            c->numChannels = jc.value("numChannels", 1);
+            c->minChannels = jc.value("minChannels", c->numChannels);
+            c->dir = Direction::input;
+            c->is_connected = jc.value("connected", false);
+            c->output_connection = c->id;
+            c->output_node = inputs.nodeID;
+            c->input_connection = -1;
+            c->input_node = -1;
+            if (c->type == DataType::Events) {
+                c->events = new std::vector<Event>;
+                c->buffer = nullptr;
+            } else {
+                c->buffer = nullptr;
+                c->bufferSize = 0;
+                c->events = nullptr;
+            }
+            inputs.connections.push_back(c);
+            inputs.ids[c->id] = inputs.connections.size() - 1;
+            inputs.id_pool.reserveID(c->id);
+        }
+    }
+
     if (!patchers.empty())
         syncPortsFromPatchers();
 }
