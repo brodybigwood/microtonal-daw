@@ -48,6 +48,11 @@ const std::unordered_map<std::string, ActionType>& UndoManager::actionRegistry()
         {"create_automation_curve", CreateAutomationCurve},
         {"modify_curve_points", ModifyCurvePoints},
         {"create_audio_clip", CreateAudioClip},
+        {"map_parameter", MapParameter},
+        {"unmap_parameter", UnmapParameter},
+        {"paramnode_add_mod_row", ParamNodeAddModRow},
+        {"paramnode_remove_mod_row", ParamNodeRemoveModRow},
+        {"paramnode_toggle_centered", ParamNodeToggleCentered},
     };
     return reg;
 }

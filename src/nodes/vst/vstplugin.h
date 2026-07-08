@@ -297,12 +297,17 @@ public:
     int getNumEventInputs() const;
     int getNumEventOutputs() const;
 
-    // Parameter access
+    // Parameter access. VST3 distinguishes a parameter's list position (index)
+    // from its stable ParamID tag — they only coincide for some plugins.
     int getParameterCount() const;
-    float getParameterValue(int index) const;
+    /** Real ParamID of the parameter at list position `paramIndex`, or -1. */
+    int getParameterID(int paramIndex) const;
+    float getParameterValue(int paramID) const;
+    std::string getParameterName(int paramIndex) const;
+    std::string getParameterNameByID(int paramID) const;
     /** Updates the edit controller AND queues the change for the processor
         (delivered via inputParameterChanges on the next audio block). */
-    void setParameterValue(int index, float valueNormalized);
+    void setParameterValue(int paramID, float valueNormalized);
     void queueParameterChange(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue value);
 
     // State serialization
@@ -384,7 +389,10 @@ public:
     int getNumEventInputs() const { return 0; }
     int getNumEventOutputs() const { return 0; }
     int getParameterCount() const { return 0; }
+    int getParameterID(int) const { return -1; }
     float getParameterValue(int) const { return 0; }
+    std::string getParameterName(int) const { return {}; }
+    std::string getParameterNameByID(int) const { return {}; }
     void setParameterValue(int, float) {}
     std::vector<uint8_t> getComponentState() const { return {}; }
     std::vector<uint8_t> getControllerState() const { return {}; }

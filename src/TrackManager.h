@@ -8,10 +8,12 @@
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
+class ElementManager;
 class SongRoll;
 class ArrangerNode;
 
 class TrackManager {
+    friend class ElementManager;
     public:
 
         TrackManager(ArrangerNode*);

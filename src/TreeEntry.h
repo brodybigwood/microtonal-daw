@@ -29,6 +29,10 @@ struct TreeEntry {
     /** Height of custom content, set by the customTick during render. Used for hit-testing. */
     float customHeight = 0;
 
+    /** If > 0, children list is clipped to this height and scrollable. */
+    float maxListHeight = 0;
+    float scrollOffset = 0;
+
     ~TreeEntry();
 };
 

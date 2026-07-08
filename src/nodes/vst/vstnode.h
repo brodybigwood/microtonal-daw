@@ -30,6 +30,17 @@ public:
     void loadPlugin(const std::string& path, bool createUndo = false);
     void unloadPlugin();
 
+    // Map/unmap VST parameters to input connections.
+    void mapVstParameter(int paramID);
+    void unmapVstParameter(int paramID);
+    bool mapVstParameterNow(int paramID);
+    bool unmapVstParameterNow(int paramID);
+
+    std::shared_ptr<TreeEntry> getNodeMenu() override;
+
+    // Mapped VST parameters: paramID -> input Connection (public for undo actions).
+    std::unordered_map<int, Connection*> mappedVstParams;
+
     std::shared_ptr<VstPlugin> plugin; // shared across copies via VstPluginCache
 
     Knob bypass = Knob(0.0f, 20.0f, NODE_H * 0.3f, 10.0f, "assets/knobs/1.png",

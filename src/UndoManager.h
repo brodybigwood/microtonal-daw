@@ -30,8 +30,6 @@ enum ActionType {
     DeleteNote = 9,
     PianoRollRegionTuning = 10,
     AssignNoteHarmonic = 11,
-    AddModSourceUndo = 12,
-    RemoveModSourceUndo = 13,
     CreateRegion = 14,
     DeleteRegion = 15,
     CreatePosition = 16,
@@ -39,7 +37,6 @@ enum ActionType {
     MoveElementPosition = 18,
     IoPortChannel = 19,
     SetParamValue = 20,
-    ToggleModulatorCentered = 21,
     MoveEmbeddedWindow = 22,
     ResizeEmbeddedWindow = 23,
     ToggleNodeVisible = 24,
@@ -56,7 +53,12 @@ enum ActionType {
     SongRollRhythmEdo = 35,
     CreateAutomationCurve = 36,
     ModifyCurvePoints = 37,
-    CreateAudioClip = 38
+    CreateAudioClip = 38,
+    MapParameter = 39,
+    UnmapParameter = 40,
+    ParamNodeAddModRow = 41,
+    ParamNodeRemoveModRow = 42,
+    ParamNodeToggleCentered = 43,
 };
 
 
@@ -252,34 +254,6 @@ struct AssignNoteHarmonicUndoAction : ProjectAction {
                                  json beforeRegion, json afterRegion, json beforeNote, json afterNote);
 };
 
-struct AddModSourceUndoAction : ProjectAction {
-    std::vector<int> managerPath;
-    int nodeID = 0;
-    std::vector<size_t> paramPath;
-
-    AddModSourceUndoAction(Project* p, std::vector<int> managerPath, int nodeID, std::vector<size_t> paramPath);
-};
-
-struct RemoveModSourceUndoAction : ProjectAction {
-    std::vector<int> managerPath;
-    int nodeID = 0;
-    std::vector<size_t> paramPath;
-    size_t modIndex = 0;
-
-    /** Saved modulator subtree (removed from the parameter but kept alive here for undo). */
-    Modulator* savedModulator = nullptr;
-    /** Connections owned by the saved modulator tree, with their original indices and wiring. */
-    struct SavedConn {
-        Connection* conn;
-        size_t index;
-        bool wasConnected;
-        uint16_t srcNode, srcCon;
-    };
-    std::vector<SavedConn> savedConns;
-
-    RemoveModSourceUndoAction(Project* p, std::vector<int> managerPath, int nodeID, std::vector<size_t> paramPath, size_t modIndex);
-};
-
 struct SetParamValueUndoAction : ProjectAction {
     std::vector<int> managerPath;
     int nodeID = 0;
@@ -289,20 +263,6 @@ struct SetParamValueUndoAction : ProjectAction {
 
     SetParamValueUndoAction(Project* p, std::vector<int> managerPath, int nodeID, std::vector<size_t> paramPath,
                             float oldValue, float newValue, std::string actionName = "Set Param Value");
-};
-
-struct ToggleModulatorCenteredUndoAction : ProjectAction {
-    std::vector<int> managerPath;
-    int nodeID = 0;
-    std::vector<size_t> paramPath;
-    size_t modIndex = 0;
-    bool oldCentered = false;
-    bool newCentered = false;
-    float oldDepth = 0.0f;
-    float newDepth = 0.0f;
-
-    ToggleModulatorCenteredUndoAction(Project* p, std::vector<int> managerPath, int nodeID, std::vector<size_t> paramPath,
-                                      size_t modIndex, bool oldCentered, bool newCentered, float oldDepth, float newDepth);
 };
 
 struct MoveNoteAction : ProjectAction {
@@ -684,4 +644,65 @@ struct VstLoadPluginAction : ProjectAction {
 
     VstLoadPluginAction(Project* p, std::vector<int> managerPath, int nodeID,
                         json oldState, json newState);
+};
+
+struct MapParameterUndoAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    size_t paramIndex = 0;
+    int vstParamID = -1; // >= 0 means VST parameter
+    uint16_t connectionID = 0;
+    bool idAssigned = false;
+
+    MapParameterUndoAction(Project* p, std::vector<int> managerPath,
+                           int nodeID, size_t paramIndex, int vstParamID = -1);
+};
+
+struct UnmapParameterUndoAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    size_t paramIndex = 0;
+    int vstParamID = -1;
+    uint16_t savedConnectionID = 0;
+    bool wasConnected = false;
+    uint16_t srcNode = 0;
+    uint16_t srcCon = 0;
+
+    UnmapParameterUndoAction(Project* p, std::vector<int> managerPath,
+                             int nodeID, size_t paramIndex, int vstParamID = -1);
+};
+
+struct ParamNodeAddModRowUndoAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+
+    ParamNodeAddModRowUndoAction(Project* p, std::vector<int> managerPath, int nodeID);
+};
+
+struct ParamNodeRemoveModRowUndoAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    size_t modIndex = 0;
+    float savedDepth = 0.f;
+    bool savedCentered = false;
+    uint16_t savedConnID = 0;
+    bool wasConnected = false;
+    uint16_t srcNode = 0;
+    uint16_t srcCon = 0;
+
+    ParamNodeRemoveModRowUndoAction(Project* p, std::vector<int> managerPath, int nodeID, size_t modIndex);
+};
+
+struct ParamNodeToggleCenteredUndoAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    size_t modIndex = 0;
+    bool oldCentered = false;
+    bool newCentered = false;
+    float oldDepth = 0.f;
+    float newDepth = 0.f;
+
+    ParamNodeToggleCenteredUndoAction(Project* p, std::vector<int> managerPath, int nodeID,
+                                      size_t modIndex, bool oldCentered, bool newCentered,
+                                      float oldDepth, float newDepth);
 };

@@ -11,12 +11,12 @@ struct Modulator;
 struct Parameter {
     float value = 0;
     float defaultValue = 0;
-    std::vector<Modulator*> modulators;
+    std::string label;
     bool clampOutput = true;
+    Connection* mappedConnection = nullptr;
+    bool lockMapping = false;
 
     virtual float operator[](size_t);
-
-    void addModulator(Modulator*);
 
     std::vector<float> vx;
     std::vector<float> vy;

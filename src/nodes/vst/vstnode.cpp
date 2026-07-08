@@ -144,6 +144,7 @@ void VstNode::process() {
     for (auto* c : audioOutConns) {
         if (c && c->buffer) { hasOut = true; break; }
     }
+
     if (!hasOut) return;
 
     // Silence active output buses
@@ -157,6 +158,16 @@ void VstNode::process() {
         bool bypassed = bypass.value > 0.5f;
         localPlugin->setBypassed(bypassed);
         if (!bypassed) {
+            // Deliver mapped VST parameter values from input connections.
+            for (auto& [paramID, conn] : mappedVstParams) {
+                if (conn && conn->is_connected && conn->buffer) {
+                    auto v = static_cast<Steinberg::Vst::ParamValue>(std::clamp(conn->buffer[0] * 0.5f + 0.5f, 0.0f, 1.0f));
+                    localPlugin->queueParameterChange(static_cast<Steinberg::Vst::ParamID>(paramID), v);
+                    if (auto* ec = localPlugin->getEditController())
+                        ec->setParamNormalized(static_cast<Steinberg::Vst::ParamID>(paramID), v);
+                }
+            }
+
             // Route audio input buses directly (both sides already planar)
             for (size_t bi = 0; bi < audioInConns.size(); ++bi) {
                 auto* c = audioInConns[bi];
@@ -244,8 +255,8 @@ void VstNode::process() {
                 if (!c || !c->buffer) continue;
                 if (bi >= localPlugin->outputBusData.size()) continue;
                 auto& data = localPlugin->outputBusData[bi];
-                size_t busSamples = static_cast<size_t>(bufferSize) * static_cast<size_t>(c->numChannels);
-                std::memcpy(c->buffer, data.data(), busSamples * sizeof(float));
+                size_t ch = std::min(static_cast<size_t>(c->numChannels), data.size() / static_cast<size_t>(bufferSize));
+                std::memcpy(c->buffer, data.data(), static_cast<size_t>(bufferSize) * ch * sizeof(float));
             }
         } else {
             // Bypass: passthrough per bus
@@ -530,6 +541,10 @@ void VstNode::unloadPlugin() {
 void VstNode::onPluginParameterChange(int paramID, float oldValue, float newValue) {
     if (!project || !project->um || !plugin) return;
     if (restoringState) return;
+    // Suppress undo when a mapped connection owns the parameter.
+    auto it = mappedVstParams.find(paramID);
+    if (it != mappedVstParams.end() && it->second && it->second->is_connected)
+        return;
     std::vector<int> mgrPath = nm ? nm->managerPath : std::vector<int>{};
     // Coalesce rapid edits of the same parameter (drag)
     if (project->um->current && project->um->current->type == VstParameterChange) {
@@ -581,6 +596,11 @@ json VstNode::extraSerialize() {
         j["compState"] = jsonBytesEncode(plugin->getComponentState());
         j["ctrlState"] = jsonBytesEncode(plugin->getControllerState());
     }
+    if (!mappedVstParams.empty()) {
+        j["mappedVstParams"] = json::object();
+        for (auto& [paramID, conn] : mappedVstParams)
+            j["mappedVstParams"][std::to_string(paramID)] = conn->id;
+    }
     return j;
 }
 
@@ -608,6 +628,31 @@ void VstNode::extraDeSerialize(const json& j) {
         }
     } else {
         loadedPath.clear();
+    }
+
+    if (j.contains("mappedVstParams")) {
+        for (auto& [key, val] : j["mappedVstParams"].items()) {
+            int paramID = std::stoi(key);
+            uint16_t connID = val;
+            auto* c = new Connection;
+            c->nm = inputs.nm;
+            c->id = connID;
+            c->type = DataType::Waveform;
+            c->dir = Direction::input;
+            c->is_connected = false;
+            c->output_connection = c->id;
+            c->output_node = inputs.nodeID;
+            c->input_connection = -1;
+            c->input_node = -1;
+            c->events = nullptr;
+            c->buffer = nullptr;
+            c->bufferSize = 0;
+            c->label = plugin ? plugin->getParameterNameByID(paramID) : ("VST Param " + std::to_string(paramID));
+            inputs.connections.push_back(c);
+            inputs.id_pool.reserveID(c->id);
+            inputs.ids[c->id] = static_cast<uint16_t>(inputs.connections.size() - 1);
+            mappedVstParams[paramID] = c;
+        }
     }
 }
 
@@ -689,4 +734,124 @@ void VstNode::sendMpePitchBendRange(void* eventList) {
         rpn(ch, 6, 2);   rpn(ch, 38, 0);
         rpn(ch, 101, 127); rpn(ch, 100, 127);
     }
+}
+
+// ============================================================================
+// VST parameter mapping
+// ============================================================================
+
+void VstNode::mapVstParameter(int paramID) {
+    if (!project || !project->um) return;
+    std::vector<int> mgrPath = nm ? nm->managerPath : std::vector<int>{};
+    auto* pa = new MapParameterUndoAction(project, std::move(mgrPath), static_cast<int>(id), 0, paramID);
+    project->um->newAction(pa);
+}
+
+void VstNode::unmapVstParameter(int paramID) {
+    if (!project || !project->um) return;
+    std::vector<int> mgrPath = nm ? nm->managerPath : std::vector<int>{};
+    auto* pa = new UnmapParameterUndoAction(project, std::move(mgrPath), static_cast<int>(id), 0, paramID);
+    project->um->newAction(pa);
+}
+
+bool VstNode::mapVstParameterNow(int paramID) {
+    if (!nm || mappedVstParams.count(paramID)) return false;
+
+    auto* c = new Connection;
+    c->type = DataType::Waveform;
+    c->dir = Direction::input;
+    inputs.addConnection(c);
+    c->label = plugin ? plugin->getParameterNameByID(paramID) : ("VST Param " + std::to_string(paramID));
+
+    mappedVstParams[paramID] = c;
+    makeConnectionRects();
+    nm->markTopologyDirty();
+    return true;
+}
+
+bool VstNode::unmapVstParameterNow(int paramID) {
+    auto it = mappedVstParams.find(paramID);
+    if (it == mappedVstParams.end()) return false;
+
+    Connection* mc = it->second;
+    if (mc->is_connected)
+        nm->severConnectionNow(static_cast<uint16_t>(mc->input_node),
+                               static_cast<uint16_t>(mc->input_connection),
+                               id, mc->id);
+
+    auto cit = std::find(inputs.connections.begin(), inputs.connections.end(), mc);
+    if (cit != inputs.connections.end()) {
+        inputs.id_pool.releaseID(mc->id);
+        inputs.ids.erase(mc->id);
+        inputs.connections.erase(cit);
+    }
+    delete mc;
+    mappedVstParams.erase(it);
+
+    inputs.ids.clear();
+    for (size_t i = 0; i < inputs.connections.size(); ++i)
+        inputs.ids[inputs.connections[i]->id] = static_cast<uint16_t>(i);
+
+    makeConnectionRects();
+    nm->markTopologyDirty();
+    return true;
+}
+
+std::shared_ptr<TreeEntry> VstNode::getNodeMenu() {
+    auto t = uTreeEntry();
+    t->label = "Node Menu";
+
+    if (this->id) {
+        auto remove = uTreeEntry();
+        remove->label = "Remove Node";
+        remove->click = [this] () { nm->removeNode(this); };
+        t->addChild(remove);
+    }
+
+    auto mapParam = uTreeEntry();
+    mapParam->label = "Map Parameter";
+    mapParam->maxListHeight = 300.f;
+
+    // Regular node params (bypass)
+    for (size_t pi = 0; pi < params.size(); ++pi) {
+        auto* p = params[pi];
+        if (!p) continue;
+        std::string label;
+        if (auto* k = dynamic_cast<Knob*>(p))
+            label = k->label.empty() ? ("Param " + std::to_string(pi)) : k->label;
+        else
+            label = p->label.empty() ? ("Param " + std::to_string(pi)) : p->label;
+        auto item = uTreeEntry();
+        bool mapped = (p->mappedConnection != nullptr);
+        item->label = (mapped ? "[M] " : "") + label;
+        if (mapped)
+            item->click = [this, pi]() { unmapParameter(pi); };
+        else
+            item->click = [this, pi]() { mapParameter(pi); };
+        mapParam->addChild(item);
+    }
+
+    // VST plugin params
+    if (plugin && plugin->isValid()) {
+        int count = plugin->getParameterCount();
+        for (int i = 0; i < count; ++i) {
+            // Map by the parameter's stable ParamID, not its list index — the
+            // ID is what queueParameterChange/setParamNormalized expect.
+            int pid = plugin->getParameterID(i);
+            if (pid == -1) continue;
+            auto item = uTreeEntry();
+            bool mapped = (mappedVstParams.count(pid) > 0);
+            item->label = (mapped ? "[M] " : "") + plugin->getParameterName(i);
+            if (mapped)
+                item->click = [this, pid]() { unmapVstParameter(pid); };
+            else
+                item->click = [this, pid]() { mapVstParameter(pid); };
+            mapParam->addChild(item);
+        }
+    }
+
+    if (mapParam->children.size() > 0)
+        t->addChild(mapParam);
+
+    return t;
 }

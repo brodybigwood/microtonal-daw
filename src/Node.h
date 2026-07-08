@@ -124,21 +124,13 @@ class Node : public EmbeddedWindow {
 
         std::shared_ptr<TreeEntry> getConnectionMenu(Connection*);
         std::shared_ptr<TreeEntry> getParameterMenu(Parameter*, const std::vector<size_t>& path = {});
-        std::shared_ptr<TreeEntry> getNodeMenu();
+        virtual std::shared_ptr<TreeEntry> getNodeMenu();
 
-        // Resolve a nested parameter path: {paramIndex, modIdx0, modIdx1, ...}
-        Parameter* resolveParameterPath(const std::vector<size_t>& path);
-        std::string parameterPathLabel(const std::vector<size_t>& path) const;
-
-        // Path-based (primary)
-        void addModSource(const std::vector<size_t>& path);
-        void removeModSource(const std::vector<size_t>& path, size_t modIndex);
-        bool addModSourceNow(const std::vector<size_t>& path);
-        bool removeModSourceNow(const std::vector<size_t>& path, size_t modIndex);
-
-        // Convenience for top-level params (looks up paramIndex, delegates to path version)
-        void addModSource(Parameter*);
-        void removeModSource(Parameter*, size_t);
+        // Map a parameter directly to an input connection.
+        void mapParameter(size_t paramIndex);
+        void unmapParameter(size_t paramIndex);
+        bool mapParameterNow(size_t paramIndex);
+        bool unmapParameterNow(size_t paramIndex);
 
         json serialize();
         static Node* deSerialize(json, NodeManager*, bool skipExtra = false);

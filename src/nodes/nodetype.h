@@ -14,5 +14,6 @@ enum NodeType {
     ParametricEQ,
     Vst,
     SurroundToStereo,
+    Param,
     Count // for iteration
 };

@@ -1,5 +1,6 @@
 #include "UndoManager.h"
 #include "nodes/parametriceq/parametriceq.h"
+#include "nodes/paramnode/paramnode.h"
 #include "nodes/vst/vstnode.h"
 #include "nodes/arranger/arranger.h"
 #include "SongRoll.h"
@@ -23,138 +24,7 @@
 #include <vector>
 #include "UndoInternal.h"
 
-// Parameter and modulation actions (split from UndoManager.cpp).
-
-AddModSourceUndoAction::AddModSourceUndoAction(Project* p, std::vector<int> managerPath, int nodeID, std::vector<size_t> paramPath) :
-        ProjectAction(p, AddModSourceUndo),
-        managerPath(std::move(managerPath)),
-        nodeID(nodeID),
-        paramPath(std::move(paramPath)) {
-    doAction = [this]() {
-        NodeManager& nm = requireManager(this->p, this->managerPath);
-        Node* target = (this->nodeID == 0) ? static_cast<Node*>(nm.outNode)
-                     : (this->nodeID == 1) ? static_cast<Node*>(nm.inNode)
-                                            : nm.getNode(static_cast<uint16_t>(this->nodeID));
-        if (!target)
-            throw std::runtime_error("AddModSourceUndoAction::doAction: target node not found");
-        target->addModSourceNow(this->paramPath);
-    };
-    undoAction = [this]() {
-        NodeManager& nm = requireManager(this->p, this->managerPath);
-        Node* target = (this->nodeID == 0) ? static_cast<Node*>(nm.outNode)
-                     : (this->nodeID == 1) ? static_cast<Node*>(nm.inNode)
-                                            : nm.getNode(static_cast<uint16_t>(this->nodeID));
-        if (!target)
-            throw std::runtime_error("AddModSourceUndoAction::undoAction: target node not found");
-        Parameter* param = target->resolveParameterPath(this->paramPath);
-        if (!param || param->modulators.empty())
-            throw std::runtime_error("AddModSourceUndoAction::undoAction: no modulator to remove");
-        target->removeModSourceNow(this->paramPath, param->modulators.size() - 1);
-    };
-}
-
-RemoveModSourceUndoAction::RemoveModSourceUndoAction(Project* p, std::vector<int> managerPath, int nodeID, std::vector<size_t> paramPath,
-                                                     size_t modIndex) :
-        ProjectAction(p, RemoveModSourceUndo),
-        managerPath(std::move(managerPath)),
-        nodeID(nodeID),
-        paramPath(std::move(paramPath)),
-        modIndex(modIndex) {
-    // Snapshot the modulator tree and all connection wiring before doAction runs.
-    NodeManager& nm = requireManager(this->p, this->managerPath);
-    Node* target = (this->nodeID == 0) ? static_cast<Node*>(nm.outNode)
-                 : (this->nodeID == 1) ? static_cast<Node*>(nm.inNode)
-                                        : nm.getNode(static_cast<uint16_t>(this->nodeID));
-    if (!target) {
-        name = "Remove Mod Source (error: node not found)";
-        doAction = []() {};
-        undoAction = []() {};
-        return;
-    }
-    Parameter* param = target->resolveParameterPath(this->paramPath);
-    if (!param || this->modIndex >= param->modulators.size()) {
-        name = "Remove Mod Source (error: bad path)";
-        doAction = []() {};
-        undoAction = []() {};
-        return;
-    }
-    savedModulator = param->modulators[this->modIndex];
-
-    // Collect every connection in the modulator tree with its wiring state.
-    std::function<void(Modulator*)> collect = [&](Modulator* mod) {
-        for (auto* nested : mod->depth.modulators) collect(nested);
-        if (mod->sourceConnection) {
-            SavedConn sc;
-            sc.conn = mod->sourceConnection;
-            auto& conns = target->inputs.connections;
-            auto it = std::find(conns.begin(), conns.end(), sc.conn);
-            sc.index = (it != conns.end()) ? static_cast<size_t>(it - conns.begin()) : 0;
-            sc.wasConnected = sc.conn->is_connected;
-            if (sc.wasConnected) {
-                sc.srcNode = static_cast<uint16_t>(sc.conn->output_node);
-                sc.srcCon  = static_cast<uint16_t>(sc.conn->output_connection);
-            }
-            savedConns.push_back(sc);
-        }
-    };
-    collect(savedModulator);
-
-    name = "Remove Mod Source";
-
-    doAction = [this, target, param]() {
-        NodeManager& nm2 = requireManager(this->p, this->managerPath);
-        // 1. Sever every connected cable.
-        for (auto& sc : this->savedConns) {
-            if (sc.wasConnected) {
-                nm2.severConnectionNow(sc.srcNode, sc.srcCon,
-                    static_cast<uint16_t>(target->id), sc.conn->id);
-                sc.conn->is_connected = false;
-            }
-        }
-        // 2. Remove connections from inputs (save, don't delete).
-        for (auto& sc : this->savedConns) {
-            auto& conns = target->inputs.connections;
-            auto it = std::find(conns.begin(), conns.end(), sc.conn);
-            if (it != conns.end()) {
-                target->inputs.ids.erase(sc.conn->id);
-                conns.erase(it);
-            }
-        }
-        target->inputs.ids.clear();
-        for (size_t i = 0; i < target->inputs.connections.size(); ++i)
-            target->inputs.ids[target->inputs.connections[i]->id] = static_cast<uint16_t>(i);
-        target->makeConnectionRects();
-        nm2.markTopologyDirty();
-        // 3. Remove modulator from parameter (save, don't delete).
-        if (this->modIndex < param->modulators.size() && param->modulators[this->modIndex] == this->savedModulator)
-            param->modulators.erase(param->modulators.begin() + static_cast<ptrdiff_t>(this->modIndex));
-    };
-
-    undoAction = [this, target, param]() {
-        NodeManager& nm2 = requireManager(this->p, this->managerPath);
-        // 1. Re-insert modulator into parameter at original index.
-        size_t insIdx = std::min(this->modIndex, param->modulators.size());
-        param->modulators.insert(param->modulators.begin() + static_cast<ptrdiff_t>(insIdx), this->savedModulator);
-        // 2. Re-insert connections into inputs at original positions.
-        for (auto& sc : this->savedConns) {
-            auto& conns = target->inputs.connections;
-            size_t ci = std::min(sc.index, conns.size());
-            conns.insert(conns.begin() + static_cast<ptrdiff_t>(ci), sc.conn);
-        }
-        target->inputs.ids.clear();
-        for (size_t i = 0; i < target->inputs.connections.size(); ++i)
-            target->inputs.ids[target->inputs.connections[i]->id] = static_cast<uint16_t>(i);
-        target->makeConnectionRects();
-        nm2.markTopologyDirty();
-        // 3. Reconnect cables.
-        for (auto& sc : this->savedConns) {
-            if (sc.wasConnected) {
-                nm2.makeNodeConnectionNow(sc.srcNode, sc.srcCon,
-                    static_cast<uint16_t>(target->id), sc.conn->id);
-            }
-        }
-    };
-}
+// Parameter actions (split from UndoManager.cpp).
 
 SetParamValueUndoAction::SetParamValueUndoAction(Project* p, std::vector<int> managerPath, int nodeID, std::vector<size_t> paramPath,
                                                  float oldValue, float newValue, std::string actionName) :
@@ -172,9 +42,9 @@ SetParamValueUndoAction::SetParamValueUndoAction(Project* p, std::vector<int> ma
                      : (this->nodeID == 1) ? static_cast<Node*>(nm.inNode)
                                            : nm.getNode(static_cast<uint16_t>(this->nodeID));
         if (!target) throw std::runtime_error("SetParamValueUndoAction::doAction: node not found");
-        Parameter* param = target->resolveParameterPath(this->paramPath);
-        if (!param) throw std::runtime_error("SetParamValueUndoAction::doAction: parameter not found");
-        param->value = this->newValue;
+        if (this->paramPath.empty() || this->paramPath[0] >= target->params.size())
+            throw std::runtime_error("SetParamValueUndoAction::doAction: parameter not found");
+        target->params[this->paramPath[0]]->value = this->newValue;
     };
     undoAction = [this]() {
         NodeManager& nm = requireManager(this->p, this->managerPath);
@@ -182,19 +52,116 @@ SetParamValueUndoAction::SetParamValueUndoAction(Project* p, std::vector<int> ma
                      : (this->nodeID == 1) ? static_cast<Node*>(nm.inNode)
                                            : nm.getNode(static_cast<uint16_t>(this->nodeID));
         if (!target) throw std::runtime_error("SetParamValueUndoAction::undoAction: node not found");
-        Parameter* param = target->resolveParameterPath(this->paramPath);
-        if (!param) throw std::runtime_error("SetParamValueUndoAction::undoAction: parameter not found");
-        param->value = this->oldValue;
+        if (this->paramPath.empty() || this->paramPath[0] >= target->params.size())
+            throw std::runtime_error("SetParamValueUndoAction::undoAction: parameter not found");
+        target->params[this->paramPath[0]]->value = this->oldValue;
     };
 }
 
-ToggleModulatorCenteredUndoAction::ToggleModulatorCenteredUndoAction(Project* p, std::vector<int> managerPath, int nodeID,
-                                                                     std::vector<size_t> paramPath, size_t modIndex,
-                                                                     bool oldCentered, bool newCentered, float oldDepth, float newDepth) :
-        ProjectAction(p, ToggleModulatorCentered),
+ParamNodeAddModRowUndoAction::ParamNodeAddModRowUndoAction(Project* p, std::vector<int> managerPath, int nodeID) :
+        ProjectAction(p, ParamNodeAddModRow),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID) {
+    name = "Add Modulator";
+    doAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        auto* target = dynamic_cast<ParamNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!target) throw std::runtime_error("ParamNodeAddModRow::doAction: node not found");
+        target->addModulatorRow();
+        target->makeConnectionRects();
+        nm.markTopologyDirty();
+    };
+    undoAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        auto* target = dynamic_cast<ParamNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!target || target->modulators.empty())
+            throw std::runtime_error("ParamNodeAddModRow::undoAction: no modulator to remove");
+        target->removeModulatorRow(target->modulators.size() - 1);
+        target->makeConnectionRects();
+        nm.markTopologyDirty();
+    };
+}
+
+ParamNodeRemoveModRowUndoAction::ParamNodeRemoveModRowUndoAction(Project* p, std::vector<int> managerPath, int nodeID, size_t modIndex) :
+        ProjectAction(p, ParamNodeRemoveModRow),
         managerPath(std::move(managerPath)),
         nodeID(nodeID),
-        paramPath(std::move(paramPath)),
+        modIndex(modIndex) {
+    // Snapshot modulator state and connection wiring before removal.
+    NodeManager& nm = requireManager(this->p, this->managerPath);
+    auto* target = dynamic_cast<ParamNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+    if (target && modIndex < target->modulators.size()) {
+        auto* m = target->modulators[modIndex];
+        if (m) {
+            savedDepth = m->depth.value;
+            savedCentered = m->centered;
+            if (m->sourceConnection) {
+                savedConnID = m->sourceConnection->id;
+                wasConnected = m->sourceConnection->is_connected;
+                if (wasConnected) {
+                    srcNode = static_cast<uint16_t>(m->sourceConnection->input_node);
+                    srcCon = static_cast<uint16_t>(m->sourceConnection->input_connection);
+                }
+            }
+        }
+    }
+    name = "Remove Modulator";
+    doAction = [this]() {
+        NodeManager& nm2 = requireManager(this->p, this->managerPath);
+        auto* target = dynamic_cast<ParamNode*>(nm2.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!target || this->modIndex >= target->modulators.size())
+            throw std::runtime_error("ParamNodeRemoveModRow::doAction: modulator not found");
+        target->removeModulatorRow(this->modIndex);
+        target->makeConnectionRects();
+        nm2.markTopologyDirty();
+    };
+    undoAction = [this]() {
+        NodeManager& nm2 = requireManager(this->p, this->managerPath);
+        auto* target = dynamic_cast<ParamNode*>(nm2.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!target) return;
+        auto* conn = new Connection;
+        conn->type = DataType::Waveform;
+        conn->dir = Direction::input;
+        conn->label = "Mod " + std::to_string(this->modIndex + 1);
+        target->inputs.addConnection(conn);
+        // Move the connection to the correct position in the vector
+        size_t insIdx = std::min(this->modIndex, target->inputs.connections.size() - 1);
+        if (insIdx < target->inputs.connections.size() - 1) {
+            auto it = std::find(target->inputs.connections.begin(), target->inputs.connections.end(), conn);
+            if (it != target->inputs.connections.end()) {
+                std::rotate(target->inputs.connections.begin() + static_cast<ptrdiff_t>(insIdx), it, it + 1);
+            }
+        }
+        target->inputs.ids.clear();
+        for (size_t i = 0; i < target->inputs.connections.size(); ++i)
+            target->inputs.ids[target->inputs.connections[i]->id] = static_cast<uint16_t>(i);
+
+        auto* mod = new Modulator(conn->buffer, this->savedCentered,
+                                  generateRect(0, 0, 200, 10), this->savedDepth, conn);
+        target->modulators.insert(
+            target->modulators.begin() + static_cast<ptrdiff_t>(insIdx), mod);
+        mod->depth.label = conn->label;
+        target->params.insert(target->params.begin() + static_cast<ptrdiff_t>(insIdx), &mod->depth);
+        for (size_t li = insIdx; li < target->modulators.size(); ++li) {
+            target->modulators[li]->depth.label = "Mod " + std::to_string(li + 1);
+            if (target->modulators[li]->sourceConnection)
+                target->modulators[li]->sourceConnection->label = target->modulators[li]->depth.label;
+        }
+        target->makeConnectionRects();
+        if (this->wasConnected && mod && mod->sourceConnection)
+            nm2.makeNodeConnectionNow(this->srcNode, this->srcCon,
+                                      static_cast<uint16_t>(this->nodeID),
+                                      mod->sourceConnection->id);
+        nm2.markTopologyDirty();
+    };
+}
+
+ParamNodeToggleCenteredUndoAction::ParamNodeToggleCenteredUndoAction(Project* p, std::vector<int> managerPath, int nodeID,
+                                                                     size_t modIndex, bool oldCentered, bool newCentered,
+                                                                     float oldDepth, float newDepth) :
+        ProjectAction(p, ParamNodeToggleCentered),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
         modIndex(modIndex),
         oldCentered(oldCentered),
         newCentered(newCentered),
@@ -204,27 +171,19 @@ ToggleModulatorCenteredUndoAction::ToggleModulatorCenteredUndoAction(Project* p,
     name = "Toggle Centered";
     doAction = [this]() {
         NodeManager& nm = requireManager(this->p, this->managerPath);
-        Node* target = (this->nodeID == 0) ? static_cast<Node*>(nm.outNode)
-                     : (this->nodeID == 1) ? static_cast<Node*>(nm.inNode)
-                                           : nm.getNode(static_cast<uint16_t>(this->nodeID));
-        if (!target) throw std::runtime_error("ToggleModulatorCenteredUndoAction::doAction: node not found");
-        Parameter* param = target->resolveParameterPath(this->paramPath);
-        if (!param || this->modIndex >= param->modulators.size())
-            throw std::runtime_error("ToggleModulatorCenteredUndoAction::doAction: modulator not found");
-        auto* mod = param->modulators[this->modIndex];
+        auto* target = dynamic_cast<ParamNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!target || this->modIndex >= target->modulators.size())
+            throw std::runtime_error("ParamNodeToggleCentered::doAction: modulator not found");
+        auto* mod = target->modulators[this->modIndex];
         mod->centered = this->newCentered;
         mod->depth.value = this->newDepth;
     };
     undoAction = [this]() {
         NodeManager& nm = requireManager(this->p, this->managerPath);
-        Node* target = (this->nodeID == 0) ? static_cast<Node*>(nm.outNode)
-                     : (this->nodeID == 1) ? static_cast<Node*>(nm.inNode)
-                                           : nm.getNode(static_cast<uint16_t>(this->nodeID));
-        if (!target) throw std::runtime_error("ToggleModulatorCenteredUndoAction::undoAction: node not found");
-        Parameter* param = target->resolveParameterPath(this->paramPath);
-        if (!param || this->modIndex >= param->modulators.size())
-            throw std::runtime_error("ToggleModulatorCenteredUndoAction::undoAction: modulator not found");
-        auto* mod = param->modulators[this->modIndex];
+        auto* target = dynamic_cast<ParamNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!target || this->modIndex >= target->modulators.size())
+            throw std::runtime_error("ParamNodeToggleCentered::undoAction: modulator not found");
+        auto* mod = target->modulators[this->modIndex];
         mod->centered = this->oldCentered;
         mod->depth.value = this->oldDepth;
     };

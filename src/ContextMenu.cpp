@@ -1,5 +1,6 @@
 #include "ContextMenu.h"
 #include "SDL_Events.h"
+#include <algorithm>
 #include <iostream>
 #include "styles.h"
 #include "WindowHandler.h"
@@ -202,10 +203,39 @@ std::function<bool(SDL_Event& e)> getTreeMenuTicker(std::shared_ptr<TreeEntry> t
             if (c->textHeight > rect.h) rect.h = c->textHeight;
         }
 
+        // Scrollable children list
+        const bool scrollable = (t->maxListHeight > 0.f);
+        float listTop = static_cast<float>(y);
+        float listH = scrollable ? t->maxListHeight : 1e9f;
+        float contentH = static_cast<float>(t->children.size()) * rect.h;
+        float maxScroll = std::max(0.f, contentH - listH);
+        if (t->scrollOffset > maxScroll) t->scrollOffset = maxScroll;
+        if (t->scrollOffset < 0.f) t->scrollOffset = 0.f;
+
+        if (scrollable && e.type == SDL_EVENT_MOUSE_WHEEL) {
+            float mx = 0, my = 0;
+            SDL_GetMouseState(&mx, &my);
+            SDL_FRect listRect{(float)x, listTop, rect.w, listH};
+            if (mx >= listRect.x && mx < listRect.x + listRect.w &&
+                my >= listRect.y && my < listRect.y + listRect.h) {
+                t->scrollOffset -= e.wheel.y * rect.h;
+                t->scrollOffset = std::clamp(t->scrollOffset, 0.f, maxScroll);
+                e.type = SDL_EVENT_FIRST; // consume wheel
+            }
+        }
+
+        float baseY = rect.y;
+        float clippedBottom = listTop + listH;
         bool mouseOn = false;
         for (auto c : t->children) {
+            float drawY = baseY - t->scrollOffset;
+            bool visible = (drawY + rect.h > listTop && drawY < clippedBottom);
+
+            // Update rect.y for hit testing
+            rect.y = drawY;
+
             bool clickedNow = false;
-            if (MouseOn(&rect)) {
+            if (visible && MouseOn(&rect)) {
                 mouseOn = true;
 
                 SDL_SetRenderDrawColor(renderer, 250, 250, 250, 255);
@@ -216,6 +246,7 @@ std::function<bool(SDL_Event& e)> getTreeMenuTicker(std::shared_ptr<TreeEntry> t
                         if (e.button.button == SDL_BUTTON_LEFT) {
                             if (c->isParent()) {
                                 c->isOpen = true;
+                                c->scrollOffset = 0.f;
                                 for (auto k : t->children) if (c != k) k->isOpen = false;
                             } else {
                                 c->click();
@@ -231,15 +262,18 @@ std::function<bool(SDL_Event& e)> getTreeMenuTicker(std::shared_ptr<TreeEntry> t
                     default:
                         break;
                 }
-            } else {
+            } else if (visible) {
                 SDL_SetRenderDrawColor(renderer, 220, 220, 220, 255);
             }
-            SDL_RenderFillRect(renderer, &rect);
-            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-            SDL_RenderRect(renderer, &rect);
 
-            SDL_FRect textRect{rect.x + padding, rect.y, (float)c->textWidth, (float)c->textHeight};
-            SDL_RenderTexture(renderer, c->labelTexture, nullptr, &textRect);
+            if (visible) {
+                SDL_RenderFillRect(renderer, &rect);
+                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+                SDL_RenderRect(renderer, &rect);
+
+                SDL_FRect textRect{rect.x + padding, rect.y, (float)c->textWidth, (float)c->textHeight};
+                SDL_RenderTexture(renderer, c->labelTexture, nullptr, &textRect);
+            }
 
             if (c->isOpen && !clickedNow) {
                 if (c->customTick) {
@@ -255,7 +289,7 @@ std::function<bool(SDL_Event& e)> getTreeMenuTicker(std::shared_ptr<TreeEntry> t
                 }
             }
 
-            rect.y += rect.h;
+            baseY += rect.h;
         }
 
         // exit the menu if clicked somewhere outside the visible tree

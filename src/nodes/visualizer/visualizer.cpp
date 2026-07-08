@@ -55,10 +55,6 @@ void VisualizerNode::process() {
         peak = std::max(peak, std::fabs(s));
     }
 
-    if (!project || !project->isPlaying.load()) {
-        return; // freeze graph when transport is not running
-    }
-
     // Fast attack / slow release level follower.
     if (peak > envLevel) envLevel = peak;
     else envLevel = envLevel * 0.92f + peak * 0.08f;

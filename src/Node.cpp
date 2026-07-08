@@ -201,134 +201,73 @@ void Node::clickMouse(SDL_Event& e) {
     }
 }
 
-Parameter* Node::resolveParameterPath(const std::vector<size_t>& path) {
-    if (path.empty() || path[0] >= params.size()) return nullptr;
-    Parameter* p = params[path[0]];
-    for (size_t i = 1; i < path.size(); ++i) {
-        size_t modIdx = path[i];
-        if (modIdx >= p->modulators.size()) return nullptr;
-        p = &p->modulators[modIdx]->depth;
-    }
-    return p;
+void Node::mapParameter(size_t paramIndex) {
+    if (!nm || !project || !project->um) return;
+    if (paramIndex >= params.size()) return;
+    std::vector<int> managerPath = nm ? nm->managerPath : std::vector<int>{};
+    auto* pa = new MapParameterUndoAction(project, std::move(managerPath), static_cast<int>(id), paramIndex);
+    project->um->newAction(pa);
 }
 
-std::string Node::parameterPathLabel(const std::vector<size_t>& path) const {
-    if (path.empty()) return "Param";
-    std::string label;
-    Parameter* p = params[path[0]];
+void Node::unmapParameter(size_t paramIndex) {
+    if (!nm || !project || !project->um) return;
+    if (paramIndex >= params.size()) return;
+    Parameter* p = params[paramIndex];
+    if (!p || !p->mappedConnection) return;
+    std::vector<int> managerPath = nm ? nm->managerPath : std::vector<int>{};
+    auto* pa = new UnmapParameterUndoAction(project, std::move(managerPath), static_cast<int>(id), paramIndex);
+    project->um->newAction(pa);
+}
+
+bool Node::mapParameterNow(size_t paramIndex) {
+    if (!nm || paramIndex >= params.size()) return false;
+    Parameter* p = params[paramIndex];
+    if (!p || p->mappedConnection) return false;
+
+    auto* c = new Connection;
+    c->type = DataType::Waveform;
+    c->dir = Direction::input;
+    inputs.addConnection(c);
+    c->label = "Param";
     if (auto* k = dynamic_cast<Knob*>(p)) {
-        label = k->label.empty() ? "Param" : k->label;
-    } else {
-        label = "Param";
+        if (!k->label.empty()) c->label = k->label;
+    } else if (!p->label.empty()) {
+        c->label = p->label;
     }
-    for (size_t i = 1; i < path.size(); ++i) {
-        label += ".mod" + std::to_string(path[i]) + ".depth";
+    c->label += " (mapped)";
+
+    p->mappedConnection = c;
+    makeConnectionRects();
+    nm->markTopologyDirty();
+    return true;
+}
+
+bool Node::unmapParameterNow(size_t paramIndex) {
+    if (!nm || paramIndex >= params.size()) return false;
+    Parameter* p = params[paramIndex];
+    if (!p || !p->mappedConnection) return false;
+
+    Connection* mc = p->mappedConnection;
+    if (mc->is_connected)
+        nm->severConnectionNow(static_cast<uint16_t>(mc->input_node),
+                               static_cast<uint16_t>(mc->input_connection),
+                               id, mc->id);
+
+    auto it = std::find(inputs.connections.begin(), inputs.connections.end(), mc);
+    if (it != inputs.connections.end()) {
+        inputs.id_pool.releaseID(mc->id);
+        inputs.ids.erase(mc->id);
+        delete mc;
+        inputs.connections.erase(it);
     }
-    return label;
-}
-
-void Node::addModSource(Parameter* p) {
-    if (!p) return;
-    for (size_t i = 0; i < params.size(); ++i) {
-        if (params[i] == p) {
-            addModSource({i});
-            return;
-        }
-    }
-}
-
-void Node::addModSource(const std::vector<size_t>& path) {
-    if (!nm || !project || !project->um) return;
-    if (path.empty() || path[0] >= params.size()) return;
-    std::vector<int> managerPath = nm ? nm->managerPath : std::vector<int>{};
-    auto* pa = new AddModSourceUndoAction(project, std::move(managerPath), static_cast<int>(id), path);
-    pa->name = "Add Mod Source";
-    project->um->newAction(pa);
-}
-
-bool Node::addModSourceNow(const std::vector<size_t>& path) {
-    if (!nm) return false;
-    Parameter* p = resolveParameterPath(path);
-    if (!p) return false;
-
-    bool changed = false;
-    {
-        auto* c = new Connection;
-        c->type = DataType::Waveform;
-        c->dir = Direction::input;
-        inputs.addConnection(c);
-        c->label = parameterPathLabel(path);
-        p->addModulator(new Modulator(c->buffer, true, generateRect(0, 0, 200, 10), 0.5f, c));
-        makeConnectionRects();
-        nm->markTopologyDirty();
-        changed = true;
-    }
-    return changed;
-}
-
-void Node::removeModSource(Parameter* p, size_t modIndex) {
-    if (!p || modIndex >= p->modulators.size()) return;
-    for (size_t i = 0; i < params.size(); ++i) {
-        if (params[i] == p) {
-            removeModSource({i}, modIndex);
-            return;
-        }
-    }
-}
-
-void Node::removeModSource(const std::vector<size_t>& path, size_t modIndex) {
-    if (!nm || !project || !project->um) return;
-    if (path.empty() || path[0] >= params.size()) return;
-    std::vector<int> managerPath = nm ? nm->managerPath : std::vector<int>{};
-    auto* pa = new RemoveModSourceUndoAction(project, std::move(managerPath), static_cast<int>(id), path, modIndex);
-    pa->name = "Remove Mod Source";
-    project->um->newAction(pa);
-}
-
-bool Node::removeModSourceNow(const std::vector<size_t>& path, size_t modIndex) {
-    if (!nm) return false;
-    Parameter* p = resolveParameterPath(path);
-    if (!p || modIndex >= p->modulators.size()) return false;
-
-    Modulator* m = p->modulators[modIndex];
-    if (!m) return false;
-
-    // Sever any wired cables in the modulator tree, then remove.
-    std::function<void(Modulator*)> severTree = [&](Modulator* mod) {
-        for (auto* nested : mod->depth.modulators) severTree(nested);
-        if (mod->sourceConnection && mod->sourceConnection->is_connected) {
-            nm->severConnectionNow(
-                static_cast<uint16_t>(mod->sourceConnection->output_node),
-                static_cast<uint16_t>(mod->sourceConnection->output_connection),
-                id, mod->sourceConnection->id);
-            mod->sourceConnection->is_connected = false;
-        }
-    };
-    severTree(m);
-
-    // Remove connections from inputs.
-    std::function<void(Modulator*)> removeConns = [&](Modulator* mod) {
-        for (auto* nested : mod->depth.modulators) removeConns(nested);
-        if (mod->sourceConnection) {
-            auto it = std::find(inputs.connections.begin(), inputs.connections.end(), mod->sourceConnection);
-            if (it != inputs.connections.end()) {
-                inputs.id_pool.releaseID(mod->sourceConnection->id);
-                inputs.ids.erase(mod->sourceConnection->id);
-                delete mod->sourceConnection;
-                inputs.connections.erase(it);
-            }
-        }
-    };
-    removeConns(m);
 
     inputs.ids.clear();
     for (size_t i = 0; i < inputs.connections.size(); ++i)
         inputs.ids[inputs.connections[i]->id] = static_cast<uint16_t>(i);
+
+    p->mappedConnection = nullptr;
     makeConnectionRects();
     nm->markTopologyDirty();
-
-    delete m;
-    p->modulators.erase(p->modulators.begin() + static_cast<ptrdiff_t>(modIndex));
     return true;
 }
 
@@ -532,6 +471,7 @@ void Node::handleWindowInput(SDL_Event& e) {
     for (size_t pi = 0; pi < params.size(); ++pi) {
         auto p = params[pi];
         if (inPolygon(p->vx.data(), p->vy.data(), p->vx.size(), msX, msY)) {
+            if (p->mappedConnection && p->mappedConnection->is_connected) continue;
             float oldValue = p->value;
             p->handleInput(e);
             if (p->value != oldValue && project && project->um) {
@@ -599,6 +539,3 @@ void Node::buildHitPolygon(std::vector<SDL_FPoint>& out) const {
     for (size_t i = 0; i < vCount; ++i)
         out[i] = {dstRect.x + vx[i], dstRect.y + vy[i]};
 }
-
-
-

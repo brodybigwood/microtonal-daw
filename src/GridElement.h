@@ -1,10 +1,13 @@
 #pragma once
 #include <vector>
 #include <utility>
+#include <memory>
 #include <SDL3/SDL.h>
 #include "idManager.h"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
+
+struct Note;
 
 enum ElementType{
     region = 0,
@@ -34,6 +37,7 @@ class GridElement {
             int rhythmEdoSubdivisionSteps = 1;
             std::vector<std::pair<int, int>> rhythmEdoLowerVector;
             std::vector<std::pair<int, int>> rhythmEdoUpperVector;
+            std::vector<std::shared_ptr<Note>> dispatched;
         };
 
         ElementType type;

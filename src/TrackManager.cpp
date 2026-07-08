@@ -383,9 +383,6 @@ void TrackManager::renderTrack(SDL_Renderer* renderer, Track* track, SDL_FRect* 
         case TrackType::Audio:
             SDL_SetRenderDrawColor(renderer, colors.trackAudio[0], colors.trackAudio[1], colors.trackAudio[2], colors.trackAudio[3]);
             break;
-        case TrackType::Automation:
-            SDL_SetRenderDrawColor(renderer, colors.trackAutomation[0], colors.trackAutomation[1], colors.trackAutomation[2], colors.trackAutomation[3]);
-            break;
         case TrackType::Notes:
             SDL_SetRenderDrawColor(renderer, colors.trackNotes[0], colors.trackNotes[1], colors.trackNotes[2], colors.trackNotes[3]);
             break;

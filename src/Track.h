@@ -7,15 +7,14 @@ using json = nlohmann::json;
 
 enum TrackType{
     Audio = 0,
-    Automation = 1,
-    Notes = 2
+    Notes = 1
 };
 
 struct Connection;
 
 class Track {
     public:
-        
+
         std::vector<std::shared_ptr<Note>> dispatched;
 
         Connection* connection;

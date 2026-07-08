@@ -13,8 +13,6 @@ void Track::process(float* input, int bufferSize) {
         case TrackType::Audio:
             std::memset(*buffer, 0, sizeof(float) * static_cast<size_t>(bufferSize) * static_cast<size_t>(connection->allocChannels));
             break;
-        case TrackType::Automation:
-            break;
         case TrackType::Notes:
             (*events)->clear();
             break;

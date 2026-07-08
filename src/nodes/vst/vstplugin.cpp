@@ -958,6 +958,49 @@ float VstPlugin::getParameterValue(int paramID) const {
     return static_cast<float>(editController->getParamNormalized(static_cast<Steinberg::Vst::ParamID>(paramID)));
 }
 
+int VstPlugin::getParameterID(int paramIndex) const {
+    if (!editController) return -1;
+    Steinberg::Vst::ParameterInfo info{};
+    if (editController->getParameterInfo(paramIndex, info) != Steinberg::kResultOk) return -1;
+    return static_cast<int>(info.id);
+}
+
+std::string VstPlugin::getParameterNameByID(int paramID) const {
+    if (editController) {
+        int count = getParameterCount();
+        Steinberg::Vst::ParameterInfo info{};
+        for (int i = 0; i < count; ++i) {
+            if (editController->getParameterInfo(i, info) == Steinberg::kResultOk &&
+                info.id == static_cast<Steinberg::Vst::ParamID>(paramID))
+                return getParameterName(i);
+        }
+    }
+    return "Param " + std::to_string(paramID);
+}
+
+std::string VstPlugin::getParameterName(int paramIndex) const {
+    if (!editController) return "Param " + std::to_string(paramIndex);
+    Steinberg::Vst::ParameterInfo info{};
+    if (editController->getParameterInfo(paramIndex, info) == Steinberg::kResultOk) {
+        std::string result;
+        for (int i = 0; i < 128 && info.title[i] != 0; ++i) {
+            char16_t c = info.title[i];
+            if (c < 0x80) {
+                result += static_cast<char>(c);
+            } else if (c < 0x800) {
+                result += static_cast<char>(0xC0 | (c >> 6));
+                result += static_cast<char>(0x80 | (c & 0x3F));
+            } else {
+                result += static_cast<char>(0xE0 | (c >> 12));
+                result += static_cast<char>(0x80 | ((c >> 6) & 0x3F));
+                result += static_cast<char>(0x80 | (c & 0x3F));
+            }
+        }
+        return result;
+    }
+    return "Param " + std::to_string(paramIndex);
+}
+
 void VstPlugin::setParameterValue(int paramID, float valueNormalized) {
     if (!editController || !hostFrame) return;
     editController->setParamNormalized(static_cast<Steinberg::Vst::ParamID>(paramID),

@@ -193,15 +193,6 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
                 j.at("beforeRegion"), j.at("afterRegion"), j.at("beforeNote"), j.at("afterNote"));
             break;
         }
-        case AddModSourceUndo: {
-            pa = new AddModSourceUndoAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(), j.at("paramPath").get<std::vector<size_t>>());
-            break;
-        }
-        case RemoveModSourceUndo: {
-            pa = new RemoveModSourceUndoAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(), j.at("paramPath").get<std::vector<size_t>>(),
-                j.at("modIndex").get<size_t>());
-            break;
-        }
         case CreateRegion: {
             const auto managerPath = j.at("managerPath").get<std::vector<int>>();
             const int nodeID = j.at("nodeID").get<int>();
@@ -252,13 +243,6 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
                 j.at("name").get<std::string>());
             break;
         }
-        case ToggleModulatorCentered: {
-            pa = new ToggleModulatorCenteredUndoAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(),
-                j.at("paramPath").get<std::vector<size_t>>(), j.at("modIndex").get<size_t>(),
-                j.at("oldCentered").get<bool>(), j.at("newCentered").get<bool>(),
-                j.at("oldDepth").get<float>(), j.at("newDepth").get<float>());
-            break;
-        }
         case AddEQBand: {
             pa = new AddEQBandAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(),
                 j.at("bandIndex").get<int>(), j.at("bandState"));
@@ -302,6 +286,30 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
             pa = new ModifyCurvePointsAction(p, j.at("managerPath").get<std::vector<int>>(),
                 j.at("nodeID").get<int>(), j.at("curveID").get<int>(),
                 j.at("before"), j.at("after"));
+            break;
+        case MapParameter:
+            pa = new MapParameterUndoAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(), j.value("paramIndex", static_cast<size_t>(0)),
+                j.value("vstParamID", -1));
+            break;
+        case UnmapParameter:
+            pa = new UnmapParameterUndoAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(), j.value("paramIndex", static_cast<size_t>(0)),
+                j.value("vstParamID", -1));
+            break;
+        case ParamNodeAddModRow:
+            pa = new ParamNodeAddModRowUndoAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>());
+            break;
+        case ParamNodeRemoveModRow:
+            pa = new ParamNodeRemoveModRowUndoAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(), j.at("modIndex").get<size_t>());
+            break;
+        case ParamNodeToggleCentered:
+            pa = new ParamNodeToggleCenteredUndoAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(), j.at("modIndex").get<size_t>(),
+                j.at("oldCentered").get<bool>(), j.at("newCentered").get<bool>(),
+                j.at("oldDepth").get<float>(), j.at("newDepth").get<float>());
             break;
         default:
             throw std::runtime_error("invalid undo action type in save");
@@ -536,21 +544,6 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["afterNote"] = ah->afterNote;
             break;
         }
-        case AddModSourceUndo: {
-            auto am = static_cast<AddModSourceUndoAction*>(pa);
-            j["managerPath"] = am->managerPath;
-            j["nodeID"] = am->nodeID;
-            j["paramPath"] = am->paramPath;
-            break;
-        }
-        case RemoveModSourceUndo: {
-            auto rm = static_cast<RemoveModSourceUndoAction*>(pa);
-            j["managerPath"] = rm->managerPath;
-            j["nodeID"] = rm->nodeID;
-            j["paramPath"] = rm->paramPath;
-            j["modIndex"] = rm->modIndex;
-            break;
-        }
         case CreateRegion: {
             auto cr = static_cast<CreateRegionAction*>(pa);
             j["managerPath"] = cr->managerPath;
@@ -620,18 +613,6 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["paramPath"] = sv->paramPath;
             j["oldValue"] = sv->oldValue;
             j["newValue"] = sv->newValue;
-            break;
-        }
-        case ToggleModulatorCentered: {
-            auto* tc = static_cast<ToggleModulatorCenteredUndoAction*>(pa);
-            j["managerPath"] = tc->managerPath;
-            j["nodeID"] = tc->nodeID;
-            j["paramPath"] = tc->paramPath;
-            j["modIndex"] = tc->modIndex;
-            j["oldCentered"] = tc->oldCentered;
-            j["newCentered"] = tc->newCentered;
-            j["oldDepth"] = tc->oldDepth;
-            j["newDepth"] = tc->newDepth;
             break;
         }
         case AddEQBand: {
@@ -714,6 +695,46 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["curveID"] = mc->curveID;
             j["before"] = mc->before;
             j["after"] = mc->after;
+            break;
+        }
+        case MapParameter: {
+            auto* mp = static_cast<MapParameterUndoAction*>(pa);
+            j["managerPath"] = mp->managerPath;
+            j["nodeID"] = mp->nodeID;
+            j["paramIndex"] = mp->paramIndex;
+            if (mp->vstParamID >= 0) j["vstParamID"] = mp->vstParamID;
+            break;
+        }
+        case UnmapParameter: {
+            auto* up = static_cast<UnmapParameterUndoAction*>(pa);
+            j["managerPath"] = up->managerPath;
+            j["nodeID"] = up->nodeID;
+            j["paramIndex"] = up->paramIndex;
+            if (up->vstParamID >= 0) j["vstParamID"] = up->vstParamID;
+            break;
+        }
+        case ParamNodeAddModRow: {
+            auto* pm = static_cast<ParamNodeAddModRowUndoAction*>(pa);
+            j["managerPath"] = pm->managerPath;
+            j["nodeID"] = pm->nodeID;
+            break;
+        }
+        case ParamNodeRemoveModRow: {
+            auto* pm = static_cast<ParamNodeRemoveModRowUndoAction*>(pa);
+            j["managerPath"] = pm->managerPath;
+            j["nodeID"] = pm->nodeID;
+            j["modIndex"] = pm->modIndex;
+            break;
+        }
+        case ParamNodeToggleCentered: {
+            auto* tc = static_cast<ParamNodeToggleCenteredUndoAction*>(pa);
+            j["managerPath"] = tc->managerPath;
+            j["nodeID"] = tc->nodeID;
+            j["modIndex"] = tc->modIndex;
+            j["oldCentered"] = tc->oldCentered;
+            j["newCentered"] = tc->newCentered;
+            j["oldDepth"] = tc->oldDepth;
+            j["newDepth"] = tc->newDepth;
             break;
         }
         default:

@@ -50,36 +50,38 @@ void ElementManager::process(int bufferSize) {
     float window = static_cast<float>(AudioManager::instance()->bufferSize) / AudioManager::instance()->sampleRate;
     float time = static_cast<float>(project->timeSeconds.load());
 
+    if (!project->isPlaying.load()) {
+        for (auto& t : tm->tracks) {
+            for (auto& note : t->dispatched) {
+                Event event{noteEventType::noteOff, note->num, note->id, 0, note->channel};
+                t->addEvent(event);
+            }
+            t->dispatched.clear();
+        }
+        for (auto* element : elements)
+            for (auto* pos : element->positions)
+                pos->dispatched.clear();
+        return;
+    }
+
     for (auto* element : elements)
         for (auto position : element->positions) {
             auto& pos = *position;
-            const float regTimeSec = Note::secondsFromVector(pos.rhythmVector);
+            const float posStartSec = Note::secondsFromVector(pos.rhythmVector);
+            const float posEndSec = Note::secondsFromVector(pos.rhythmEndVector);
+            if (posStartSec > time + window) continue;
 
             Track* track = tm->getTrack(pos.trackID);
-            auto& dispatched = track->dispatched;
+            auto& dispatched = pos.dispatched;
             switch (element->type) {
                 case ElementType::region:
                     {
-                        if (!project->isPlaying.load()) {
-                            for (auto& note : dispatched) {
-                                Event event {
-                                    noteEventType::noteOff,
-                                    note->num,
-                                    note->id,
-                                    0,
-                                    note->channel
-                                };
-                                track->addEvent(event);
-                            }
-
-                            dispatched.clear();
-                            break;
-                        }
                         auto* region = static_cast<Region*>(element);
                         const float trim = Note::secondsFromVector(pos.startOffsetPairs);
                         for (auto& note : region->notes) {
-                            float start = note->startSeconds() + regTimeSec - trim;
-                            float end = note->endSeconds() + regTimeSec - trim;
+                            float start = note->startSeconds() + posStartSec - trim;
+                            if (start > posEndSec) continue;
+                            float end = note->endSeconds() + posStartSec - trim;
 
                             if (std::find(dispatched.begin(), dispatched.end(), note) == dispatched.end() && start < time+window+epsilon && start+epsilon >= time) {
 
@@ -96,6 +98,20 @@ void ElementManager::process(int bufferSize) {
                                 track->addEvent(event);
 
                                 dispatched.push_back(note);
+                                track->dispatched.push_back(note);
+                            } else if (std::find(dispatched.begin(), dispatched.end(), note) != dispatched.end() && end < time) {
+                                // Note-off dispatch was missed — send now at offset 0.
+                                Event event {
+                                    noteEventType::noteOff,
+                                    note->num,
+                                    note->id,
+                                    0,
+                                    note->channel
+                                };
+                                track->addEvent(event);
+                                dispatched.erase(std::remove(dispatched.begin(), dispatched.end(), note), dispatched.end());
+                                track->dispatched.erase(std::remove(track->dispatched.begin(), track->dispatched.end(), note),
+                                                       track->dispatched.end());
                             } else if (std::find(dispatched.begin(), dispatched.end(), note) != dispatched.end() && end < time+window+epsilon && end+epsilon >= time) {
 
                                 int offset = static_cast<int>(AudioManager::instance()->sampleRate * (end - time));
@@ -112,7 +128,22 @@ void ElementManager::process(int bufferSize) {
                                 track->addEvent(event);
 
                                 dispatched.erase(std::remove(dispatched.begin(), dispatched.end(), note), dispatched.end());
+                                track->dispatched.erase(std::remove(track->dispatched.begin(), track->dispatched.end(), note),
+                                                       track->dispatched.end());
                             }
+                        }
+                        // Flush notes still active when the position ends.
+                        if (posEndSec < time + window) {
+                            for (auto& note : dispatched) {
+                                int off = posEndSec < time ? 0
+                                    : static_cast<int>(AudioManager::instance()->sampleRate * (posEndSec - time));
+                                Event event{noteEventType::noteOff, note->num, note->id, off, note->channel};
+                                track->addEvent(event);
+                                track->dispatched.erase(
+                                    std::remove(track->dispatched.begin(), track->dispatched.end(), note),
+                                    track->dispatched.end());
+                            }
+                            dispatched.clear();
                         }
                     }
                     break;
@@ -123,7 +154,7 @@ void ElementManager::process(int bufferSize) {
                         AudioClip* ac = static_cast<AudioClip*>(element);
                         if (!ac->buffer) break;
 
-                        const double localSec = time - static_cast<double>(Note::secondsFromVector(pos.rhythmVector));
+                        const double localSec = time - static_cast<double>(posStartSec);
                         const double fileSec = localSec + static_cast<double>(Note::secondsFromVector(pos.startOffsetPairs));
                         const double sr = AudioManager::instance()->sampleRate;
                         int readIdx = static_cast<int>(fileSec * sr);
@@ -134,8 +165,11 @@ void ElementManager::process(int bufferSize) {
                             float* wbuf = *(track->buffer) + static_cast<size_t>(ch) * static_cast<size_t>(stride);
                             int ri = readIdx;
                             for (size_t i = 0; i < bufferSize; ++i) {
-                                if (ri >= 0 && ri < static_cast<int>(ac->num_samples))
-                                    wbuf[i] += rbuf[ri];
+                                double sec = time + static_cast<double>(i) / sr;
+                                if (sec >= posStartSec && sec <= posEndSec) {
+                                    if (ri >= 0 && ri < static_cast<int>(ac->num_samples))
+                                        wbuf[i] += rbuf[ri];
+                                }
                                 ri++;
                             }
                         }
@@ -147,14 +181,12 @@ void ElementManager::process(int bufferSize) {
                         if (!(*track->buffer)) break;
                         AutomationCurve* ac = static_cast<AutomationCurve*>(element);
                         if (ac->points.empty()) break;
-                        float posStart = Note::secondsFromVector(pos.rhythmVector);
-                        float posEnd = Note::secondsFromVector(pos.rhythmEndVector);
                         float offSec = Note::secondsFromVector(pos.startOffsetPairs);
                         float* wbuf = *(track->buffer);
                         for (size_t i = 0; i < bufferSize; ++i) {
                             float sec = static_cast<float>(time) + static_cast<float>(i) / AudioManager::instance()->sampleRate;
-                            if (sec < posStart - offSec || sec > posEnd + 0.001f) { wbuf[i] += 0.f; continue; }
-                            float v = ac->evaluateAtSec(sec, posStart - offSec, posEnd);
+                            if (sec < posStartSec || sec > posEndSec + 0.001f) { wbuf[i] += 0.f; continue; }
+                            float v = ac->evaluateAtSec(sec, posStartSec - offSec, posEndSec);
                             wbuf[i] += v * 2.f - 1.f;  // 0..1 → -1..1
                         }
                     }

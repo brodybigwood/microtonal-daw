@@ -18,9 +18,9 @@ float Modulator::operator[](size_t i) {
     if (!source) return 0.0f;
     float d = depth[i];
     if (centered) {
-        return d * (2.0f * source[i] - 1.0f);
+        return d * source[i];
     }
-    return d * source[i];
+    return d * (source[i] + 1.0f);
 }
 
 Parameter::Parameter(float value, std::pair<std::vector<float>, std::vector<float>> bound) :
@@ -30,14 +30,11 @@ Parameter::Parameter(float value, std::pair<std::vector<float>, std::vector<floa
     vy(std::move(bound.second)) {}
 
 float Parameter::operator[](size_t i) {
-    float v = value;
-    for (auto& m : modulators) v += (*m)[i];
-    return clampOutput ? std::clamp(v, 0.0f, 1.0f) : v;
-}
-
-void Parameter::addModulator(Modulator* m) {
-    if (!m) return;
-    modulators.push_back(m);
+    if (mappedConnection && mappedConnection->is_connected && mappedConnection->buffer) {
+        float v = mappedConnection->buffer[i] * 0.5f + 0.5f;
+        return clampOutput ? std::clamp(v, 0.0f, 1.0f) : v;
+    }
+    return clampOutput ? std::clamp(value, 0.0f, 1.0f) : value;
 }
 
 void Parameter::clearTextures() {
@@ -49,10 +46,6 @@ void Parameter::clearTextures() {
 }
 
 Parameter::~Parameter() {
-    for (auto* m : modulators) {
-        delete m;
-    }
-    modulators.clear();
     clearTextures();
 }
 
@@ -160,7 +153,6 @@ DropdownParameter::DropdownParameter(float value, float x, float y, float w, flo
 
 float DropdownParameter::operator[](size_t i) {
     float v = value;
-    for (auto& m : modulators) v += (*m)[i];
     v = std::clamp(v, 0.0f, 1.0f);
     int n = static_cast<int>(choices.size());
     if (n > 1) {
