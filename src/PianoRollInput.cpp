@@ -71,7 +71,7 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     rhythmIntervalStartNote = std::dynamic_pointer_cast<Note>(hoveredElement);
                     refreshHoveredRhythmLineIndex();
                     if (rhythmIntervalStartNote)
-                        rhythmIntervalStartSec = Note::secondsFromVector(rhythmIntervalStartNote->rhythmVector);
+                        rhythmIntervalStartSec = Note::beatsFromVector(rhythmIntervalStartNote->rhythmVector);
                     else if (hoveredRhythmLineIndex != SIZE_MAX && hoveredRhythmLineIndex < rhythmLines.size())
                         rhythmIntervalStartSec = rhythmLines[hoveredRhythmLineIndex].seconds;
                     else
@@ -261,9 +261,13 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     else if(isShiftPressed && hoveredElement != nullptr) {
                         auto ctxMenu = ContextMenu::get();
                         ctxMenu->skipNextEvent = true;
-                        if (project && project->window)
-                            SDL_StartTextInput(project->window);
-                        ctxMenu->activate();
+                        SDL_Window* inputWin = this->window ? this->window : project->window;
+                        if (inputWin) {
+                            SDL_StartTextInput(inputWin);
+                            ctxMenu->activate(renderer, SDL_GetWindowID(inputWin));
+                        } else {
+                            ctxMenu->activate();
+                        }
 
                         ctxMenu->dynamicTick = getTextInputTicker([this](std::string text) {
                             try {
@@ -429,7 +433,7 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                             movingNote->rhythmVector = rhythmLines[rli].integerPairs;
                             const auto delta = subVec(rhythmLines[rli].integerPairs, rhythmDragStartPairs);
                             auto newEndPairs = addVec(rhythmDragEndPairs, delta);
-                            const size_t erli = closestRhythmLineIndexForSeconds(Note::secondsFromVector(newEndPairs));
+                            const size_t erli = closestRhythmLineIndexForSeconds(Note::beatsFromVector(newEndPairs));
                             if (erli != SIZE_MAX && erli < rhythmLines.size())
                                 movingNote->rhythmEndVector = rhythmLines[erli].integerPairs;
                             else
@@ -487,9 +491,13 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     const auto capEndPairs = rhythmDialogFrozenEndPairs;
                     auto ctxMenu = ContextMenu::get();
                     ctxMenu->skipNextEvent = true;
-                    if (project && project->window)
-                        SDL_StartTextInput(project->window);
-                    ctxMenu->activate();
+                    SDL_Window* inputWin = this->window ? this->window : project->window;
+                    if (inputWin) {
+                        SDL_StartTextInput(inputWin);
+                        ctxMenu->activate(renderer, SDL_GetWindowID(inputWin));
+                    } else {
+                        ctxMenu->activate();
+                    }
                     ctxMenu->dynamicTick = getTextInputTicker(
                         [this, a, b, capStartPairs, capEndPairs](std::string text) {
                         try {
@@ -511,7 +519,7 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                                 scaledDiff.push_back(ratMulInt(p, den));
                             auto otherPairs = addVec(capStartPairs, scaledDiff);
                             const float fixedSec = a;
-                            const float otherSec = Note::secondsFromVector(otherPairs);
+                            const float otherSec = Note::beatsFromVector(otherPairs);
                             const auto& lowerPairs = (fixedSec <= otherSec) ? capStartPairs : otherPairs;
                             const auto& upperPairs = (fixedSec <= otherSec) ? otherPairs : capStartPairs;
                             int steps = num;
@@ -576,9 +584,13 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     }
                     auto ctxMenu = ContextMenu::get();
                     ctxMenu->skipNextEvent = true;
-                    if (project && project->window)
-                        SDL_StartTextInput(project->window);
-                    ctxMenu->activate();
+                    SDL_Window* inputWin = this->window ? this->window : project->window;
+                    if (inputWin) {
+                        SDL_StartTextInput(inputWin);
+                        ctxMenu->activate(renderer, SDL_GetWindowID(inputWin));
+                    } else {
+                        ctxMenu->activate();
+                    }
                     const float a = intervalDialogFrozenStartLine;
                     const float b = intervalDialogFrozenEndLine;
                     const std::shared_ptr<Note> capIntervalStartNote = intervalStartNote;
@@ -686,7 +698,7 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                 auto endNote = std::dynamic_pointer_cast<Note>(hoveredElement);
                 refreshHoveredRhythmLineIndex();
                 if (endNote) {
-                    rhythmIntervalEndSec = Note::secondsFromVector(endNote->rhythmVector);
+                    rhythmIntervalEndSec = Note::beatsFromVector(endNote->rhythmVector);
                     rhythmDragEndVertexPairs = endNote->rhythmVector;
                     if (!intervalStartNote || endNote->id != intervalStartNote->id)
                         rhythmIntervalDragMoved = true;

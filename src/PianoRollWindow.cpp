@@ -21,7 +21,8 @@ void PianoRollWindow::onCreated() {
     lastW_ = w;
     lastH_ = h;
 
-    // Sync PianoRoll's EmbeddedWindow dimensions to the SDL window size.
+    // Sync PianoRoll's EmbeddedWindow to this SDL window.
+    pianoRoll_->window = window;
     pianoRoll_->EmbeddedWindow::w = static_cast<float>(w);
     pianoRoll_->EmbeddedWindow::h = static_cast<float>(h);
     pianoRoll_->EmbeddedWindow::x = 0.f;
