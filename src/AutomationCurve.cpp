@@ -89,20 +89,20 @@ static float evalCurveSegment(const CurvePoint& a, const CurvePoint& b, float lo
 }
 
 static float evalAtRelSec(const std::vector<CurvePoint>& points, float relSec) {
-    if (relSec <= Note::secondsFromVector(points.front().timeVec)) return points.front().v;
-    if (relSec >= Note::secondsFromVector(points.back().timeVec))  return points.back().v;
+    if (relSec <= Note::beatsFromVector(points.front().timeVec)) return points.front().v;
+    if (relSec >= Note::beatsFromVector(points.back().timeVec))  return points.back().v;
     size_t lo = 0, hi = points.size() - 1;
     while (lo + 1 < hi) {
         size_t mid = (lo + hi) / 2;
-        if (Note::secondsFromVector(points[mid].timeVec) <= relSec)
+        if (Note::beatsFromVector(points[mid].timeVec) <= relSec)
             lo = mid;
         else
             hi = mid;
     }
     const auto& a = points[lo];
     const auto& b = points[lo + 1];
-    float aRel = Note::secondsFromVector(a.timeVec);
-    float bRel = Note::secondsFromVector(b.timeVec);
+    float aRel = Note::beatsFromVector(a.timeVec);
+    float bRel = Note::beatsFromVector(b.timeVec);
     float dt = bRel - aRel;
     if (dt <= 0.f) return a.v;
     return evalCurveSegment(a, b, (relSec - aRel) / dt);
@@ -110,8 +110,8 @@ static float evalAtRelSec(const std::vector<CurvePoint>& points, float relSec) {
 
 float AutomationCurve::evaluate(float t) const {
     if (points.empty()) return 0.f;
-    float first = Note::secondsFromVector(points.front().timeVec);
-    float last  = Note::secondsFromVector(points.back().timeVec);
+    float first = Note::beatsFromVector(points.front().timeVec);
+    float last  = Note::beatsFromVector(points.back().timeVec);
     return evalAtRelSec(points, first + t * (last - first));
 }
 
@@ -122,9 +122,9 @@ float AutomationCurve::evaluateAtSec(float sec, float startSec, float) const {
 
 void AutomationCurve::addPoint(const std::vector<std::pair<int,int>>& timeVec, float v, CurveShape::Type shapeType) {
     CurvePoint pt{timeVec, v, {shapeType, 0.f}};
-    float ptSec = Note::secondsFromVector(timeVec);
+    float ptSec = Note::beatsFromVector(timeVec);
     auto it = std::lower_bound(points.begin(), points.end(), ptSec,
-        [](const CurvePoint& a, float s) { return Note::secondsFromVector(a.timeVec) < s; });
+        [](const CurvePoint& a, float s) { return Note::beatsFromVector(a.timeVec) < s; });
     points.insert(it, std::move(pt));
 }
 

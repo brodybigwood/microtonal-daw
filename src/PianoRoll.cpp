@@ -117,8 +117,8 @@ float PianoRoll::adjustTransportSeekSec(float rawSec) {
     float bestDist = FLT_MAX;
     float bestOffset = 0.f;
     for (auto* pos : region->positions) {
-        float posStart = Note::secondsFromVector(pos->rhythmVector);
-        float off = Note::secondsFromVector(pos->startOffsetPairs);
+        float posStart = Note::beatsFromVector(pos->rhythmVector);
+        float off = Note::beatsFromVector(pos->startOffsetPairs);
         float phX = static_cast<float>(curEff - static_cast<double>(posStart) + static_cast<double>(off)) * dW + leftMargin - scrollX;
         float dist = std::abs(mouseX - phX);
         if (dist < bestDist) {
@@ -228,12 +228,25 @@ void PianoRoll::RenderDestinations(SDL_Renderer* renderer) {
 
     SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
 
-    if (lineLabelTextures.size() != pitchLines.size()) {
-        for (auto* t : lineLabelTextures) SDL_DestroyTexture(t);
-        lineLabelTextures.clear();
-        lineLabelTextures.reserve(pitchLines.size());
+    bool labelsChanged = lineLabelTextures.size() != pitchLines.size();
+    if (!labelsChanged) {
         for (size_t i = 0; i < pitchLines.size(); ++i) {
             const std::string& label = (i < lineLabels.size()) ? lineLabels[i] : std::to_string(pitchLines[i].midi);
+            if (i >= cachedLineLabels.size() || cachedLineLabels[i] != label) {
+                labelsChanged = true;
+                break;
+            }
+        }
+    }
+    if (labelsChanged) {
+        for (auto* t : lineLabelTextures) SDL_DestroyTexture(t);
+        lineLabelTextures.clear();
+        cachedLineLabels.clear();
+        lineLabelTextures.reserve(pitchLines.size());
+        cachedLineLabels.reserve(pitchLines.size());
+        for (size_t i = 0; i < pitchLines.size(); ++i) {
+            const std::string& label = (i < lineLabels.size()) ? lineLabels[i] : std::to_string(pitchLines[i].midi);
+            cachedLineLabels.push_back(label);
             SDL_Surface* surf = TTF_RenderText_Solid(fonts.mainFont, label.c_str(), label.size(), textColor);
             lineLabelTextures.push_back(SDL_CreateTextureFromSurface(renderer, surf));
             SDL_DestroySurface(surf);
@@ -330,8 +343,8 @@ bool PianoRoll::customTick(SDL_Renderer* renderer) {
     transport->render(renderer);
 
     for(auto pos : region->positions) {
-        float posStart = Note::secondsFromVector(pos->rhythmVector);
-        float off = Note::secondsFromVector(pos->startOffsetPairs);
+        float posStart = Note::beatsFromVector(pos->rhythmVector);
+        float off = Note::beatsFromVector(pos->startOffsetPairs);
         playHead->render(renderer, dW, scrollX + (posStart - off) * dW);
     }
 
@@ -647,7 +660,7 @@ float PianoRoll::getNotePosX(std::shared_ptr<Note> note) {
         const size_t rli = *movingNoteRhythmPreviewLineIdx;
         if (rli < rhythmLines.size()) {
             const auto startDelta = subVec(rhythmLines[rli].integerPairs, rhythmDragStartPairs);
-            return getX(Note::secondsFromVector(addVec(note->rhythmVector, startDelta)));
+            return getX(Note::beatsFromVector(addVec(note->rhythmVector, startDelta)));
         }
     }
     return getX(note->startSeconds());
@@ -658,7 +671,7 @@ float PianoRoll::getNoteEnd(std::shared_ptr<Note> note) {
         const size_t rli = *movingNoteRhythmPreviewLineIdx;
         if (rli < rhythmLines.size()) {
             const auto startDelta = subVec(rhythmLines[rli].integerPairs, rhythmDragStartPairs);
-            return getX(Note::secondsFromVector(addVec(note->rhythmEndVector, startDelta)));
+            return getX(Note::beatsFromVector(addVec(note->rhythmEndVector, startDelta)));
         }
     }
     return getX(note->endSeconds());

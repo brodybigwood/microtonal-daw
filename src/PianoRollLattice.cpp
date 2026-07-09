@@ -111,8 +111,6 @@ void PianoRoll::updateLines() {
     pitchLines.clear();
     lineLabels.clear();
     lineStructural.clear();
-    for (auto* t : lineLabelTextures) SDL_DestroyTexture(t);
-    lineLabelTextures.clear();
 
     if (tuningMode == TuningMode::Harmonic) {
         const auto& anchorVec = region->tuningHarmonicAnchorVector;

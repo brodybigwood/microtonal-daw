@@ -399,8 +399,8 @@ void SongRoll::movePosition() {
             break;
         }
         case PositionDragKind::ResizeRight: {
-            float startSec = Note::secondsFromVector(lastPosition.rhythmVector);
-            float newEndSec = Note::secondsFromVector(lastPosition.rhythmEndVector) + deltaSec;
+            float startSec = Note::beatsFromVector(lastPosition.rhythmVector);
+            float newEndSec = Note::beatsFromVector(lastPosition.rhythmEndVector) + deltaSec;
             const float minLenSec = 1.0f / static_cast<float>(std::max(1, parentNode ? parentNode->rhythmEdoSubdivisionSteps : 1));
             if (newEndSec - startSec < minLenSec)
                 newEndSec = startSec + minLenSec;
@@ -417,7 +417,7 @@ void SongRoll::movePosition() {
         }
         case PositionDragKind::Move:
         default: {
-            float startSec = Note::secondsFromVector(lastPosition.rhythmVector) + deltaSec;
+            float startSec = Note::beatsFromVector(lastPosition.rhythmVector) + deltaSec;
             size_t sli = closestRhythmLineIndexForSeconds(rhythmLines, startSec);
             if (sli != SIZE_MAX && sli < rhythmLines.size()) {
                 auto startDelta = subVec(rhythmLines[sli].integerPairs, lastPosition.rhythmVector);
@@ -522,14 +522,14 @@ void SongRoll::handleCustomInput(SDL_Event& e) {
                         refreshHoveredRhythmLineIndex();
                         if (hoveredRhythmLineIndex != SIZE_MAX && hoveredRhythmLineIndex < rhythmLines.size()) {
                             auto newVec = addVec(subVec(rhythmLines[hoveredRhythmLineIndex].integerPairs, *ce->startVec()), *ce->offsetVec());
-                            float newSec = Note::secondsFromVector(newVec);
+                            float newSec = Note::beatsFromVector(newVec);
                             // Don't cross adjacent points
                             if (draggingCurvePointIdx > 0) {
-                                float prevSec = Note::secondsFromVector(ac->points[draggingCurvePointIdx - 1].timeVec);
+                                float prevSec = Note::beatsFromVector(ac->points[draggingCurvePointIdx - 1].timeVec);
                                 if (newSec <= prevSec) newVec = ac->points[draggingCurvePointIdx - 1].timeVec;
                             }
                             if (draggingCurvePointIdx < static_cast<int>(ac->points.size()) - 1) {
-                                float nextSec = Note::secondsFromVector(ac->points[draggingCurvePointIdx + 1].timeVec);
+                                float nextSec = Note::beatsFromVector(ac->points[draggingCurvePointIdx + 1].timeVec);
                                 if (newSec >= nextSec) newVec = ac->points[draggingCurvePointIdx + 1].timeVec;
                             }
                             pt.timeVec = newVec;
@@ -549,8 +549,8 @@ void SongRoll::handleCustomInput(SDL_Event& e) {
                                               positionDragKind == PositionDragKind::ResizeRight);
                 bool overResize = resizing;
                 if (!overResize && hoveredPosition) {
-                    const float xL = getX(Note::secondsFromVector(hoveredPosition->rhythmVector));
-                    const float xR = getX(Note::secondsFromVector(hoveredPosition->rhythmEndVector));
+                    const float xL = getX(Note::beatsFromVector(hoveredPosition->rhythmVector));
+                    const float xR = getX(Note::beatsFromVector(hoveredPosition->rhythmEndVector));
                     const float yT = getY(tracks->getIndex(hoveredPosition->trackID));
                     if (mouseY >= yT && mouseY <= yT + kDragBarH) {
                         if (mouseX <= xL + kDragBarResizeW || mouseX >= xR - kDragBarResizeW)
@@ -610,9 +610,9 @@ void SongRoll::renderElement(SDL_Renderer* renderer, GridElement* element) {
             SDL_SetRenderDrawColor(renderer, 20,20,100,127);
         }
 
-        const float startSec = Note::secondsFromVector(pos.rhythmVector);
-        const float endSec = Note::secondsFromVector(pos.rhythmEndVector);
-        float offSec = Note::secondsFromVector(pos.startOffsetPairs);
+        const float startSec = Note::beatsFromVector(pos.rhythmVector);
+        const float endSec = Note::beatsFromVector(pos.rhythmEndVector);
+        float offSec = Note::beatsFromVector(pos.startOffsetPairs);
         uint16_t index = tracks->getIndex(pos.trackID);
         float topLeftCornerY = getY(index);
         float fullW = (endSec - startSec) * dW;
@@ -686,8 +686,8 @@ void SongRoll::getHoveredPosition() {
         for(auto position :e->positions) {
             auto& pos = *position;
             uint16_t index = tracks->getIndex(pos.trackID);
-            const float startSec = Note::secondsFromVector(pos.rhythmVector);
-            const float endSec = Note::secondsFromVector(pos.rhythmEndVector);
+            const float startSec = Note::beatsFromVector(pos.rhythmVector);
+            const float endSec = Note::beatsFromVector(pos.rhythmEndVector);
             if(
                 mouseX < rightRect.x &&
                 mouseX > getX(startSec) &&
@@ -818,8 +818,8 @@ void SongRoll::clickMouse(SDL_Event& e) {
                         for (auto* e : em->elements) {
                             if (e->type != ElementType::automationCurve) continue;
                             for (auto* p : e->positions) {
-                                float xL = getX(Note::secondsFromVector(p->rhythmVector));
-                                float xR = getX(Note::secondsFromVector(p->rhythmEndVector));
+                                float xL = getX(Note::beatsFromVector(p->rhythmVector));
+                                float xR = getX(Note::beatsFromVector(p->rhythmEndVector));
                                 float yT = getY(tracks->getIndex(p->trackID)) + kDragBarH;
                                 float yB = yT + divHeight - kDragBarH;
                                 if (mouseX >= xL - CurveEditor::kHandleRadius * 3 &&
@@ -888,8 +888,8 @@ void SongRoll::clickMouse(SDL_Event& e) {
                 timelineDragElementId = -1;
                 timelineDragPositionId = -1;
                 if (movingPosition) {
-                    const float xL = getX(Note::secondsFromVector(movingPosition->rhythmVector));
-                    const float xR = getX(Note::secondsFromVector(movingPosition->rhythmEndVector));
+                    const float xL = getX(Note::beatsFromVector(movingPosition->rhythmVector));
+                    const float xR = getX(Note::beatsFromVector(movingPosition->rhythmEndVector));
                     const float yT = getY(tracks->getIndex(movingPosition->trackID));
                     const float barY = yT;
                     const float barH = kDragBarH;
@@ -1070,7 +1070,7 @@ void SongRoll::clickMouse(SDL_Event& e) {
                                     scaledDiff.push_back(ratMulInt(p, den));
                                 auto otherPairs = addVec(capStartPairs, scaledDiff);
                                 const float fixedSec = a;
-                                const float otherSec = Note::secondsFromVector(otherPairs);
+                                const float otherSec = Note::beatsFromVector(otherPairs);
                                 const auto& lowerPairs = (fixedSec <= otherSec) ? capStartPairs : otherPairs;
                                 const auto& upperPairs = (fixedSec <= otherSec) ? otherPairs : capStartPairs;
                                 int steps = num;

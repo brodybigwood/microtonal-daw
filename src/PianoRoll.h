@@ -139,7 +139,8 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         void handleMouse();
         std::vector<std::string> lineLabels;
         std::vector<int> lineStructural;
-        std::vector<SDL_Texture*> lineLabelTextures; // cached once in updateLines()
+        std::vector<SDL_Texture*> lineLabelTextures;
+        std::vector<std::string> cachedLineLabels;   // compared to detect label changes
 
         float getNotePosX(std::shared_ptr<Note>);
         float getNoteEnd(std::shared_ptr<Note>);

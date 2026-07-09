@@ -33,7 +33,7 @@ float Note::midiFromPitchVector(const std::vector<std::pair<int, int>>& pairs) {
     return 69.0f + static_cast<float>(12.0 * std::log2(prod));
 }
 
-float Note::secondsFromVector(const std::vector<std::pair<int, int>>& pairs) {
+float Note::beatsFromVector(const std::vector<std::pair<int, int>>& pairs) {
     double prod = 1.0;
     std::vector<int> primes;
     primesForSlots(static_cast<int>(pairs.size()), primes);
@@ -60,11 +60,11 @@ Note::~Note() {
 }
 
 float Note::startSeconds() const {
-    return secondsFromVector(rhythmVector);
+    return beatsFromVector(rhythmVector);
 }
 
 float Note::endSeconds() const {
-    return secondsFromVector(rhythmEndVector);
+    return beatsFromVector(rhythmEndVector);
 }
 
 float Note::durationSeconds() const {

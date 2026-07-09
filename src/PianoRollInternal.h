@@ -321,8 +321,8 @@ inline void generateRhythmLines(std::vector<RhythmGridLine>& outLines,
     outLabels.clear();
     if (steps <= 0) return;
 
-    const float lowerSec = Note::secondsFromVector(lower);
-    const float upperSec = Note::secondsFromVector(upper);
+    const float lowerSec = Note::beatsFromVector(lower);
+    const float upperSec = Note::beatsFromVector(upper);
     const float stepSec = (upperSec - lowerSec) / static_cast<float>(steps);
     if (stepSec == 0.f) {
         if (lowerSec >= minSec && lowerSec <= maxSec) {
@@ -340,7 +340,7 @@ inline void generateRhythmLines(std::vector<RhythmGridLine>& outLines,
 
     for (int k = kFirst; k <= kLast; ++k) {
         auto pairs = edoVectorForK(k, steps, lower, upper);
-        const float s = Note::secondsFromVector(pairs);
+        const float s = Note::beatsFromVector(pairs);
         outLines.emplace_back(s);
         outLines.back().integerPairs = std::move(pairs);
         outLines.back().isBeat = (k % steps == 0);

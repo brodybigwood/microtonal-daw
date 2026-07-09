@@ -67,8 +67,8 @@ void ElementManager::process(int bufferSize) {
     for (auto* element : elements)
         for (auto position : element->positions) {
             auto& pos = *position;
-            const float posStartSec = Note::secondsFromVector(pos.rhythmVector);
-            const float posEndSec = Note::secondsFromVector(pos.rhythmEndVector);
+            const float posStartSec = Note::beatsFromVector(pos.rhythmVector);
+            const float posEndSec = Note::beatsFromVector(pos.rhythmEndVector);
             if (posStartSec > time + window) continue;
 
             Track* track = tm->getTrack(pos.trackID);
@@ -77,7 +77,7 @@ void ElementManager::process(int bufferSize) {
                 case ElementType::region:
                     {
                         auto* region = static_cast<Region*>(element);
-                        const float trim = Note::secondsFromVector(pos.startOffsetPairs);
+                        const float trim = Note::beatsFromVector(pos.startOffsetPairs);
                         for (auto& note : region->notes) {
                             float start = note->startSeconds() + posStartSec - trim;
                             if (start > posEndSec) continue;
@@ -155,7 +155,7 @@ void ElementManager::process(int bufferSize) {
                         if (!ac->buffer) break;
 
                         const double localSec = time - static_cast<double>(posStartSec);
-                        const double fileSec = localSec + static_cast<double>(Note::secondsFromVector(pos.startOffsetPairs));
+                        const double fileSec = localSec + static_cast<double>(Note::beatsFromVector(pos.startOffsetPairs));
                         const double sr = AudioManager::instance()->sampleRate;
                         int readIdx = static_cast<int>(fileSec * sr);
                         int chans = std::min({ac->numChannels, track->connection->numChannels, track->connection->allocChannels});
@@ -181,7 +181,7 @@ void ElementManager::process(int bufferSize) {
                         if (!(*track->buffer)) break;
                         AutomationCurve* ac = static_cast<AutomationCurve*>(element);
                         if (ac->points.empty()) break;
-                        float offSec = Note::secondsFromVector(pos.startOffsetPairs);
+                        float offSec = Note::beatsFromVector(pos.startOffsetPairs);
                         float* wbuf = *(track->buffer);
                         for (size_t i = 0; i < bufferSize; ++i) {
                             float sec = static_cast<float>(time) + static_cast<float>(i) / AudioManager::instance()->sampleRate;

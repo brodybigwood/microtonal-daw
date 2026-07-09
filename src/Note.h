@@ -35,7 +35,7 @@ class Note {
 
         /** Same mapping as syncNumFromPitchVector → num (69 + 12·log₂ prime product). */
         static float midiFromPitchVector(const std::vector<std::pair<int, int>>& pairs);
-        static float secondsFromVector(const std::vector<std::pair<int, int>>& pairs);
+        static float beatsFromVector(const std::vector<std::pair<int, int>>& pairs);
         void syncNumFromPitchVector();
 
         float startSeconds() const;

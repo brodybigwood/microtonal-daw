@@ -33,20 +33,20 @@ CurveEditor::CurveEditor(
 }
 
 float CurveEditor::startSec() const {
-    return Note::secondsFromVector(*startVec_);
+    return Note::beatsFromVector(*startVec_);
 }
 
 float CurveEditor::endSec() const {
-    return Note::secondsFromVector(*endVec_);
+    return Note::beatsFromVector(*endVec_);
 }
 
 float CurveEditor::contentOriginSec() const {
-    float off = offsetVec_ ? Note::secondsFromVector(*offsetVec_) : 0.f;
+    float off = offsetVec_ ? Note::beatsFromVector(*offsetVec_) : 0.f;
     return startSec() - off;
 }
 
 float CurveEditor::tx(const std::vector<std::pair<int,int>>& relVec) const {
-    return gridView_->getX(contentOriginSec() + Note::secondsFromVector(relVec));
+    return gridView_->getX(contentOriginSec() + Note::beatsFromVector(relVec));
 }
 
 void CurveEditor::updateArea(float y, float h) {
@@ -132,7 +132,7 @@ int CurveEditor::hitTestPoint(float mx, float my) {
 void CurveEditor::tensionHandlePos(size_t seg, float& outX, float& outY) {
     const auto& a = curve_->points[seg];
     const auto& b = curve_->points[seg + 1];
-    float midSec = (Note::secondsFromVector(a.timeVec) + Note::secondsFromVector(b.timeVec)) * 0.5f;
+    float midSec = (Note::beatsFromVector(a.timeVec) + Note::beatsFromVector(b.timeVec)) * 0.5f;
     float absSec = contentOriginSec() + midSec;
     outX = gridView_->getX(absSec);
     outY = ty(curve_->evaluateAtSec(absSec, contentOriginSec(), endSec()));
