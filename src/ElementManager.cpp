@@ -1,6 +1,7 @@
 #include "ElementManager.h"
 #include "Region.h"
 #include "AutomationCurve.h"
+#include <algorithm>
 #include "UndoManager.h"
 #include <SDL3/SDL_events.h>
 #include <string>
@@ -83,50 +84,28 @@ void ElementManager::process(int bufferSize) {
                             if (start > posEndSec) continue;
                             float end = note->endSeconds() + posStartSec - trim;
 
-                            if (std::find(dispatched.begin(), dispatched.end(), note) == dispatched.end() && start < time+window+epsilon && start+epsilon >= time) {
+                            const bool wasDispatched = std::find(dispatched.begin(), dispatched.end(), note) != dispatched.end();
 
+                            if (!wasDispatched && start < time+window+epsilon && start+epsilon >= time) {
                                 int offset = static_cast<int>(AudioManager::instance()->sampleRate * (start - time));
- 
-                                Event event {
-                                    noteEventType::noteOn,
-                                    note->num,
-                                    note->id,
-                                    offset,
-                                    note->channel
-                                };
-            
+                                Event event{noteEventType::noteOn, note->num, note->id, offset, note->channel};
                                 track->addEvent(event);
-
                                 dispatched.push_back(note);
                                 track->dispatched.push_back(note);
-                            } else if (std::find(dispatched.begin(), dispatched.end(), note) != dispatched.end() && end < time) {
+                            }
+
+                            const bool isDispatched = std::find(dispatched.begin(), dispatched.end(), note) != dispatched.end();
+                            if (isDispatched && end < time) {
                                 // Note-off dispatch was missed — send now at offset 0.
-                                Event event {
-                                    noteEventType::noteOff,
-                                    note->num,
-                                    note->id,
-                                    0,
-                                    note->channel
-                                };
+                                Event event{noteEventType::noteOff, note->num, note->id, 0, note->channel};
                                 track->addEvent(event);
                                 dispatched.erase(std::remove(dispatched.begin(), dispatched.end(), note), dispatched.end());
                                 track->dispatched.erase(std::remove(track->dispatched.begin(), track->dispatched.end(), note),
                                                        track->dispatched.end());
-                            } else if (std::find(dispatched.begin(), dispatched.end(), note) != dispatched.end() && end < time+window+epsilon && end+epsilon >= time) {
-
+                            } else if (isDispatched && end < time+window+epsilon && end+epsilon >= time) {
                                 int offset = static_cast<int>(AudioManager::instance()->sampleRate * (end - time));
-
-
-                                Event event {
-                                    noteEventType::noteOff,
-                                    note->num,
-                                    note->id,
-                                    offset,
-                                    note->channel
-                                };
-
+                                Event event{noteEventType::noteOff, note->num, note->id, offset, note->channel};
                                 track->addEvent(event);
-
                                 dispatched.erase(std::remove(dispatched.begin(), dispatched.end(), note), dispatched.end());
                                 track->dispatched.erase(std::remove(track->dispatched.begin(), track->dispatched.end(), note),
                                                        track->dispatched.end());
@@ -195,6 +174,17 @@ void ElementManager::process(int bufferSize) {
                     break;
             }
         }
+
+    // Sort events by sample offset so they're consumed in time order.
+    for (auto& t : tm->tracks) {
+        if (!t->events || !(*t->events)) continue;
+        std::sort((*t->events)->begin(), (*t->events)->end(),
+            [](const Event& a, const Event& b) {
+                if (a.sampleOffset != b.sampleOffset)
+                    return a.sampleOffset < b.sampleOffset;
+                return a.type == noteOff && b.type == noteOn;
+            });
+    }
 }
 
 GridElement* ElementManager::getElement(uint16_t id) {
