@@ -335,8 +335,8 @@ inline void generateRhythmLines(std::vector<RhythmGridLine>& outLines,
         return;
     }
 
-    const int kFirst = static_cast<int>(std::ceil((minSec - lowerSec) / stepSec));
-    const int kLast  = static_cast<int>(std::floor((maxSec - lowerSec) / stepSec));
+    const int kFirst = static_cast<int>(std::ceil((minSec - lowerSec) / stepSec)) - 1;
+    const int kLast  = static_cast<int>(std::floor((maxSec - lowerSec) / stepSec)) + 1;
 
     for (int k = kFirst; k <= kLast; ++k) {
         auto pairs = edoVectorForK(k, steps, lower, upper);

@@ -3,9 +3,12 @@
 #include <SDL3/SDL.h>
 #include <vector>
 #include <utility>
+#include <functional>
+#include <memory>
 
 class AutomationCurve;
 class GridView;
+struct TreeEntry;
 
 class CurveEditor {
 public:
@@ -32,6 +35,16 @@ public:
 
     AutomationCurve* curve() { return curve_; }
     GridView* gridView() { return gridView_; }
+
+    // Returns true and sets outNeighborVec if beat crosses an adjacent point.
+    bool clampBeatToNeighbors(int pointIndex, float beat,
+                               const std::vector<std::pair<int,int>>** outNeighborVec) const;
+
+    // Build right-click context menu for a point (Delete, Shape submenu).
+    // onWillModify called before each change; onDidModify called after.
+    std::shared_ptr<TreeEntry> buildPointMenu(int pointIndex,
+                                               std::function<void()> onWillModify,
+                                               std::function<void()> onDidModify);
 
     float startSec() const;
     float endSec() const;

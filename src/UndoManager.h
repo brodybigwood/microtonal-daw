@@ -59,6 +59,7 @@ enum ActionType {
     ParamNodeAddModRow = 41,
     ParamNodeRemoveModRow = 42,
     ParamNodeToggleCentered = 43,
+    TempoCurveEdit = 44,
 };
 
 
@@ -355,6 +356,13 @@ struct ModifyCurvePointsAction : ProjectAction {
 
     ModifyCurvePointsAction(Project* p, std::vector<int> managerPath, int nodeID, int curveID,
                             json before, json after);
+};
+
+struct TempoCurveEditAction : ProjectAction {
+    json before = json::array();
+    json after = json::array();
+
+    TempoCurveEditAction(Project* p, json before, json after);
 };
 
 struct CreateAudioClipAction : ProjectAction {

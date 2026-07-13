@@ -53,6 +53,7 @@ const std::unordered_map<std::string, ActionType>& UndoManager::actionRegistry()
         {"paramnode_add_mod_row", ParamNodeAddModRow},
         {"paramnode_remove_mod_row", ParamNodeRemoveModRow},
         {"paramnode_toggle_centered", ParamNodeToggleCentered},
+        {"tempo_curve_edit", TempoCurveEdit},
     };
     return reg;
 }
@@ -80,7 +81,7 @@ std::string UndoManager::actionSchema(const std::string& actionName) {
         return R"({"managerPath":[int,...],"nodeID":int,"trackType":int})";
     }
     if (actionName == "create_note") {
-        return R"({"managerPath":[int,...],"nodeID":int,"regionID":int,"start":fract_json,"length":fract_json,"pitch":float,"pitchVector":[[int,int],...]})";
+        return R"({"managerPath":[int,...],"nodeID":int,"regionID":int,"start":timeVec_json,"length":timeVec_json,"pitch":float,"pitchVector":[[int,int],...]})";
     }
     if (actionName == "create_region") {
         return R"({"managerPath":[int,...],"nodeID":int})";
@@ -89,7 +90,7 @@ std::string UndoManager::actionSchema(const std::string& actionName) {
         return R"({"managerPath":[int,...],"nodeID":int,"regionID":int})";
     }
     if (actionName == "create_position") {
-        return R"({"managerPath":[int,...],"nodeID":int,"elementID":int,"start":fract_json,"trackID":int})";
+        return R"({"managerPath":[int,...],"nodeID":int,"elementID":int,"start":timeVec_json,"trackID":int})";
     }
     if (actionName == "delete_position") {
         return R"({"managerPath":[int,...],"nodeID":int,"elementID":int,"positionID":int})";

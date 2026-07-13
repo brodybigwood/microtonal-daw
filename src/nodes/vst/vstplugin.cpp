@@ -737,7 +737,9 @@ void VstPlugin::setup(int sampleRate, int bufferSize) {
     processingActive = true;
 }
 
-void VstPlugin::processAudio(int bufferSize, Steinberg::Vst::IEventList* inputEvents) {
+void VstPlugin::processAudio(int bufferSize, Steinberg::Vst::IEventList* inputEvents,
+                              double tempo, double projectTimeMusic, double projectTimeSamples,
+                              bool isPlaying) {
     if (!valid || !audioProcessor || !processingActive || bypassed) return;
 
     // Zero output bus data
@@ -772,9 +774,17 @@ void VstPlugin::processAudio(int bufferSize, Steinberg::Vst::IEventList* inputEv
         processData.inputParameterChanges = &paramChanges_;
 
     Steinberg::Vst::ProcessContext context{};
-    context.state = Steinberg::Vst::ProcessContext::kPlaying
-                  | Steinberg::Vst::ProcessContext::kProjectTimeMusicValid;
+    context.state = Steinberg::Vst::ProcessContext::kProjectTimeMusicValid
+                  | Steinberg::Vst::ProcessContext::kTempoValid
+                  | Steinberg::Vst::ProcessContext::kTimeSigValid;
+    if (isPlaying)
+        context.state |= Steinberg::Vst::ProcessContext::kPlaying;
     context.sampleRate = processSampleRate;
+    context.tempo = tempo;
+    context.projectTimeMusic = projectTimeMusic;
+    context.projectTimeSamples = projectTimeSamples;
+    context.timeSigNumerator = 4;
+    context.timeSigDenominator = 4;
     processData.processContext = &context;
 
     audioProcessor->process(processData);

@@ -3,7 +3,6 @@
 #include <vector>
 #include <climits>
 #include "Note.h"
-#include "fract.h"
 #include <SDL3/SDL.h>
 #include <SDL_ttf.h>
 #include <string>

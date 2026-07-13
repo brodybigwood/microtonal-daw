@@ -10,7 +10,6 @@
 #include "Region.h"
 #include "Note.h"
 #include "PianoRollInternal.h"
-#include "fract.h"
 #include "styles.h"
 #include "Project.h"
 #include <optional>
@@ -130,7 +129,6 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         float getY(float) override;
 
 
-        fract lastLength = fract(1, 1);
         std::vector<std::pair<int, int>> lastRhythmDurationPairs;
 
         SDL_Texture* layers[4];

@@ -27,6 +27,7 @@
 static thread_local NodeManager* tls_activeManager = nullptr;
 
 void NodeProcessor::setThreadActiveRoot(NodeManager* r) { tls_activeManager = r; }
+NodeManager* NodeProcessor::getActiveRoot() { return tls_activeManager; }
 
 NodeManager& requireManager(Project* p, const std::vector<int>& path) {
     if (!p || !p->processor)
@@ -209,7 +210,7 @@ void UndoManager::undo() {
     }
     // Enqueue for audio copy (applied before next DSP callback).
     ProjectAction* cap = current;
-    enqueueAudioSync([cap]() { cap->undoAction(); });
+enqueueAudioSync([cap]() { cap->undoAction(); });
     current->parent->last_index = current->index;
     current = current->parent;
 }

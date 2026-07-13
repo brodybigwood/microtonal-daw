@@ -926,39 +926,11 @@ void SongRoll::clickMouse(SDL_Event& e) {
                     hoveredPosition->element->type == ElementType::automationCurve) {
                     auto* ac = static_cast<AutomationCurve*>(hoveredPosition->element);
                     int ptIdx = hoveredCurvePointIdx;
-                    auto menuRoot = std::make_shared<TreeEntry>("Point " + std::to_string(ptIdx));
-                    auto holdEntry = std::make_shared<TreeEntry>("Hold");
-                    auto singleEntry = std::make_shared<TreeEntry>("Single");
-                    auto doubleEntry = std::make_shared<TreeEntry>("Double");
-                    auto deleteEntry = std::make_shared<TreeEntry>("Delete");
-                    holdEntry->click = [this, ac, ptIdx]() {
-                        auto before = snapshotCurvePoints(ac);
-                        ac->points[ptIdx].shape.type = CurveShape::Hold;
-                        pushCurveUndo(ac, before);
-                        refreshGrid = true;
-                    };
-                    singleEntry->click = [this, ac, ptIdx]() {
-                        auto before = snapshotCurvePoints(ac);
-                        ac->points[ptIdx].shape.type = CurveShape::Single;
-                        pushCurveUndo(ac, before);
-                        refreshGrid = true;
-                    };
-                    doubleEntry->click = [this, ac, ptIdx]() {
-                        auto before = snapshotCurvePoints(ac);
-                        ac->points[ptIdx].shape.type = CurveShape::Double;
-                        pushCurveUndo(ac, before);
-                        refreshGrid = true;
-                    };
-                    deleteEntry->click = [this, ac, ptIdx]() {
-                        auto before = snapshotCurvePoints(ac);
-                        ac->removePoint(static_cast<size_t>(ptIdx));
-                        pushCurveUndo(ac, before);
-                        refreshGrid = true;
-                    };
-                    menuRoot->addChild(holdEntry);
-                    menuRoot->addChild(singleEntry);
-                    menuRoot->addChild(doubleEntry);
-                    menuRoot->addChild(deleteEntry);
+                    auto* ce = getCurveEditor(hoveredPosition);
+                    auto beforeSnapshot = std::make_shared<json>();
+                    auto menuRoot = ce->buildPointMenu(ptIdx,
+                        [this, ac, beforeSnapshot]() { *beforeSnapshot = snapshotCurvePoints(ac); },
+                        [this, ac, beforeSnapshot]() { pushCurveUndo(ac, *beforeSnapshot); refreshGrid = true; });
                     auto ctxMenu = ContextMenu::get();
                     ctxMenu->skipNextEvent = true;
                     ctxMenu->activate();

@@ -2,6 +2,7 @@
 #include "Region.h"
 #include "AutomationCurve.h"
 #include <algorithm>
+#include <cmath>
 #include "UndoManager.h"
 #include <SDL3/SDL_events.h>
 #include <string>
@@ -13,6 +14,7 @@
 #include "Note.h"
 #include "NodeManager.h"
 #include "nodes/arranger/arranger.h"
+#include <unordered_set>
 
 ElementManager::~ElementManager() {
     for (auto e : elements) {
@@ -46,33 +48,97 @@ json ElementManager::toJSON() {
 }
 
 void ElementManager::process(int bufferSize) {
-    float epsilon = 1e-6;
+    float epsilon = 1e-3f;  // ~0.5ms at 120 BPM
 
-    float window = static_cast<float>(AudioManager::instance()->bufferSize) / AudioManager::instance()->sampleRate;
-    float time = static_cast<float>(project->timeSeconds.load());
+    float beatWindow = static_cast<float>(project->deltaBeats);
+    float currentBeat = static_cast<float>(project->activeBeatPosition());
+    float sampleRate = static_cast<float>(AudioManager::instance()->sampleRate);
 
-    if (!project->isPlaying.load()) {
+    auto eraseTrackVoice = [](Track* track, int voiceId) {
+        track->dispatched.erase(
+            std::remove_if(track->dispatched.begin(), track->dispatched.end(),
+                [voiceId](const ActiveNote& active) { return active.voiceId == voiceId; }),
+            track->dispatched.end());
+    };
+    auto emitNoteOff = [](Track* track, const ActiveNote& active, int offset) {
+        if (!track || !active.note) return;
+        track->addEvent(Event{noteEventType::noteOff, active.sourcePitch,
+                              active.voiceId, offset, active.sourceChannel});
+    };
+    auto flushAllActiveNotes = [&]() {
         for (auto& t : tm->tracks) {
-            for (auto& note : t->dispatched) {
-                Event event{noteEventType::noteOff, note->num, note->id, 0, note->channel};
-                t->addEvent(event);
-            }
+            for (const auto& active : t->dispatched)
+                emitNoteOff(t, active, 0);
             t->dispatched.clear();
         }
         for (auto* element : elements)
             for (auto* pos : element->positions)
                 pos->dispatched.clear();
+    };
+
+    // A seek is a discontinuity. Release old voices, then schedule only notes
+    // whose starts occur in the new block (no MIDI note chasing).
+    if (lastTransportGeneration != project->dspTransportGeneration) {
+        flushAllActiveNotes();
+        lastTransportGeneration = project->dspTransportGeneration;
+    }
+
+    if (!project->dspIsPlaying) {
+        flushAllActiveNotes();
         return;
+    }
+
+    // Reconcile DSP edits. An active source note may have been deleted, or its
+    // entire position/region may have disappeared between blocks.
+    std::unordered_set<int> liveVoiceIds;
+    for (auto* element : elements) {
+        if (element->type != ElementType::region) continue;
+        auto* region = static_cast<Region*>(element);
+        for (auto* pos : element->positions) {
+            Track* track = tm->getTrack(pos->trackID);
+            if (!track) continue;
+            auto& activeNotes = pos->dispatched;
+            for (auto it = activeNotes.begin(); it != activeNotes.end();) {
+                bool sourceStillExists = it->note &&
+                    std::find(region->notes.begin(), region->notes.end(), it->note) != region->notes.end();
+                if (sourceStillExists) {
+                    sourceStillExists =
+                        std::fabs(it->sourceStartBeat - it->note->startBeats()) < 1e-6f &&
+                        std::fabs(it->sourceEndBeat - it->note->endBeats()) < 1e-6f &&
+                        std::fabs(it->sourcePitch - it->note->num) < 1e-6f &&
+                        it->sourceChannel == it->note->channel;
+                }
+                if (!sourceStillExists) {
+                    emitNoteOff(track, *it, 0);
+                    eraseTrackVoice(track, it->voiceId);
+                    it = activeNotes.erase(it);
+                } else {
+                    liveVoiceIds.insert(it->voiceId);
+                    ++it;
+                }
+            }
+        }
+    }
+    for (Track* track : tm->tracks) {
+        for (auto it = track->dispatched.begin(); it != track->dispatched.end();) {
+            if (!liveVoiceIds.contains(it->voiceId)) {
+                emitNoteOff(track, *it, 0);
+                it = track->dispatched.erase(it);
+            } else {
+                ++it;
+            }
+        }
     }
 
     for (auto* element : elements)
         for (auto position : element->positions) {
             auto& pos = *position;
-            const float posStartSec = Note::beatsFromVector(pos.rhythmVector);
-            const float posEndSec = Note::beatsFromVector(pos.rhythmEndVector);
-            if (posStartSec > time + window) continue;
+            const float posStartBeat = Note::beatsFromVector(pos.rhythmVector);
+            const float posEndBeat = Note::beatsFromVector(pos.rhythmEndVector);
+            if (posStartBeat > currentBeat + beatWindow + 1e-5f) continue;
 
             Track* track = tm->getTrack(pos.trackID);
+            if (!track) continue;
             auto& dispatched = pos.dispatched;
             switch (element->type) {
                 case ElementType::region:
@@ -80,47 +146,55 @@ void ElementManager::process(int bufferSize) {
                         auto* region = static_cast<Region*>(element);
                         const float trim = Note::beatsFromVector(pos.startOffsetPairs);
                         for (auto& note : region->notes) {
-                            float start = note->startSeconds() + posStartSec - trim;
-                            if (start > posEndSec) continue;
-                            float end = note->endSeconds() + posStartSec - trim;
+                            float start = note->startBeats() + posStartBeat - trim;
+                            if (start > posEndBeat) continue;
+                            float end = note->endBeats() + posStartBeat - trim;
 
-                            const bool wasDispatched = std::find(dispatched.begin(), dispatched.end(), note) != dispatched.end();
+                            auto activeIt = std::find_if(dispatched.begin(), dispatched.end(),
+                                [&note](const ActiveNote& active) { return active.note == note; });
+                            const bool wasDispatched = activeIt != dispatched.end();
 
-                            if (!wasDispatched && start < time+window+epsilon && start+epsilon >= time) {
-                                int offset = static_cast<int>(AudioManager::instance()->sampleRate * (start - time));
-                                Event event{noteEventType::noteOn, note->num, note->id, offset, note->channel};
+                            if (!wasDispatched && start < currentBeat + beatWindow && start + epsilon >= currentBeat) {
+                                float secs = project->activeTempoCurve().secondsForBeats(currentBeat, start);
+                                int offset = std::max(0, std::min(static_cast<int>(secs * sampleRate), bufferSize - 1));
+                                ActiveNote active;
+                                active.note = note;
+                                active.voiceId = project->allocateDspVoiceId();
+                                active.positionId = pos.id;
+                                active.sourceStartBeat = note->startBeats();
+                                active.sourceEndBeat = note->endBeats();
+                                active.sourcePitch = note->num;
+                                active.sourceChannel = note->channel;
+                                Event event{noteEventType::noteOn, note->num, active.voiceId, offset, note->channel};
                                 track->addEvent(event);
-                                dispatched.push_back(note);
-                                track->dispatched.push_back(note);
+                                dispatched.push_back(active);
+                                track->dispatched.push_back(active);
+                                activeIt = std::prev(dispatched.end());
                             }
 
-                            const bool isDispatched = std::find(dispatched.begin(), dispatched.end(), note) != dispatched.end();
-                            if (isDispatched && end < time) {
-                                // Note-off dispatch was missed — send now at offset 0.
-                                Event event{noteEventType::noteOff, note->num, note->id, 0, note->channel};
-                                track->addEvent(event);
-                                dispatched.erase(std::remove(dispatched.begin(), dispatched.end(), note), dispatched.end());
-                                track->dispatched.erase(std::remove(track->dispatched.begin(), track->dispatched.end(), note),
-                                                       track->dispatched.end());
-                            } else if (isDispatched && end < time+window+epsilon && end+epsilon >= time) {
-                                int offset = static_cast<int>(AudioManager::instance()->sampleRate * (end - time));
-                                Event event{noteEventType::noteOff, note->num, note->id, offset, note->channel};
-                                track->addEvent(event);
-                                dispatched.erase(std::remove(dispatched.begin(), dispatched.end(), note), dispatched.end());
-                                track->dispatched.erase(std::remove(track->dispatched.begin(), track->dispatched.end(), note),
-                                                       track->dispatched.end());
+                            activeIt = std::find_if(dispatched.begin(), dispatched.end(),
+                                [&note](const ActiveNote& active) { return active.note == note; });
+                            const bool isDispatched = activeIt != dispatched.end();
+                            if (isDispatched && end < currentBeat) {
+                                emitNoteOff(track, *activeIt, 0);
+                                eraseTrackVoice(track, activeIt->voiceId);
+                                dispatched.erase(activeIt);
+                            } else if (isDispatched && end < currentBeat + beatWindow && end + epsilon >= currentBeat) {
+                                float secs = project->activeTempoCurve().secondsForBeats(currentBeat, end);
+                                int offset = std::max(0, std::min(static_cast<int>(secs * sampleRate), bufferSize - 1));
+                                emitNoteOff(track, *activeIt, offset);
+                                eraseTrackVoice(track, activeIt->voiceId);
+                                dispatched.erase(activeIt);
                             }
                         }
                         // Flush notes still active when the position ends.
-                        if (posEndSec < time + window) {
-                            for (auto& note : dispatched) {
-                                int off = posEndSec < time ? 0
-                                    : static_cast<int>(AudioManager::instance()->sampleRate * (posEndSec - time));
-                                Event event{noteEventType::noteOff, note->num, note->id, off, note->channel};
-                                track->addEvent(event);
-                                track->dispatched.erase(
-                                    std::remove(track->dispatched.begin(), track->dispatched.end(), note),
-                                    track->dispatched.end());
+                        if (posEndBeat < currentBeat + beatWindow) {
+                            for (const auto& active : dispatched) {
+                                int off = posEndBeat < currentBeat ? 0
+                                    : std::min(static_cast<int>(project->activeTempoCurve().secondsForBeats(
+                                        currentBeat, posEndBeat) * sampleRate), bufferSize - 1);
+                                emitNoteOff(track, active, off);
+                                eraseTrackVoice(track, active.voiceId);
                             }
                             dispatched.clear();
                         }
@@ -128,13 +202,20 @@ void ElementManager::process(int bufferSize) {
                     break;
                 case ElementType::audioClip:
                     {
-                        if (!project->isPlaying.load()) break;
+                        if (!project->dspIsPlaying) break;
                         if (!(*track->buffer)) break;
                         AudioClip* ac = static_cast<AudioClip*>(element);
                         if (!ac->buffer) break;
 
-                        const double localSec = time - static_cast<double>(posStartSec);
-                        const double fileSec = localSec + static_cast<double>(Note::beatsFromVector(pos.startOffsetPairs));
+                        // Actual elapsed seconds from beat positions
+                        float posStartSec = project->activeTempoCurve().secondsForBeats(0.f, posStartBeat);
+                        float posEndSec = project->activeTempoCurve().secondsForBeats(0.f, posEndBeat);
+                        float offBeats = Note::beatsFromVector(pos.startOffsetPairs);
+                        float offSec = project->activeTempoCurve().secondsForBeats(
+                            posStartBeat, posStartBeat + offBeats);
+                        double latSec = static_cast<double>(
+                            project->activeTempoCurve().secondsForBeats(0.f, currentBeat) - posStartSec);
+                        const double fileSec = latSec + static_cast<double>(offSec);
                         const double sr = AudioManager::instance()->sampleRate;
                         int readIdx = static_cast<int>(fileSec * sr);
                         int chans = std::min({ac->numChannels, track->connection->numChannels, track->connection->allocChannels});
@@ -144,8 +225,8 @@ void ElementManager::process(int bufferSize) {
                             float* wbuf = *(track->buffer) + static_cast<size_t>(ch) * static_cast<size_t>(stride);
                             int ri = readIdx;
                             for (size_t i = 0; i < bufferSize; ++i) {
-                                double sec = time + static_cast<double>(i) / sr;
-                                if (sec >= posStartSec && sec <= posEndSec) {
+                                float beat = currentBeat + (static_cast<float>(i) / bufferSize) * beatWindow;
+                                if (beat >= posStartBeat && beat <= posEndBeat) {
                                     if (ri >= 0 && ri < static_cast<int>(ac->num_samples))
                                         wbuf[i] += rbuf[ri];
                                 }
@@ -156,16 +237,16 @@ void ElementManager::process(int bufferSize) {
                     break;
                 case ElementType::automationCurve:
                     {
-                        if (!project->isPlaying.load()) break;
+                        if (!project->dspIsPlaying) break;
                         if (!(*track->buffer)) break;
                         AutomationCurve* ac = static_cast<AutomationCurve*>(element);
                         if (ac->points.empty()) break;
-                        float offSec = Note::beatsFromVector(pos.startOffsetPairs);
+                        float offBeat = Note::beatsFromVector(pos.startOffsetPairs);
                         float* wbuf = *(track->buffer);
                         for (size_t i = 0; i < bufferSize; ++i) {
-                            float sec = static_cast<float>(time) + static_cast<float>(i) / AudioManager::instance()->sampleRate;
-                            if (sec < posStartSec || sec > posEndSec + 0.001f) { wbuf[i] += 0.f; continue; }
-                            float v = ac->evaluateAtSec(sec, posStartSec - offSec, posEndSec);
+                            float beat = currentBeat + (static_cast<float>(i) / bufferSize) * beatWindow;
+                            if (beat < posStartBeat || beat > posEndBeat + 0.001f) continue;
+                            float v = ac->evaluateAtX(beat - posStartBeat + offBeat);
                             wbuf[i] += v * 2.f - 1.f;  // 0..1 → -1..1
                         }
                     }

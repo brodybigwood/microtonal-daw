@@ -15,7 +15,7 @@ struct Connection;
 class Track {
     public:
 
-        std::vector<std::shared_ptr<Note>> dispatched;
+        std::vector<ActiveNote> dispatched;
 
         Connection* connection;
 

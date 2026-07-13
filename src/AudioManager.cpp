@@ -53,7 +53,13 @@ void SDLCALL AudioManager::sdlCallback(void *userdata, SDL_AudioStream *stream, 
         int frames = (remaining >= fixedBS) ? fixedBS : remaining;
         remaining -= frames;
 
-        if (project->loading.load()) {
+        // Commands must still be consumed while DSP loading is silenced.
+        if (project->um) {
+            project->processor->setThreadActiveRoot(project->processor->dspGraph);
+            project->um->flushAudioSync();
+        }
+
+        if (project->dspLoading) {
             // Still push silence if loading
             size_t byteCount = static_cast<size_t>(frames) * static_cast<size_t>(outCh) * sizeof(float);
             am->sdlInterleaved_.assign(frames * outCh, 0.0f);
@@ -68,21 +74,23 @@ void SDLCALL AudioManager::sdlCallback(void *userdata, SDL_AudioStream *stream, 
         size_t bufSize = static_cast<size_t>(frames) * static_cast<size_t>(outCh);
         memset(am->sdlScratch_.data(), 0, bufSize * sizeof(float));
 
-        // Apply queued actions before DSP
-        if (project->um) {
-            project->processor->setThreadActiveRoot(project->processor->dspGraph);
-            project->um->flushAudioSync();
-        }
-
         int ic = 0;
         int bs = frames;
+
+        // Compute beat advance BEFORE process() so ElementManager has deltaBeats
+        if (project->dspIsPlaying) {
+            const double dt = static_cast<double>(frames) / sr;
+            project->advanceBeatPosition(dt);
+        }
+
         project->process(nullptr, am->sdlScratch_.data(), bs, ic, outCh, sr);
 
         // Advance AFTER processing: the block [t, t+dt) must be processed at
         // time t, or notes starting exactly at the play position are skipped.
-        if (project->isPlaying.load()) {
+        if (project->dspIsPlaying) {
             const double dt = static_cast<double>(frames) / sr;
-            project->timeSeconds.store(project->timeSeconds.load() + dt);
+            project->activeTimeSeconds() = project->activeTimeSeconds() + dt;
+            project->activeBeatPosition() = project->activeBeatPosition() + project->deltaBeats;
         }
 
         // Interleave
@@ -97,14 +105,23 @@ void SDLCALL AudioManager::sdlCallback(void *userdata, SDL_AudioStream *stream, 
                                frames * outCh * static_cast<int>(sizeof(float)));
     }
 
-    if (!project->loading.load()) {
-        if (project->isPlaying.load()) {
-            project->effectiveTime.store(
-                project->timeSeconds.load() - static_cast<double>(am->latency) / sr
-            );
+    if (!project->dspLoading) {
+        double effTime, effBeat;
+        if (project->dspIsPlaying) {
+            double latencySec = static_cast<double>(am->latency) / sr;
+            double latencyBeats = latencySec
+                * static_cast<double>(project->activeTempoCurve().evaluateAtX(
+                    static_cast<float>(project->activeBeatPosition()))) / 60.0;
+            effTime = project->activeTimeSeconds() - latencySec;
+            effBeat = project->activeBeatPosition() - latencyBeats;
         } else {
-            project->effectiveTime.store(project->timeSeconds.load());
+            effTime = project->activeTimeSeconds();
+            effBeat = project->activeBeatPosition();
         }
+        project->processor->enqueueProcessorAction([project, effTime, effBeat]() {
+            project->effectiveTime = effTime;
+            project->effectiveBeatPosition = effBeat;
+        });
     }
 }
 
@@ -117,7 +134,13 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
 
     Project* project = audioManager->project;
 
-    if (project->loading.load()) {
+    // Commands must still be consumed while DSP loading is silenced.
+    if (project->um) {
+        project->processor->setThreadActiveRoot(project->processor->dspGraph);
+        project->um->flushAudioSync();
+    }
+
+    if (project->dspLoading) {
         unsigned int numChannels = audioManager->outputChannels;
         memset(outputBuffer, 0, bufferSize * numChannels * sizeof(float));
         return 0;
@@ -130,12 +153,6 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
     unsigned int numChannels = audioManager->outputChannels;
 
     memset(outputBuffer, 0, bufferSize * numChannels * sizeof(float));
-
-    // Apply queued actions to the audio copy before DSP.
-    if (project->um) {
-        project->processor->setThreadActiveRoot(project->processor->dspGraph);
-        project->um->flushAudioSync();
-    }
 
     // JACK can change buffer size dynamically — keep in sync.
     if (static_cast<unsigned int>(audioManager->bufferSize) != bufferSize) {
@@ -150,21 +167,39 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
     int bs = static_cast<int>(bufferSize);
     int sr = static_cast<int>(audioManager->sampleRate);
 
+    // Compute beat advance BEFORE process() so ElementManager has deltaBeats
+    if (project->dspIsPlaying) {
+        const double dt = static_cast<double>(bufferSize) / audioManager->sampleRate;
+        project->advanceBeatPosition(dt);
+    }
+
     project->process(inBuffer, outBuffer, bs, ic, oc, sr);
 
     // Advance AFTER processing: the block [t, t+dt) must be processed at
     // time t, or notes starting exactly at the play position are skipped.
-    if(project->isPlaying.load()) {
+    if(project->dspIsPlaying) {
         const double dt = static_cast<double>(bufferSize) / audioManager->sampleRate;
-        project->timeSeconds.store(project->timeSeconds.load() + dt);
+        project->activeTimeSeconds() = project->activeTimeSeconds() + dt;
+        project->activeBeatPosition() = project->activeBeatPosition() + project->deltaBeats;
     }
 
-    if(project->isPlaying.load()) {
-        project->effectiveTime.store(
-            project->timeSeconds.load() - static_cast<double>(audioManager->latency) / audioManager->sampleRate
-        );
-    } else {
-        project->effectiveTime.store(project->timeSeconds.load());
+    {
+        double effTime, effBeat;
+        if (project->dspIsPlaying) {
+            double latencySec = static_cast<double>(audioManager->latency) / audioManager->sampleRate;
+            double latencyBeats = latencySec
+                    * static_cast<double>(project->activeTempoCurve().evaluateAtX(
+                        static_cast<float>(project->activeBeatPosition()))) / 60.0;
+            effTime = project->activeTimeSeconds() - latencySec;
+            effBeat = project->activeBeatPosition() - latencyBeats;
+        } else {
+            effTime = project->activeTimeSeconds();
+            effBeat = project->activeBeatPosition();
+        }
+        project->processor->enqueueProcessorAction([project, effTime, effBeat]() {
+            project->effectiveTime = effTime;
+            project->effectiveBeatPosition = effBeat;
+        });
     }
 
     return 0;

@@ -44,17 +44,30 @@ void EnvelopeNode::process() {
     eventOut->events->clear();
     std::memset(envelopeOut->buffer, 0, static_cast<size_t>(bufferSize) * sizeof(float));
 
+    if (!eventIn || !eventIn->is_connected || !eventIn->events) {
+        // The source connection can disappear before it has a chance to send
+        // releases. Forward immediate note-offs for all envelope voices.
+        for (const auto& [noteId, voice] : voices) {
+            (void)voice;
+            Event off{};
+            off.type = noteEventType::noteOff;
+            off.id = noteId;
+            off.sampleOffset = 0;
+            eventOut->events->push_back(off);
+        }
+        voices.clear();
+        return;
+    }
+
     const int attackSamples = std::max(1, static_cast<int>(mapTimeSeconds(attack.value) * sampleRate));
     const int decaySamples = std::max(1, static_cast<int>(mapTimeSeconds(decay.value) * sampleRate));
     const int releaseSamples = std::max(1, static_cast<int>(mapTimeSeconds(release.value) * sampleRate));
     const float sustainLevel = sustain.value;
 
     std::vector<std::vector<Event>> eventsAt(static_cast<size_t>(bufferSize));
-    if (eventIn && eventIn->is_connected && eventIn->events) {
-        for (const auto& ev : *(eventIn->events)) {
-            const int at = std::clamp(ev.sampleOffset, 0, bufferSize - 1);
-            eventsAt[static_cast<size_t>(at)].push_back(ev);
-        }
+    for (const auto& ev : *(eventIn->events)) {
+        const int at = std::clamp(ev.sampleOffset, 0, bufferSize - 1);
+        eventsAt[static_cast<size_t>(at)].push_back(ev);
     }
 
     for (int i = 0; i < bufferSize; ++i) {

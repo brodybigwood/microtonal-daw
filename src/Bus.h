@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 #include <string>
 #include <SDL3/SDL.h>
@@ -19,6 +20,18 @@ struct Event {
     int id;
     int sampleOffset;
     int channel = 0;
+};
+
+class Note;
+
+struct ActiveNote {
+    std::shared_ptr<Note> note;
+    int voiceId = 0;
+    int positionId = 0;
+    float sourceStartBeat = 0.f;
+    float sourceEndBeat = 0.f;
+    float sourcePitch = 0.f;
+    int sourceChannel = 0;
 };
 
 enum DataType{

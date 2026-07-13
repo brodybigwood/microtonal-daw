@@ -23,6 +23,10 @@ void OscillatorNode::process() {
 // first process input
 
     if (!inputN->is_connected) { // just do zeroes
+        // A disconnected event source cannot deliver its pending note-offs.
+        // Drop all local voices so reconnecting cannot revive stale notes.
+        for (auto& voice : voices)
+            voice.reset();
         if (output->is_connected) {
             std::memset(output->buffer, 0, static_cast<size_t>(bufferSize) * static_cast<size_t>(output->numChannels) * sizeof(float));
         }

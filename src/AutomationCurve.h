@@ -40,7 +40,13 @@ public:
     float valueRangeMax = 1.f;
 
     float evaluate(float t) const;
-    float evaluateAtSec(float sec, float startSec, float endSec) const;  // seconds-space eval
-    void addPoint(const std::vector<std::pair<int,int>>& timeVec, float v, CurveShape::Type shapeType);
+    float evaluateAtSec(float sec, float startSec, float endSec) const;
+    float evaluateAtX(float x) const;
+
+    // ∫ 60/BPM(b) db over [fromBeat, toBeat] — seconds elapsed
+    float secondsForBeats(float fromBeat, float toBeat) const;
+
+    void addPoint(const std::vector<std::pair<int,int>>& timeVec, float v,
+                   CurveShape::Type shapeType = CurveShape::Single);
     void removePoint(size_t idx);
 };

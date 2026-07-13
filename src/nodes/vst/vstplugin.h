@@ -264,7 +264,9 @@ public:
     const std::string& getPluginPath() const { return pluginPath; }
 
     void setup(int sampleRate, int bufferSize);
-    void processAudio(int bufferSize, Steinberg::Vst::IEventList* inputEvents = nullptr);
+    void processAudio(int bufferSize, Steinberg::Vst::IEventList* inputEvents = nullptr,
+                       double tempo = 120.0, double projectTimeMusic = 0.0, double projectTimeSamples = 0.0,
+                       bool isPlaying = true);
     void setBypassed(bool b) { bypassed = b; }
     bool isBypassed() const { return bypassed; }
 
@@ -373,7 +375,7 @@ public:
     const std::string& getVendor() const { static std::string s; return s; }
     const std::string& getPluginPath() const { static std::string s; return s; }
     void setup(int, int) {}
-    void processAudio(int, void* = nullptr) {}
+    void processAudio(int, void* = nullptr, double = 120.0, double = 0.0, double = 0.0, bool = true) {}
     void setBypassed(bool) {}
     bool isBypassed() const { return true; }
     void showEditor() {}

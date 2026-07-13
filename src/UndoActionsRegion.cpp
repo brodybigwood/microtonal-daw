@@ -602,3 +602,46 @@ RemoveArrangerTrackAction::RemoveArrangerTrackAction(Project* p, std::vector<int
     };
 }
 
+// ---------------------------------------------------------------------------
+// TempoCurveEditAction
+// ---------------------------------------------------------------------------
+TempoCurveEditAction::TempoCurveEditAction(Project* p, json before, json after) :
+        ProjectAction(p, TempoCurveEdit),
+        before(std::move(before)),
+        after(std::move(after)) {
+    skipInitialDo = true;
+    name = "Edit Tempo";
+    doAction = [this]() {
+        if (this->after.is_array()) {
+            this->p->activeTempoCurve().points.clear();
+            for (const auto& el : this->after) {
+                CurvePoint pt;
+                pt.v = el.value("v", 120.f);
+                pt.shape.type = static_cast<CurveShape::Type>(el.value("shape", static_cast<int>(CurveShape::Single)));
+                pt.shape.param = el.value("shapeParam", 0.f);
+                if (el.contains("timeVec") && el["timeVec"].is_array())
+                    for (const auto& pr : el["timeVec"])
+                        if (pr.is_array() && pr.size() >= 2)
+                            pt.timeVec.push_back({pr[0].get<int>(), pr[1].get<int>()});
+                this->p->activeTempoCurve().points.push_back(std::move(pt));
+            }
+        }
+    };
+    undoAction = [this]() {
+        if (this->before.is_array()) {
+            this->p->activeTempoCurve().points.clear();
+            for (const auto& el : this->before) {
+                CurvePoint pt;
+                pt.v = el.value("v", 120.f);
+                pt.shape.type = static_cast<CurveShape::Type>(el.value("shape", static_cast<int>(CurveShape::Single)));
+                pt.shape.param = el.value("shapeParam", 0.f);
+                if (el.contains("timeVec") && el["timeVec"].is_array())
+                    for (const auto& pr : el["timeVec"])
+                        if (pr.is_array() && pr.size() >= 2)
+                            pt.timeVec.push_back({pr[0].get<int>(), pr[1].get<int>()});
+                this->p->activeTempoCurve().points.push_back(std::move(pt));
+            }
+        }
+    };
+}
+

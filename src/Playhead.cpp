@@ -19,5 +19,5 @@ void Playhead::render(SDL_Renderer* renderer, float barWidth, float scrollX) {
 }
 
 void Playhead::getTimePx(float barWidth) {
-    timePx = project->effectiveTime.load() * barWidth + 1 + gridRect->x;
+    timePx = project->effectiveBeatPosition * barWidth + 1 + gridRect->x;
 }

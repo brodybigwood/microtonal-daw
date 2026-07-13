@@ -52,7 +52,7 @@ class NodeManager {
         void markTopologyDirty();
 
         Project* project;
-        
+
         void setNE(NodeEditor*);
         void resetNE();
         NodeEditor* ne = nullptr;

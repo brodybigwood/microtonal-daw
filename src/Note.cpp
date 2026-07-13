@@ -59,16 +59,16 @@ Note::Note(const std::vector<std::pair<int, int>>& startPairs, const std::vector
 Note::~Note() {
 }
 
-float Note::startSeconds() const {
+float Note::startBeats() const {
     return beatsFromVector(rhythmVector);
 }
 
-float Note::endSeconds() const {
+float Note::endBeats() const {
     return beatsFromVector(rhythmEndVector);
 }
 
-float Note::durationSeconds() const {
-    return endSeconds() - startSeconds();
+float Note::durationBeats() const {
+    return endBeats() - startBeats();
 }
 
 json Note::toJSON() {

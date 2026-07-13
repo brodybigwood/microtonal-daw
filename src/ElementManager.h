@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <cstdint>
 #include "GridElement.h"
 
 class Region;
@@ -40,6 +41,7 @@ class ElementManager {
         void fromJSON(json);
 
         void process(int bufferSize);
+        uint64_t lastTransportGeneration = 0;
 
         int currentElement = -1;
         int hoveredElement = -1;

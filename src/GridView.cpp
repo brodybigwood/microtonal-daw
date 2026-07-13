@@ -64,11 +64,12 @@ bool GridView::handleInput(SDL_Event& e) {
             transport->handleMotion();
             break;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
-            transport->clickMouse();
+            transport->clickMouse(e.button.button);
             clickMouse(e);
             break;
         case SDL_EVENT_MOUSE_BUTTON_UP:
             transport->draggingTimeline = false;
+            transport->finishTempoDrag();
             clickMouse(e);
             break;
         case SDL_EVENT_MOUSE_WHEEL:

@@ -110,10 +110,10 @@ bool PianoRoll::handleInput(SDL_Event& e) {
     return GridView::handleInput(e) || consumed;
 }
 
-float PianoRoll::adjustTransportSeekSec(float rawSec) {
-    if (!region || region->positions.empty()) return rawSec;
+float PianoRoll::adjustTransportSeekSec(float rawBeat) {
+    if (!region || region->positions.empty()) return rawBeat;
     // Find the position whose playhead is closest to mouseX.
-    double curEff = project->effectiveTime.load();
+    double curEff = project->effectiveBeatPosition;
     float bestDist = FLT_MAX;
     float bestOffset = 0.f;
     for (auto* pos : region->positions) {
@@ -126,7 +126,7 @@ float PianoRoll::adjustTransportSeekSec(float rawSec) {
             bestOffset = posStart - off;
         }
     }
-    return rawSec + bestOffset;
+    return rawBeat + bestOffset;
 }
 
 void PianoRoll::renderContent(SDL_Renderer* r) {
@@ -663,7 +663,7 @@ float PianoRoll::getNotePosX(std::shared_ptr<Note> note) {
             return getX(Note::beatsFromVector(addVec(note->rhythmVector, startDelta)));
         }
     }
-    return getX(note->startSeconds());
+    return getX(note->startBeats());
 }
 
 float PianoRoll::getNoteEnd(std::shared_ptr<Note> note) {
@@ -674,6 +674,6 @@ float PianoRoll::getNoteEnd(std::shared_ptr<Note> note) {
             return getX(Note::beatsFromVector(addVec(note->rhythmEndVector, startDelta)));
         }
     }
-    return getX(note->endSeconds());
+    return getX(note->endBeats());
 }
 

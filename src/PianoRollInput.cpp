@@ -1002,7 +1002,7 @@ void PianoRoll::stretchElement(int amount) {
     refreshHoveredRhythmLineIndex();
     if (hoveredRhythmLineIndex != SIZE_MAX && hoveredRhythmLineIndex < rhythmLines.size()) {
         const float lineSec = rhythmLines[hoveredRhythmLineIndex].seconds;
-        if (resizeDir == -1 && lineSec < stretchingNote->endSeconds() - 0.001f) {
+        if (resizeDir == -1 && lineSec < stretchingNote->endBeats() - 0.001f) {
             stretchingNote->rhythmVector = rhythmLines[hoveredRhythmLineIndex].integerPairs;
             // Re-anchor the note onto this line: adopt the grid's rhythm temperament.
             if (region) {
@@ -1010,7 +1010,7 @@ void PianoRoll::stretchElement(int amount) {
                 stretchingNote->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
                 stretchingNote->rhythmEdoUpperVector = region->rhythmEdoUpperVector;
             }
-        } else if (resizeDir == 1 && lineSec > stretchingNote->startSeconds() + 0.001f) {
+        } else if (resizeDir == 1 && lineSec > stretchingNote->startBeats() + 0.001f) {
             stretchingNote->rhythmEndVector = rhythmLines[hoveredRhythmLineIndex].integerPairs;
             if (region) {
                 stretchingNote->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
@@ -1067,7 +1067,7 @@ void PianoRoll::commitNotePitchSnap(std::shared_ptr<Note> note, float targetLine
 
 void PianoRoll::snapNoteRhythm(const std::shared_ptr<Note>& note) {
     if (!note || !region || rhythmLines.empty()) return;
-    const size_t rli = closestRhythmLineIndexForSeconds(note->startSeconds());
+    const size_t rli = closestRhythmLineIndexForSeconds(note->startBeats());
     if (rli != SIZE_MAX && rli < rhythmLines.size()) {
         note->rhythmVector = rhythmLines[rli].integerPairs;
         note->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;

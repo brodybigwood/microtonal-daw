@@ -25,6 +25,8 @@ public:
 
     /** Set the thread-local active manager. Call once per thread before any action. */
     static void setThreadActiveRoot(NodeManager* r);
+    /** Get the thread-local active manager (may be null). */
+    static NodeManager* getActiveRoot();
 
     SDL_Window* getHostWindow() const { return hostWindow; }
     SDL_Renderer* getHostRenderer() const { return hostRenderer; }

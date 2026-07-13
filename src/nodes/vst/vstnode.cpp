@@ -6,6 +6,7 @@
 #include "UndoManager.h"
 #include "NodeProcessor.h"
 #include "ContextMenu.h"
+#include "AudioManager.h"
 #include <algorithm>
 #include <cstdio>
 #include <iostream>
@@ -156,6 +157,35 @@ void VstNode::process() {
     auto localPlugin = plugin;
     if (localPlugin && localPlugin->isValid()) {
         bool bypassed = bypass.value > 0.5f;
+        if (bypassed && !wasBypassed_ && !noteChannels.empty()) {
+            // Deliver releases once before bypass stops normal event processing.
+            HostEventList releases;
+            for (const auto& [noteId, channel] : noteChannels) {
+                Steinberg::Vst::Event off{};
+                off.busIndex = 0;
+                off.sampleOffset = 0;
+                off.flags = 0;
+                off.type = Steinberg::Vst::Event::kNoteOffEvent;
+                off.noteOff.channel = static_cast<Steinberg::int16>(channel);
+                off.noteOff.pitch = 0;
+                off.noteOff.tuning = 0;
+                off.noteOff.velocity = 0.0f;
+                off.noteOff.noteId = noteId;
+                releases.addEvent(off);
+            }
+            localPlugin->setBypassed(false);
+            double beat = project ? project->activeBeatPosition() : 0.0;
+            double seconds = project ? project->activeTimeSeconds() : 0.0;
+            double bpm = project
+                ? static_cast<double>(project->activeTempoCurve().evaluateAtX(static_cast<float>(beat)))
+                : 120.0;
+            double sr = AudioManager::instance()->sampleRate;
+            localPlugin->processAudio(bufferSize, &releases, bpm, beat, seconds * sr,
+                                      project ? project->dspIsPlaying : true);
+            noteChannels.clear();
+            evictedNoteChannels.clear();
+        }
+        wasBypassed_ = bypassed;
         localPlugin->setBypassed(bypassed);
         if (!bypassed) {
             // Deliver mapped VST parameter values from input connections.
@@ -181,7 +211,27 @@ void VstNode::process() {
             // Convert DAW Events to VST3 EventList with MPE
             HostEventList vstEvents;
             sendMpePitchBendRange(&vstEvents);
-            if (midiIn && midiIn->is_connected && midiIn->events) {
+            const bool midiConnected = midiIn && midiIn->is_connected && midiIn->events;
+            if (!midiConnected && !noteChannels.empty()) {
+                // The upstream event connection disappeared while voices were
+                // active. Release them before forgetting the MPE allocation.
+                for (const auto& [noteId, channel] : noteChannels) {
+                    Steinberg::Vst::Event off{};
+                    off.busIndex = 0;
+                    off.sampleOffset = 0;
+                    off.flags = 0;
+                    off.type = Steinberg::Vst::Event::kNoteOffEvent;
+                    off.noteOff.channel = static_cast<Steinberg::int16>(channel);
+                    off.noteOff.pitch = 0;
+                    off.noteOff.tuning = 0;
+                    off.noteOff.velocity = 0.0f;
+                    off.noteOff.noteId = noteId;
+                    vstEvents.addEvent(off);
+                }
+                noteChannels.clear();
+                evictedNoteChannels.clear();
+            }
+            if (midiConnected) {
                 for (auto& ev : *midiIn->events) {
                     Steinberg::int16 base = static_cast<Steinberg::int16>(std::floor(ev.num));
                     float frac = ev.num - base;
@@ -247,7 +297,22 @@ void VstNode::process() {
                 }
             }
 
-            localPlugin->processAudio(bufferSize, &vstEvents);
+            double bpm = 120.0;
+            double beatPos = project ? project->activeBeatPosition() : 0.0;
+            double samplePos = (project && AudioManager::instance())
+                ? project->activeTimeSeconds() * AudioManager::instance()->sampleRate : 0.0;
+            if (project) {
+                if (project->dspIsPlaying) {
+                    double db = project->deltaBeats;
+                    double dt = static_cast<double>(bufferSize) / AudioManager::instance()->sampleRate;
+                    bpm = (dt > 0.0) ? db * 60.0 / dt : 120.0;
+                } else {
+                    bpm = static_cast<double>(project->activeTempoCurve().evaluateAtX(
+                        static_cast<float>(project->activeBeatPosition())));
+                }
+            }
+            bool playing = project ? project->dspIsPlaying : true;
+            localPlugin->processAudio(bufferSize, &vstEvents, bpm, beatPos, samplePos, playing);
 
             // Route audio output buses directly (both sides planar)
             for (size_t bi = 0; bi < audioOutConns.size(); ++bi) {

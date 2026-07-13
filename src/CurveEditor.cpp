@@ -3,6 +3,7 @@
 #include "GridView.h"
 #include "Note.h"
 #include "PianoRollInternal.h"  // addVec, subVec
+#include "TreeEntry.h"
 #include <algorithm>
 #include <cmath>
 
@@ -55,7 +56,9 @@ void CurveEditor::updateArea(float y, float h) {
 }
 
 float CurveEditor::ty(float v) const {
-    return area.y + area.h - v * area.h;
+    float range = curve_->valueRangeMax - curve_->valueRangeMin;
+    float norm = (range > 0.f) ? (v - curve_->valueRangeMin) / range : 0.f;
+    return area.y + area.h - norm * area.h;
 }
 
 void CurveEditor::render(SDL_Renderer* renderer) {
@@ -152,4 +155,54 @@ int CurveEditor::hitTestTension(float mx, float my) {
 
 float CurveEditor::hitTestCurve(float mx, float my) {
     return -1.f;
+}
+
+bool CurveEditor::clampBeatToNeighbors(int pointIndex, float beat,
+                                        const std::vector<std::pair<int,int>>** outNeighborVec) const {
+    if (pointIndex > 0) {
+        float prevBeat = Note::beatsFromVector(curve_->points[pointIndex - 1].timeVec);
+        if (beat <= prevBeat) {
+            *outNeighborVec = &curve_->points[pointIndex - 1].timeVec;
+            return true;
+        }
+    }
+    if (pointIndex < static_cast<int>(curve_->points.size()) - 1) {
+        float nextBeat = Note::beatsFromVector(curve_->points[pointIndex + 1].timeVec);
+        if (beat >= nextBeat) {
+            *outNeighborVec = &curve_->points[pointIndex + 1].timeVec;
+            return true;
+        }
+    }
+    return false;
+}
+
+std::shared_ptr<TreeEntry> CurveEditor::buildPointMenu(int pointIndex,
+                                                        std::function<void()> onWillModify,
+                                                        std::function<void()> onDidModify) {
+    auto root = std::make_shared<TreeEntry>("Point " + std::to_string(pointIndex));
+
+    const char* names[] = {"Hold", "Single", "Double"};
+    for (int s = 0; s < 3; ++s) {
+        auto e = std::make_shared<TreeEntry>(names[s]);
+        auto st = static_cast<CurveShape::Type>(s);
+        e->click = [this, pointIndex, st, onWillModify, onDidModify]() {
+            if (static_cast<size_t>(pointIndex) < curve_->points.size()) {
+                onWillModify();
+                curve_->points[pointIndex].shape.type = st;
+                curve_->points[pointIndex].shape.param = 0.f;
+                onDidModify();
+            }
+        };
+        root->addChild(e);
+    }
+
+    auto delEntry = std::make_shared<TreeEntry>("Delete");
+    delEntry->click = [this, pointIndex, onWillModify, onDidModify]() {
+        onWillModify();
+        curve_->removePoint(static_cast<size_t>(pointIndex));
+        onDidModify();
+    };
+    root->addChild(delEntry);
+
+    return root;
 }

@@ -67,6 +67,7 @@ private:
     std::unordered_map<int, int> evictedNoteChannels; // noteId -> channel for evicted notes
     int nextMpeChannel = 1;
     bool mpeRangeSet = false;
+    bool wasBypassed_ = false;
     int allocMpeChannel(int noteId, void* eventList); // HostEventList*
     void freeMpeChannel(int noteId);
     void sendMpePitchBendRange(void* eventList); // HostEventList*

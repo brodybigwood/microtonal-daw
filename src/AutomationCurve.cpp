@@ -2,6 +2,7 @@
 #include "Note.h"
 #include <algorithm>
 #include <cmath>
+#include <functional>
 
 AutomationCurve::AutomationCurve(Project* p, ArrangerNode* n) : GridElement(p, n) {
     type = ElementType::automationCurve;
@@ -106,6 +107,155 @@ static float evalAtRelSec(const std::vector<CurvePoint>& points, float relSec) {
     float dt = bRel - aRel;
     if (dt <= 0.f) return a.v;
     return evalCurveSegment(a, b, (relSec - aRel) / dt);
+}
+
+// -- Adaptive Simpson quadrature ------------------------------------------------
+
+static float adaptiveSimpson(float a, float b, float fa, float fm, float fb,
+                              const std::function<float(float)>& f, float tol, int depth) {
+    float h = (b - a) * 0.5f;
+    float fl = f(a + h * 0.5f);
+    float fr = f(b - h * 0.5f);
+    float sLeft  = (h / 6.f) * (fa + 4.f * fl + fm);
+    float sRight = (h / 6.f) * (fm + 4.f * fr + fb);
+    float sTotal = sLeft + sRight;
+    float sSimple = (b - a) / 6.f * (fa + 4.f * fm + fb);
+    if (depth >= 10 || std::fabs(sTotal - sSimple) < tol)
+        return sTotal;
+    return adaptiveSimpson(a, a + h, fa, fl, fm, f, tol * 0.5f, depth + 1) +
+           adaptiveSimpson(a + h, b, fm, fr, fb, f, tol * 0.5f, depth + 1);
+}
+
+static float integrateFunctor(float a, float b,
+                               const std::function<float(float)>& f, float tol = 1e-7f) {
+    if (b - a <= 0.f) return 0.f;
+    float fa = f(a), fb = f(b), fm = f((a + b) * 0.5f);
+    return adaptiveSimpson(a, b, fa, fm, fb, f, tol, 0);
+}
+
+// Integrate curve value over a single segment [x_a, x_b].
+// -- Public integration methods -----------------------------------------------
+
+float AutomationCurve::evaluateAtX(float x) const {
+    if (points.empty()) return 0.f;
+    return evalAtRelSec(points, x);
+}
+
+// -- Segment-based seconds-from-beats integration -----------------------------
+
+// Integrate 60/evalCurveSegment over a single segment's beat span [x_a, x_b].
+static float segmentSeconds(const CurvePoint& a, const CurvePoint& b, float x_a, float x_b) {
+    float dx = x_b - x_a;
+    if (dx <= 0.f) return 0.f;
+
+    switch (a.shape.type) {
+    case CurveShape::Hold:
+        return 60.f / a.v * dx;
+
+    case CurveShape::Single:
+    case CurveShape::Double:
+    default: {
+        // Linear case: exact integral of 60 / (a.v + slope * local)
+        if (std::fabs(a.shape.param) < 0.01f && std::fabs(b.v - a.v) > 1e-6f) {
+            float slope = (b.v - a.v) / dx;
+            return 60.f / slope * std::log(b.v / a.v);
+        }
+        if (std::fabs(a.shape.param) < 0.01f)
+            return 60.f / a.v * dx;  // constant
+
+        // Nonlinear: adaptive Simpson
+        auto fn = [&](float x) -> float {
+            float v = evalCurveSegment(a, b, (x - x_a) / dx);
+            return 60.f / v;
+        };
+        return integrateFunctor(x_a, x_b, fn);
+    }
+    }
+}
+
+float AutomationCurve::secondsForBeats(float fromBeat, float toBeat) const {
+    if (points.empty())
+        return (toBeat - fromBeat) * 60.f / 120.f;
+    if (fromBeat > toBeat) return -secondsForBeats(toBeat, fromBeat);
+    if (fromBeat == toBeat) return 0.f;
+
+    float firstBeat = Note::beatsFromVector(points.front().timeVec);
+    float lastBeat  = Note::beatsFromVector(points.back().timeVec);
+
+    float a = fromBeat, b = toBeat;
+    float total = 0.f;
+
+    // Before first point: flat extension
+    if (a < firstBeat) {
+        float endPre = std::min(b, firstBeat);
+        total += 60.f / points.front().v * (endPre - a);
+        a = endPre;
+    }
+
+    // Iterate segments
+    if (a < lastBeat && points.size() >= 2) {
+        size_t lo = 0, hi = points.size() - 1;
+        while (lo + 1 < hi) {
+            size_t mid = (lo + hi) / 2;
+            if (Note::beatsFromVector(points[mid].timeVec) <= a) lo = mid;
+            else hi = mid;
+        }
+
+        // Partial first segment
+        float x_lo = Note::beatsFromVector(points[lo].timeVec);
+        float x_hi = Note::beatsFromVector(points[lo + 1].timeVec);
+        if (a < x_hi) {
+            float end = std::min(b, x_hi);
+            const auto& pa = points[lo]; const auto& pb = points[lo + 1];
+            float dx = x_hi - x_lo;
+            if (pa.shape.type == CurveShape::Hold
+                || (pa.shape.type != CurveShape::Hold && std::fabs(pa.shape.param) < 0.01f)) {
+                // Hold or linear: virtual endpoints are exact
+                float locA = (a - x_lo) / dx, locB = (end - x_lo) / dx;
+                CurvePoint aAt = pa; aAt.v = evalCurveSegment(pa, pb, locA);
+                CurvePoint bAt = pb; bAt.v = evalCurveSegment(pa, pb, locB);
+                total += segmentSeconds(aAt, bAt, a, end);
+            } else {
+                // Nonlinear: integrate on original segment with correct local range
+                auto fn = [&](float x) -> float {
+                    return 60.f / evalCurveSegment(pa, pb, (x - x_lo) / dx);
+                };
+                total += integrateFunctor(a, end, fn);
+            }
+            if (b <= x_hi) return total;
+            lo++;
+        }
+
+        // Full middle segments
+        while (lo + 1 < points.size()) {
+            x_lo = Note::beatsFromVector(points[lo].timeVec);
+            x_hi = Note::beatsFromVector(points[lo + 1].timeVec);
+            if (b <= x_hi) {
+                const auto& pa = points[lo]; const auto& pb = points[lo + 1];
+                float dx = x_hi - x_lo;
+                if (pa.shape.type == CurveShape::Hold
+                    || (pa.shape.type != CurveShape::Hold && std::fabs(pa.shape.param) < 0.01f)) {
+                    float locEnd = (b - x_lo) / dx;
+                    CurvePoint bAt = pb; bAt.v = evalCurveSegment(pa, pb, locEnd);
+                    total += segmentSeconds(pa, bAt, x_lo, b);
+                } else {
+                    auto fn = [&](float x) -> float {
+                        return 60.f / evalCurveSegment(pa, pb, (x - x_lo) / dx);
+                    };
+                    total += integrateFunctor(x_lo, b, fn);
+                }
+                return total;
+            }
+            total += segmentSeconds(points[lo], points[lo + 1], x_lo, x_hi);
+            lo++;
+        }
+    }
+
+    // After last point: flat extension
+    if (b > lastBeat)
+        total += 60.f / points.back().v * (b - std::max(a, lastBeat));
+
+    return total;
 }
 
 float AutomationCurve::evaluate(float t) const {

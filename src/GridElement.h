@@ -4,6 +4,7 @@
 #include <memory>
 #include <SDL3/SDL.h>
 #include "idManager.h"
+#include "Bus.h"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
@@ -37,7 +38,7 @@ class GridElement {
             int rhythmEdoSubdivisionSteps = 1;
             std::vector<std::pair<int, int>> rhythmEdoLowerVector;
             std::vector<std::pair<int, int>> rhythmEdoUpperVector;
-            std::vector<std::shared_ptr<Note>> dispatched;
+            std::vector<ActiveNote> dispatched;
         };
 
         ElementType type;

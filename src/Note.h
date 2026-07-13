@@ -5,7 +5,6 @@
 #include <memory>
 #include <utility>
 #include <vector>
-#include "fract.h"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
@@ -38,9 +37,9 @@ class Note {
         static float beatsFromVector(const std::vector<std::pair<int, int>>& pairs);
         void syncNumFromPitchVector();
 
-        float startSeconds() const;
-        float endSeconds() const;
-        float durationSeconds() const;
+        float startBeats() const;
+        float endBeats() const;
+        float durationBeats() const;
 
         json toJSON();
         static std::shared_ptr<Note> fromJSON(json&);

@@ -1,11 +1,11 @@
 #include "Note.h"
 #include <utility>
 #include <vector>
-#include "fract.h"
 #include <iostream>
-#include <atomic>
+#include <cstdint>
 #include "UndoManager.h"
 #include "Window.h"
+#include "AutomationCurve.h"
 
 #ifndef PROJECT_H
 #define PROJECT_H
@@ -34,12 +34,31 @@ class Project : public Window {
 
         int sampleTime = 0;
 
-        int beatsToSamples(float);
-
         std::string filepath = "";
         std::string startupCWD = "";  // captured before VST plugins can chdir()
 
-        float tempo = 120;
+        // Tempo automation: beat -> BPM curve (GUI and DSP copies)
+        AutomationCurve tempoCurve;
+        AutomationCurve dspTempoCurve;
+        AutomationCurve& activeTempoCurve();
+        double deltaBeats = 0.0;
+
+        // Per-thread transport state (same model as tempoCurve)
+        double beatPosition = 0.0;
+        double timeSeconds = 0.0;
+        double effectiveTime = 0.0;
+        double effectiveBeatPosition = 0.0;
+        double dspBeatPosition = 0.0;
+        double dspTimeSeconds = 0.0;
+        uint64_t dspTransportGeneration = 0;
+        int dspNextVoiceId = 1;
+
+        double& activeBeatPosition();
+        double& activeTimeSeconds();
+
+        void advanceBeatPosition(double dtSec);
+        void syncTransportToAudio(bool playing, double beat, double seconds);
+        int allocateDspVoiceId();
 
         void load(std::string path = "");
 
@@ -49,8 +68,6 @@ class Project : public Window {
                         std::vector<std::pair<int, int>> pitchVector = {});
 
         void deleteNote(int nodeID, int regionID, int noteID, std::vector<int> managerPath = {});
-
-        fract startTime;
 
         float mouseX;
         float mouseY;
@@ -65,15 +82,13 @@ class Project : public Window {
 
         void setup();
 
-        fract playHeadStart;
-        fract playHeadPos = fract(0,1);
+        double playHeadBeat = 0.0;
+        double playHeadStart = 0.0;
 
-        std::atomic<bool> isPlaying{false};
-        std::atomic<bool> loading{false};
-
-        std::atomic<double> timeSeconds{0.0};
-
-        std::atomic<double> effectiveTime{0.0};
+        bool isPlaying = false;
+        bool dspIsPlaying = false;
+        bool loading = false;
+        bool dspLoading = false;
 
         void process(float* input, float* output, int& bufferSize, int& numChannelsIn, int& numChannelsOut, int& sampleRate);
 

@@ -311,6 +311,9 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
                 j.at("oldCentered").get<bool>(), j.at("newCentered").get<bool>(),
                 j.at("oldDepth").get<float>(), j.at("newDepth").get<float>());
             break;
+        case TempoCurveEdit:
+            pa = new TempoCurveEditAction(p, j.at("before"), j.at("after"));
+            break;
         default:
             throw std::runtime_error("invalid undo action type in save");
     }
@@ -735,6 +738,12 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["newCentered"] = tc->newCentered;
             j["oldDepth"] = tc->oldDepth;
             j["newDepth"] = tc->newDepth;
+            break;
+        }
+        case TempoCurveEdit: {
+            auto* te = static_cast<TempoCurveEditAction*>(pa);
+            j["before"] = te->before;
+            j["after"] = te->after;
             break;
         }
         default:
