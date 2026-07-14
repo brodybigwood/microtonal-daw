@@ -31,7 +31,7 @@ class Track {
         float** buffer = nullptr;
         int bufferSize;
 
-        std::vector<Event>** events;
+        std::vector<Event>** events = nullptr;
         void addEvent(Event);
 
         void fromJSON(json);
