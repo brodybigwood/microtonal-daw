@@ -111,9 +111,14 @@ and everything else (mod routing, internal toggles, preset browsing) is caught
 by a state-diff poller (`VstNode::pollVstStateForUndo`, driven from
 `tickEditor` on the GUI thread) that snapshots component+controller state
 while the editor is open and records differences as `VstStateChangeAction`
-blobs. Host-initiated state writes mark `vstStateBaselineDirty` so the poller
-re-baselines instead of echoing them; polling pauses while mapped parameter
-connections drive the plugin.
+blobs. Host-initiated state writes mark `vstStateBaselineDirty` (plus a forced
+next-tick poll) so the poller re-baselines instead of echoing them; polling
+waits out open beginEdit/endEdit gestures and held pointer buttons (a drag
+commits as one action on release), and a mapped parameter connection only
+causes a silent re-baseline when its driven value actually moved since the
+last snapshot. Undo-tree navigation calls
+`VstPlugin::commitPendingStateEdits()` first so not-yet-polled plugin edits
+become actions instead of being absorbed.
 
 ## Build
 

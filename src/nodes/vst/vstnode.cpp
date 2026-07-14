@@ -644,6 +644,7 @@ void VstNode::onPluginParameterChange(int paramID, float oldValue, float newValu
                                              static_cast<uint32_t>(paramID), oldValue, newValue);
     project->um->newAction(pa);
     vstStateBaselineDirty = true;
+    requestStatePollSoon();
 }
 
 void VstNode::wirePluginCallbacks() {
@@ -667,6 +668,7 @@ void VstNode::wirePluginCallbacks() {
     };
     // onStatePoll: state-diff undo for edits that never reach performEdit
     frame->onStatePoll = [this](bool force) { pollVstStateForUndo(force); };
+    frame->activeGestureCount = 0;
     stateBaselineValid_ = false;
     vstStateBaselineDirty = true;
 }
@@ -686,18 +688,27 @@ void VstNode::pollVstStateForUndo(bool force) {
     if (!plugin || !plugin->isValid() || restoringState) return;
     if (!project || !project->um) return;
 
+    // Mid-gesture (knob drag): the blob is churning with the dragged value,
+    // which the param action already records. endEdit forces a poll when done.
+    auto* frame = plugin->getHostFrame();
+    if (frame && frame->activeGestureCount > 0) return;
+
     uint64_t now = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now().time_since_epoch()).count());
-    if (!force && now - lastStatePollMs_ < 1000) return;
+    if (!force && now - lastStatePollMs_ < 500) return;
     lastStatePollMs_ = now;
 
-    // Mapped, connected parameters rewrite plugin state every audio block; a
-    // byte diff can't separate that from user edits, so pause while any are
-    // driven. performEdit-based undo still covers unmapped parameters.
+    // A mapped, driven parameter rewrites plugin state continuously, and a
+    // byte diff can't separate its movement from user edits. Only when one has
+    // actually moved since the baseline snapshot, re-baseline silently; idle
+    // mappings don't block state undo.
+    bool mappedMoved = false;
     for (auto& [pid, conn] : mappedVstParams) {
-        if (conn && conn->is_connected) {
-            stateBaselineValid_ = false;
-            return;
+        if (!conn || !conn->is_connected) continue;
+        auto it = mappedBaselineValues_.find(pid);
+        if (it == mappedBaselineValues_.end() || it->second != plugin->getParameterValue(pid)) {
+            mappedMoved = true;
+            break;
         }
     }
 
@@ -705,36 +716,27 @@ void VstNode::pollVstStateForUndo(bool force) {
     auto ctrl = plugin->getControllerState();
     if (comp.empty() && ctrl.empty()) return;
 
-    if (vstStateBaselineDirty || !stateBaselineValid_) {
+    if (mappedMoved || vstStateBaselineDirty || !stateBaselineValid_) {
         stateBaselineComp_ = std::move(comp);
         stateBaselineCtrl_ = std::move(ctrl);
         stateBaselineValid_ = true;
         vstStateBaselineDirty = false;
-        stateDiffCoalesce_ = false;
+        mappedBaselineValues_.clear();
+        for (auto& [pid, conn] : mappedVstParams)
+            if (conn && conn->is_connected)
+                mappedBaselineValues_[pid] = plugin->getParameterValue(pid);
         return;
     }
 
-    if (comp == stateBaselineComp_ && ctrl == stateBaselineCtrl_) {
-        stateDiffCoalesce_ = false;
-        return;
-    }
+    if (comp == stateBaselineComp_ && ctrl == stateBaselineCtrl_) return;
 
+    // No coalescing here: mutating an already-visible action would rewrite
+    // history (redo would replay a later edit). Continuous drags don't spam
+    // actions because polling waits for pointer-button release.
     json newState = json::object();
     newState["compState"] = jsonBytesEncode(comp);
     newState["ctrlState"] = jsonBytesEncode(ctrl);
     std::vector<int> mgrPath = nm ? nm->managerPath : std::vector<int>{};
-
-    // Consecutive changed polls = one continuous internal gesture; extend the
-    // existing action instead of stacking one per poll interval.
-    if (stateDiffCoalesce_ && project->um->current && project->um->current->type == VstStateChange) {
-        auto* prev = static_cast<VstStateChangeAction*>(project->um->current);
-        if (prev->nodeID == static_cast<int>(id) && prev->managerPath == mgrPath) {
-            prev->newState = std::move(newState);
-            stateBaselineComp_ = std::move(comp);
-            stateBaselineCtrl_ = std::move(ctrl);
-            return;
-        }
-    }
 
     json oldState = json::object();
     oldState["compState"] = jsonBytesEncode(stateBaselineComp_);
@@ -744,7 +746,14 @@ void VstNode::pollVstStateForUndo(bool force) {
     project->um->newAction(pa);
     stateBaselineComp_ = std::move(comp);
     stateBaselineCtrl_ = std::move(ctrl);
-    stateDiffCoalesce_ = true;
+}
+
+void VstNode::requestStatePollSoon() {
+#ifndef __EMSCRIPTEN__
+    if (plugin)
+        if (auto* frame = plugin->getHostFrame())
+            frame->statePollRequested = true;
+#endif
 }
 
 // ============================================================================

@@ -184,6 +184,9 @@ public:
     virtual bool tick() = 0;
     virtual void resize(int w, int h) = 0;
     virtual bool setName(const char* name) = 0;
+    /** True while any pointer button is held — state-diff polling waits for
+        release so a continuous drag inside the plugin commits as one action. */
+    virtual bool pointerButtonDown() { return false; }
 
     Steinberg::IPlugView* view = nullptr;
     bool windowOpen = false;
@@ -207,6 +210,8 @@ public:
     std::function<void(bool)> onStatePoll;
     /** Set by restartComponent (any thread), consumed by the next tick. */
     bool statePollRequested = false;
+    /** Open beginEdit/endEdit gestures; state-diff polling waits them out. */
+    int activeGestureCount = 0;
 
     // Called by VstNode to snapshot pre-edit parameter value
     void capturePreEditValue(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue val);
@@ -292,6 +297,9 @@ public:
 
     // Global list of open editors — ticked from NodeEditor event loop.
     static void tickAllEditors();
+    /** Force a state-diff capture on every open editor so pending plugin-internal
+        edits become undo actions NOW — call before undo-tree navigation. */
+    static void commitPendingStateEdits();
     static void registerEditor(VstPlugin* p);
     static void unregisterEditor(VstPlugin* p);
     int getEditorWidth() const { return editorW; }
@@ -388,6 +396,7 @@ public:
     void hideEditor() {}
     bool isEditorOpen() const { return false; }
     bool tickEditor() { return false; }
+    static void commitPendingStateEdits() {}
     int getEditorWidth() const { return 0; }
     int getEditorHeight() const { return 0; }
     int getNumAudioInputs() const { return 0; }

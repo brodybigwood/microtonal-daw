@@ -273,6 +273,10 @@ void UndoManager::goTo(ProjectAction* target) {
     if (!target || !current || !head)
         throw std::runtime_error("UndoManager::goTo: null target, current, or head");
 
+    // Commit pending plugin-internal edits before navigating so they aren't
+    // silently absorbed into a re-baseline mid-traversal.
+    VstPlugin::commitPendingStateEdits();
+
     std::vector<int> headToCurrent;
     std::vector<int> headToTarget;
 

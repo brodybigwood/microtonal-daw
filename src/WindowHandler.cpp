@@ -6,6 +6,7 @@
 #include "Node.h"
 #include "WindowManager.h"
 #include "NodeProcessor.h"
+#include "nodes/vst/vstplugin.h"
 #include <algorithm>
 #include <cstdio>
 #include <vector>
@@ -109,6 +110,9 @@ bool WindowHandler::tick() {
                     // SDL key-repeat would fire undo/redo many times per key hold; undo tree navigates once per click.
                     if (e.key.repeat)
                         continue;
+                    // Pending plugin-internal edits become actions first, so
+                    // undo reverts the newest edit instead of absorbing it.
+                    VstPlugin::commitPendingStateEdits();
                     if (shiftDown) {
                         project->redo();
                     } else {

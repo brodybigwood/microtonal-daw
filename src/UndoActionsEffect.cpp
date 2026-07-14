@@ -122,6 +122,7 @@ VstParameterChangeAction::VstParameterChangeAction(Project* p, std::vector<int> 
         vst->plugin->setParameterValue(static_cast<int>(this->paramID), this->newValue);
         vst->restoringState = false;
         vst->vstStateBaselineDirty = true;
+        vst->requestStatePollSoon();
     };
 
     undoAction = [this]() {
@@ -134,6 +135,7 @@ VstParameterChangeAction::VstParameterChangeAction(Project* p, std::vector<int> 
         vst->plugin->setParameterValue(static_cast<int>(this->paramID), this->oldValue);
         vst->restoringState = false;
         vst->vstStateBaselineDirty = true;
+        vst->requestStatePollSoon();
     };
 }
 
@@ -206,6 +208,7 @@ static void vstApplyStateJson(Project* p, const std::vector<int>& managerPath, i
         vst->plugin->setControllerState(jsonBytesDecode(state["ctrlState"]));
     vst->restoringState = false;
     vst->vstStateBaselineDirty = true;
+    vst->requestStatePollSoon();
 }
 
 VstStateChangeAction::VstStateChangeAction(Project* p, std::vector<int> managerPath, int nodeID,

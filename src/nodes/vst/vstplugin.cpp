@@ -194,6 +194,10 @@ Steinberg::tresult PLUGIN_API EditorHostFrame::resizeView(Steinberg::IPlugView*,
 }
 
 Steinberg::tresult PLUGIN_API EditorHostFrame::beginEdit(Steinberg::Vst::ParamID id) {
+    // The gesture hasn't changed any value yet — commit pending internal edits
+    // now so the post-gesture re-baseline can't absorb them.
+    if (activeGestureCount == 0 && onStatePoll) onStatePoll(true);
+    activeGestureCount++;
     if (onBeginEdit) onBeginEdit(id);
     return Steinberg::kResultTrue;
 }
@@ -212,6 +216,11 @@ Steinberg::tresult PLUGIN_API EditorHostFrame::performEdit(Steinberg::Vst::Param
 }
 
 Steinberg::tresult PLUGIN_API EditorHostFrame::endEdit(Steinberg::Vst::ParamID id) {
+    if (activeGestureCount > 0) activeGestureCount--;
+    // Gesture over — re-baseline (or diff) on the next tick instead of waiting
+    // out the poll interval, so an internal edit made right after a knob drag
+    // isn't absorbed into the post-drag baseline.
+    statePollRequested = true;
     preEditValues.erase(id);
     return Steinberg::kResultTrue;
 }
@@ -427,6 +436,15 @@ public:
             XResizeWindow(display, window, w, h);
             XFlush(display);
         }
+    }
+
+    bool pointerButtonDown() override {
+        if (!display) return false;
+        ::Window root, child;
+        int rx, ry, wx, wy;
+        unsigned int mask = 0;
+        XQueryPointer(display, DefaultRootWindow(display), &root, &child, &rx, &ry, &wx, &wy, &mask);
+        return (mask & (Button1Mask | Button2Mask | Button3Mask)) != 0;
     }
 
     bool setName(const char* name) override {
@@ -889,7 +907,10 @@ bool VstPlugin::tickEditor() {
         editorOpen = false;
         return false;
     }
-    if (hostFrame && hostFrame->onStatePoll) {
+    // Defer state polling while a pointer button is held: a continuous drag
+    // inside the plugin then commits as a single action on release (a pending
+    // forced poll stays queued in statePollRequested until then).
+    if (hostFrame && hostFrame->onStatePoll && !editorHost->pointerButtonDown()) {
         bool force = hostFrame->statePollRequested;
         hostFrame->statePollRequested = false;
         hostFrame->onStatePoll(force);
@@ -921,7 +942,10 @@ void VstPluginCache::removePlugin(int nodeID, const std::vector<int>& managerPat
 static std::vector<VstPlugin*> openEditors;
 
 void VstPlugin::registerEditor(VstPlugin* p) {
-    openEditors.push_back(p);
+    // WM-close leaves the entry in place (removal would invalidate the
+    // tickAllEditors iteration), so reopening must not add a duplicate.
+    if (std::find(openEditors.begin(), openEditors.end(), p) == openEditors.end())
+        openEditors.push_back(p);
 }
 
 void VstPlugin::unregisterEditor(VstPlugin* p) {
@@ -931,6 +955,13 @@ void VstPlugin::unregisterEditor(VstPlugin* p) {
 void VstPlugin::tickAllEditors() {
     for (auto* p : openEditors) {
         if (p->editorOpen) p->tickEditor();
+    }
+}
+
+void VstPlugin::commitPendingStateEdits() {
+    for (auto* p : openEditors) {
+        if (p->editorOpen && p->hostFrame && p->hostFrame->onStatePoll)
+            p->hostFrame->onStatePoll(true);
     }
 }
 

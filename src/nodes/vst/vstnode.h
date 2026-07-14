@@ -29,6 +29,10 @@ public:
         action. Set after any host-initiated state write (param actions,
         undo/redo replays, plugin load). */
     bool vstStateBaselineDirty = true;
+    /** Ask the poller to run on the next editor tick instead of waiting out the
+        interval — call alongside vstStateBaselineDirty to keep the absorb
+        window at ~one frame. */
+    void requestStatePollSoon();
 
     // Load a new plugin (with undo support)
     void loadPlugin(const std::string& path, bool createUndo = false);
@@ -82,8 +86,9 @@ private:
     void pollVstStateForUndo(bool force);
     std::vector<uint8_t> stateBaselineComp_;
     std::vector<uint8_t> stateBaselineCtrl_;
+    /** Mapped param values at baseline capture — a moved value explains a blob
+        diff as connection-driven, so it re-baselines instead of acting. */
+    std::unordered_map<int, float> mappedBaselineValues_;
     bool stateBaselineValid_ = false;
     uint64_t lastStatePollMs_ = 0;
-    /** Last poll produced a state action — consecutive diffs coalesce into it. */
-    bool stateDiffCoalesce_ = false;
 };
