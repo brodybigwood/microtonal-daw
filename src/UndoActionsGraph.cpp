@@ -101,6 +101,20 @@ RemoveNodeAction::RemoveNodeAction(Project* p, std::vector<int> managerPath, int
         NodeManager& nm2 = requireManager(this->p, this->managerPath);
         if (nodeData.is_null()) {
             (void)nm2.snapshotNode(static_cast<uint16_t>(this->nodeID), nodeData, connectionsData);
+            // Snapshot positions of all nodes that lose connections when this node is removed.
+            affectedNodePositions = json::object();
+            for (auto& c : connectionsData) {
+                auto snapPos = [&](int nid) {
+                    if (nid == this->nodeID) return; // deleted node is covered by nodeData
+                    std::string key = std::to_string(nid);
+                    if (!affectedNodePositions.contains(key)) {
+                        if (auto* peer = nm2.getNode(static_cast<uint16_t>(nid)))
+                            affectedNodePositions[key] = {{"x", peer->dstRect.x}, {"y", peer->dstRect.y}};
+                    }
+                };
+                snapPos(c["srcNodeID"].get<int>());
+                snapPos(c["dstNodeID"].get<int>());
+            }
             auto* mux = dynamic_cast<MultiplexerNode*>(nm2.getNode(static_cast<uint16_t>(this->nodeID)));
             if (mux) {
                 patcherData = json::array();
@@ -139,57 +153,132 @@ RemoveNodeAction::RemoveNodeAction(Project* p, std::vector<int> managerPath, int
             throw std::runtime_error("RemoveNodeAction::undoAction: addNodeNow failed");
         for (auto c : connectionsData)
             nm2.makeNodeConnectionNow(c["srcNodeID"], c["srcConID"], c["dstNodeID"], c["dstConID"]);
+        // Restore positions of peer nodes that were disconnected by the removal.
+        if (!affectedNodePositions.is_null()) {
+            float ox = 0.f, oy = 0.f;
+            if (nm2.ne) {
+                ox = nm2.ne->panOffsetX_ - this->panOffX;
+                oy = nm2.ne->panOffsetY_ - this->panOffY;
+            }
+            for (auto& [idStr, pos] : affectedNodePositions.items()) {
+                int nid = std::stoi(idStr);
+                if (auto* peer = nm2.getNode(static_cast<uint16_t>(nid)))
+                    peer->move(pos["x"].get<float>() + ox, pos["y"].get<float>() + oy);
+            }
+        }
     };
 }
 
-MakeNodeConnectionAction::MakeNodeConnectionAction(Project* p, std::vector<int> managerPath, int srcNodeID, int srcConID, int dstNodeID, int dstConID) :
+MakeNodeConnectionAction::MakeNodeConnectionAction(Project* p, std::vector<int> managerPath, int srcNodeID, int srcConID, int dstNodeID, int dstConID,
+        float srcX, float srcY, float dstX, float dstY,
+        bool positionsValid) :
         ProjectAction(p, MakeNodeConnection),
         managerPath(std::move(managerPath)),
         srcNodeID(srcNodeID),
         srcConID(srcConID),
         dstNodeID(dstNodeID),
-        dstConID(dstConID) {
+        dstConID(dstConID),
+        srcX(srcX), srcY(srcY),
+        dstX(dstX), dstY(dstY),
+        positionsValid(positionsValid) {
     name ="Connect Nodes";
     doAction = [this] () {
         NodeManager& nm = requireManager(this->p, this->managerPath);
         nm.makeNodeConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
+        if (this->positionsValid) {
+            float ox = 0.f, oy = 0.f;
+            if (nm.ne) {
+                ox = nm.ne->panOffsetX_ - this->panOffX;
+                oy = nm.ne->panOffsetY_ - this->panOffY;
+            }
+            if (auto* n = nm.getNode(static_cast<uint16_t>(this->srcNodeID))) n->move(this->srcX + ox, this->srcY + oy);
+            if (auto* n = nm.getNode(static_cast<uint16_t>(this->dstNodeID))) n->move(this->dstX + ox, this->dstY + oy);
+        }
     };
     undoAction = [this] () {
         NodeManager& nm = requireManager(this->p, this->managerPath);
         nm.severConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
+        if (this->positionsValid) {
+            float ox = 0.f, oy = 0.f;
+            if (nm.ne) {
+                ox = nm.ne->panOffsetX_ - this->panOffX;
+                oy = nm.ne->panOffsetY_ - this->panOffY;
+            }
+            if (auto* n = nm.getNode(static_cast<uint16_t>(this->srcNodeID))) n->move(this->srcX + ox, this->srcY + oy);
+            if (auto* n = nm.getNode(static_cast<uint16_t>(this->dstNodeID))) n->move(this->dstX + ox, this->dstY + oy);
+        }
     };
 }
 
-SeverNodeConnectionAction::SeverNodeConnectionAction(Project* p, std::vector<int> managerPath, int srcNodeID, int srcConID, int dstNodeID, int dstConID) :
+SeverNodeConnectionAction::SeverNodeConnectionAction(Project* p, std::vector<int> managerPath, int srcNodeID, int srcConID, int dstNodeID, int dstConID,
+        float srcX, float srcY, float dstX, float dstY,
+        bool positionsValid) :
         ProjectAction(p, SeverNodeConnection),
         managerPath(std::move(managerPath)),
         srcNodeID(srcNodeID),
         srcConID(srcConID),
         dstNodeID(dstNodeID),
-        dstConID(dstConID) {
+        dstConID(dstConID),
+        srcX(srcX), srcY(srcY),
+        dstX(dstX), dstY(dstY),
+        positionsValid(positionsValid) {
     name ="Sever Connection";
     doAction = [this] () {
         NodeManager& nm = requireManager(this->p, this->managerPath);
         nm.severConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
+        if (this->positionsValid) {
+            float ox = 0.f, oy = 0.f;
+            if (nm.ne) {
+                ox = nm.ne->panOffsetX_ - this->panOffX;
+                oy = nm.ne->panOffsetY_ - this->panOffY;
+            }
+            if (auto* n = nm.getNode(static_cast<uint16_t>(this->srcNodeID))) n->move(this->srcX + ox, this->srcY + oy);
+            if (auto* n = nm.getNode(static_cast<uint16_t>(this->dstNodeID))) n->move(this->dstX + ox, this->dstY + oy);
+        }
     };
     undoAction = [this] () {
         NodeManager& nm = requireManager(this->p, this->managerPath);
         nm.makeNodeConnectionNow(this->srcNodeID, this->srcConID, this->dstNodeID, this->dstConID);
+        if (this->positionsValid) {
+            float ox = 0.f, oy = 0.f;
+            if (nm.ne) {
+                ox = nm.ne->panOffsetX_ - this->panOffX;
+                oy = nm.ne->panOffsetY_ - this->panOffY;
+            }
+            if (auto* n = nm.getNode(static_cast<uint16_t>(this->srcNodeID))) n->move(this->srcX + ox, this->srcY + oy);
+            if (auto* n = nm.getNode(static_cast<uint16_t>(this->dstNodeID))) n->move(this->dstX + ox, this->dstY + oy);
+        }
     };
 }
 
 ReassignNodeConnectionAction::ReassignNodeConnectionAction(Project* p, std::vector<int> managerPath,
         const ConnIDs* oldCxns, int oldCount,
-        int nSrcN, int nSrcC, int nDstN, int nDstC) :
+        int nSrcN, int nSrcC, int nDstN, int nDstC,
+        json nodePositions) :
         ProjectAction(p, ReassignNodeConnection),
         managerPath(std::move(managerPath)),
         oldConnCount(oldCount),
         newSrcNodeID(nSrcN), newSrcConID(nSrcC),
-        newDstNodeID(nDstN), newDstConID(nDstC) {
+        newDstNodeID(nDstN), newDstConID(nDstC),
+        nodePositions(std::move(nodePositions)) {
     name = "Reassign Connection";
     for (int i = 0; i < oldCount; ++i) oldConns[i] = oldCxns[i];
 
-    doAction = [this]() {
+    auto restorePositions = [this](NodeManager& nm) {
+        if (this->nodePositions.is_null()) return;
+        float ox = 0.f, oy = 0.f;
+        if (nm.ne) {
+            ox = nm.ne->panOffsetX_ - this->panOffX;
+            oy = nm.ne->panOffsetY_ - this->panOffY;
+        }
+        for (auto& [idStr, pos] : this->nodePositions.items()) {
+            int nid = std::stoi(idStr);
+            if (auto* n = nm.getNode(static_cast<uint16_t>(nid)))
+                n->move(pos["x"].get<float>() + ox, pos["y"].get<float>() + oy);
+        }
+    };
+
+    doAction = [this, restorePositions]() {
         NodeManager& nm = requireManager(this->p, this->managerPath);
         for (int i = 0; i < this->oldConnCount; ++i) {
             if (this->oldConns[i].existed)
@@ -202,9 +291,10 @@ ReassignNodeConnectionAction::ReassignNodeConnectionAction(Project* p, std::vect
                                  static_cast<uint16_t>(this->newSrcConID),
                                  static_cast<uint16_t>(this->newDstNodeID),
                                  static_cast<uint16_t>(this->newDstConID));
+        restorePositions(nm);
     };
 
-    undoAction = [this]() {
+    undoAction = [this, restorePositions]() {
         NodeManager& nm = requireManager(this->p, this->managerPath);
         nm.severConnectionNow(static_cast<uint16_t>(this->newSrcNodeID),
                               static_cast<uint16_t>(this->newSrcConID),
@@ -217,6 +307,7 @@ ReassignNodeConnectionAction::ReassignNodeConnectionAction(Project* p, std::vect
                                          static_cast<uint16_t>(this->oldConns[i].dstNodeID),
                                          static_cast<uint16_t>(this->oldConns[i].dstConID));
         }
+        restorePositions(nm);
     };
 }
 

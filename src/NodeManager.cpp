@@ -173,7 +173,10 @@ void NodeManager::makeNodeConnection(
         Node* srcNode, uint16_t srcConID,
         Node* dstNode, uint16_t dstConID
 ) {
-    auto pa = new MakeNodeConnectionAction(project, managerPath, srcNode->id, srcConID, dstNode->id, dstConID);
+    auto pa = new MakeNodeConnectionAction(project, managerPath, srcNode->id, srcConID, dstNode->id, dstConID,
+                                          srcNode->dstRect.x, srcNode->dstRect.y,
+                                          dstNode->dstRect.x, dstNode->dstRect.y, true);
+    if (ne) { pa->panOffX = ne->panOffsetX_; pa->panOffY = ne->panOffsetY_; }
     project->um->newAction(pa);
 }
 
@@ -215,7 +218,12 @@ void NodeManager::severConnection(Connection* c) {
         dstNodeID = c->output_node;
         dstConID = c->output_connection;
     }
-    auto pa = new SeverNodeConnectionAction(project, managerPath, srcNodeID, srcConID, dstNodeID, dstConID);
+    float sx = 0.f, sy = 0.f, dx = 0.f, dy = 0.f;
+    if (auto* sn = getNode(srcNodeID)) { sx = sn->dstRect.x; sy = sn->dstRect.y; }
+    if (auto* dn = getNode(dstNodeID)) { dx = dn->dstRect.x; dy = dn->dstRect.y; }
+    auto pa = new SeverNodeConnectionAction(project, managerPath, srcNodeID, srcConID, dstNodeID, dstConID,
+                                            sx, sy, dx, dy, true);
+    if (ne) { pa->panOffX = ne->panOffsetX_; pa->panOffY = ne->panOffsetY_; }
     project->um->newAction(pa);
 }
 

@@ -290,11 +290,34 @@ void NodeEditor::handleDragDrop() {
             }
 
             if (shouldConnect) {
+                // Build position snapshot for all nodes involved in the reassign.
+                json nodePos = json::object();
+                auto addPos = [&](Node* n) {
+                    if (!n) return;
+                    std::string key = std::to_string(n->id);
+                    if (!nodePos.contains(key))
+                        nodePos[key] = {{"x", n->dstRect.x}, {"y", n->dstRect.y}};
+                };
+                auto addPosById = [&](int nid) {
+                    if (auto* n = nm->getNode(static_cast<uint16_t>(nid)))
+                        addPos(n);
+                };
+                addPos(srcNode);
+                addPos(dstNode);
+                addPos(dragNode_);
+                addPos(dropNode);
+                addPos(dragAnchorNode_);
+                for (int i = 0; i < oldCount; ++i) {
+                    addPosById(oldCxns[i].srcNodeID);
+                    addPosById(oldCxns[i].dstNodeID);
+                }
                 auto* ra = new ReassignNodeConnectionAction(
                     nm->project, nm->managerPath,
                     oldCxns, oldCount,
                     static_cast<int>(srcNode->id), static_cast<int>(srcId),
-                    static_cast<int>(dstNode->id), static_cast<int>(dstId));
+                    static_cast<int>(dstNode->id), static_cast<int>(dstId),
+                    std::move(nodePos));
+                if (nm->ne) { ra->panOffX = nm->ne->panOffsetX_; ra->panOffY = nm->ne->panOffsetY_; }
                 nm->project->um->newAction(ra);
             }
         }

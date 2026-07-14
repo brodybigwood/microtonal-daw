@@ -128,17 +128,30 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
             rn->panOffX = j.value("panOffX", 0.f);
             rn->panOffY = j.value("panOffY", 0.f);
             rn->patcherData = j.value("patcherData", json());
+            rn->affectedNodePositions = j.value("affectedNodePositions", json::object());
             pa = rn;
             break;
         }
         case MakeNodeConnection: {
-            pa = new MakeNodeConnectionAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("srcNodeID").get<int>(), j.at("srcConID").get<int>(),
-                j.at("dstNodeID").get<int>(), j.at("dstConID").get<int>());
+            bool hasPos = j.contains("positionsValid") ? j["positionsValid"].get<bool>() : j.contains("srcX");
+            auto* mc = new MakeNodeConnectionAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("srcNodeID").get<int>(), j.at("srcConID").get<int>(),
+                j.at("dstNodeID").get<int>(), j.at("dstConID").get<int>(),
+                j.value("srcX", 0.f), j.value("srcY", 0.f),
+                j.value("dstX", 0.f), j.value("dstY", 0.f), hasPos);
+            mc->panOffX = j.value("panOffX", 0.f);
+            mc->panOffY = j.value("panOffY", 0.f);
+            pa = mc;
             break;
         }
         case SeverNodeConnection: {
-            pa = new SeverNodeConnectionAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("srcNodeID").get<int>(), j.at("srcConID").get<int>(),
-                j.at("dstNodeID").get<int>(), j.at("dstConID").get<int>());
+            bool hasPos = j.contains("positionsValid") ? j["positionsValid"].get<bool>() : j.contains("srcX");
+            auto* sc = new SeverNodeConnectionAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("srcNodeID").get<int>(), j.at("srcConID").get<int>(),
+                j.at("dstNodeID").get<int>(), j.at("dstConID").get<int>(),
+                j.value("srcX", 0.f), j.value("srcY", 0.f),
+                j.value("dstX", 0.f), j.value("dstY", 0.f), hasPos);
+            sc->panOffX = j.value("panOffX", 0.f);
+            sc->panOffY = j.value("panOffY", 0.f);
+            pa = sc;
             break;
         }
         case ReassignNodeConnection: {
@@ -157,9 +170,13 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
                     ++i;
                 }
             }
-            pa = new ReassignNodeConnectionAction(p, std::move(mp), oldCxns, oldCount,
+            auto* ra = new ReassignNodeConnectionAction(p, std::move(mp), oldCxns, oldCount,
                 j.at("newSrcNodeID").get<int>(), j.at("newSrcConID").get<int>(),
-                j.at("newDstNodeID").get<int>(), j.at("newDstConID").get<int>());
+                j.at("newDstNodeID").get<int>(), j.at("newDstConID").get<int>(),
+                j.value("nodePositions", json::object()));
+            ra->panOffX = j.value("panOffX", 0.f);
+            ra->panOffY = j.value("panOffY", 0.f);
+            pa = ra;
             break;
         }
         case MoveNote: {
@@ -458,6 +475,8 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["panOffY"] = rn->panOffY;
             if (!rn->patcherData.is_null())
                 j["patcherData"] = rn->patcherData;
+            if (!rn->affectedNodePositions.is_null() && !rn->affectedNodePositions.empty())
+                j["affectedNodePositions"] = rn->affectedNodePositions;
             break;
         }
         case MakeNodeConnection: {
@@ -467,6 +486,15 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["srcConID"] = mc->srcConID;
             j["dstNodeID"] = mc->dstNodeID;
             j["dstConID"] = mc->dstConID;
+            if (mc->positionsValid) {
+                j["srcX"] = mc->srcX;
+                j["srcY"] = mc->srcY;
+                j["dstX"] = mc->dstX;
+                j["dstY"] = mc->dstY;
+                j["positionsValid"] = true;
+                j["panOffX"] = mc->panOffX;
+                j["panOffY"] = mc->panOffY;
+            }
             break;
         }
         case SeverNodeConnection: {
@@ -476,6 +504,15 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["srcConID"] = sc->srcConID;
             j["dstNodeID"] = sc->dstNodeID;
             j["dstConID"] = sc->dstConID;
+            if (sc->positionsValid) {
+                j["srcX"] = sc->srcX;
+                j["srcY"] = sc->srcY;
+                j["dstX"] = sc->dstX;
+                j["dstY"] = sc->dstY;
+                j["positionsValid"] = true;
+                j["panOffX"] = sc->panOffX;
+                j["panOffY"] = sc->panOffY;
+            }
             break;
         }
         case ReassignNodeConnection: {
@@ -495,6 +532,11 @@ json ProjectAction::serialize(ProjectAction* pa) {
                 oc["dstConID"] = ra->oldConns[i].dstConID;
                 oc["existed"] = ra->oldConns[i].existed;
                 j["oldConns"].push_back(oc);
+            }
+            if (!ra->nodePositions.is_null() && !ra->nodePositions.empty()) {
+                j["nodePositions"] = ra->nodePositions;
+                j["panOffX"] = ra->panOffX;
+                j["panOffY"] = ra->panOffY;
             }
             break;
         }

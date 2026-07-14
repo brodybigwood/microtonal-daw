@@ -553,6 +553,9 @@ struct RemoveNodeAction : ProjectAction {
     /** Multiplexer patcher snapshots for undo/redo idempotency. */
     json patcherData;
     float panOffX = 0.f, panOffY = 0.f;
+    /** Positions of nodes that lose connections when this node is removed:
+        [{nodeID, x, y}, ...]. Restored on undo so peers stay at correct positions. */
+    json affectedNodePositions;
 
     RemoveNodeAction(Project* p, std::vector<int> managerPath, int nodeID);
 };
@@ -563,8 +566,15 @@ struct MakeNodeConnectionAction : ProjectAction {
     int srcConID;
     int dstNodeID;
     int dstConID;
+    float srcX = 0.f, srcY = 0.f;
+    float dstX = 0.f, dstY = 0.f;
+    bool positionsValid = false;
+    /** Editor pan offset when the positions were captured; replay adjusts by the delta. */
+    float panOffX = 0.f, panOffY = 0.f;
 
-    MakeNodeConnectionAction(Project* p, std::vector<int> managerPath, int srcNodeID, int srcConID, int dstNodeID, int dstConID);
+    MakeNodeConnectionAction(Project* p, std::vector<int> managerPath, int srcNodeID, int srcConID, int dstNodeID, int dstConID,
+                             float srcX = 0.f, float srcY = 0.f, float dstX = 0.f, float dstY = 0.f,
+                             bool positionsValid = false);
 };
 
 struct SeverNodeConnectionAction : ProjectAction {
@@ -573,8 +583,15 @@ struct SeverNodeConnectionAction : ProjectAction {
     int srcConID;
     int dstNodeID;
     int dstConID;
+    float srcX = 0.f, srcY = 0.f;
+    float dstX = 0.f, dstY = 0.f;
+    bool positionsValid = false;
+    /** Editor pan offset when the positions were captured; replay adjusts by the delta. */
+    float panOffX = 0.f, panOffY = 0.f;
 
-    SeverNodeConnectionAction(Project* p, std::vector<int> managerPath, int srcNodeID, int srcConID, int dstNodeID, int dstConID);
+    SeverNodeConnectionAction(Project* p, std::vector<int> managerPath, int srcNodeID, int srcConID, int dstNodeID, int dstConID,
+                              float srcX = 0.f, float srcY = 0.f, float dstX = 0.f, float dstY = 0.f,
+                              bool positionsValid = false);
 };
 
 struct ConnIDs {
@@ -587,10 +604,15 @@ struct ReassignNodeConnectionAction : ProjectAction {
     ConnIDs oldConns[2];
     int oldConnCount = 0;
     int newSrcNodeID, newSrcConID, newDstNodeID, newDstConID;
+    // Position snapshots for every node referenced (keyed by nodeID).
+    json nodePositions;
+    /** Editor pan offset when the positions were captured; replay adjusts by the delta. */
+    float panOffX = 0.f, panOffY = 0.f;
 
     ReassignNodeConnectionAction(Project* p, std::vector<int> managerPath,
                                  const ConnIDs* oldCxns, int oldCount,
-                                 int nSrcN, int nSrcC, int nDstN, int nDstC);
+                                 int nSrcN, int nSrcC, int nDstN, int nDstC,
+                                 json nodePositions = json::object());
 };
 
 namespace IoPortChannelOp {
