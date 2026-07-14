@@ -263,6 +263,11 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
                 j.at("oldState"), j.at("newState"));
             break;
         }
+        case VstStateChange: {
+            pa = new VstStateChangeAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(),
+                j.at("oldState"), j.at("newState"));
+            break;
+        }
         case TogglePianoRollWindow: {
             pa = new TogglePianoRollWindowAction(p, j.at("managerPath").get<std::vector<int>>(),
                 j.at("arrangerNodeID").get<int>(), j.at("regionID").get<int>(), j.at("ewID").get<int>(),
@@ -649,6 +654,14 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["nodeID"] = vl->nodeID;
             j["oldState"] = vl->oldState;
             j["newState"] = vl->newState;
+            break;
+        }
+        case VstStateChange: {
+            auto* vs = static_cast<VstStateChangeAction*>(pa);
+            j["managerPath"] = vs->managerPath;
+            j["nodeID"] = vs->nodeID;
+            j["oldState"] = vs->oldState;
+            j["newState"] = vs->newState;
             break;
         }
         case TogglePianoRollWindow: {

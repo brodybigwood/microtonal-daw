@@ -202,6 +202,12 @@ public:
     std::function<void(Steinberg::Vst::ParamID)> onBeginEdit;
     std::function<void(Steinberg::Vst::ParamID, Steinberg::Vst::ParamValue, Steinberg::Vst::ParamValue)> onPerformEdit; // (paramID, oldValue, newValue)
 
+    /** State-diff undo driver, invoked from tickEditor on the GUI thread only.
+        `force` skips the poll interval (window closing, restartComponent). */
+    std::function<void(bool)> onStatePoll;
+    /** Set by restartComponent (any thread), consumed by the next tick. */
+    bool statePollRequested = false;
+
     // Called by VstNode to snapshot pre-edit parameter value
     void capturePreEditValue(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue val);
     std::unordered_map<Steinberg::Vst::ParamID, Steinberg::Vst::ParamValue> preEditValues;

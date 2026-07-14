@@ -8,6 +8,7 @@
 #include "ContextMenu.h"
 #include "AudioManager.h"
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <iostream>
 #include <SDL3_ttf/SDL_ttf.h>
@@ -42,7 +43,16 @@ VstNode::VstNode(uint16_t id, NodeManager* nm)
 }
 
 VstNode::~VstNode() {
-    if (plugin) plugin->hideEditor();
+    if (plugin) {
+        // The shared plugin (and its host frame) can outlive this copy — drop
+        // the callbacks bound to `this` before they can fire again.
+        if (auto* frame = plugin->getHostFrame()) {
+            frame->onBeginEdit = nullptr;
+            frame->onPerformEdit = nullptr;
+            frame->onStatePoll = nullptr;
+        }
+        plugin->hideEditor();
+    }
     plugin = nullptr;
     VstPluginCache::instance().removePlugin(static_cast<int>(id), nm ? nm->managerPath : std::vector<int>{});
 }
@@ -470,6 +480,8 @@ bool VstNode::handleCustomInput(SDL_Event& e) {
         if (SDL_PointInRectFloat(&pt, &editorBtnRect_)) {
             if (plugin && plugin->isValid()) {
                 if (plugin->isEditorOpen()) {
+                    // Catch edits made since the last poll before the editor goes away.
+                    pollVstStateForUndo(true);
                     plugin->hideEditor();
                 } else {
                     plugin->showEditor();
@@ -620,12 +632,18 @@ void VstNode::onPluginParameterChange(int paramID, float oldValue, float newValu
             prev->newValue = newValue;
             ProjectAction* cap = prev;
             project->um->enqueueAudioSync([cap]() { cap->doAction(); });
+            vstStateBaselineDirty = true;
             return;
         }
     }
+    // No usable old value (plugin skipped beginEdit) — leave the change to the
+    // state-diff poller instead of recording a no-op action that would also
+    // suppress the diff.
+    if (oldValue == newValue) return;
     auto* pa = new VstParameterChangeAction(project, std::move(mgrPath), static_cast<int>(id),
                                              static_cast<uint32_t>(paramID), oldValue, newValue);
     project->um->newAction(pa);
+    vstStateBaselineDirty = true;
 }
 
 void VstNode::wirePluginCallbacks() {
@@ -647,6 +665,86 @@ void VstNode::wirePluginCallbacks() {
         onPluginParameterChange(static_cast<int>(paramID),
                                 static_cast<float>(oldVal), static_cast<float>(newVal));
     };
+    // onStatePoll: state-diff undo for edits that never reach performEdit
+    frame->onStatePoll = [this](bool force) { pollVstStateForUndo(force); };
+    stateBaselineValid_ = false;
+    vstStateBaselineDirty = true;
+}
+
+// ============================================================================
+// State-diff undo
+// ============================================================================
+//
+// Anything the user changes inside the plugin GUI that is not an exposed
+// parameter edit (Vital's LFO-to-knob drags, mod-matrix routing, internal
+// toggles that skip beginEdit, preset browsing) only shows up in the
+// component/controller state blobs. While the editor is open we snapshot those
+// blobs at an interval and turn any unexplained difference into an undoable
+// VstStateChangeAction.
+
+void VstNode::pollVstStateForUndo(bool force) {
+    if (!plugin || !plugin->isValid() || restoringState) return;
+    if (!project || !project->um) return;
+
+    uint64_t now = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count());
+    if (!force && now - lastStatePollMs_ < 1000) return;
+    lastStatePollMs_ = now;
+
+    // Mapped, connected parameters rewrite plugin state every audio block; a
+    // byte diff can't separate that from user edits, so pause while any are
+    // driven. performEdit-based undo still covers unmapped parameters.
+    for (auto& [pid, conn] : mappedVstParams) {
+        if (conn && conn->is_connected) {
+            stateBaselineValid_ = false;
+            return;
+        }
+    }
+
+    auto comp = plugin->getComponentState();
+    auto ctrl = plugin->getControllerState();
+    if (comp.empty() && ctrl.empty()) return;
+
+    if (vstStateBaselineDirty || !stateBaselineValid_) {
+        stateBaselineComp_ = std::move(comp);
+        stateBaselineCtrl_ = std::move(ctrl);
+        stateBaselineValid_ = true;
+        vstStateBaselineDirty = false;
+        stateDiffCoalesce_ = false;
+        return;
+    }
+
+    if (comp == stateBaselineComp_ && ctrl == stateBaselineCtrl_) {
+        stateDiffCoalesce_ = false;
+        return;
+    }
+
+    json newState = json::object();
+    newState["compState"] = jsonBytesEncode(comp);
+    newState["ctrlState"] = jsonBytesEncode(ctrl);
+    std::vector<int> mgrPath = nm ? nm->managerPath : std::vector<int>{};
+
+    // Consecutive changed polls = one continuous internal gesture; extend the
+    // existing action instead of stacking one per poll interval.
+    if (stateDiffCoalesce_ && project->um->current && project->um->current->type == VstStateChange) {
+        auto* prev = static_cast<VstStateChangeAction*>(project->um->current);
+        if (prev->nodeID == static_cast<int>(id) && prev->managerPath == mgrPath) {
+            prev->newState = std::move(newState);
+            stateBaselineComp_ = std::move(comp);
+            stateBaselineCtrl_ = std::move(ctrl);
+            return;
+        }
+    }
+
+    json oldState = json::object();
+    oldState["compState"] = jsonBytesEncode(stateBaselineComp_);
+    oldState["ctrlState"] = jsonBytesEncode(stateBaselineCtrl_);
+    auto* pa = new VstStateChangeAction(project, std::move(mgrPath), static_cast<int>(id),
+                                        std::move(oldState), std::move(newState), true);
+    project->um->newAction(pa);
+    stateBaselineComp_ = std::move(comp);
+    stateBaselineCtrl_ = std::move(ctrl);
+    stateDiffCoalesce_ = true;
 }
 
 // ============================================================================

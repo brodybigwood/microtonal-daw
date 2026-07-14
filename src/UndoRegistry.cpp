@@ -44,6 +44,7 @@ const std::unordered_map<std::string, ActionType>& UndoManager::actionRegistry()
         {"remove_eq_band", RemoveEQBand},
         {"vst_param_change", VstParameterChange},
         {"vst_load_plugin", VstLoadPlugin},
+        {"vst_state_change", VstStateChange},
         {"toggle_piano_roll_window", TogglePianoRollWindow},
         {"create_automation_curve", CreateAutomationCurve},
         {"modify_curve_points", ModifyCurvePoints},
@@ -108,6 +109,9 @@ std::string UndoManager::actionSchema(const std::string& actionName) {
         return R"({"managerPath":[int,...],"nodeID":int,"paramID":int,"oldValue":float,"newValue":float})";
     }
     if (actionName == "vst_load_plugin") {
+        return R"({"managerPath":[int,...],"nodeID":int,"oldState":object,"newState":object})";
+    }
+    if (actionName == "vst_state_change") {
         return R"({"managerPath":[int,...],"nodeID":int,"oldState":object,"newState":object})";
     }
     if (actionName == "toggle_piano_roll_window") {

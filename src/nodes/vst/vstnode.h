@@ -25,6 +25,10 @@ public:
     void wirePluginCallbacks();
 
     bool restoringState = false;
+    /** State-diff undo: next poll re-snapshots the baseline without creating an
+        action. Set after any host-initiated state write (param actions,
+        undo/redo replays, plugin load). */
+    bool vstStateBaselineDirty = true;
 
     // Load a new plugin (with undo support)
     void loadPlugin(const std::string& path, bool createUndo = false);
@@ -71,4 +75,15 @@ private:
     int allocMpeChannel(int noteId, void* eventList); // HostEventList*
     void freeMpeChannel(int noteId);
     void sendMpePitchBendRange(void* eventList); // HostEventList*
+
+    // State-diff undo — catches plugin-internal edits (mod routing, toggles,
+    // preset browsing) that never arrive via IComponentHandler::performEdit.
+    // GUI thread only, driven from VstPlugin::tickEditor via onStatePoll.
+    void pollVstStateForUndo(bool force);
+    std::vector<uint8_t> stateBaselineComp_;
+    std::vector<uint8_t> stateBaselineCtrl_;
+    bool stateBaselineValid_ = false;
+    uint64_t lastStatePollMs_ = 0;
+    /** Last poll produced a state action — consecutive diffs coalesce into it. */
+    bool stateDiffCoalesce_ = false;
 };

@@ -121,6 +121,7 @@ VstParameterChangeAction::VstParameterChangeAction(Project* p, std::vector<int> 
         vst->restoringState = true;
         vst->plugin->setParameterValue(static_cast<int>(this->paramID), this->newValue);
         vst->restoringState = false;
+        vst->vstStateBaselineDirty = true;
     };
 
     undoAction = [this]() {
@@ -132,6 +133,7 @@ VstParameterChangeAction::VstParameterChangeAction(Project* p, std::vector<int> 
         vst->restoringState = true;
         vst->plugin->setParameterValue(static_cast<int>(this->paramID), this->oldValue);
         vst->restoringState = false;
+        vst->vstStateBaselineDirty = true;
     };
 }
 
@@ -164,6 +166,7 @@ VstLoadPluginAction::VstLoadPluginAction(Project* p, std::vector<int> managerPat
             if (this->newState.contains("ctrlState") && vst->plugin)
                 vst->plugin->setControllerState(jsonBytesDecode(this->newState["ctrlState"]));
         }
+        vst->vstStateBaselineDirty = true;
     };
 
     undoAction = [this]() {
@@ -181,6 +184,54 @@ VstLoadPluginAction::VstLoadPluginAction(Project* p, std::vector<int> managerPat
             if (this->oldState.contains("ctrlState") && vst->plugin)
                 vst->plugin->setControllerState(jsonBytesDecode(this->oldState["ctrlState"]));
         }
+        vst->vstStateBaselineDirty = true;
+    };
+}
+
+// ============================================================================
+// VstStateChangeAction
+// ============================================================================
+
+static void vstApplyStateJson(Project* p, const std::vector<int>& managerPath, int nodeID,
+                              const json& state, const char* ctx) {
+    NodeManager& nm = requireManager(p, managerPath);
+    Node* node = nm.getNode(static_cast<uint16_t>(nodeID));
+    auto* vst = dynamic_cast<VstNode*>(node);
+    if (!vst) throw std::runtime_error(std::string(ctx) + ": node not found or not VstNode");
+    if (!vst->plugin) throw std::runtime_error(std::string(ctx) + ": plugin is null");
+    vst->restoringState = true;
+    if (state.contains("compState"))
+        vst->plugin->setComponentState(jsonBytesDecode(state["compState"]));
+    if (state.contains("ctrlState"))
+        vst->plugin->setControllerState(jsonBytesDecode(state["ctrlState"]));
+    vst->restoringState = false;
+    vst->vstStateBaselineDirty = true;
+}
+
+VstStateChangeAction::VstStateChangeAction(Project* p, std::vector<int> managerPath, int nodeID,
+                                           json oldState, json newState, bool liveCreated)
+    : ProjectAction(p, VstStateChange)
+    , managerPath(std::move(managerPath))
+    , nodeID(nodeID)
+    , oldState(std::move(oldState))
+    , newState(std::move(newState))
+    , skipFirstReplay(liveCreated)
+{
+    skipInitialDo = true;
+    name = "VST Plugin Edit";
+
+    doAction = [this]() {
+        if (this->skipFirstReplay) {
+            this->skipFirstReplay = false;
+            return;
+        }
+        vstApplyStateJson(this->p, this->managerPath, this->nodeID, this->newState,
+                          "VstStateChangeAction::doAction");
+    };
+
+    undoAction = [this]() {
+        vstApplyStateJson(this->p, this->managerPath, this->nodeID, this->oldState,
+                          "VstStateChangeAction::undoAction");
     };
 }
 

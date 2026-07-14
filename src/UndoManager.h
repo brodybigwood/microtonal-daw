@@ -60,6 +60,7 @@ enum ActionType {
     ParamNodeRemoveModRow = 42,
     ParamNodeToggleCentered = 43,
     TempoCurveEdit = 44,
+    VstStateChange = 45,
 };
 
 
@@ -652,6 +653,21 @@ struct VstLoadPluginAction : ProjectAction {
 
     VstLoadPluginAction(Project* p, std::vector<int> managerPath, int nodeID,
                         json oldState, json newState);
+};
+
+/** Whole-state snapshot diff for plugin-internal edits (mod routing, toggles,
+    preset browsing) that never arrive via IComponentHandler::performEdit. */
+struct VstStateChangeAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    json oldState;      // {compState, ctrlState}
+    json newState;
+    /** Live-created actions: the shared plugin already carries newState, so the
+        audio-copy replay that newAction enqueues must not re-apply it. */
+    bool skipFirstReplay = false;
+
+    VstStateChangeAction(Project* p, std::vector<int> managerPath, int nodeID,
+                         json oldState, json newState, bool liveCreated = false);
 };
 
 struct MapParameterUndoAction : ProjectAction {

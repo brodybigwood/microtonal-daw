@@ -200,11 +200,13 @@ Steinberg::tresult PLUGIN_API EditorHostFrame::beginEdit(Steinberg::Vst::ParamID
 
 Steinberg::tresult PLUGIN_API EditorHostFrame::performEdit(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue valueNormalized) {
     if (onPerformEdit) {
-        // Look up pre-edit value captured by VstNode in beginEdit callback
+        // Look up pre-edit value captured by VstNode in beginEdit callback.
+        // Kept until endEdit so every performEdit of a drag gesture reports the
+        // true pre-gesture value; without beginEdit, oldValue == newValue and
+        // VstNode leaves the change to the state-diff poller.
         auto it = preEditValues.find(id);
         Steinberg::Vst::ParamValue oldValue = (it != preEditValues.end()) ? it->second : valueNormalized;
         onPerformEdit(id, oldValue, valueNormalized);
-        preEditValues.erase(id);
     }
     return Steinberg::kResultTrue;
 }
@@ -219,6 +221,8 @@ void EditorHostFrame::capturePreEditValue(Steinberg::Vst::ParamID id, Steinberg:
 }
 
 Steinberg::tresult PLUGIN_API EditorHostFrame::restartComponent(Steinberg::int32 flags) {
+    // Plugin-initiated state reloads (preset change etc.) — poll for undo promptly.
+    statePollRequested = true;
     return Steinberg::kResultTrue;
 }
 
@@ -877,10 +881,18 @@ bool VstPlugin::tickEditor() {
     if (hostFrame) hostFrame->pollRunLoop();
 
     if (!editorHost->tick()) {
+        // Final state check so edits made just before closing the window still
+        // land in the undo tree.
+        if (hostFrame && hostFrame->onStatePoll) hostFrame->onStatePoll(true);
         if (view) view->removed();
         editorHost.reset();
         editorOpen = false;
         return false;
+    }
+    if (hostFrame && hostFrame->onStatePoll) {
+        bool force = hostFrame->statePollRequested;
+        hostFrame->statePollRequested = false;
+        hostFrame->onStatePoll(force);
     }
     return true;
 }

@@ -105,6 +105,15 @@ sibling are replicated to the others (`UndoManager::newAction`).
 
 The VST node (`nodes/vst/`) hosts VST3 plugins natively (X11 editor window,
 yabridge-aware, microtonal notes → MPE); it compiles to a stub under WASM.
+Plugin undo is two-tier: exposed parameter edits arrive via
+`IComponentHandler::performEdit` (`VstParameterChangeAction`, drag-coalesced),
+and everything else (mod routing, internal toggles, preset browsing) is caught
+by a state-diff poller (`VstNode::pollVstStateForUndo`, driven from
+`tickEditor` on the GUI thread) that snapshots component+controller state
+while the editor is open and records differences as `VstStateChangeAction`
+blobs. Host-initiated state writes mark `vstStateBaselineDirty` so the poller
+re-baselines instead of echoing them; polling pauses while mapped parameter
+connections drive the plugin.
 
 ## Build
 
