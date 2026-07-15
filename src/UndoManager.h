@@ -61,6 +61,12 @@ enum ActionType {
     ParamNodeToggleCentered = 43,
     TempoCurveEdit = 44,
     VstStateChange = 45,
+    SamplerAddSample = 46,
+    SamplerRemoveSample = 47,
+    SamplerReorderSamples = 48,
+    SamplerLoadSampleFile = 49,
+    SamplerToggleSampleSolo = 50,
+    SamplerToggleSampleMute = 51,
 };
 
 
@@ -103,6 +109,10 @@ struct ProjectAction {
     Project* p;
 
     virtual ~ProjectAction() = default;
+
+    /** If this action can absorb @p newer (same logical operation, just updating final value),
+     *  merge it and return true.  Called by UndoManager before pushing a new action. */
+    virtual bool coalesceWith(ProjectAction* newer) { (void)newer; return false; }
 
     ProjectAction(Project* p, ActionType type) : p(p), type(type) {
         doAction = []() {};
@@ -265,6 +275,8 @@ struct SetParamValueUndoAction : ProjectAction {
 
     SetParamValueUndoAction(Project* p, std::vector<int> managerPath, int nodeID, std::vector<size_t> paramPath,
                             float oldValue, float newValue, std::string actionName = "Set Param Value");
+
+    bool coalesceWith(ProjectAction* newer) override;
 };
 
 struct MoveNoteAction : ProjectAction {
@@ -751,4 +763,72 @@ struct ParamNodeToggleCenteredUndoAction : ProjectAction {
     ParamNodeToggleCenteredUndoAction(Project* p, std::vector<int> managerPath, int nodeID,
                                       size_t modIndex, bool oldCentered, bool newCentered,
                                       float oldDepth, float newDepth);
+};
+
+// --- Sampler undo actions ---
+
+struct SamplerAddSampleUndoAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    std::string filepath;
+    size_t insertedIndex = 0;
+
+    SamplerAddSampleUndoAction(Project* p, std::vector<int> managerPath, int nodeID, std::string filepath);
+};
+
+struct SamplerRemoveSampleUndoAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    size_t sampleIndex = 0;
+    // Snapshot of the removed sample
+    std::string filepath;
+    float vol, pitch, pan, offset, cutoff, attack, decay, sustain, release;
+    bool solo, mute;
+    int sampleRate, numChannels;
+    // Connection wiring snapshot for undo restore.
+    bool inConnected = false;
+    uint16_t inSrcNode = 0, inSrcCon = 0;
+    bool outConnected = false;
+    uint16_t outDstNode = 0, outDstCon = 0;
+
+    SamplerRemoveSampleUndoAction(Project* p, std::vector<int> managerPath, int nodeID, size_t sampleIndex);
+};
+
+struct SamplerReorderSamplesUndoAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    std::vector<size_t> newOrder;
+
+    SamplerReorderSamplesUndoAction(Project* p, std::vector<int> managerPath, int nodeID,
+                                    std::vector<size_t> newOrder);
+};
+
+struct SamplerLoadSampleFileUndoAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    size_t sampleIndex = 0;
+    std::string oldFilepath;
+    std::string newFilepath;
+    int oldSampleRate = 0, oldNumChannels = 0;
+    int newSampleRate = 0, newNumChannels = 0;
+
+    SamplerLoadSampleFileUndoAction(Project* p, std::vector<int> managerPath, int nodeID,
+                                    size_t sampleIndex, std::string oldFilepath, std::string newFilepath,
+                                    int oldSr, int oldNch, int newSr, int newNch);
+};
+
+struct SamplerToggleSampleSoloUndoAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    size_t sampleIndex = 0;
+
+    SamplerToggleSampleSoloUndoAction(Project* p, std::vector<int> managerPath, int nodeID, size_t sampleIndex);
+};
+
+struct SamplerToggleSampleMuteUndoAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    size_t sampleIndex = 0;
+
+    SamplerToggleSampleMuteUndoAction(Project* p, std::vector<int> managerPath, int nodeID, size_t sampleIndex);
 };

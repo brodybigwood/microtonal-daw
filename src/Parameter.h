@@ -24,6 +24,7 @@ struct Parameter {
     virtual void render(SDL_Renderer*) {}
     virtual void handleInput(SDL_Event&) {}
 
+    Parameter() = default;
     Parameter(float, std::pair<std::vector<float>, std::vector<float>>);
     ~Parameter();
 

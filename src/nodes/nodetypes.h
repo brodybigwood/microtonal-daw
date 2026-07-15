@@ -16,6 +16,7 @@
 #include "nodes/vst/vstnode.h"
 #include "nodes/surroundtostereo/surroundtostereo.h"
 #include "nodes/paramnode/paramnode.h"
+#include "nodes/sampler/sampler.h"
 
 inline std::string NodeTypeStr[] = {
     "Arranger",
@@ -33,7 +34,8 @@ inline std::string NodeTypeStr[] = {
     "ParametricEQ",
     "VST",
     "Surround->Stereo",
-    "Param"
+    "Param",
+    "Sampler"
 };
 
 inline Node* byType(NodeType t, int id, NodeManager* nm) {
@@ -70,6 +72,8 @@ inline Node* byType(NodeType t, int id, NodeManager* nm) {
             return new SurroundToStereoNode(id, nm);
         case NodeType::Param:
             return new ParamNode(id, nm);
+        case NodeType::Sampler:
+            return new SamplerNode(id, nm);
         default:
             return nullptr;
     }

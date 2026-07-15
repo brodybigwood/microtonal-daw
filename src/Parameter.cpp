@@ -97,16 +97,11 @@ void Knob::render(SDL_Renderer* renderer) {
         SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, label.c_str(), 0, labelColor);
         if (surf) {
             SDL_Texture* textTex = SDL_CreateTextureFromSurface(renderer, surf);
-            // Keep label visual size consistent across differently sized knobs.
-            const float referenceDiameter = 290.0f;
-            const float scale = knobRect.w / referenceDiameter;
-            const float tw = static_cast<float>(surf->w) * scale;
-            const float th = static_cast<float>(surf->h) * scale;
             SDL_FRect tr{
-                cx - tw * 0.5f,
-                knobRect.y + knobRect.h + 16.0f,
-                tw,
-                th
+                cx - static_cast<float>(surf->w) * 0.5f,
+                knobRect.y + knobRect.h + 4.0f,
+                static_cast<float>(surf->w),
+                static_cast<float>(surf->h)
             };
             SDL_RenderTexture(renderer, textTex, nullptr, &tr);
             SDL_DestroyTexture(textTex);

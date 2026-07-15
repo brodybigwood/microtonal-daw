@@ -336,6 +336,75 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
         case TempoCurveEdit:
             pa = new TempoCurveEditAction(p, j.at("before"), j.at("after"));
             break;
+        case SamplerAddSample: {
+            auto* sa = new SamplerAddSampleUndoAction(p,
+                j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(),
+                j.at("filepath").get<std::string>());
+            if (j.contains("insertedIndex"))
+                sa->insertedIndex = j["insertedIndex"].get<size_t>();
+            pa = sa;
+            break;
+        }
+        case SamplerRemoveSample: {
+            auto* sa = new SamplerRemoveSampleUndoAction(p,
+                j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(),
+                j.at("sampleIndex").get<size_t>());
+            // Restore snapshot fields (overrides what constructor read, since node may be gone).
+            sa->filepath = j.at("filepath").get<std::string>();
+            sa->vol = j.at("vol").get<float>();
+            sa->pitch = j.at("pitch").get<float>();
+            sa->pan = j.at("pan").get<float>();
+            sa->offset = j.value("offset", 0.f);
+            sa->cutoff = j.value("cutoff", 1.f);
+            sa->attack = j.value("attack", 0.f);
+            sa->decay = j.value("decay", 0.f);
+            sa->sustain = j.value("sustain", 1.f);
+            sa->release = j.value("release", 0.f);
+            sa->solo = j.value("solo", false);
+            sa->mute = j.value("mute", false);
+            sa->sampleRate = j.value("sampleRate", 0);
+            sa->numChannels = j.value("numChannels", 1);
+            sa->inConnected = j.value("inConnected", false);
+            sa->inSrcNode = j.value("inSrcNode", 0);
+            sa->inSrcCon = j.value("inSrcCon", 0);
+            sa->outConnected = j.value("outConnected", false);
+            sa->outDstNode = j.value("outDstNode", 0);
+            sa->outDstCon = j.value("outDstCon", 0);
+            pa = sa;
+            break;
+        }
+        case SamplerReorderSamples:
+            pa = new SamplerReorderSamplesUndoAction(p,
+                j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(),
+                j.at("newOrder").get<std::vector<size_t>>());
+            break;
+        case SamplerLoadSampleFile:
+            pa = new SamplerLoadSampleFileUndoAction(p,
+                j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(),
+                j.at("sampleIndex").get<size_t>(),
+                j.at("oldFilepath").get<std::string>(),
+                j.at("newFilepath").get<std::string>(),
+                j.at("oldSampleRate").get<int>(),
+                j.at("oldNumChannels").get<int>(),
+                j.at("newSampleRate").get<int>(),
+                j.at("newNumChannels").get<int>());
+            break;
+        case SamplerToggleSampleSolo:
+            pa = new SamplerToggleSampleSoloUndoAction(p,
+                j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(),
+                j.at("sampleIndex").get<size_t>());
+            break;
+        case SamplerToggleSampleMute:
+            pa = new SamplerToggleSampleMuteUndoAction(p,
+                j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(),
+                j.at("sampleIndex").get<size_t>());
+            break;
         default:
             throw std::runtime_error("invalid undo action type in save");
     }
@@ -799,6 +868,75 @@ json ProjectAction::serialize(ProjectAction* pa) {
             auto* te = static_cast<TempoCurveEditAction*>(pa);
             j["before"] = te->before;
             j["after"] = te->after;
+            break;
+        }
+        case SamplerAddSample: {
+            auto* sa = static_cast<SamplerAddSampleUndoAction*>(pa);
+            j["managerPath"] = sa->managerPath;
+            j["nodeID"] = sa->nodeID;
+            j["filepath"] = sa->filepath;
+            j["insertedIndex"] = sa->insertedIndex;
+            break;
+        }
+        case SamplerRemoveSample: {
+            auto* sr = static_cast<SamplerRemoveSampleUndoAction*>(pa);
+            j["managerPath"] = sr->managerPath;
+            j["nodeID"] = sr->nodeID;
+            j["sampleIndex"] = sr->sampleIndex;
+            j["filepath"] = sr->filepath;
+            j["vol"] = sr->vol;
+            j["pitch"] = sr->pitch;
+            j["pan"] = sr->pan;
+            j["offset"] = sr->offset;
+            j["cutoff"] = sr->cutoff;
+            j["attack"] = sr->attack;
+            j["decay"] = sr->decay;
+            j["sustain"] = sr->sustain;
+            j["release"] = sr->release;
+            j["solo"] = sr->solo;
+            j["mute"] = sr->mute;
+            j["sampleRate"] = sr->sampleRate;
+            j["numChannels"] = sr->numChannels;
+            j["inConnected"] = sr->inConnected;
+            j["inSrcNode"] = sr->inSrcNode;
+            j["inSrcCon"] = sr->inSrcCon;
+            j["outConnected"] = sr->outConnected;
+            j["outDstNode"] = sr->outDstNode;
+            j["outDstCon"] = sr->outDstCon;
+            break;
+        }
+        case SamplerReorderSamples: {
+            auto* sr = static_cast<SamplerReorderSamplesUndoAction*>(pa);
+            j["managerPath"] = sr->managerPath;
+            j["nodeID"] = sr->nodeID;
+            j["newOrder"] = sr->newOrder;
+            break;
+        }
+        case SamplerLoadSampleFile: {
+            auto* sl = static_cast<SamplerLoadSampleFileUndoAction*>(pa);
+            j["managerPath"] = sl->managerPath;
+            j["nodeID"] = sl->nodeID;
+            j["sampleIndex"] = sl->sampleIndex;
+            j["oldFilepath"] = sl->oldFilepath;
+            j["newFilepath"] = sl->newFilepath;
+            j["oldSampleRate"] = sl->oldSampleRate;
+            j["oldNumChannels"] = sl->oldNumChannels;
+            j["newSampleRate"] = sl->newSampleRate;
+            j["newNumChannels"] = sl->newNumChannels;
+            break;
+        }
+        case SamplerToggleSampleSolo: {
+            auto* ts = static_cast<SamplerToggleSampleSoloUndoAction*>(pa);
+            j["managerPath"] = ts->managerPath;
+            j["nodeID"] = ts->nodeID;
+            j["sampleIndex"] = ts->sampleIndex;
+            break;
+        }
+        case SamplerToggleSampleMute: {
+            auto* tm = static_cast<SamplerToggleSampleMuteUndoAction*>(pa);
+            j["managerPath"] = tm->managerPath;
+            j["nodeID"] = tm->nodeID;
+            j["sampleIndex"] = tm->sampleIndex;
             break;
         }
         default:

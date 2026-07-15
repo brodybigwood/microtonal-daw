@@ -1,6 +1,7 @@
 #include "UndoManager.h"
 #include "nodes/parametriceq/parametriceq.h"
 #include "nodes/paramnode/paramnode.h"
+#include "nodes/sampler/sampler.h"
 #include "nodes/vst/vstnode.h"
 #include "nodes/arranger/arranger.h"
 #include "SongRoll.h"
@@ -56,6 +57,14 @@ SetParamValueUndoAction::SetParamValueUndoAction(Project* p, std::vector<int> ma
             throw std::runtime_error("SetParamValueUndoAction::undoAction: parameter not found");
         target->params[this->paramPath[0]]->value = this->oldValue;
     };
+}
+
+bool SetParamValueUndoAction::coalesceWith(ProjectAction* newer) {
+    if (newer->type != SetParamValue) return false;
+    auto* o = static_cast<SetParamValueUndoAction*>(newer);
+    if (o->nodeID != nodeID || o->paramPath != paramPath) return false;
+    newValue = o->newValue;
+    return true;
 }
 
 ParamNodeAddModRowUndoAction::ParamNodeAddModRowUndoAction(Project* p, std::vector<int> managerPath, int nodeID) :
@@ -186,6 +195,194 @@ ParamNodeToggleCenteredUndoAction::ParamNodeToggleCenteredUndoAction(Project* p,
         auto* mod = target->modulators[this->modIndex];
         mod->centered = this->oldCentered;
         mod->depth.value = this->oldDepth;
+    };
+}
+
+// ============================================================================
+// Sampler undo actions
+// ============================================================================
+
+SamplerAddSampleUndoAction::SamplerAddSampleUndoAction(Project* p, std::vector<int> managerPath,
+    int nodeID, std::string filepath)
+    : ProjectAction(p, SamplerAddSample), managerPath(std::move(managerPath)),
+      nodeID(nodeID), filepath(std::move(filepath)) {
+    name = "Add Sample";
+    doAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        auto* target = dynamic_cast<SamplerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!target) throw std::runtime_error("SamplerAddSample::doAction: node not found");
+        target->addSample(this->filepath);
+        this->insertedIndex = target->samples.size() - 1;
+    };
+    undoAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        auto* target = dynamic_cast<SamplerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!target) throw std::runtime_error("SamplerAddSample::undoAction: node not found");
+        target->removeSample(this->insertedIndex);
+    };
+}
+
+SamplerRemoveSampleUndoAction::SamplerRemoveSampleUndoAction(Project* p, std::vector<int> managerPath,
+    int nodeID, size_t sampleIndex)
+    : ProjectAction(p, SamplerRemoveSample), managerPath(std::move(managerPath)),
+      nodeID(nodeID), sampleIndex(sampleIndex) {
+    // Snapshot from live node.
+    NodeManager& nm = requireManager(p, this->managerPath);
+    auto* target = dynamic_cast<SamplerNode*>(nm.getNode(static_cast<uint16_t>(nodeID)));
+    if (target && sampleIndex < target->samples.size()) {
+        auto& s = target->samples[sampleIndex];
+        filepath = s.filepath;
+        vol = s.volume.value; pitch = s.pitch.value; pan = s.pan.value;
+        offset = s.offset.value; cutoff = s.cutoff.value;
+        attack = s.attack.value; decay = s.decay.value;
+        sustain = s.sustain.value; release = s.release.value;
+        solo = s.solo; mute = s.mute;
+        sampleRate = s.sampleRate; numChannels = s.numChannels;
+        // Snapshot connection wiring.
+        size_t inIdx = 1 + sampleIndex;
+        if (inIdx < target->inputs.connections.size()) {
+            auto* ic = target->inputs.connections[inIdx];
+            if (ic->is_connected) {
+                inConnected = true;
+                inSrcNode = ic->input_node;
+                inSrcCon = ic->input_connection;
+            }
+        }
+        if (sampleIndex < target->outputs.connections.size()) {
+            auto* oc = target->outputs.connections[sampleIndex];
+            if (oc->is_connected) {
+                outConnected = true;
+                outDstNode = oc->output_node;
+                outDstCon = oc->output_connection;
+            }
+        }
+    }
+    name = "Remove Sample";
+    doAction = [this]() {
+        NodeManager& nm2 = requireManager(this->p, this->managerPath);
+        auto* target2 = dynamic_cast<SamplerNode*>(nm2.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!target2) throw std::runtime_error("SamplerRemoveSample::doAction: node not found");
+        target2->removeSample(this->sampleIndex);
+    };
+    undoAction = [this]() {
+        NodeManager& nm2 = requireManager(this->p, this->managerPath);
+        auto* target2 = dynamic_cast<SamplerNode*>(nm2.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!target2) throw std::runtime_error("SamplerRemoveSample::undoAction: node not found");
+        target2->insertSampleAt(this->sampleIndex, this->filepath);
+        if (this->sampleIndex < target2->samples.size()) {
+            auto& s = target2->samples[this->sampleIndex];
+            s.volume.value = this->vol;
+            s.pitch.value = this->pitch;
+            s.pan.value = this->pan;
+            s.offset.value = this->offset;
+            s.cutoff.value = this->cutoff;
+            s.attack.value = this->attack;
+            s.decay.value = this->decay;
+            s.sustain.value = this->sustain;
+            s.release.value = this->release;
+            s.solo = this->solo;
+            s.mute = this->mute;
+            // Restore connection wiring.
+            if (this->inConnected) {
+                size_t inIdx = 1 + this->sampleIndex;
+                if (inIdx < target2->inputs.connections.size()) {
+                    auto* ic = target2->inputs.connections[inIdx];
+                    nm2.makeNodeConnectionNow(this->inSrcNode, this->inSrcCon,
+                                              ic->output_node, ic->output_connection);
+                }
+            }
+            if (this->outConnected) {
+                if (this->sampleIndex < target2->outputs.connections.size()) {
+                    auto* oc = target2->outputs.connections[this->sampleIndex];
+                    nm2.makeNodeConnectionNow(static_cast<int>(target2->id), static_cast<int>(oc->id),
+                                              this->outDstNode, this->outDstCon);
+                }
+            }
+        }
+    };
+}
+
+SamplerReorderSamplesUndoAction::SamplerReorderSamplesUndoAction(Project* p, std::vector<int> managerPath,
+    int nodeID, std::vector<size_t> newOrder)
+    : ProjectAction(p, SamplerReorderSamples), managerPath(std::move(managerPath)),
+      nodeID(nodeID), newOrder(std::move(newOrder)) {
+    name = "Reorder Samples";
+    doAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        auto* target = dynamic_cast<SamplerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!target) throw std::runtime_error("SamplerReorderSamples::doAction: node not found");
+        target->reorderSamples(this->newOrder);
+    };
+    undoAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        auto* target = dynamic_cast<SamplerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!target) throw std::runtime_error("SamplerReorderSamples::undoAction: node not found");
+        // Compute inverse permutation.
+        std::vector<size_t> inverse(this->newOrder.size());
+        for (size_t i = 0; i < this->newOrder.size(); ++i)
+            inverse[this->newOrder[i]] = i;
+        target->reorderSamples(inverse);
+    };
+}
+
+SamplerLoadSampleFileUndoAction::SamplerLoadSampleFileUndoAction(Project* p, std::vector<int> managerPath,
+    int nodeID, size_t sampleIndex, std::string oldFilepath, std::string newFilepath,
+    int oldSr, int oldNch, int newSr, int newNch)
+    : ProjectAction(p, SamplerLoadSampleFile), managerPath(std::move(managerPath)),
+      nodeID(nodeID), sampleIndex(sampleIndex),
+      oldFilepath(std::move(oldFilepath)), newFilepath(std::move(newFilepath)),
+      oldSampleRate(oldSr), oldNumChannels(oldNch),
+      newSampleRate(newSr), newNumChannels(newNch) {
+    name = "Load Sample File";
+    doAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        auto* target = dynamic_cast<SamplerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!target) throw std::runtime_error("SamplerLoadSampleFile::doAction: node not found");
+        target->setSampleFile(this->sampleIndex, this->newFilepath);
+    };
+    undoAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        auto* target = dynamic_cast<SamplerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!target) throw std::runtime_error("SamplerLoadSampleFile::undoAction: node not found");
+        target->setSampleFile(this->sampleIndex, this->oldFilepath);
+    };
+}
+
+SamplerToggleSampleSoloUndoAction::SamplerToggleSampleSoloUndoAction(Project* p, std::vector<int> managerPath,
+    int nodeID, size_t sampleIndex)
+    : ProjectAction(p, SamplerToggleSampleSolo), managerPath(std::move(managerPath)),
+      nodeID(nodeID), sampleIndex(sampleIndex) {
+    name = "Toggle Solo";
+    doAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        auto* target = dynamic_cast<SamplerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!target || this->sampleIndex >= target->samples.size()) return;
+        target->samples[this->sampleIndex].solo = !target->samples[this->sampleIndex].solo;
+    };
+    undoAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        auto* target = dynamic_cast<SamplerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!target || this->sampleIndex >= target->samples.size()) return;
+        target->samples[this->sampleIndex].solo = !target->samples[this->sampleIndex].solo;
+    };
+}
+
+SamplerToggleSampleMuteUndoAction::SamplerToggleSampleMuteUndoAction(Project* p, std::vector<int> managerPath,
+    int nodeID, size_t sampleIndex)
+    : ProjectAction(p, SamplerToggleSampleMute), managerPath(std::move(managerPath)),
+      nodeID(nodeID), sampleIndex(sampleIndex) {
+    name = "Toggle Mute";
+    doAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        auto* target = dynamic_cast<SamplerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!target || this->sampleIndex >= target->samples.size()) return;
+        target->samples[this->sampleIndex].mute = !target->samples[this->sampleIndex].mute;
+    };
+    undoAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        auto* target = dynamic_cast<SamplerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!target || this->sampleIndex >= target->samples.size()) return;
+        target->samples[this->sampleIndex].mute = !target->samples[this->sampleIndex].mute;
     };
 }
 

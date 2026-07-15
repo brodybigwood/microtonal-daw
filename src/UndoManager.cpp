@@ -177,6 +177,16 @@ void UndoManager::newAction(ProjectAction* pa) {
     }
 
     // --- Normal newAction flow ---
+    // Coalesce: if the last action can absorb this one, avoid pushing a new entry.
+    if (current != head && current->coalesceWith(pa)) {
+        // Still sync the updated (coalesced) action to the audio thread.
+        if (pa->p && pa->p->processor && pa->p->processor->dspGraph) {
+            ProjectAction* cap = current;
+            enqueueAudioSync([cap]() { cap->doAction(); });
+        }
+        delete pa;
+        return;
+    }
     current->newAction(pa);
     current->last_index = pa->index;
     current = pa;
