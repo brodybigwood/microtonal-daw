@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "daw": {
+      "command": "/usr/bin/python3",
+      "args": ["/mnt/2TB/home/brody/projects/daw/tools/daw_mcp_server.py"]
+    }
+  }
+}

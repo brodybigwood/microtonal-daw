@@ -2,6 +2,8 @@
 #include "WindowHandler.h"
 #include "AudioManager.h"
 #include "NodeProcessor.h"
+#include "ControlServer.h"
+#include "Settings.h"
 #include "styles.h"
 
 #ifdef __EMSCRIPTEN__
@@ -47,6 +49,13 @@ int main(int argc, char* argv[]) {
     WindowHandler* windowHandler = WindowHandler::instance();
     windowHandler->project = project;
 
+#ifndef __EMSCRIPTEN__
+    // External control channel (see ControlServer), configured purely from
+    // settings.json (`controlEnabled` / `controlSocketPath`).
+    if (Settings::instance().controlEnabled())
+        ControlServer::instance().start(Settings::instance().controlSocketPath());
+#endif
+
     if (!audioManager->start())
         std::cout << "[Audio] failed to start, running without audio" << std::endl;
 
@@ -65,6 +74,9 @@ int main(int argc, char* argv[]) {
 #endif
 
     project->save();
+#ifndef __EMSCRIPTEN__
+    ControlServer::instance().stop();
+#endif
     audioManager->stop();
     delete project;
     SDL_Quit();

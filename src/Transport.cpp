@@ -203,31 +203,13 @@ void Transport::clickMouse(uint8_t button) {
     // Timeline bar
     if (mouseY >= barY && mouseY <= barY + Transport::kTimelineHeight) {
         draggingTimeline = true;
-        float beat = snappedBeat(view, mouseX);
-        view->project->beatPosition = static_cast<double>(beat);
-        view->project->effectiveBeatPosition = static_cast<double>(beat);
-        double sec = static_cast<double>(view->project->tempoCurve.secondsForBeats(0.f, beat));
-        view->project->effectiveTime = sec;
-        view->project->timeSeconds = sec;
-        view->project->playHeadStart = sec;
-        view->project->playHeadBeat = static_cast<double>(beat);
-        view->project->syncTransportToAudio(view->project->isPlaying,
-                                            static_cast<double>(beat), sec);
+        view->project->seekBeat(static_cast<double>(snappedBeat(view, mouseX)));
     }
 }
 
 void Transport::handleMotion() {
     if (draggingTimeline) {
-        float beat = snappedBeat(view, mouseX);
-        view->project->beatPosition = static_cast<double>(beat);
-        view->project->effectiveBeatPosition = static_cast<double>(beat);
-        double sec = static_cast<double>(view->project->tempoCurve.secondsForBeats(0.f, beat));
-        view->project->effectiveTime = sec;
-        view->project->timeSeconds = sec;
-        view->project->playHeadStart = sec;
-        view->project->playHeadBeat = static_cast<double>(beat);
-        view->project->syncTransportToAudio(view->project->isPlaying,
-                                            static_cast<double>(beat), sec);
+        view->project->seekBeat(static_cast<double>(snappedBeat(view, mouseX)));
         return;
     }
 

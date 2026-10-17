@@ -16,5 +16,6 @@ enum NodeType {
     SurroundToStereo,
     Param,
     Sampler,
+    Bus,
     Count // for iteration
 };

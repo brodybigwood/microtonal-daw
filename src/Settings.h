@@ -13,6 +13,8 @@ public:
     void setBool(const char* key, bool val);
     int getInt(const char* key, int defaultVal) const;
     void setInt(const char* key, int val);
+    std::string getString(const char* key, const std::string& defaultVal) const;
+    void setString(const char* key, const std::string& val);
 
     // Typed convenience accessors.
     bool showFps() const { return getBool("showFps", false); }
@@ -32,6 +34,13 @@ public:
     void setAudioTripleBuffer(bool v) { setBool("audioTripleBuffer", v); }
     int audioEngine() const { return getInt("audioEngine", 0); }
     void setAudioEngine(int v) { setInt("audioEngine", v); }
+
+    // External control channel (Claude Code / MCP bridge).
+    bool controlEnabled() const { return getBool("controlEnabled", false); }
+    std::string controlSocketPath() const { return getString("controlSocketPath", "/tmp/microtonal-daw.sock"); }
+
+    // Raw dump of the current settings (for the control channel's `settings` query).
+    nlohmann::json toJSON() const { return data_; }
 
     std::vector<std::string> getVstHistory() const;
     void addVstToHistory(const std::string& path);

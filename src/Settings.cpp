@@ -60,6 +60,21 @@ void Settings::setInt(const char* key, int val) {
     save();
 }
 
+std::string Settings::getString(const char* key, const std::string& defaultVal) const {
+    if (data_.contains(key)) {
+        try { return data_[key].get<std::string>(); } catch (...) {}
+    }
+    if (defaults_.contains(key)) {
+        try { return defaults_[key].get<std::string>(); } catch (...) {}
+    }
+    return defaultVal;
+}
+
+void Settings::setString(const char* key, const std::string& val) {
+    data_[key] = val;
+    save();
+}
+
 void Settings::loadDefaults() {
     // Retry loading the defaults file if it wasn't available at construction time.
     if (defaults_.empty()) {
@@ -79,6 +94,8 @@ void Settings::loadDefaults() {
         defaults_["audioSampleRate"] = 0;
         defaults_["audioTripleBuffer"] = false;
         defaults_["audioEngine"] = 0;
+        defaults_["controlEnabled"] = false;
+        defaults_["controlSocketPath"] = "/tmp/microtonal-daw.sock";
     }
     json old = data_;           // snapshot current settings
     old.erase("backup");        // remove nested backup if present

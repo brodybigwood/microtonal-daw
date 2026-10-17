@@ -105,6 +105,12 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
                 j.at("toW").get<float>(), j.at("toH").get<float>());
             break;
         }
+        case MoveNode: {
+            pa = new MoveNodeAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeId").get<int>(),
+                j.at("fromX").get<float>(), j.at("fromY").get<float>(),
+                j.at("toX").get<float>(), j.at("toY").get<float>());
+            break;
+        }
         case ToggleNodeVisible: {
             pa = new ToggleNodeVisibleAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeId").get<int>());
             break;
@@ -490,6 +496,16 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["toY"] = rw->toY;
             j["toW"] = rw->toW;
             j["toH"] = rw->toH;
+            break;
+        }
+        case MoveNode: {
+            auto mn = static_cast<MoveNodeAction*>(pa);
+            j["managerPath"] = mn->managerPath;
+            j["nodeId"] = mn->nodeId;
+            j["fromX"] = mn->fromX;
+            j["fromY"] = mn->fromY;
+            j["toX"] = mn->toX;
+            j["toY"] = mn->toY;
             break;
         }
         case ToggleNodeVisible: {

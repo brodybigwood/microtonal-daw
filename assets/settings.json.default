@@ -7,5 +7,7 @@
   "audioBufferSize": 3,
   "audioSampleRate": 0,
   "audioTripleBuffer": false,
-  "audioEngine": 0
+  "audioEngine": 0,
+  "controlEnabled": false,
+  "controlSocketPath": "/tmp/microtonal-daw.sock"
 }

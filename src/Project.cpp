@@ -236,6 +236,17 @@ void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {
     } else save_l();
 }
 
+void Project::seekBeat(double beat) {
+    beatPosition = beat;
+    effectiveBeatPosition = beat;
+    const double sec = static_cast<double>(tempoCurve.secondsForBeats(0.f, static_cast<float>(beat)));
+    effectiveTime = sec;
+    timeSeconds = sec;
+    playHeadStart = sec;
+    playHeadBeat = beat;
+    syncTransportToAudio(isPlaying, beat, sec);
+}
+
 void Project::createNote(int nodeID, std::vector<std::pair<int,int>> startPairs, std::vector<std::pair<int,int>> endPairs, int regionID, std::vector<int> managerPath,
                          std::vector<std::pair<int, int>> pitchVector) {
     auto pa = new CreateNoteAction(this, std::move(managerPath), nodeID, regionID, std::move(startPairs), std::move(endPairs),

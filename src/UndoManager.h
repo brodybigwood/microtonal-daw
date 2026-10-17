@@ -239,6 +239,10 @@ struct UndoManager {
     static const std::unordered_map<std::string, ActionType>& actionRegistry();
     static std::string actionSchema(const std::string& actionName);
     bool runRegisteredAction(const std::string& actionName, const json& params, std::string& error);
+    // Builds (but does not run) the action named by actionName; throws on unknown/bad params.
+    ProjectAction* buildRegisteredAction(const std::string& actionName, const json& params);
+    // Ops only reachable through a node method that builds+runs its own action.
+    bool runDelegatedAction(const std::string& actionName, const json& params, std::string& error);
 };
 
 struct PianoRollRegionTuningUndoAction : ProjectAction {
@@ -522,6 +526,18 @@ struct ToggleNodeVisibleAction : ProjectAction {
     int nodeId = 0;
 
     ToggleNodeVisibleAction(Project* p, std::vector<int> managerPath, int nodeId);
+};
+
+/** Moves one node to an absolute position. Node drags in the editor are not
+    otherwise undoable, so this is the only way to script/undo a node move. */
+struct MoveNodeAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeId = 0;
+    float fromX = 0.f, fromY = 0.f;
+    float toX = 0.f, toY = 0.f;
+
+    MoveNodeAction(Project* p, std::vector<int> managerPath, int nodeId,
+                   float fromX, float fromY, float toX, float toY);
 };
 
 struct PanNodesAction : ProjectAction {

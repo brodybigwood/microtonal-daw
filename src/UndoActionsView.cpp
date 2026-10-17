@@ -82,6 +82,27 @@ ToggleNodeVisibleAction::ToggleNodeVisibleAction(Project* p, std::vector<int> ma
     undoAction = doAction;
 }
 
+MoveNodeAction::MoveNodeAction(Project* p, std::vector<int> managerPath, int nodeId,
+                               float fromX, float fromY, float toX, float toY) :
+        ProjectAction(p, MoveNode),
+        managerPath(std::move(managerPath)),
+        nodeId(nodeId),
+        fromX(fromX), fromY(fromY),
+        toX(toX), toY(toY) {
+    name = "Move Node";
+    // Runs on both copies: moveTo only touches geometry, no SDL.
+    doAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        Node* n = nm.getNode(static_cast<uint16_t>(this->nodeId));
+        if (n) n->moveTo(this->toX, this->toY);
+    };
+    undoAction = [this]() {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        Node* n = nm.getNode(static_cast<uint16_t>(this->nodeId));
+        if (n) n->moveTo(this->fromX, this->fromY);
+    };
+}
+
 PanNodesAction::PanNodesAction(Project* p, std::vector<int> managerPath, float dx, float dy) :
         ProjectAction(p, PanNodes),
         managerPath(std::move(managerPath)),

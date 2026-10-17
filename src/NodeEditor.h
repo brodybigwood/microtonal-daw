@@ -126,6 +126,26 @@ class NodeEditor {
             return it != embeddedWindowById_.end() ? it->second : nullptr;
         }
         json serializeOpenPianoRolls(const std::vector<int>& managerPath) const;
+
+        /** Geometry/visibility of every embedded window on this canvas (control channel). */
+        json serializeEmbeddedWindows() const {
+            json arr = json::array();
+            for (const auto& kv : embeddedWindowById_) {
+                const EmbeddedWindow* ew = kv.second;
+                if (!ew) continue;
+                json j;
+                j["id"] = kv.first;
+                j["title"] = ew->title;
+                j["x"] = ew->x;
+                j["y"] = ew->y;
+                j["w"] = ew->w;
+                j["h"] = ew->h;
+                j["zOrder"] = ew->zOrder;
+                j["visible"] = ew->visible;
+                arr.push_back(std::move(j));
+            }
+            return arr;
+        }
         void restoreOpenPianoRolls(const json& arr);
 
     private:

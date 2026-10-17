@@ -6,6 +6,7 @@
 #include "Node.h"
 #include "WindowManager.h"
 #include "NodeProcessor.h"
+#include "ControlServer.h"
 #include "nodes/vst/vstplugin.h"
 #include <algorithm>
 #include <cstdio>
@@ -32,6 +33,10 @@ WindowHandler* WindowHandler::instance() {
 bool WindowHandler::tick() {
 
     if (!running) return false;
+
+    // External control requests run here, on the GUI thread, before the render
+    // gate below — so control latency tracks the main loop (~5ms), not the frame rate.
+    ControlServer::instance().poll();
 
     double timeSinceLastFrame = double(SDL_GetTicks())-double(lastTime);
     if(timeSinceLastFrame >= frameTime) {

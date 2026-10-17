@@ -76,6 +76,9 @@ class Project : public Window {
 
         void stop();
 
+        /** Move the playhead to an absolute beat, converting through the tempo curve. */
+        void seekBeat(double beat);
+
         uint16_t id_reg = 0;
 
         void tick();
