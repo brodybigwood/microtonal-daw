@@ -173,6 +173,13 @@ void ControlServer::serverLoop() {
     for (int c : clients) ::close(c);
 }
 
+void ControlServer::deliver(const std::vector<std::pair<int, std::string>>& replies) {
+    if (replies.empty()) return;
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (const auto& r : replies)
+        outbox_.push_back(Message{r.first, r.second + "\n"});
+}
+
 void ControlServer::poll() {
     std::vector<Message> batch;
     {
@@ -187,8 +194,8 @@ void ControlServer::poll() {
     std::vector<Message> responses;
     responses.reserve(batch.size());
     for (auto& req : batch) {
-        std::string reply = ControlApi::handle(req.line);
-        if (reply.empty()) continue;
+        std::string reply = ControlApi::handle(req.line, req.fd);
+        if (reply.empty()) continue;   // deferred (e.g. capture, answered after render)
         reply.push_back('\n');
         responses.push_back(Message{req.fd, std::move(reply)});
     }

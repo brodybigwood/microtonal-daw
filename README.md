@@ -21,15 +21,17 @@ The DAW can expose a Unix socket that speaks line-delimited JSON, so an outside
 process can perform any action the UI can and read any state as JSON. It is off
 by default.
 
-Enable it in `assets/settings.json` (or via env, which wins):
+Enable it in the `assets/settings.json` the DAW loads — paths are relative to its
+working directory, so running `./DAW` from `build/` means editing
+`build/assets/settings.json`:
 
 ```json
 { "controlEnabled": true, "controlSocketPath": "/tmp/microtonal-daw.sock" }
 ```
 
-```sh
-DAW_CONTROL_ENABLE=1 DAW_CONTROL_SOCKET=/tmp/daw.sock ./DAW   # env override
-```
+The DAW reads no env vars for this; `DAW_CONTROL_ENABLE` is not a thing.
+`DAW_CONTROL_SOCKET` is only read by the client scripts (`dawctl.py`, the MCP
+server) to pick which socket to connect to.
 
 Requests are one JSON object per line; responses echo the `id`:
 

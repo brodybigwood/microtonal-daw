@@ -7,6 +7,7 @@
 #include "WindowManager.h"
 #include "NodeProcessor.h"
 #include "ControlServer.h"
+#include "ControlApi.h"
 #include "nodes/vst/vstplugin.h"
 #include <algorithm>
 #include <cstdio>
@@ -199,6 +200,14 @@ bool WindowHandler::tick() {
                 fake.window.windowID = ctxMenu->window_id;
                 ctxMenu->tick(fake);
             }
+        }
+
+        // Control-channel captures read the freshly rendered (not yet presented)
+        // backbuffers, so they must run between the render and present passes.
+        {
+            auto caps = ControlApi::flushCaptures(project->renderer, wm);
+            if (!caps.empty())
+                ControlServer::instance().deliver(caps);
         }
 
         // Present everything once.

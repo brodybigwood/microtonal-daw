@@ -81,6 +81,10 @@ public:
     SamplerNode(uint16_t, NodeManager*);
     ~SamplerNode() override;
 
+    /// Open/close the detached per-sample editor window.
+    void openSampleEditor(size_t index);
+    void closeSampleEditor();
+
     void process() override;
     void setup() override;
     void render(SDL_Renderer* r) override;
@@ -126,8 +130,6 @@ private:
 
     // Per-sample editor window (detached SDL window)
     SampleEditorWindow* editorWindow_ = nullptr;
-    void openSampleEditor(size_t index);
-    void closeSampleEditor();
 
     // Volume slider drag
     int draggingVolumeIdx_ = -1;

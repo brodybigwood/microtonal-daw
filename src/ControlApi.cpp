@@ -2,6 +2,7 @@
 
 #include "AudioManager.h"
 #include "ControlDocs.h"
+#include "JsonBytes.h"
 #include "Node.h"
 #include "NodeEditor.h"
 #include "NodeManager.h"
@@ -12,9 +13,21 @@
 #include "UndoManager.h"
 #include "WindowHandler.h"
 #include "nodes/nodetypes.h"
+#include "nodes/sampler/sampler.h"
 #include "nodes/vst/vstnode.h"
+#include "PreferencesExpandedWindow.h"
+#include "UndoTreeExpandedWindow.h"
+#include "ArrangerExpandedWindow.h"
+#include "PatcherExpandedWindow.h"
+#include "PianoRollWindow.h"
+#include "WindowManager.h"
+
+#include <SDL3/SDL.h>
+#include <SDL3_image/SDL_image.h>
 
 #include <algorithm>
+#include <cstdlib>
+#include <cstring>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
@@ -41,6 +54,58 @@ json err(const json& id, const std::string& code, const std::string& message) {
     r["error"] = json{{"code", code}, {"message", message}};
     return r;
 }
+
+// ---- screen capture: PNG encoded into memory, answered after the render pass ----
+
+struct MemIO { std::vector<uint8_t> data; Sint64 pos = 0; };
+
+Sint64 SDLCALL memSize(void* u) { return static_cast<Sint64>(static_cast<MemIO*>(u)->data.size()); }
+Sint64 SDLCALL memSeek(void* u, Sint64 off, SDL_IOWhence whence) {
+    auto* m = static_cast<MemIO*>(u);
+    const Sint64 end = static_cast<Sint64>(m->data.size());
+    const Sint64 base = whence == SDL_IO_SEEK_SET ? 0 : (whence == SDL_IO_SEEK_CUR ? m->pos : end);
+    const Sint64 np = base + off;
+    if (np < 0) return -1;
+    m->pos = np;
+    return np;
+}
+size_t SDLCALL memRead(void*, void*, size_t, SDL_IOStatus*) { return 0; }
+size_t SDLCALL memWrite(void* u, const void* ptr, size_t size, SDL_IOStatus*) {
+    auto* m = static_cast<MemIO*>(u);
+    if (m->pos + static_cast<Sint64>(size) > static_cast<Sint64>(m->data.size()))
+        m->data.resize(static_cast<size_t>(m->pos + static_cast<Sint64>(size)));
+    std::memcpy(m->data.data() + m->pos, ptr, size);
+    m->pos += static_cast<Sint64>(size);
+    return size;
+}
+bool SDLCALL memFlush(void*, SDL_IOStatus*) { return true; }
+bool SDLCALL memClose(void*) { return true; }
+
+bool rendererToPng(SDL_Renderer* r, std::vector<uint8_t>& png, int& w, int& h) {
+    if (!r) return false;
+    SDL_Surface* surf = SDL_RenderReadPixels(r, nullptr);
+    if (!surf) return false;
+    w = surf->w;
+    h = surf->h;
+    MemIO mem;
+    SDL_IOStreamInterface iface{};
+    SDL_INIT_INTERFACE(&iface);
+    iface.size = memSize;
+    iface.seek = memSeek;
+    iface.read = memRead;
+    iface.write = memWrite;
+    iface.flush = memFlush;
+    iface.close = memClose;
+    SDL_IOStream* io = SDL_OpenIO(&iface, &mem);
+    const bool saved = io && IMG_SavePNG_IO(surf, io, true);
+    SDL_DestroySurface(surf);
+    if (!saved) return false;
+    png = std::move(mem.data);
+    return !png.empty();
+}
+
+struct PendingCapture { int fd = -1; json id; std::string target; };
+std::vector<PendingCapture> g_pendingCaptures;   // GUI thread only
 
 std::vector<int> readManagerPath(const json& args) {
     std::vector<int> path;
@@ -188,6 +253,30 @@ json handleQuery(Project* p, const json& req) {
         if (p->processor && p->processor->guiGraph)
             collectManagers(*p->processor->guiGraph, {}, out);
         return out;
+    }
+    if (q == "windows") {
+        json expanded = json::array();
+        WindowManager* wm = p->processor ? p->processor->getWindowManager() : nullptr;
+        if (wm) {
+            for (const auto& up : wm->windows()) {
+                ExpandedWindow* w = up.get();
+                if (!w) continue;
+                int ww = 0, hh = 0;
+                if (w->window) SDL_GetWindowSize(w->window, &ww, &hh);
+                expanded.push_back(json{{"id", w->id}, {"sdlWindowID", w->sdlWindowID},
+                                        {"title", w->title}, {"visible", w->visible},
+                                        {"width", ww}, {"height", hh}});
+            }
+        }
+        json main = json::object();
+        if (p->window) {
+            int mw = 0, mh = 0;
+            SDL_GetWindowSize(p->window, &mw, &mh);
+            main = json{{"target", "main"}, {"title", "NodeProcessorHost"},
+                        {"sdlWindowID", SDL_GetWindowID(p->window)},
+                        {"width", mw}, {"height", mh}};
+        }
+        return json{{"main", main}, {"expanded", expanded}};
     }
 
     // Everything below addresses a specific manager.
@@ -351,9 +440,13 @@ json dispatch(const json& req) {
         if (name.empty()) return err(id, "bad_request", "missing 'action'");
         const json args = req.value("args", json::object());
         std::string error;
-        if (!p->um->runRegisteredAction(name, args, error))
+        json created;
+        if (!p->um->runRegisteredAction(name, args, error, &created))
             return err(id, "execution_failed", error);
-        return ok(id, json{{"applied", name}});
+        json out{{"applied", name}};
+        // The ids of anything the action created, so the caller never has to guess.
+        if (created.is_object() && !created.empty()) out["created"] = std::move(created);
+        return ok(id, std::move(out));
     }
 
     if (op == "undo") {
@@ -379,6 +472,87 @@ json dispatch(const json& req) {
         }
         p->um->goTo(a);
         return ok(id, json{{"version", a->version()}});
+    }
+
+    if (op == "window") {
+        WindowManager* wm = p->processor ? p->processor->getWindowManager() : nullptr;
+        if (!wm) return err(id, "internal", "no window manager");
+
+        if (req.contains("close")) {
+            const std::string t = req["close"].get<std::string>();
+            ExpandedWindow* ew = wm->findByTitle(t.c_str());
+            if (!ew) ew = wm->findById(std::atoi(t.c_str()));
+            if (!ew) return err(id, "not_found", "no window titled/id '" + t + "'");
+            wm->removeWindow(ew);
+            return ok(id, json{{"closed", t}});
+        }
+
+        auto opened = [&](ExpandedWindow* ew, const std::string& title) -> json {
+            if (!ew) return err(id, "internal", "failed to open " + title);
+            ew->show();
+            return ok(id, json{{"opened", title}, {"id", ew->id}, {"sdlWindowID", ew->sdlWindowID}});
+        };
+        auto reuse = [&](const std::string& title) -> ExpandedWindow* {
+            ExpandedWindow* ew = wm->findByTitle(title.c_str());
+            if (ew) { ew->show(); SDL_RaiseWindow(ew->window); }
+            return ew;
+        };
+        auto nodeByID = [&](int nid) -> Node* {
+            return (p->processor && p->processor->guiGraph)
+                ? p->processor->guiGraph->getNode(static_cast<uint16_t>(nid)) : nullptr;
+        };
+
+        const std::string kind = req.value("open", "");
+        if (kind == "preferences") {
+            if (auto* ew = reuse("Preferences")) return opened(ew, "Preferences");
+            auto w = std::make_unique<PreferencesExpandedWindow>();
+            ExpandedWindow* ew = wm->addWindow(std::move(w), 500, 500, "Preferences");
+            if (ew) ew->setPosition(120, 120);
+            return opened(ew, "Preferences");
+        }
+        if (kind == "undo_tree") {
+            if (auto* ew = reuse("Undo Tree")) return opened(ew, "Undo Tree");
+            auto w = std::make_unique<UndoTreeExpandedWindow>(p);
+            ExpandedWindow* ew = wm->addWindow(std::move(w), 480, 640, "Undo Tree");
+            if (ew) ew->setPosition(120, 120);
+            return opened(ew, "Undo Tree");
+        }
+        if (kind == "arranger" || kind == "patcher") {
+            Node* n = nodeByID(req.value("nodeID", -1));
+            if (kind == "arranger") {
+                auto* arr = dynamic_cast<ArrangerNode*>(n);
+                if (!arr) return err(id, "not_found", "arranger node not found");
+                std::string title = "Arranger##" + std::to_string(arr->id);
+                if (auto* ew = reuse(title)) return opened(ew, title);
+                auto w = std::make_unique<ArrangerExpandedWindow>(arr, p);
+                return opened(wm->addWindow(std::move(w), 1200, 800, title.c_str()), title);
+            }
+            auto* pat = dynamic_cast<PatcherNode*>(n);
+            if (!pat) return err(id, "not_found", "patcher node not found");
+            std::string title = "Patcher##" + std::to_string(pat->id);
+            if (auto* ew = reuse(title)) return opened(ew, title);
+            auto w = std::make_unique<PatcherExpandedWindow>(pat, p);
+            return opened(wm->addWindow(std::move(w), 1200, 800, title.c_str()), title);
+        }
+        if (kind == "sample_editor") {
+            auto* sn = dynamic_cast<SamplerNode*>(nodeByID(req.value("nodeID", -1)));
+            if (!sn) return err(id, "not_found", "sampler node not found");
+            sn->openSampleEditor(static_cast<size_t>(req.value("sampleIndex", 0)));
+            return opened(wm->findByTitle("Sample Editor"), "Sample Editor");
+        }
+        if (kind == "piano_roll") {
+            auto* arr = dynamic_cast<ArrangerNode*>(nodeByID(req.value("nodeID", -1)));
+            if (!arr) return err(id, "not_found", "arranger node not found");
+            arr->ensureSongRoll();
+            if (!arr->sl || !arr->elements) return err(id, "internal", "arranger song roll unavailable");
+            auto* region = dynamic_cast<Region*>(
+                arr->elements->getElement(static_cast<uint16_t>(req.value("regionID", -1))));
+            if (!region) return err(id, "not_found", "region not found");
+            arr->sl->createPianoRoll(region, /*createUndo=*/true);
+            return opened(wm->findByTitle("Piano Roll"), "Piano Roll");
+        }
+        return err(id, "bad_request", "unknown window to open: " + kind +
+                       " (preferences, undo_tree, arranger, patcher, sample_editor, piano_roll)");
     }
 
     if (op == "save") {
@@ -418,7 +592,7 @@ json dispatch(const json& req) {
 
 } // namespace
 
-std::string ControlApi::handle(const std::string& line) {
+std::string ControlApi::handle(const std::string& line, int clientFd) {
     json req;
     try {
         req = json::parse(line);
@@ -428,6 +602,16 @@ std::string ControlApi::handle(const std::string& line) {
     if (!req.is_object()) return err(json(), "bad_request", "request must be a JSON object").dump();
 
     const json id = req.contains("id") ? req["id"] : json();
+
+    // A capture has to read the frame after it is drawn, so defer the reply to
+    // flushCaptures(), which runs between the render and present passes.
+    if (req.value("op", "") == "capture") {
+        if (clientFd < 0)
+            return err(id, "bad_request", "capture is only available over the control socket").dump();
+        g_pendingCaptures.push_back({clientFd, id, req.value("target", std::string("main"))});
+        return {};
+    }
+
     try {
         return dispatch(req).dump();
     } catch (const std::exception& e) {
@@ -435,4 +619,41 @@ std::string ControlApi::handle(const std::string& line) {
     } catch (...) {
         return err(id, "execution_failed", "unknown error").dump();
     }
+}
+
+std::vector<std::pair<int, std::string>> ControlApi::flushCaptures(SDL_Renderer* mainRenderer,
+                                                                   WindowManager* wm) {
+    std::vector<std::pair<int, std::string>> out;
+    if (g_pendingCaptures.empty()) return out;
+
+    std::vector<PendingCapture> pending;
+    pending.swap(g_pendingCaptures);
+
+    for (const auto& pc : pending) {
+        SDL_Renderer* r = nullptr;
+        if (pc.target == "main") {
+            r = mainRenderer;
+        } else if (wm) {
+            if (ExpandedWindow* ew = wm->findByTitle(pc.target.c_str()))
+                r = ew->renderer;
+            else if (ExpandedWindow* e2 = wm->findById(std::atoi(pc.target.c_str())))
+                r = e2->renderer;
+        }
+        if (!r) {
+            out.push_back({pc.fd, err(pc.id, "not_found",
+                "capture target has no renderer: " + pc.target).dump()});
+            continue;
+        }
+        std::vector<uint8_t> png;
+        int w = 0, h = 0;
+        if (!rendererToPng(r, png, w, h)) {
+            out.push_back({pc.fd, err(pc.id, "capture_failed",
+                "could not read pixels from " + pc.target + ": " + SDL_GetError()).dump()});
+            continue;
+        }
+        json res{{"target", pc.target}, {"format", "png"}, {"width", w}, {"height", h},
+                 {"data", jsonBytesEncode(png)}};
+        out.push_back({pc.fd, ok(pc.id, std::move(res)).dump()});
+    }
+    return out;
 }

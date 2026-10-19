@@ -4,6 +4,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 // External control channel.
@@ -24,6 +25,8 @@ public:
     void start(const std::string& socketPath);
     void stop();
     void poll();                        // GUI thread only
+    /// Queue replies produced outside poll() (e.g. screen captures read after render).
+    void deliver(const std::vector<std::pair<int, std::string>>& replies);
     bool isRunning() const { return running_.load(); }
 
 private:

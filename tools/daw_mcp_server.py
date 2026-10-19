@@ -2,8 +2,12 @@
 """MCP stdio server that bridges Claude Code to a running DAW's control socket.
 
 The DAW opens a Unix socket speaking line-delimited JSON when control is enabled
-(settings `controlEnabled`, or DAW_CONTROL_ENABLE=1). This server exposes that
-channel as MCP tools, so an agent can drive the DAW and read its state.
+in its settings.json (`"controlEnabled": true`). That is the only switch — the
+DAW does not read DAW_CONTROL_ENABLE or any other env var. This server exposes
+that channel as MCP tools, so an agent can drive the DAW and read its state.
+
+The DAW loads settings.json relative to its working directory; running `./DAW`
+from `build/` means editing `build/assets/settings.json`.
 
 Dependency-free: implements the small slice of MCP needed (initialize, tools/list,
 tools/call) by hand so it runs under a bare python3.
@@ -62,8 +66,10 @@ def daw_request(payload):
             return json.loads(buf.split(b"\n", 1)[0].decode())
     except FileNotFoundError:
         raise RuntimeError(
-            f"no DAW control socket at {path} — start the DAW with controlEnabled=true "
-            f"(settings.json) or DAW_CONTROL_ENABLE=1, and check the socket path matches")
+            f"no DAW control socket at {path} — the DAW is not running or control is off. "
+            f"Set \"controlEnabled\": true in the settings.json the DAW reads "
+            f"(assets/settings.json relative to its working directory, e.g. "
+            f"build/assets/settings.json) and start it. There is no env var to enable it.")
     except ConnectionRefusedError:
         raise RuntimeError(f"DAW control socket at {path} refused the connection (DAW shutting down?)")
     except socket.timeout:
@@ -108,7 +114,13 @@ TOOLS = [
                         "CALL THIS FIRST when starting work in the DAW: it explains managerPath, "
                         "node ids, the pitch/rhythm vector encoding, the tuning model and the "
                         "read-live rule. Then use daw_describe_action / daw_describe_query for "
-                        "the exact parameters and a worked example of each one."),
+                        "the exact parameters and a worked example of each one. "
+                        "If this call fails with 'no DAW control socket', the DAW is not running "
+                        "or is not controllable: it must be started with \"controlEnabled\": true "
+                        "in the assets/settings.json under its working directory (e.g. "
+                        "build/assets/settings.json when run from build/). DAW_CONTROL_ENABLE is "
+                        "not read by the DAW; DAW_CONTROL_SOCKET only changes which socket this "
+                        "MCP server connects to."),
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
@@ -161,6 +173,36 @@ TOOLS = [
             "type": "object",
             "properties": {"action": {"type": "string"}},
             "required": ["action"],
+        },
+    },
+    {
+        "name": "daw_capture",
+        "description": ("Screenshot a DAW renderer and return it as a PNG image. target is \"main\" "
+                        "(the node canvas, default) or a window title / id from daw_windows — e.g. "
+                        "\"Piano Roll\", \"Arranger##2\". The reply is rendered fresh on the next frame. "
+                        "Open windows with daw_window first."),
+        "inputSchema": {"type": "object", "properties": {"target": {"type": "string"}}},
+    },
+    {
+        "name": "daw_windows",
+        "description": "List the main canvas plus every expanded window (title, id, sdlWindowID, size, visible).",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "daw_window",
+        "description": ("Open or close an expanded window, so you can capture and inspect it. "
+                        "open: preferences, undo_tree, arranger (nodeID), patcher (nodeID), "
+                        "sample_editor (nodeID, sampleIndex), piano_roll (nodeID, regionID). "
+                        "close: a window title or numeric id."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "open": {"type": "string"},
+                "nodeID": {"type": "integer"},
+                "regionID": {"type": "integer"},
+                "sampleIndex": {"type": "integer"},
+                "close": {"type": "string"},
+            },
         },
     },
     {"name": "daw_undo", "description": "Undo one step.", "inputSchema": {"type": "object", "properties": {}}},
@@ -226,6 +268,15 @@ def call_tool(name, args):
 
     if name == "daw_help":
         return daw_op("help")
+    if name == "daw_capture":
+        return daw_op("capture", **({"target": args["target"]} if "target" in args else {}))
+    if name == "daw_windows":
+        return daw_op("query", query="windows")
+    if name == "daw_window":
+        if "close" in args:
+            return daw_op("window", close=args["close"])
+        payload = {k: args[k] for k in ("open", "nodeID", "regionID", "sampleIndex") if k in args}
+        return daw_op("window", **payload)
     if name == "daw_action":
         return daw_op("action", action=args["name"], args=args.get("args", {}))
     if name == "daw_query":
@@ -279,6 +330,14 @@ def handle(msg):
         name = params.get("name")
         try:
             result = call_tool(name, params.get("arguments"))
+            # A capture is an image: hand it to the agent as image content, with the
+            # metadata (minus the base64 payload) as a text block beside it.
+            if name == "daw_capture" and isinstance(result, dict) and result.get("data"):
+                meta = {k: v for k, v in result.items() if k != "data"}
+                return {"content": [
+                    {"type": "text", "text": json.dumps(meta, indent=2)},
+                    {"type": "image", "data": result["data"], "mimeType": "image/png"},
+                ]}
             text = json.dumps(result, indent=2)
             return {"content": [{"type": "text", "text": text}]}
         except Exception as e:  # surfaced to the agent as a tool error

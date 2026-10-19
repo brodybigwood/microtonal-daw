@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Send JSON requests to a running DAW's control socket and print the replies.
 
-The DAW only opens the socket when control is enabled (settings `controlEnabled`,
-or DAW_CONTROL_ENABLE=1 in the environment).
+The DAW only opens the socket when `assets/settings.json` (relative to its
+working directory, e.g. `build/assets/settings.json`) has `"controlEnabled": true`.
+The DAW reads no env vars for this. `DAW_CONTROL_SOCKET` only overrides which
+socket this script connects to.
 
 Usage:
     dawctl.py '{"op":"ping"}'
@@ -72,7 +74,8 @@ def main():
         replies = send_lines(sock_path, lines)
     except (FileNotFoundError, ConnectionRefusedError, FileNotFoundError) as e:
         sys.exit(f"could not connect to {sock_path}: {e}\n"
-                 f"Is the DAW running with controlEnabled=true (or DAW_CONTROL_ENABLE=1)?")
+                 f"Is the DAW running with \"controlEnabled\": true in the settings.json "
+                 f"under its working directory (e.g. build/assets/settings.json)?")
     except socket.timeout:
         sys.exit(f"timed out talking to {sock_path} (DAW busy or blocked?)")
 

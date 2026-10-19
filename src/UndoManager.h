@@ -238,7 +238,8 @@ struct UndoManager {
 
     static const std::unordered_map<std::string, ActionType>& actionRegistry();
     static std::string actionSchema(const std::string& actionName);
-    bool runRegisteredAction(const std::string& actionName, const json& params, std::string& error);
+    bool runRegisteredAction(const std::string& actionName, const json& params, std::string& error,
+                             json* result = nullptr);
     // Builds (but does not run) the action named by actionName; throws on unknown/bad params.
     ProjectAction* buildRegisteredAction(const std::string& actionName, const json& params);
     // Ops only reachable through a node method that builds+runs its own action.

@@ -70,6 +70,9 @@ public:
     /// Number of active windows.
     size_t windowCount() const { return windows_.size(); }
 
+    /// Active windows, for enumerating/capturing them from the control channel.
+    const std::vector<std::unique_ptr<ExpandedWindow>>& windows() const { return windows_; }
+
     /// Remove all windows whose title ends with the given suffix.
     void removeWindowsByTitleSuffix(const std::string& suffix);
 

@@ -410,6 +410,11 @@ void NodeManager::severConnectionNow(uint16_t srcNodeID, uint16_t srcConID, uint
     dstCon->input_connection = -1;
     srcCon->output_node = -1;
     srcCon->output_connection = -1;
+    // On an input connection, output_node/output_connection identify the port
+    // itself (its owning node and its own id), not a peer — addConnection sets
+    // them once and serialize() reads them to write the cable's destination.
+    // Clearing them here would make any reconnected cable serialize as dst
+    // (-1,-1) and vanish on save/load.
     srcCon->is_connected = false;
     dstCon->is_connected = false;
     dstCon->buffer = nullptr;

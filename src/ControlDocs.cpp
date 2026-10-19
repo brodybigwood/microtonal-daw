@@ -39,6 +39,9 @@ const json& controlConcepts() {
         {"embedded windows", "Nodes are floating windows inside the canvas and have their own id space, SEPARATE from node ids: ewID comes from the editor's pool (0 and 1 are reserved, so on a fresh graph the Output node gets ewID 2 and the Input node ewID 3). Never compute it — read it from the `embedded_windows` query, and pass it to move_embedded_window / resize_embedded_window."},
         {"vst state blobs", "compState / ctrlState in vst_state_change are base64 strings (standard alphabet, = padding) of the plugin's raw component/controller state. Get the current ones from the plugin, or pass neither to re-apply the current state."},
         {"undo tree", "The `undo` query returns {head, version}. head is the root action; each node has type (an ActionType int), its action-specific fields, children[], name, last_index and optionally savedMainManager (the graph snapshot). version is the child-index path from head to the current action — [] is the root. `goto` consumes exactly that array."},
+        {"created ids", "Every action that creates something returns it in result.created: add_node -> nodeID, create_region/automation_curve/audio_clip -> regionID/curveID/clipID, create_note -> noteID, create_position -> positionID, add_arranger_track -> trackID+connectionID, add_eq_band -> bandIndex, sampler_add_sample -> sampleIndex, io_port_channel (add) -> connectionId+connectionIndex. Never guess an id."},
+        {"capture", "op capture takes {\"target\":\"main\"} (the node canvas) or a window title / numeric id from the `windows` query, and replies with {target, format:\"png\", width, height, data:<base64 PNG>}. The reply is produced after the next frame is rendered, so it is always fresh; it just arrives a frame later. Use it to see the actual UI."},
+        {"windows", "The `windows` query lists the main canvas plus every expanded window (title, id, sdlWindowID, size, visibility). The `window` op opens/closes them: open preferences, undo_tree, arranger (nodeID), patcher (nodeID), sample_editor (nodeID, sampleIndex) or piano_roll (nodeID, regionID); close by title or id. Open a window, then capture it by title."},
         {"self-description", "`help` returns these concepts plus indexes. `describe_action` / `describe_query` / `describe_op` return one entry in full, including parameters and a worked example. Prefer those over guessing."},
     };
     return docs;
@@ -291,6 +294,8 @@ const json& queryDocs() {
         d["undo"] = A("The whole undo tree: {head, version}. Each tree node has type (ActionType int), its action-specific fields, children[], name, last_index and optionally savedMainManager (a graph snapshot). version is the child-index path from head to the current action — the exact array `goto` takes.",
             json::object(), R"({"op":"query","query":"undo"})");
         d["settings"] = A("The DAW's settings.json contents.", json::object(), R"({"op":"query","query":"settings"})");
+        d["windows"] = A("The main canvas plus every expanded window: {main:{target,sdlWindowID,width,height}, expanded:[{id,sdlWindowID,title,visible,width,height}]}. Use the title or id as a capture target and as the argument to the `window` op.",
+            json::object(), R"({"op":"query","query":"windows"})");
         return d;
     }();
     return docs;
@@ -331,6 +336,16 @@ const json& opDocs() {
         d["list_queries"] = A("All query names with a one-line summary.", json::object(), R"({"op":"list_queries"})");
         d["describe_query"] = A("One query in full: summary, arguments and an example.",
             {{"query", P("string", "")}}, R"({"op":"describe_query","query":"region"})");
+        d["capture"] = A("Screenshot a renderer as a PNG. Answered after the next frame is drawn, so it is always fresh. target is \"main\" (default) or a window title / id from the `windows` query. Returns {target, format:\"png\", width, height, data:<base64>}.",
+            {{"target", P("string", "\"main\" or a window title/id from the windows query", false)}},
+            R"({"op":"capture","target":"main"})");
+        d["window"] = A("Open or close an expanded window. Open kinds: preferences, undo_tree, arranger (needs nodeID), patcher (nodeID), sample_editor (nodeID, sampleIndex), piano_roll (nodeID, regionID). Close by title or numeric id. Returns the window's id and sdlWindowID when opening.",
+            {{"open", P("string", "preferences | undo_tree | arranger | patcher | sample_editor | piano_roll", false)},
+             {"nodeID", P("int", "for arranger / patcher / sample_editor / piano_roll", false)},
+             {"regionID", P("int", "for piano_roll", false)},
+             {"sampleIndex", P("int", "for sample_editor", false)},
+             {"close", P("string", "window title or numeric id to close", false)}},
+            R"({"op":"window","open":"piano_roll","nodeID":2,"regionID":0})");
         d["shutdown"] = A("Quit the DAW.", json::object(), R"({"op":"shutdown"})");
         return d;
     }();

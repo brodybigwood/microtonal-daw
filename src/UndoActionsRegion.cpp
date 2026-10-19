@@ -339,7 +339,11 @@ CreatePositionAction::CreatePositionAction(Project* p, std::vector<int> managerP
         endPairs(std::move(endPairs)),
         trackID(trackID),
         startOffsetPairs(std::move(startOffsetPairs)) {
-    ArrangerNode* arr = undoResolveArrangerNode(p, this->managerPath, nodeID);
+    // The arranger may not exist yet: Project::load deserializes the undo tree
+    // before restoring the graph. Missing it just means "keep the defaults";
+    // the constructor must not throw or the project cannot be loaded.
+    NodeManager& nm = requireManager(p, this->managerPath);
+    ArrangerNode* arr = dynamic_cast<ArrangerNode*>(nm.getNode(static_cast<uint16_t>(nodeID)));
     if (arr) {
         rhythmEdoSteps = arr->rhythmEdoSubdivisionSteps;
         rhythmEdoLower = arr->rhythmEdoLowerVector;

@@ -111,8 +111,8 @@ class Node : public EmbeddedWindow {
         bool& isAltPressed;
         bool& isCtrlPressed;
 
-        int hoveredConnection;
-        Direction hoveredDirection;
+        int hoveredConnection = -1;
+        Direction hoveredDirection = Direction::input;
 
         uint32_t lastLeftClick;
         bool handleContentInput(SDL_Event&) override;

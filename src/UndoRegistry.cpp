@@ -796,7 +796,28 @@ ProjectAction* UndoManager::buildRegisteredAction(const std::string& actionName,
     return pa;
 }
 
-bool UndoManager::runRegisteredAction(const std::string& actionName, const json& params, std::string& error) {
+/// The ids an action assigned to the entities it created, so a scripted caller
+/// learns what it just made without guessing or diffing state.
+json createdIdsFor(ProjectAction* pa) {
+    json r = json::object();
+    switch (pa->type) {
+        case AddNode:               { auto* a = static_cast<AddNodeAction*>(pa);               r["nodeID"] = a->nodeID; break; }
+        case CreateRegion:          { auto* a = static_cast<CreateRegionAction*>(pa);          r["regionID"] = a->regionID; break; }
+        case CreateAutomationCurve: { auto* a = static_cast<CreateAutomationCurveAction*>(pa); r["curveID"] = a->curveID; break; }
+        case CreateAudioClip:       { auto* a = static_cast<CreateAudioClipAction*>(pa);       r["clipID"] = a->clipID; break; }
+        case CreateNote:            { auto* a = static_cast<CreateNoteAction*>(pa);            r["noteID"] = a->noteID; break; }
+        case CreatePosition:        { auto* a = static_cast<CreatePositionAction*>(pa);        r["positionID"] = a->positionID; break; }
+        case AddArrangerTrack:      { auto* a = static_cast<AddArrangerTrackAction*>(pa);      r["trackID"] = a->trackID; r["connectionID"] = a->connectionID; break; }
+        case AddEQBand:             { auto* a = static_cast<AddEQBandAction*>(pa);             r["bandIndex"] = a->bandIndex; break; }
+        case SamplerAddSample:      { auto* a = static_cast<SamplerAddSampleUndoAction*>(pa);  r["sampleIndex"] = a->insertedIndex; break; }
+        case IoPortChannel:         { auto* a = static_cast<IoPortChannelAction*>(pa);         r["connectionId"] = a->connectionId; r["connectionIndex"] = a->connectionIndex; break; }
+        default: break;
+    }
+    return r;
+}
+
+bool UndoManager::runRegisteredAction(const std::string& actionName, const json& params, std::string& error,
+                                      json* result) {
     error.clear();
     try {
         // A few operations are only reachable through the node/song-roll method the
@@ -811,6 +832,10 @@ bool UndoManager::runRegisteredAction(const std::string& actionName, const json&
         // doAction and let the action perform the change.
         pa->skipInitialDo = false;
         newAction(pa);
+        // newAction may have coalesced the action away (deleting it); only read the
+        // ids back when it actually became the current node.
+        if (result)
+            *result = (current == pa) ? createdIdsFor(pa) : json::object();
 
         // A note only means something inside the scale it was placed in. The piano
         // roll stamps the surrounding tuning onto each note it creates; a scripted
