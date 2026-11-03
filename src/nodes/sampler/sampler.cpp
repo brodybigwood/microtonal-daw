@@ -270,6 +270,29 @@ void SamplerNode::rebuildConnections() {
     if (nm) nm->markTopologyDirty();
 }
 
+// Short, light labels for the sample editor knobs (the full labels are for the API).
+static void applySamplerKnobDisplay(SampleSlab& s) {
+    s.volume.displayLabel = "Vol";
+    s.pitch.displayLabel = "Pitch";
+    s.pan.displayLabel = "Pan";
+    s.offset.displayLabel = "Offset";
+    s.cutoff.displayLabel = "Cut";
+    s.attack.displayLabel = "Atk";
+    s.decay.displayLabel = "Dec";
+    s.sustain.displayLabel = "Sus";
+    s.release.displayLabel = "Rel";
+    const SDL_Color light{220, 220, 220, 255};
+    s.volume.labelColor = light;
+    s.pitch.labelColor = light;
+    s.pan.labelColor = light;
+    s.offset.labelColor = light;
+    s.cutoff.labelColor = light;
+    s.attack.labelColor = light;
+    s.decay.labelColor = light;
+    s.sustain.labelColor = light;
+    s.release.labelColor = light;
+}
+
 void SamplerNode::rebuildSampleParams() {
     params.clear();
     params.reserve(samples.size() * 9);
@@ -313,6 +336,7 @@ void SamplerNode::addSample(const std::string& filepath) {
     s.decay.label = "S" + std::to_string(s.id) + " Dec";
     s.sustain.label = "S" + std::to_string(s.id) + " Sus";
     s.release.label = "S" + std::to_string(s.id) + " Rel";
+    applySamplerKnobDisplay(s);
     rebuildSampleParams();
     rebuildConnections();
 }
@@ -349,6 +373,7 @@ void SamplerNode::insertSampleAt(size_t index, const std::string& filepath) {
     s.decay.label = "S" + std::to_string(s.id) + " Dec";
     s.sustain.label = "S" + std::to_string(s.id) + " Sus";
     s.release.label = "S" + std::to_string(s.id) + " Rel";
+    applySamplerKnobDisplay(s);
 
     rebuildSampleParams();
 
@@ -694,7 +719,7 @@ void SamplerNode::openSampleEditor(size_t index) {
 
     auto win = std::make_unique<SampleEditorWindow>(this, index);
     SampleEditorWindow* ptr = win.get();
-    ExpandedWindow* ew = wm->addWindow(std::move(win), 300, 320, "Sample Editor");
+    ExpandedWindow* ew = wm->addWindow(std::move(win), 300, 400, "Sample Editor");
     if (!ew) return;
     ew->show();
     editorWindow_ = ptr;
@@ -726,7 +751,7 @@ void SamplerNode::renderContent(SDL_Renderer* R) {
     float listTop = kListTop + 24.f; // below port rects
 
     // Total content height of a column (without add button).
-    float colContentH = kThumbH + kRowH + kBtnSz + kSliderH + 4.f;
+    float colContentH = kThumbH + kRowH + 2.f * kBtnSz + 2.f + kSliderH + 4.f;
 
     // Sample columns.
     for (size_t i = 0; i < samples.size(); ++i) {
@@ -771,15 +796,36 @@ void SamplerNode::renderContent(SDL_Renderer* R) {
         cy += kRowH;
 
         // Solo [S] and Mute [M].
-        SDL_FRect soloR{cx + 2.f, cy, kBtnSz, kBtnSz};
-        SDL_FRect muteR{cx + 2.f + kBtnSz + 4.f, cy, kBtnSz, kBtnSz};
+        const float btnX = cx + (kColW - kBtnSz) * 0.5f;
+        SDL_FRect soloR{btnX, cy, kBtnSz, kBtnSz};
+        SDL_FRect muteR{btnX, cy + kBtnSz + 2.f, kBtnSz, kBtnSz};
         SDL_Color soloCol = slab.solo ? SDL_Color{255, 200, 50, 255} : SDL_Color{70, 70, 75, 255};
         SDL_Color muteCol = slab.mute ? SDL_Color{255, 60, 60, 255} : SDL_Color{70, 70, 75, 255};
         SDL_SetRenderDrawColor(R, soloCol.r, soloCol.g, soloCol.b, soloCol.a);
         SDL_RenderFillRect(R, &soloR);
         SDL_SetRenderDrawColor(R, muteCol.r, muteCol.g, muteCol.b, muteCol.a);
         SDL_RenderFillRect(R, &muteR);
-        cy += kBtnSz + 2.f;
+
+        // Label the two square buttons so they are recognisable.
+        if (fonts.mainFont) {
+            const char* lbls[2] = {"S", "M"};
+            SDL_FRect rects[2] = {soloR, muteR};
+            for (int bi = 0; bi < 2; ++bi) {
+                SDL_Surface* bs = TTF_RenderText_Blended(fonts.mainFont, lbls[bi], 1, SDL_Color{235, 235, 235, 255});
+                if (!bs) continue;
+                SDL_Texture* bt = SDL_CreateTextureFromSurface(R, bs);
+                if (bt) {
+                    const float sc = std::min(1.0f, (rects[bi].w - 2.f) / static_cast<float>(bs->w));
+                    SDL_FRect br{rects[bi].x + (rects[bi].w - bs->w * sc) * 0.5f,
+                                 rects[bi].y + (rects[bi].h - bs->h * sc) * 0.5f,
+                                 bs->w * sc, bs->h * sc};
+                    SDL_RenderTexture(R, bt, nullptr, &br);
+                    SDL_DestroyTexture(bt);
+                }
+                SDL_DestroySurface(bs);
+            }
+        }
+        cy += 2.f * kBtnSz + 4.f;
 
         // Volume slider.
         float sliderW = 10.f;
@@ -824,13 +870,14 @@ void SamplerNode::renderContent(SDL_Renderer* R) {
 // UI: Input Handling
 // ============================================================================
 
-void SamplerNode::openSampleFileDialog() {
 #ifndef __EMSCRIPTEN__
+// Pick an audio file, or return "" if cancelled.
+static std::string pickAudioFile() {
     FILE* fp = popen(
         "zenity --file-selection --title='Load Audio Sample' "
         "--file-filter='Audio Files (*.wav *.ogg *.flac *.aiff) | *.wav *.WAV *.ogg *.OGG *.flac *.FLAC *.aiff *.AIFF' "
         "2>/dev/null", "r");
-    if (!fp) return;
+    if (!fp) return "";
     char buf[4096]{};
     std::string result;
     if (fgets(buf, sizeof(buf), fp)) {
@@ -839,6 +886,13 @@ void SamplerNode::openSampleFileDialog() {
             result.pop_back();
     }
     pclose(fp);
+    return result;
+}
+#endif
+
+void SamplerNode::openSampleFileDialog() {
+#ifndef __EMSCRIPTEN__
+    const std::string result = pickAudioFile();
 
     if (!result.empty()) {
         if (project && project->um) {
@@ -889,14 +943,15 @@ bool SamplerNode::handleCustomInput(SDL_Event& e) {
     }
 
     // --- Sample columns ---
-    float colContentH = kThumbH + kRowH + kBtnSz + kSliderH + 4.f;
+    float colContentH = kThumbH + kRowH + 2.f * kBtnSz + 2.f + kSliderH + 4.f;
     for (size_t i = 0; i < samples.size(); ++i) {
         float cx = columnLeft(i, scrollOffset_);
         if (mx < cx || mx > cx + kColW) continue;
         float cy = listTop + 2.f;
 
-        // Solo button.
-        SDL_FRect soloR{cx + 2.f, cy + kThumbH + kRowH, kBtnSz, kBtnSz};
+        // Solo button (stacked above mute in the narrow column).
+        const float btnX = cx + (kColW - kBtnSz) * 0.5f;
+        SDL_FRect soloR{btnX, cy + kThumbH + kRowH, kBtnSz, kBtnSz};
         if (mx >= soloR.x && mx <= soloR.x + soloR.w && my >= soloR.y && my <= soloR.y + soloR.h) {
             if (e.button.button == SDL_BUTTON_LEFT) {
                 if (project && project->um) {
@@ -911,7 +966,7 @@ bool SamplerNode::handleCustomInput(SDL_Event& e) {
         }
 
         // Mute button.
-        SDL_FRect muteR{cx + 2.f + kBtnSz + 4.f, cy + kThumbH + kRowH, kBtnSz, kBtnSz};
+        SDL_FRect muteR{btnX, cy + kThumbH + kRowH + kBtnSz + 2.f, kBtnSz, kBtnSz};
         if (mx >= muteR.x && mx <= muteR.x + muteR.w && my >= muteR.y && my <= muteR.y + muteR.h) {
             if (e.button.button == SDL_BUTTON_LEFT) {
                 if (project && project->um) {
@@ -928,7 +983,7 @@ bool SamplerNode::handleCustomInput(SDL_Event& e) {
         // Volume slider.
         float sliderW = 10.f;
         float sliderX = cx + (kColW - sliderW) / 2.f;
-        float sliderY = cy + kThumbH + kRowH + kBtnSz + 2.f;
+        float sliderY = cy + kThumbH + kRowH + 2.f * kBtnSz + 4.f;
         SDL_FRect sliderTrack{sliderX, sliderY, sliderW, kSliderH};
         if (mx >= sliderTrack.x - 4.f && mx <= sliderTrack.x + sliderW + 4.f &&
             my >= sliderTrack.y && my <= sliderTrack.y + kSliderH) {
@@ -1000,6 +1055,18 @@ void SamplerNode::handleWindowInput(SDL_Event& e) {
     float my = msY;
     float listTop = kListTop + 24.f;
 
+    // Right-click on a parameter opens its context menu, in the node or the editor window.
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_RIGHT) {
+        float rx = mx, ry = my;
+        if (window && e.button.windowID == SDL_GetWindowID(window)) {
+            int wx, wy; SDL_GetWindowPosition(window, &wx, &wy);
+            float gx, gy; SDL_GetGlobalMouseState(&gx, &gy);
+            rx = gx - static_cast<float>(wx);
+            ry = gy - static_cast<float>(wy);
+        }
+        if (openParameterMenuAt(e, rx, ry)) return;
+    }
+
     // --- Drag-to-reorder ---
     if (draggingSample_ >= 0) {
         if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
@@ -1042,26 +1109,26 @@ void SamplerNode::handleWindowInput(SDL_Event& e) {
     // --- Volume slider drag ---
     if (draggingVolumeIdx_ >= 0 && draggingVolumeIdx_ < static_cast<int>(samples.size())) {
         if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-            int idx = draggingVolumeIdx_;
-            float newVal = samples[idx].volume.value;
             draggingVolumeIdx_ = -1;
-            if (std::fabs(newVal - oldVolume_) > 0.001f && project && project->um) {
-                std::vector<int> mp = nm ? nm->managerPath : std::vector<int>{};
-                std::vector<size_t> pp;
-                pp.push_back(static_cast<size_t>(idx) * 9 + 0);
-                project->um->newAction(new SetParamValueUndoAction(project, std::move(mp),
-                    static_cast<int>(id), std::move(pp), oldVolume_, newVal, "Volume"));
-            }
             return;
         }
         if (e.type == SDL_EVENT_MOUSE_MOTION) {
-            float cx = columnLeft(static_cast<size_t>(draggingVolumeIdx_), scrollOffset_);
+            const int idx = draggingVolumeIdx_;
+            float cx = columnLeft(static_cast<size_t>(idx), scrollOffset_);
             float sliderW = 10.f;
             float sliderX = cx + (kColW - sliderW) / 2.f;
-            float sliderY = listTop + kThumbH + kRowH + kBtnSz + 2.f;
+            float sliderY = listTop + kThumbH + kRowH + 2.f * kBtnSz + 4.f;
             float frac = 1.f - (my - sliderY) / kSliderH;
             if (frac < 0.f) frac = 0.f; if (frac > 1.f) frac = 1.f;
-            samples[draggingVolumeIdx_].volume.value = frac;
+            const float oldVal = samples[idx].volume.value;
+            if (std::fabs(frac - oldVal) > 0.0005f && project && project->um) {
+                // Coalesces with the previous motion into one undo step for the drag.
+                std::vector<int> mp = nm ? nm->managerPath : std::vector<int>{};
+                std::vector<size_t> pp{static_cast<size_t>(idx) * 9};
+                project->um->newAction(new SetParamValueUndoAction(project, std::move(mp),
+                    static_cast<int>(id), std::move(pp), oldVal, frac, "Volume"));
+            }
+            samples[idx].volume.value = frac;
             return;
         }
     }
@@ -1071,7 +1138,7 @@ void SamplerNode::handleWindowInput(SDL_Event& e) {
         hoveredSampleIndex_ = -1;
         for (size_t i = 0; i < samples.size(); ++i) {
             float cx = columnLeft(i, scrollOffset_);
-            if (mx >= cx && mx <= cx + kColW && my >= listTop && my <= listTop + kThumbH + kRowH + kBtnSz + kSliderH + 4.f) {
+            if (mx >= cx && mx <= cx + kColW && my >= listTop && my <= listTop + kThumbH + kRowH + 2.f * kBtnSz + 2.f + kSliderH + 4.f) {
                 hoveredSampleIndex_ = static_cast<int>(i);
                 break;
             }
@@ -1124,6 +1191,63 @@ void SampleEditorWindow::render() {
         ey += 18.f + 6.f;
     }
 
+    // Waveform view with the played range shaded and the ADSR envelope on top.
+    {
+        const float vizW = static_cast<float>(ww) - 2.f * ex;
+        const float vizH = 54.f;
+        SDL_FRect viz{ex, ey, vizW, vizH};
+        SDL_SetRenderDrawColor(R, 26, 26, 30, 255);
+        SDL_RenderFillRect(R, &viz);
+
+        if (slab.buffer && slab.num_samples > 0 && vizW > 4.f) {
+            const size_t n = slab.num_samples;
+            const int cols = static_cast<int>(vizW);
+            SDL_SetRenderDrawColor(R, 90, 140, 190, 255);
+            for (int c = 0; c < cols; ++c) {
+                size_t s0 = n * static_cast<size_t>(c) / static_cast<size_t>(cols);
+                size_t s1 = n * static_cast<size_t>(c + 1) / static_cast<size_t>(cols);
+                if (s1 <= s0) s1 = s0 + 1;
+                float mn = 0.f, mx = 0.f;
+                for (size_t i = s0; i < s1 && i < n; ++i) {
+                    const float v = slab.buffer[i];
+                    if (v < mn) mn = v;
+                    if (v > mx) mx = v;
+                }
+                const float y0 = viz.y + vizH * 0.5f - mx * vizH * 0.5f;
+                const float y1 = viz.y + vizH * 0.5f - mn * vizH * 0.5f;
+                SDL_RenderLine(R, viz.x + static_cast<float>(c), y0,
+                               viz.x + static_cast<float>(c), std::max(y0 + 1.f, y1));
+            }
+        }
+
+        // Dim what playback skips: before `offset` and after `cutoff`.
+        const float offF = std::clamp(slab.offset.value, 0.f, 1.f);
+        const float cutF = std::clamp(slab.cutoff.value, 0.f, 1.f);
+        SDL_SetRenderDrawColor(R, 0, 0, 0, 130);
+        SDL_FRect pre{viz.x, viz.y, vizW * offF, vizH};
+        SDL_RenderFillRect(R, &pre);
+        SDL_FRect post{viz.x + vizW * cutF, viz.y, vizW * (1.f - cutF), vizH};
+        SDL_RenderFillRect(R, &post);
+
+        // Envelope: attack and decay in seconds, sustain held to the end of the sample.
+        const float durSec = slab.sampleRate > 0
+            ? static_cast<float>(slab.num_samples) / static_cast<float>(slab.sampleRate) : 1.f;
+        const float atk = std::max(0.0f, slab.attack.value);
+        const float dec = std::max(0.0f, slab.decay.value);
+        const float sus = std::clamp(slab.sustain.value, 0.f, 1.f);
+        const float invDur = 1.f / std::max(durSec, 1e-4f);
+        auto exAt = [&](float sec) { return viz.x + vizW * std::clamp(sec * invDur, 0.f, 1.f); };
+        auto eyAt = [&](float lvl) { return viz.y + vizH - vizH * std::clamp(lvl, 0.f, 1.f); };
+        SDL_SetRenderDrawColor(R, 240, 200, 80, 230);
+        SDL_RenderLine(R, exAt(0.f), eyAt(0.f), exAt(atk), eyAt(1.f));
+        SDL_RenderLine(R, exAt(atk), eyAt(1.f), exAt(atk + dec), eyAt(sus));
+        SDL_RenderLine(R, exAt(atk + dec), eyAt(sus), viz.x + vizW, eyAt(sus));
+
+        SDL_SetRenderDrawColor(R, 70, 70, 78, 255);
+        SDL_RenderRect(R, &viz);
+    }
+    ey += 54.f + 6.f;
+
     // Volume slider.
     char buf[64];
     snprintf(buf, sizeof(buf), "Volume: %.2f", slab.volume.value);
@@ -1168,7 +1292,15 @@ void SampleEditorWindow::render() {
                      static_cast<float>(rs->w), static_cast<float>(rs->h)};
         SDL_RenderTexture(R, rt, nullptr, &rr); SDL_DestroySurface(rs); SDL_DestroyTexture(rt); }
 
-    SDL_FRect delBtn{ex + 100.f, ky, 90.f, 22.f};
+    SDL_FRect loadBtn{ex + 100.f, ky, 90.f, 22.f};
+    SDL_SetRenderDrawColor(R, 60, 140, 90, 255); SDL_RenderFillRect(R, &loadBtn);
+    SDL_Surface* ls = TTF_RenderText_Blended(fonts.mainFont, "Load File", 9, {255, 255, 255, 255});
+    if (ls) { SDL_Texture* lt = SDL_CreateTextureFromSurface(R, ls);
+        SDL_FRect lr{loadBtn.x + (loadBtn.w - ls->w)/2.f, loadBtn.y + (loadBtn.h - ls->h)/2.f,
+                     static_cast<float>(ls->w), static_cast<float>(ls->h)};
+        SDL_RenderTexture(R, lt, nullptr, &lr); SDL_DestroySurface(ls); SDL_DestroyTexture(lt); }
+
+    SDL_FRect delBtn{ex + 200.f, ky, 90.f, 22.f};
     SDL_SetRenderDrawColor(R, 180, 50, 50, 255); SDL_RenderFillRect(R, &delBtn);
     SDL_Surface* ds = TTF_RenderText_Blended(fonts.mainFont, "Delete", 6, {255, 255, 255, 255});
     if (ds) { SDL_Texture* dt = SDL_CreateTextureFromSurface(R, ds);
@@ -1185,21 +1317,22 @@ bool SampleEditorWindow::handleInput(SDL_Event& e) {
     int nid = static_cast<int>(samplerNode->id);
     auto& slab = samplerNode->samples[sampleIndex];
 
-    // Volume slider rect (matches render layout).
-    float volY = 8.f + 24.f + 16.f;
+    // Right-click on a knob opens its parameter menu (same one the node canvas shows).
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_RIGHT) {
+        int wx, wy; SDL_GetWindowPosition(window, &wx, &wy);
+        float gx, gy; SDL_GetGlobalMouseState(&gx, &gy);
+        if (samplerNode->openParameterMenuAt(e, gx - static_cast<float>(wx), gy - static_cast<float>(wy)))
+            return true;
+    }
+
+    // Volume slider rect (matches render layout: filepath + waveform view + label).
+    float volY = 8.f + 24.f + 60.f + 16.f;
     SDL_FRect volTrack{8.f, volY, 200.f, 8.f};
 
     // --- Volume slider drag ---
     if (draggingVolume_) {
         if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
             draggingVolume_ = false;
-            float newVal = slab.volume.value;
-            if (std::fabs(newVal - volDragStart_) > 0.001f && p && p->um) {
-                std::vector<int> mp = nm.managerPath;
-                std::vector<size_t> pp{static_cast<size_t>(sampleIndex) * 9};
-                p->um->newAction(new SetParamValueUndoAction(p, std::move(mp), nid,
-                    std::move(pp), volDragStart_, newVal, slab.volume.label));
-            }
             return true;
         }
         if (e.type == SDL_EVENT_MOUSE_MOTION) {
@@ -1207,6 +1340,14 @@ bool SampleEditorWindow::handleInput(SDL_Event& e) {
             float gx, gy; SDL_GetGlobalMouseState(&gx, &gy);
             float frac = 1.f - (gy - static_cast<float>(wy) - volTrack.y) / volTrack.h;
             if (frac < 0.f) frac = 0.f; if (frac > 1.f) frac = 1.f;
+            const float oldVal = slab.volume.value;
+            if (std::fabs(frac - oldVal) > 0.0005f && p && p->um) {
+                // Coalesces with the previous motion into one undo step for the drag.
+                std::vector<int> mp = nm.managerPath;
+                std::vector<size_t> pp{static_cast<size_t>(sampleIndex) * 9};
+                p->um->newAction(new SetParamValueUndoAction(p, std::move(mp), nid,
+                    std::move(pp), oldVal, frac, slab.volume.label));
+            }
             slab.volume.value = frac;
             return true;
         }
@@ -1256,9 +1397,26 @@ bool SampleEditorWindow::handleInput(SDL_Event& e) {
         }
 
         // Reload/Delete buttons.
-        float btnY = 8.f + 24.f + 16.f + 22.f + 120.f + 8.f;
+        // Matches the render layout: filepath, waveform, volume label + track, then the
+        // two knob rows (22 offset + 60 + 60) and an 8 px gap.
+        float btnY = 8.f + 24.f + 60.f + 16.f + 14.f + 8.f + 22.f + 60.f + 60.f + 8.f;
         SDL_FRect relBtn{8.f, btnY, 90.f, 22.f};
-        SDL_FRect delBtn{108.f, btnY, 90.f, 22.f};
+        SDL_FRect loadBtn{108.f, btnY, 90.f, 22.f};
+        SDL_FRect delBtn{208.f, btnY, 90.f, 22.f};
+        if (mx >= loadBtn.x && mx <= loadBtn.x + loadBtn.w && my >= loadBtn.y && my <= loadBtn.y + loadBtn.h) {
+#ifndef __EMSCRIPTEN__
+            const std::string picked = pickAudioFile();
+            if (!picked.empty()) {
+                if (p && p->um) {
+                    std::vector<int> mp = nm.managerPath;
+                    p->um->newAction(new SamplerLoadSampleFileUndoAction(p, std::move(mp), nid,
+                        sampleIndex, slab.filepath, picked,
+                        slab.sampleRate, slab.numChannels, slab.sampleRate, slab.numChannels));
+                } else { samplerNode->setSampleFile(sampleIndex, picked); }
+            }
+#endif
+            return true;
+        }
         if (mx >= relBtn.x && mx <= relBtn.x + relBtn.w && my >= relBtn.y && my <= relBtn.y + relBtn.h) {
             if (!slab.filepath.empty()) {
                 if (p && p->um) {
@@ -1360,6 +1518,7 @@ void SamplerNode::extraDeSerialize(const json& j) {
         s.decay.label = "S" + std::to_string(s.id) + " Dec";
         s.sustain.label = "S" + std::to_string(s.id) + " Sus";
         s.release.label = "S" + std::to_string(s.id) + " Rel";
+    applySamplerKnobDisplay(s);
     }
 
     rebuildSampleParams();

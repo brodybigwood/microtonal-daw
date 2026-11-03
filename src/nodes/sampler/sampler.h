@@ -107,7 +107,7 @@ public:
     static constexpr int kMaxVoices = 64;
     SamplerVoice voices[kMaxVoices];
 
-    static constexpr float kColW = 80.f;
+    static constexpr float kColW = 20.f;
     static constexpr float kColPad = 4.f;
     static constexpr float kThumbH = 30.f;
     static constexpr float kRowH = 14.f;

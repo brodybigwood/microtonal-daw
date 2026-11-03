@@ -134,6 +134,20 @@ std::shared_ptr<TreeEntry> Node::getParameterMenu(Parameter* p, const std::vecto
     return root;
 }
 
+bool Node::openParameterMenuAt(SDL_Event& e, float x, float y) {
+    for (size_t i = 0; i < params.size(); ++i) {
+        Parameter* p = params[i];
+        if (!p || !inPolygon(p->vx.data(), p->vy.data(), p->vx.size(), x, y)) continue;
+        auto* ctxMenu = ContextMenu::get();
+        SDL_Window* evWin = SDL_GetWindowFromID(e.button.windowID);
+        SDL_Renderer* evRenderer = evWin ? SDL_GetRenderer(evWin) : nullptr;
+        ctxMenu->activate(evRenderer, e.button.windowID);
+        ctxMenu->dynamicTick = getTreeMenuTicker(getParameterMenu(p, {i}));
+        return true;
+    }
+    return false;
+}
+
 bool inside(float& mouseX, float& mouseY, SDL_FRect* rect) {
     return (
         mouseX > rect->x &&

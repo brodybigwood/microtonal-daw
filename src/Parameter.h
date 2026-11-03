@@ -47,7 +47,8 @@ struct Knob : Parameter {
 
     float thetaMin;
     float thetaMax;
-    std::string label;
+    std::string label;         // API/serialization name
+    std::string displayLabel;  // optional short text drawn on the canvas
     SDL_Color labelColor{0, 0, 0, 255};
 
     void handleInput(SDL_Event&) override;

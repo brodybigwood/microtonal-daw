@@ -308,6 +308,11 @@ void ParamNode::handleWindowInput(SDL_Event& e) {
     float listH = visH - kFootH - pad;
     float rowW = w - pad * 2.f;
 
+    // Right-click on a parameter opens its context menu.
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_RIGHT) {
+        if (openParameterMenuAt(e, msX, msY)) return;
+    }
+
     if (e.type == SDL_EVENT_MOUSE_WHEEL) {
         float contentH = static_cast<float>(n) * kRowH;
         float maxScroll = std::max(0.f, contentH - listH);

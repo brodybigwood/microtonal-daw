@@ -133,6 +133,10 @@ class Node : public EmbeddedWindow {
 
         std::shared_ptr<TreeEntry> getConnectionMenu(Connection*);
         std::shared_ptr<TreeEntry> getParameterMenu(Parameter*, const std::vector<size_t>& path = {});
+
+        /// Right-click a parameter at local coordinates (node canvas or an expanded editor)
+        /// and open its context menu. Returns true if a parameter was hit.
+        bool openParameterMenuAt(SDL_Event& e, float x, float y);
         virtual std::shared_ptr<TreeEntry> getNodeMenu();
 
         // Map a parameter directly to an input connection.

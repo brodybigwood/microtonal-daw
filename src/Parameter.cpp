@@ -93,8 +93,9 @@ void Knob::render(SDL_Renderer* renderer) {
         static_cast<Sint16>(x2Max), static_cast<Sint16>(y2Max),
         4, 20, 20, 20, 255);
 
-    if (!label.empty() && fonts.mainFont) {
-        SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, label.c_str(), 0, labelColor);
+    const std::string& shownLabel = displayLabel.empty() ? label : displayLabel;
+    if (!shownLabel.empty() && fonts.mainFont) {
+        SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, shownLabel.c_str(), 0, labelColor);
         if (surf) {
             SDL_Texture* textTex = SDL_CreateTextureFromSurface(renderer, surf);
             SDL_FRect tr{

@@ -156,22 +156,8 @@ void Node::clickMouse(SDL_Event& e) {
         SDL_Window* evWin = SDL_GetWindowFromID(e.button.windowID);
         SDL_Renderer* evRenderer = evWin ? SDL_GetRenderer(evWin) : nullptr;
 
-        Parameter* hoveredParam = nullptr;
-        for (auto* p : params) {
-            if (inPolygon(p->vx.data(), p->vy.data(), p->vx.size(), msX, msY)) {
-                hoveredParam = p;
-                break;
-            }
-        }
-
-        if (hoveredParam) {
-            ctxMenu->activate(evRenderer, e.button.windowID);
-            size_t paramIndex = 0;
-            for (size_t i = 0; i < params.size(); ++i) {
-                if (params[i] == hoveredParam) { paramIndex = i; break; }
-            }
-            auto t = getParameterMenu(hoveredParam, {paramIndex});
-            ctxMenu->dynamicTick = getTreeMenuTicker(t);
+        if (openParameterMenuAt(e, msX, msY)) {
+            // handled by the parameter menu
         } else if (hoveredConnection != -1) {
             if (!ne) {
                 ctxMenu->active = false;
