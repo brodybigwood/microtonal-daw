@@ -3,6 +3,7 @@
 #include "SDL_Events.h"
 #include "Transport.h"
 #include "WindowHandler.h"
+#include "styles.h"
 
 GridView::GridView(SDL_FRect* rect, float leftMargin, Window* w, Project* p) :
     leftMargin(leftMargin),
@@ -208,8 +209,48 @@ float GridView::getX(float time) {
 }
 
 void GridView::renderGridRhythmButton(SDL_Renderer* renderer) {
-    gridRhythmButtonRect = {dstRect->x + 4.f, dstRect->y + 4.f,
-                            std::max(20.f, leftMargin - 8.f), topMargin - 8.f};
+    const float inset = 4.f;
+    const float x = dstRect->x + inset;
+    const float w = std::max(20.f, leftMargin - 2.f * inset);
+    const float stripH = Transport::kTimelineHeight;
+
+    if (showRecordButtons()) {
+        // Record sits in the corner's tempo-curve band; the grid-rhythm arrow takes the
+        // transport-strip band below it.
+        recordButtonRect = {x, dstRect->y + inset, w, std::max(12.f, topMargin - stripH - 2.f * inset)};
+        gridRhythmButtonRect = {x, dstRect->y + topMargin - stripH, w, stripH};
+    } else {
+        recordButtonRect = {0, 0, 0, 0};
+        gridRhythmButtonRect = {x, dstRect->y + inset, w, topMargin - 2.f * inset};
+    }
+
+    if (recordButtonRect.w > 0.f) {
+        const bool rec = project && project->isRecording;
+        SDL_SetRenderDrawColor(renderer, rec ? 150 : 50, rec ? 25 : 50, rec ? 25 : 54, 255);
+        SDL_RenderFillRect(renderer, &recordButtonRect);
+        SDL_SetRenderDrawColor(renderer, rec ? 230 : 130, rec ? 70 : 130, rec ? 70 : 130, 255);
+        SDL_RenderRect(renderer, &recordButtonRect);
+        SDL_SetRenderDrawColor(renderer, 230, 60, 60, 255);
+        SDL_FRect dot{recordButtonRect.x + 10.f,
+                      recordButtonRect.y + recordButtonRect.h * 0.5f - 5.f, 10.f, 10.f};
+        SDL_RenderFillRect(renderer, &dot);
+        if (fonts.mainFont) {
+            const char* label = rec ? "REC" : "REC";
+            SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, label, 0,
+                SDL_Color{225, 225, 225, 255});
+            if (surf) {
+                SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
+                if (tex) {
+                    float tw = static_cast<float>(surf->w), th = static_cast<float>(surf->h);
+                    SDL_FRect dst{dot.x + dot.w + 8.f, recordButtonRect.y + recordButtonRect.h * 0.5f - th * 0.5f, tw, th};
+                    SDL_RenderTexture(renderer, tex, nullptr, &dst);
+                    SDL_DestroyTexture(tex);
+                }
+                SDL_DestroySurface(surf);
+            }
+        }
+    }
+
     SDL_SetRenderDrawColor(renderer, 50, 50, 54, 255);
     SDL_RenderFillRect(renderer, &gridRhythmButtonRect);
     SDL_SetRenderDrawColor(renderer, 130, 130, 130, 255);
@@ -228,4 +269,10 @@ void GridView::renderGridRhythmButton(SDL_Renderer* renderer) {
 bool GridView::gridRhythmButtonHit(float x, float y) const {
     return x >= gridRhythmButtonRect.x && x <= gridRhythmButtonRect.x + gridRhythmButtonRect.w &&
            y >= gridRhythmButtonRect.y && y <= gridRhythmButtonRect.y + gridRhythmButtonRect.h;
+}
+
+bool GridView::recordButtonHit(float x, float y) const {
+    if (recordButtonRect.w <= 0.f) return false;
+    return x >= recordButtonRect.x && x <= recordButtonRect.x + recordButtonRect.w &&
+           y >= recordButtonRect.y && y <= recordButtonRect.y + recordButtonRect.h;
 }

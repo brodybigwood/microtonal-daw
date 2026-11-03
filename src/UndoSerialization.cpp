@@ -24,7 +24,9 @@
 
 // ProjectAction JSON (de)serialization (split from UndoManager.cpp).
 
-ProjectAction* ProjectAction::deSerialize(const json& j, Project* p) {
+// Builds one action (fields + own JSON) without touching its children; the iterative
+// driver below assembles the tree so deep undo chains cannot overflow the stack.
+static ProjectAction* deSerializeOne(const json& j, Project* p) {
     ProjectAction* pa;
     switch (j.at("type").get<int>()) {
         case CreateNote: {
@@ -90,10 +92,19 @@ ProjectAction* ProjectAction::deSerialize(const json& j, Project* p) {
                 j.value("chainData", json::object()), j.value("name", std::string("Mixer Edit")));
             break;
         }
+        case MixerChainNodeParam: {
+            pa = new MixerChainNodeParamAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("mixerNodeID").get<int>(), j.at("chainID").get<int>(),
+                j.at("chainNodeID").get<int>(), j.at("paramIndex").get<size_t>(),
+                j.at("oldValue").get<float>(), j.at("newValue").get<float>(),
+                j.value("name", std::string("Knob Change")));
+            break;
+        }
         case AddArrangerTrack: {
             auto at = new AddArrangerTrackAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(), j.at("trackType").get<int>());
             at->trackID = j.at("trackID").get<int>();
             at->connectionID = j.at("connectionID").get<int>();
+            at->inputConnectionID = j.value("inputConnectionID", -1);
             pa = at;
             break;
         }
@@ -109,7 +120,36 @@ ProjectAction* ProjectAction::deSerialize(const json& j, Project* p) {
                 rt->connectionIdPoolSnapshot = j["connectionIdPoolSnapshot"];
             if (j.contains("positionIdPoolSnapshot"))
                 rt->positionIdPoolSnapshot = j["positionIdPoolSnapshot"];
+            rt->inputConnectionID = j.value("inputConnectionID", -1);
+            rt->inputWasConnected = j.value("inputWasConnected", false);
+            rt->inputSourceNodeID = j.value("inputSourceNodeID", -1);
+            rt->inputSourceConnectionID = j.value("inputSourceConnectionID", -1);
             pa = rt;
+            break;
+        }
+        case ArrangerTrackControl: {
+            pa = new ArrangerTrackControlAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(), static_cast<uint16_t>(j.at("trackID").get<int>()),
+                j.at("control").get<int>(), j.value("before", false), j.value("after", false));
+            break;
+        }
+        case RecordTake: {
+            auto rtPairs = [](const json& a) {
+                std::vector<std::pair<int, int>> out;
+                if (a.is_array())
+                    for (const auto& el : a)
+                        if (el.is_array() && el.size() >= 2)
+                            out.push_back({el[0].get<int>(), el[1].get<int>()});
+                return out;
+            };
+            pa = new RecordTakeAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(), static_cast<uint16_t>(j.at("trackID").get<int>()),
+                rtPairs(j.value("takeStartPairs", json::array())),
+                rtPairs(j.value("takeEndPairs", json::array())),
+                j.value("isAudio", false), j.value("filepath", std::string()),
+                j.value("takeNotes", json::array()), j.value("elementID", -1),
+                j.value("elementSnapshot", json::object()), j.value("snapshotValid", false),
+                j.value("beforePositions", json::array()), j.value("afterPositions", json::array()));
             break;
         }
         case AddNode: {
@@ -144,10 +184,6 @@ ProjectAction* ProjectAction::deSerialize(const json& j, Project* p) {
             pa = new MoveNodeAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeId").get<int>(),
                 j.at("fromX").get<float>(), j.at("fromY").get<float>(),
                 j.at("toX").get<float>(), j.at("toY").get<float>());
-            break;
-        }
-        case ToggleNodeVisible: {
-            pa = new ToggleNodeVisibleAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeId").get<int>());
             break;
         }
         case PanNodes: {
@@ -440,11 +476,6 @@ ProjectAction* ProjectAction::deSerialize(const json& j, Project* p) {
             throw std::runtime_error("invalid undo action type in save");
     }
 
-    for (auto jc : j.at("children")) {
-        auto c = ProjectAction::deSerialize(jc, p);
-        pa->newAction(c);
-    }
-
     pa->last_index = j.at("last_index").get<int>();
     pa->name = j.at("name").get<std::string>();
     pa->undoTreeExpanded = j.value("undoTreeExpanded", false);
@@ -453,7 +484,33 @@ ProjectAction* ProjectAction::deSerialize(const json& j, Project* p) {
     return pa;
 }
 
-json ProjectAction::serialize(ProjectAction* pa) {
+ProjectAction* ProjectAction::deSerialize(const json& j, Project* p) {
+    struct Frame {
+        const json* j;
+        ProjectAction* pa;
+        size_t next;
+    };
+    ProjectAction* root = deSerializeOne(j, p);
+    std::vector<Frame> stack;
+    stack.push_back({&j, root, 0});
+    while (!stack.empty()) {
+        Frame& f = stack.back();
+        const json& children = f.j->at("children");
+        if (f.next < children.size()) {
+            const json& jc = children[f.next++];
+            ProjectAction* child = deSerializeOne(jc, p);
+            f.pa->newAction(child);
+            stack.push_back({&jc, child, 0});
+        } else {
+            stack.pop_back();
+        }
+    }
+    return root;
+}
+
+// Serializes one action without its children; the driver below assembles the tree
+// iteratively, since a long undo chain would otherwise recurse once per action.
+static json serializeOne(ProjectAction* pa) {
     json j;
     j["type"] = pa->type;
     switch (pa->type) {
@@ -510,6 +567,17 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["chainData"] = mx->chainData;
             break;
         }
+        case MixerChainNodeParam: {
+            auto mp = static_cast<MixerChainNodeParamAction*>(pa);
+            j["managerPath"] = mp->managerPath;
+            j["mixerNodeID"] = mp->mixerNodeID;
+            j["chainID"] = mp->chainID;
+            j["chainNodeID"] = mp->chainNodeID;
+            j["paramIndex"] = mp->paramIndex;
+            j["oldValue"] = mp->oldValue;
+            j["newValue"] = mp->newValue;
+            break;
+        }
         case AddArrangerTrack: {
             auto at = static_cast<AddArrangerTrackAction*>(pa);
             j["managerPath"] = at->managerPath;
@@ -517,6 +585,7 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["trackType"] = at->trackType;
             j["trackID"] = at->trackID;
             j["connectionID"] = at->connectionID;
+            j["inputConnectionID"] = at->inputConnectionID;
             break;
         }
         case RemoveArrangerTrack: {
@@ -526,11 +595,47 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["trackType"] = rt->trackType;
             j["trackID"] = rt->trackID;
             j["connectionID"] = rt->connectionID;
+            j["inputConnectionID"] = rt->inputConnectionID;
+            j["inputWasConnected"] = rt->inputWasConnected;
+            j["inputSourceNodeID"] = rt->inputSourceNodeID;
+            j["inputSourceConnectionID"] = rt->inputSourceConnectionID;
             j["trackIndex"] = rt->trackIndex;
             j["positionsSnapshot"] = rt->positionsSnapshot;
             if (!rt->trackIdPoolSnapshot.is_null()) j["trackIdPoolSnapshot"] = rt->trackIdPoolSnapshot;
             if (!rt->connectionIdPoolSnapshot.is_null()) j["connectionIdPoolSnapshot"] = rt->connectionIdPoolSnapshot;
             if (!rt->positionIdPoolSnapshot.is_null()) j["positionIdPoolSnapshot"] = rt->positionIdPoolSnapshot;
+            break;
+        }
+        case ArrangerTrackControl: {
+            auto ac = static_cast<ArrangerTrackControlAction*>(pa);
+            j["managerPath"] = ac->managerPath;
+            j["nodeID"] = ac->nodeID;
+            j["trackID"] = static_cast<int>(ac->trackID);
+            j["control"] = ac->control;
+            j["before"] = ac->before;
+            j["after"] = ac->after;
+            break;
+        }
+        case RecordTake: {
+            auto rt = static_cast<RecordTakeAction*>(pa);
+            auto pairsJson = [](const std::vector<std::pair<int, int>>& pairs) {
+                json a = json::array();
+                for (const auto& pr : pairs) a.push_back(json::array({pr.first, pr.second}));
+                return a;
+            };
+            j["managerPath"] = rt->managerPath;
+            j["nodeID"] = rt->nodeID;
+            j["trackID"] = static_cast<int>(rt->trackID);
+            j["takeStartPairs"] = pairsJson(rt->takeStartPairs);
+            j["takeEndPairs"] = pairsJson(rt->takeEndPairs);
+            j["isAudio"] = rt->isAudio;
+            j["filepath"] = rt->filepath;
+            j["takeNotes"] = rt->takeNotes;
+            j["elementID"] = rt->elementID;
+            j["elementSnapshot"] = rt->elementSnapshot;
+            j["snapshotValid"] = rt->snapshotValid;
+            j["beforePositions"] = rt->beforePositions;
+            j["afterPositions"] = rt->afterPositions;
             break;
         }
         case MoveEmbeddedWindow: {
@@ -565,12 +670,6 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["fromY"] = mn->fromY;
             j["toX"] = mn->toX;
             j["toY"] = mn->toY;
-            break;
-        }
-        case ToggleNodeVisible: {
-            auto tv = static_cast<ToggleNodeVisibleAction*>(pa);
-            j["managerPath"] = tv->managerPath;
-            j["nodeId"] = tv->nodeId;
             break;
         }
         case PanNodes: {
@@ -1002,19 +1101,35 @@ json ProjectAction::serialize(ProjectAction* pa) {
             throw std::runtime_error("invalid undo action type when serializing");
     }
 
-    // Move each child's JSON into the array and the array into j. Copying a
-    // child's whole subtree into every ancestor made tree serialization
-    // quadratic in the number of actions (a 400 KB tree took ~55 s to save).
-    json children = json::array();
-    for (auto c : pa->children)
-        children.push_back(ProjectAction::serialize(c));
-
-    j["children"] = std::move(children);
+    j["children"] = json::array();
     j["name"] = pa->name;
     j["last_index"] = pa->last_index;
     j["undoTreeExpanded"] = pa->undoTreeExpanded;
     if (!pa->savedMainManager.is_null())
         j["savedMainManager"] = pa->savedMainManager;
     return j;
+}
+
+json ProjectAction::serialize(ProjectAction* root) {
+    struct Frame {
+        ProjectAction* a;
+        json j;
+        size_t next;
+    };
+    std::vector<Frame> stack;
+    stack.push_back({root, serializeOne(root), 0});
+    while (!stack.empty()) {
+        Frame& f = stack.back();
+        if (f.next < f.a->children.size()) {
+            ProjectAction* c = f.a->children[f.next++];
+            stack.push_back({c, serializeOne(c), 0});
+        } else {
+            json done = std::move(f.j);
+            stack.pop_back();
+            if (stack.empty()) return done;
+            stack.back().j["children"].push_back(std::move(done));
+        }
+    }
+    return json::object();
 }
 

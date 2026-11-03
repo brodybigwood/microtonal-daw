@@ -4,6 +4,7 @@
 #include "ElementManager.h"
 #include "Parameter.h"
 #include "Bus.h"
+#include "RecordedTake.h"
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -39,7 +40,7 @@ enum ActionType {
     SetParamValue = 20,
     MoveEmbeddedWindow = 22,
     ResizeEmbeddedWindow = 23,
-    ToggleNodeVisible = 24,
+    // 24 was ToggleNodeVisible; node hiding was removed.
     PanNodes = 25,
     ZoomNodes = 26,
     VstParameterChange = 29,
@@ -67,6 +68,9 @@ enum ActionType {
     SamplerToggleSampleMute = 51,
     CreateNotes = 52,
     MixerChainEdit = 53,
+    ArrangerTrackControl = 54,
+    RecordTake = 55,
+    MixerChainNodeParam = 56,
 };
 
 
@@ -179,7 +183,7 @@ struct UndoManager {
         return j;
     }
 
-    void deSerialize(json j, Project* p) {
+    void deSerialize(const json& j, Project* p) {
         if (head) delete head;
         undoTreeViewRoot = nullptr;
         head = ProjectAction::deSerialize(j["head"], p);
@@ -287,6 +291,24 @@ struct AssignNoteHarmonicUndoAction : ProjectAction {
 
     AssignNoteHarmonicUndoAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, int noteID,
                                  json beforeRegion, json afterRegion, json beforeNote, json afterNote);
+};
+
+/** Parameter edit on an insert node that lives inside a mixer chain (not in the graph's
+    node list), so the usual managerPath+nodeID lookup cannot find it. */
+struct MixerChainNodeParamAction : ProjectAction {
+    std::vector<int> managerPath;
+    int mixerNodeID = 0;
+    int chainID = 0;
+    int chainNodeID = 0;
+    size_t paramIndex = 0;
+    float oldValue = 0.0f;
+    float newValue = 0.0f;
+
+    MixerChainNodeParamAction(Project* p, std::vector<int> managerPath, int mixerNodeID, int chainID,
+                              int chainNodeID, size_t paramIndex, float oldValue, float newValue,
+                              std::string actionName = "Knob Change");
+
+    bool coalesceWith(ProjectAction* newer) override;
 };
 
 struct SetParamValueUndoAction : ProjectAction {
@@ -505,6 +527,7 @@ struct AddArrangerTrackAction : ProjectAction {
     int trackType;
     int trackID = -1;
     int connectionID = -1;
+    int inputConnectionID = -1;
 
     AddArrangerTrackAction(Project* p, std::vector<int> managerPath, int nodeID, int trackType);
 };
@@ -515,6 +538,7 @@ struct RemoveArrangerTrackAction : ProjectAction {
     int trackType;
     int trackID;
     int connectionID;
+    int inputConnectionID = -1;
     int trackIndex = -1;  // position in the tracks list
     // Snapshot of positions on this track: {elementID, positionIndex, positionJson}
     json positionsSnapshot;
@@ -524,8 +548,58 @@ struct RemoveArrangerTrackAction : ProjectAction {
     json positionIdPoolSnapshot;
     // Connection list snapshot for the removed connection
     json connectionSnapshot;
+    // The track input port's cable, if it was connected, so undo can rewire it.
+    bool inputWasConnected = false;
+    int inputSourceNodeID = -1;
+    int inputSourceConnectionID = -1;
 
     RemoveArrangerTrackAction(Project* p, std::vector<int> managerPath, int nodeID, int trackType, int trackID, int connectionID);
+};
+
+struct ArrangerTrackControlAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    uint16_t trackID = 0;
+    int control = 0;  // 0 solo, 1 mute, 2 record-arm, 3 monitor
+    bool before = false;
+    bool after = false;
+
+    ArrangerTrackControlAction(Project* p, std::vector<int> managerPath, int nodeID, uint16_t trackID, int control);
+    /** Restored from project / undo JSON. */
+    ArrangerTrackControlAction(Project* p, std::vector<int> managerPath, int nodeID, uint16_t trackID, int control,
+                               bool before, bool after);
+};
+
+struct RecordTakeAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    uint16_t trackID = 0;
+    std::vector<std::pair<int, int>> takeStartPairs;
+    std::vector<std::pair<int, int>> takeEndPairs;
+    bool isAudio = false;
+    std::string filepath;
+    // Recorded notes relative to the take start: {rhythmVector, rhythmEndVector, pitchVector, channel}
+    json takeNotes = json::array();
+
+    int elementID = -1;
+    json elementSnapshot = json::object();
+    bool snapshotValid = false;
+    // Positions touched by the overwrite trim. Each entry: {elementID, entries:[{index, pos}]}.
+    json beforePositions = json::array();
+    json afterPositions = json::array();
+
+    RecordTakeAction(Project* p, std::vector<int> managerPath, int nodeID, uint16_t trackID,
+                     const RecordedTake& take);
+    /** Restored from project / undo JSON. */
+    RecordTakeAction(Project* p, std::vector<int> managerPath, int nodeID, uint16_t trackID,
+                     std::vector<std::pair<int, int>> takeStartPairs,
+                     std::vector<std::pair<int, int>> takeEndPairs,
+                     bool isAudio, std::string filepath, json takeNotes,
+                     int elementID, json elementSnapshot, bool snapshotValid,
+                     json beforePositions, json afterPositions);
+
+private:
+    void wireLambdas();
 };
 
 struct MoveEmbeddedWindowAction : ProjectAction {
@@ -558,13 +632,6 @@ struct TogglePianoRollWindowAction : ProjectAction {
     bool open;
     TogglePianoRollWindowAction(Project* p, std::vector<int> managerPath, int arrangerNodeID, int regionID,
                                 int ewID, float x, float y, float w, float h, int zOrder, bool open);
-};
-
-struct ToggleNodeVisibleAction : ProjectAction {
-    std::vector<int> managerPath;
-    int nodeId = 0;
-
-    ToggleNodeVisibleAction(Project* p, std::vector<int> managerPath, int nodeId);
 };
 
 /** Moves one node to an absolute position. Node drags in the editor are not

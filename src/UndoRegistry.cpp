@@ -259,6 +259,7 @@ const std::unordered_map<std::string, ActionType>& UndoManager::actionRegistry()
         {"create_note", CreateNote},
         {"create_notes", CreateNotes},
         {"add_arranger_track", AddArrangerTrack},
+        {"set_arranger_track_control", ArrangerTrackControl},
         {"add_node", AddNode},
         {"remove_node", RemoveNode},
         {"make_node_connection", MakeNodeConnection},
@@ -290,7 +291,6 @@ const std::unordered_map<std::string, ActionType>& UndoManager::actionRegistry()
         {"delete_note", DeleteNote},
         {"move_note", MoveNote},
         {"move_notes", MoveMultipleNotes},
-        {"toggle_node_visible", ToggleNodeVisible},
         {"pan_nodes", PanNodes},
         {"zoom_nodes", ZoomNodes},
         {"io_port_channel", IoPortChannel},
@@ -328,6 +328,9 @@ std::string UndoManager::actionSchema(const std::string& actionName) {
     }
     if (actionName == "add_arranger_track") {
         return R"({"managerPath":[int,...],"nodeID":int,"trackType":int})";
+    }
+    if (actionName == "set_arranger_track_control") {
+        return R"({"managerPath":[int,...],"nodeID":int,"trackID":int,"control":int,"value":bool?})";
     }
     if (actionName == "create_note") {
         return R"({"managerPath":[int,...],"nodeID":int,"regionID":int,"pitchVector":[[int,int],...]|"token","rhythmVector":[[int,int],...],"rhythmEndVector":[[int,int],...]})";
@@ -372,8 +375,6 @@ std::string UndoManager::actionSchema(const std::string& actionName) {
         return R"({"managerPath":[int,...],"nodeID":int,"regionID":int,"noteID":int,"intent":{...note fields...}})";
     if (actionName == "move_notes")
         return R"({"managerPath":[int,...],"nodeID":int,"regionID":int,"notes":[{"noteID":int,"intent":{...}},...]})";
-    if (actionName == "toggle_node_visible")
-        return R"({"managerPath":[int,...],"nodeID":int})";
     if (actionName == "pan_nodes")
         return R"({"managerPath":[int,...],"dx":float,"dy":float})";
     if (actionName == "zoom_nodes")
@@ -530,6 +531,16 @@ ProjectAction* UndoManager::buildRegisteredAction(const std::string& actionName,
         case AddArrangerTrack:
             pa = new AddArrangerTrackAction(head->p, params.at("managerPath").get<std::vector<int>>(), params.at("nodeID").get<int>(), params.at("trackType").get<int>());
             break;
+        case ArrangerTrackControl: {
+            auto* ac = new ArrangerTrackControlAction(head->p, params.at("managerPath").get<std::vector<int>>(),
+                params.at("nodeID").get<int>(), static_cast<uint16_t>(params.at("trackID").get<int>()),
+                params.at("control").get<int>());
+            // Intent: omit "value" to toggle, or set an explicit state.
+            if (params.contains("value") && params["value"].is_boolean())
+                ac->after = params["value"].get<bool>();
+            pa = ac;
+            break;
+        }
         case RemoveArrangerTrack:
             pa = new RemoveArrangerTrackAction(head->p, params.at("managerPath").get<std::vector<int>>(), params.at("nodeID").get<int>(), params.at("trackType").get<int>(), params.at("trackID").get<int>(), params.at("connectionID").get<int>());
             break;
@@ -629,10 +640,6 @@ ProjectAction* UndoManager::buildRegisteredAction(const std::string& actionName,
                                     params.at("toX").get<float>(), params.at("toY").get<float>());
             break;
         }
-        case ToggleNodeVisible:
-            pa = new ToggleNodeVisibleAction(head->p, params.at("managerPath").get<std::vector<int>>(),
-                                             params.at("nodeID").get<int>());
-            break;
         case PanNodes:
             pa = new PanNodesAction(head->p, params.at("managerPath").get<std::vector<int>>(),
                                     params.at("dx").get<float>(), params.at("dy").get<float>());

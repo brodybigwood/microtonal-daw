@@ -26,6 +26,8 @@ TrackType& Track::getType() {
 void Track::fromJSON(json j) {
     type = static_cast<TrackType>(j["type"].get<uint16_t>());
     id = j["id"].get<uint16_t>();
+    recordArmed = j.value("recordArmed", false);
+    monitor = j.value("monitor", false);
 }
 
 json Track::toJSON() {
@@ -33,6 +35,8 @@ json Track::toJSON() {
 
     j["type"] = type;
     j["id"] = id;
+    j["recordArmed"] = recordArmed;
+    j["monitor"] = monitor;
 
     return j;
 }

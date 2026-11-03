@@ -36,6 +36,51 @@ NodeManager& requireManager(Project* p, const std::vector<int>& path) {
     for (size_t i = 0; i < path.size(); ++i) {
         int nodeId = path[i];
         auto* node = nm->getNode(static_cast<uint16_t>(nodeId));
+        // Mixer chain inserts are not in the node list; a mixer path is
+        // [mixerID, chainID, insertID] and continues into the insert's nested graph.
+        auto* mixer = dynamic_cast<MixerNode*>(node);
+        if (mixer) {
+            if (i + 2 >= path.size())
+                throw std::runtime_error("requireManager: mixer path needs chain and insert ids");
+            const int chainId = path[i + 1];
+            const int insertId = path[i + 2];
+            Node* insert = nullptr;
+            for (auto& cp : mixer->chains) {
+                if (cp->id != chainId) continue;
+                for (Node* cn : cp->nodes)
+                    if (cn && static_cast<int>(cn->id) == insertId) { insert = cn; break; }
+                break;
+            }
+            if (!insert)
+                throw std::runtime_error("requireManager: mixer insert not found");
+            i += 2;
+            if (auto* dn = dynamic_cast<DelayNode*>(insert); dn && dn->chain) {
+                nm = dn->chain;
+                continue;
+            }
+            if (auto* pt = dynamic_cast<PatcherNode*>(insert); pt && pt->mainManager) {
+                nm = pt->mainManager;
+                continue;
+            }
+            if (auto* mx = dynamic_cast<MultiplexerNode*>(insert); mx) {
+                ++i;
+                if (i >= path.size())
+                    throw std::runtime_error("requireManager: multiplexer without patcher index");
+                const int patcherId = path[i];
+                bool found = false;
+                for (auto* mp : mx->patchers) {
+                    if (mp->id == static_cast<uint16_t>(patcherId)) {
+                        nm = mp->mainManager;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found)
+                    throw std::runtime_error("requireManager: multiplexer patcher not found");
+                continue;
+            }
+            throw std::runtime_error("requireManager: mixer insert has no nested graph");
+        }
         auto* patcher = dynamic_cast<PatcherNode*>(node);
         if (patcher && patcher->mainManager) {
             nm = patcher->mainManager;

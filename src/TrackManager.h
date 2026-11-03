@@ -11,6 +11,7 @@ using json = nlohmann::json;
 class ElementManager;
 class SongRoll;
 class ArrangerNode;
+class Project;
 
 class TrackManager {
     friend class ElementManager;
@@ -23,8 +24,35 @@ class TrackManager {
         ArrangerNode* parentNode;
 
         void addTrack(TrackType);
-        Track* addTrackNow(TrackType, int forcedTrackID = -1, int forcedConnectionID = -1, int forcedIndex = -1);
+        Track* addTrackNow(TrackType, int forcedTrackID = -1, int forcedConnectionID = -1, int forcedIndex = -1,
+                           int forcedInputConnectionID = -1);
         void removeTrackNow(uint16_t);
+
+        // Per-track input ports (Events for Notes tracks, Waveform for Audio tracks), kept in
+        // track order on the arranger's inputs.
+        Connection* addInputConnection(TrackType, int forcedID = -1, int insertIndex = -1);
+        void removeInputConnectionForTrack(Track*);
+        void syncInputPortOrder();
+
+        bool isSoloed(uint16_t id) const;
+        bool isMuted(uint16_t id) const;
+        bool isAudible(uint16_t id) const;
+        bool anySoloed() const { return !soloTracks.empty(); }
+        void setSoloState(uint16_t id, bool on);
+        void setMuteState(uint16_t id, bool on);
+        void setRecordArmedState(uint16_t id, bool on);
+        void setMonitorState(uint16_t id, bool on);
+
+        std::vector<Track*>& getTracks() { return tracks; }
+        const std::vector<Track*>& getTracks() const { return tracks; }
+
+        void processAfterElements(int bufferSize);
+
+        // Recording (DSP thread): capture armed tracks' inputs per block and hand finished
+        // takes to the project's queue.
+        void captureTakes(Project* project, int bufferSize);
+        void finalizeTake(Project* project, Track* track);
+        uint64_t lastSeenTransportGeneration = 0;
 
         void solo(uint16_t);
         void mute(uint16_t);
@@ -33,7 +61,7 @@ class TrackManager {
         void renderTrack(SDL_Renderer*, Track*, SDL_FRect*);
 
         void handleInput(SDL_Event&);
-        void handleTrackInput(Track*, int, SDL_Event& e);
+        bool handleTrackInput(Track*, int, SDL_Event& e);
 
         void process(float* input, int bufferSize);
 

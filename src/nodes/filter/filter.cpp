@@ -102,9 +102,11 @@ void FilterNode::updateCoefficientsNormalized(float cutoffNorm, float resonanceN
 
     const auto plan = slopePlan();
     const int neededStages = std::min(4, plan.fullStages + (plan.halfExtraStage ? 1 : 0));
-    for (int i = 0; i < neededStages; ++i) {
-        stages[i].g = g;
-        stages[i].k = k;
+    for (auto& st : channelStages) {
+        for (int i = 0; i < neededStages; ++i) {
+            st[i].g = g;
+            st[i].k = k;
+        }
     }
     coeffDirty = false;
 }
@@ -112,8 +114,15 @@ void FilterNode::updateCoefficientsNormalized(float cutoffNorm, float resonanceN
 void FilterNode::process() {
     if (!out || !out->buffer) return;
 
+    const int ch = std::max(1, out->numChannels);
+    if (static_cast<int>(channelStages.size()) != ch) {
+        channelStages.assign(static_cast<size_t>(ch), std::array<SvfStage, 4>{});
+        coeffDirty = true;
+    }
+
     if (!in || !in->is_connected || !in->buffer) {
-        std::memset(out->buffer, 0, static_cast<size_t>(bufferSize) * sizeof(float));
+        std::memset(out->buffer, 0, static_cast<size_t>(bufferSize) *
+                    static_cast<size_t>(ch) * sizeof(float));
         return;
     }
 
@@ -124,6 +133,13 @@ void FilterNode::process() {
     }
 
     const auto plan = slopePlan();
+    const int inCh = std::min(ch, std::max(1, in->numChannels));
+    std::vector<float*> outChans(static_cast<size_t>(ch));
+    std::vector<const float*> inChans(static_cast<size_t>(ch), nullptr);
+    for (int c = 0; c < ch; ++c) {
+        outChans[static_cast<size_t>(c)] = out->channel(c);
+        if (c < inCh) inChans[static_cast<size_t>(c)] = in->channel(c);
+    }
 
     for (int i = 0; i < bufferSize; ++i) {
         const float cutoffNow = cutoff[i];
@@ -134,20 +150,24 @@ void FilterNode::process() {
             lastResonanceValue = resonanceNow;
         }
 
-        float y = in->buffer[i];
-        for (int s = 0; s < plan.fullStages; ++s) {
-            y = stages[s].process(y, mode);
+        for (int c = 0; c < ch; ++c) {
+            const float* src = inChans[static_cast<size_t>(c)];
+            float y = src ? src[i] : 0.0f;
+            auto& st = channelStages[static_cast<size_t>(c)];
+            for (int s = 0; s < plan.fullStages; ++s)
+                y = st[static_cast<size_t>(s)].process(y, mode);
+            if (plan.halfExtraStage) {
+                const float extra = st[static_cast<size_t>(plan.fullStages)].process(y, mode);
+                y = 0.5f * (y + extra);
+            }
+            outChans[static_cast<size_t>(c)][i] = y * outputTrim;
         }
-        if (plan.halfExtraStage) {
-            const float extra = stages[plan.fullStages].process(y, mode);
-            y = 0.5f * (y + extra);
-        }
-        out->buffer[i] = y * outputTrim;
     }
 }
 
 void FilterNode::setup() {
-    for (auto& stage : stages) stage.reset();
+    for (auto& st : channelStages)
+        for (auto& stage : st) stage.reset();
     lastCutoffValue = cutoff.value;
     lastResonanceValue = resonance.value;
     coeffDirty = true;

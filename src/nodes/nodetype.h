@@ -17,5 +17,6 @@ enum NodeType {
     Sampler,
     Bus,
     Mixer,
+    Duplicator,
     Count // for iteration
 };

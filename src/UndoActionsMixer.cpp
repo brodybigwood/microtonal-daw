@@ -4,6 +4,43 @@
 #include "nodes/mixer/mixer.h"
 #include <stdexcept>
 
+MixerChainNodeParamAction::MixerChainNodeParamAction(Project* p, std::vector<int> managerPath,
+                                                     int mixerNodeID, int chainID, int chainNodeID,
+                                                     size_t paramIndex, float oldValue, float newValue,
+                                                     std::string actionName)
+    : ProjectAction(p, MixerChainNodeParam),
+      managerPath(std::move(managerPath)),
+      mixerNodeID(mixerNodeID),
+      chainID(chainID),
+      chainNodeID(chainNodeID),
+      paramIndex(paramIndex),
+      oldValue(oldValue),
+      newValue(newValue) {
+    skipInitialDo = true;
+    name = std::move(actionName);
+
+    auto apply = [this](float value) {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        auto* m = dynamic_cast<MixerNode*>(nm.getNode(static_cast<uint16_t>(this->mixerNodeID)));
+        if (!m) return;
+        Node* target = m->chainNodeByID(this->chainID, this->chainNodeID);
+        if (!target || this->paramIndex >= target->params.size()) return;
+        target->params[this->paramIndex]->value = value;
+    };
+    doAction = [this, apply]() { apply(this->newValue); };
+    undoAction = [this, apply]() { apply(this->oldValue); };
+}
+
+bool MixerChainNodeParamAction::coalesceWith(ProjectAction* newer) {
+    if (!newer || newer->type != MixerChainNodeParam) return false;
+    auto* o = static_cast<MixerChainNodeParamAction*>(newer);
+    if (o->mixerNodeID != mixerNodeID || o->chainID != chainID ||
+        o->chainNodeID != chainNodeID || o->paramIndex != paramIndex)
+        return false;
+    newValue = o->newValue;
+    return true;
+}
+
 MixerChainEditUndoAction::MixerChainEditUndoAction(Project* p, std::vector<int> managerPath,
                                                    int nodeID, int op, int chainID,
                                                    uint16_t portID, std::vector<int> order,

@@ -33,11 +33,15 @@ void PatcherExpandedWindow::render() {
         editor_->setEmbeddedCanvasSize(static_cast<float>(w), static_cast<float>(h));
     }
 
-    // Update mouse coords.
-    float mx, my;
-    SDL_GetMouseState(&mx, &my);
-    editor_->mouseX = mx;
-    editor_->mouseY = my;
+    // Update mouse coords in this window's space. SDL_GetMouseState can report the
+    // focused window's coordinates (e.g. the context-menu window when adding a node),
+    // which puts new nodes at bogus positions; use the global position instead.
+    float gx = 0.f, gy = 0.f;
+    SDL_GetGlobalMouseState(&gx, &gy);
+    int wx = 0, wy = 0;
+    if (window) SDL_GetWindowPosition(window, &wx, &wy);
+    editor_->mouseX = gx - static_cast<float>(wx);
+    editor_->mouseY = gy - static_cast<float>(wy);
 
     editor_->tick(renderer);
 }

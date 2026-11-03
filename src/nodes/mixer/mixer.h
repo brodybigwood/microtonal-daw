@@ -14,15 +14,25 @@ class MixerNode;
 class MixerChainWindow : public ExpandedWindow {
 public:
     MixerChainWindow(MixerNode* node, int chainID);
+    ~MixerChainWindow() override;
     void render() override;
     bool handleInput(SDL_Event& e) override;
 
     MixerNode* mixerNode;
     int chainID;
 
+    void setSelectedRow(int row) { selectedRow_ = row; }
+
 private:
     int draggingNode_ = -1;
     int dragTargetInsert_ = -1;
+
+    // Selected insert, shown in the node-sized preview on the right.
+    int selectedRow_ = 0;
+    bool previewDragging_ = false;
+    SDL_Renderer* previewRenderer_ = nullptr;
+
+    void renderPreview(SDL_Renderer*, Node* selected);
 };
 
 class MixerNode : public Node {
@@ -66,6 +76,10 @@ public:
     std::vector<std::unique_ptr<Chain>> chains;
 
     void openChainWindow(int chainID);
+    /** Select an insert row in the open chain window (preview target). */
+    void selectChainWindowInsert(int index);
+    /** Called from ~MixerChainWindow so the dangling back-pointer is cleared. */
+    void detachChainWindow(MixerChainWindow* w);
     void addNodeToChain(int chainIndex, NodeType type);
     void removeNodeFromChain(int chainIndex, int nodeIndex);
     void addChain(uint16_t inputPortID = 0);
@@ -81,6 +95,7 @@ public:
     json chainNodesJson(int chainID) const;
     void applyChainNodes(int chainID, const json& nodes);
     Chain* chainByID(int chainID);
+    Node* chainNodeByID(int chainID, int nodeID);
 
     static constexpr float kColW = 22.f;
     static constexpr float kColPad = 4.f;

@@ -11,7 +11,7 @@ class DelayNode : public Node {
         ~DelayNode() override;
 
         void process() override;
-        void setup() override {}
+        void setup() override;
         bool widthFollowsInput() const override { return true; }
 
         json extraSerialize() override;

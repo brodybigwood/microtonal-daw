@@ -20,10 +20,15 @@
 #include "ElementManager.h"
 #include "NodeProcessor.h"
 #include "NodeManager.h"
+#include "nodes/arranger/arranger.h"
 #include "WindowHandler.h"
 #include "WindowManager.h"
 #include "ContextMenu.h"
 #include <nlohmann/json.hpp>
+#ifndef __EMSCRIPTEN__
+#include <sndfile.h>
+#endif
+#include <atomic>
 using json = nlohmann::json;
 
 void Project::process(float* input, float* output, int& bufferSize, int& numChannelsIn, int& numChannelsOut, int& sampleRate) {
@@ -31,7 +36,102 @@ void Project::process(float* input, float* output, int& bufferSize, int& numChan
 };
 
 void Project::render() {
+    drainRecordedTakes();
     if (processor) processor->render();
+}
+
+std::string Project::projectFolder() const {
+    if (filepath.empty()) return "";
+    std::filesystem::path folder(filepath);
+    if (folder.is_relative())
+        folder = std::filesystem::path(startupCWD) / folder;
+    return folder.string();
+}
+
+void Project::pushRecordedTake(RecordedTake&& take) {
+    std::lock_guard<std::mutex> lock(takeQueueMutex);
+    pendingTakes.push_back(std::move(take));
+}
+
+#ifndef __EMSCRIPTEN__
+static std::string writeTakeWavFile(const RecordedTake& take, const std::string& folder) {
+    if (take.channels <= 0 || take.frames == 0 || take.sampleRate <= 0) return "";
+    static std::atomic<unsigned> seq{0};
+    std::filesystem::path dir = std::filesystem::path(folder) / "recordings";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    if (ec) return "";
+
+    // Timestamp keeps take names unique across process restarts; seq orders takes within one.
+    std::string name = "rec_" + std::to_string(take.nodeID) + "_" + std::to_string(take.trackID) +
+                       "_" + std::to_string(static_cast<long long>(std::time(nullptr))) + "_" +
+                       std::to_string(seq.fetch_add(1)) + ".wav";
+    std::filesystem::path finalPath = dir / name;
+    std::filesystem::path tmpPath = dir / (name + ".tmp");
+
+    std::vector<float> interleaved(take.frames * static_cast<size_t>(take.channels));
+    for (size_t i = 0; i < take.frames; ++i)
+        for (int ch = 0; ch < take.channels; ++ch)
+            interleaved[i * static_cast<size_t>(take.channels) + static_cast<size_t>(ch)] =
+                take.audio[static_cast<size_t>(ch) * take.frames + i];
+
+    SF_INFO info{};
+    info.samplerate = take.sampleRate;
+    info.channels = take.channels;
+    info.format = SF_FORMAT_WAV | SF_FORMAT_FLOAT;
+    SNDFILE* sf = sf_open(tmpPath.c_str(), SFM_WRITE, &info);
+    if (!sf) {
+        std::cerr << "[record] cannot write " << tmpPath << ": " << sf_strerror(nullptr) << std::endl;
+        return "";
+    }
+    sf_writef_float(sf, interleaved.data(), static_cast<sf_count_t>(take.frames));
+    sf_close(sf);
+
+    std::filesystem::rename(tmpPath, finalPath, ec);
+    if (ec) {
+        std::filesystem::remove(tmpPath, ec);
+        std::cerr << "[record] rename failed for " << finalPath << std::endl;
+        return "";
+    }
+    return finalPath.string();
+}
+#else
+static std::string writeTakeWavFile(const RecordedTake&, const std::string&) { return ""; }
+#endif
+
+void Project::drainRecordedTakes() {
+    std::vector<RecordedTake> local;
+    {
+        std::lock_guard<std::mutex> lock(takeQueueMutex);
+        local.swap(pendingTakes);
+    }
+    for (auto& take : local) {
+        if (take.isAudio) {
+            const std::string folder = projectFolder();
+            if (folder.empty()) {
+                std::cerr << "[record] dropping audio take: project is not saved yet" << std::endl;
+                continue;
+            }
+            take.filepath = writeTakeWavFile(take, folder);
+            if (take.filepath.empty()) {
+                std::cerr << "[record] dropping audio take: WAV write failed" << std::endl;
+                continue;
+            }
+        }
+        NodeManager* gui = processor ? processor->guiGraph : nullptr;
+        ArrangerNode* arr = gui
+            ? dynamic_cast<ArrangerNode*>(gui->getNode(static_cast<uint16_t>(take.nodeID)))
+            : nullptr;
+        if (!arr || !arr->tracks || !arr->tracks->getTrack(take.trackID)) {
+            std::cerr << "[record] dropping take: arranger track no longer exists" << std::endl;
+            continue;
+        }
+
+        std::cout << "[record] take node=" << take.nodeID << " track=" << take.trackID
+                  << (take.isAudio ? " audio" : " notes")
+                  << " " << take.startBeat << ".." << take.endBeat << std::endl;
+        um->newAction(new RecordTakeAction(this, take.managerPath, take.nodeID, take.trackID, take));
+    }
 }
 
 void Project::renderPresent() {
@@ -86,6 +186,8 @@ void Project::waitForSave() {
 }
 
 void Project::load(std::string path) {
+    // Never carry a record arming state across projects.
+    setRecording(false);
 
     std::filesystem::path folder(path);
     if (folder.is_relative())
@@ -355,6 +457,71 @@ void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {
             std::filesystem::create_directories(verDir / "vst", wec);
             int verCounter = 0;
             externalizeInto(archive, verDir, verCounter);
+
+            // Copy the rest of the project folder (recorded WAVs etc.) into the version so it
+            // is self-contained, then point the archived clip paths at the copies.
+            {
+                std::error_code cec;
+                for (std::filesystem::recursive_directory_iterator it(
+                         folder, std::filesystem::directory_options::skip_permission_denied, cec), end;
+                     !cec && it != end; it.increment(cec)) {
+                    const std::filesystem::path rel = it->path().lexically_relative(folder);
+                    if (rel.empty() || rel == ".") continue;
+                    auto first = rel.begin();
+                    if (first != rel.end() && (*first == "versions" || *first == "vst")) {
+                        if (it->is_directory()) it.disable_recursion_pending();
+                        continue;
+                    }
+                    if (!it->is_regular_file()) continue;
+                    const std::string fn = it->path().filename().string();
+                    if (fn == "save.json" || fn == "save.json.tmp") continue;
+                    if (fn.size() >= 4 && fn.compare(fn.size() - 4, 4, ".tmp") == 0) continue;
+                    const std::filesystem::path dest = verDir / rel;
+                    std::error_code dec;
+                    std::filesystem::create_directories(dest.parent_path(), dec);
+                    std::filesystem::copy_file(it->path(), dest,
+                        std::filesystem::copy_options::overwrite_existing, dec);
+                }
+
+                std::error_code canonEc;
+                const std::filesystem::path folderCanon =
+                    std::filesystem::weakly_canonical(folder, canonEc);
+                if (!canonEc) {
+                    std::function<void(json&)> rewritePaths = [&](json& node) {
+                        if (node.is_object()) {
+                            for (auto itj = node.begin(); itj != node.end(); ++itj) {
+                                if (itj.key() == "filepath" && itj.value().is_string()) {
+                                    const std::string s = itj.value().get<std::string>();
+                                    if (s.empty()) continue;
+                                    std::filesystem::path p(s);
+                                    if (p.is_relative()) p = folder / p;
+                                    std::error_code pec;
+                                    auto canon = std::filesystem::weakly_canonical(p, pec);
+                                    if (pec) continue;
+                                    auto rel = canon.lexically_relative(folderCanon);
+                                    if (rel.empty() || rel == ".") continue;
+                                    bool escaped = false;
+                                    for (const auto& part : rel)
+                                        if (part == "..") { escaped = true; break; }
+                                    if (escaped) continue;
+                                    auto first = rel.begin();
+                                    if (first != rel.end() && *first == "versions") continue;
+                                    const std::filesystem::path copied = verDir / rel;
+                                    std::error_code xec;
+                                    if (!std::filesystem::exists(copied, xec)) continue;
+                                    itj.value() = std::filesystem::absolute(copied).string();
+                                } else {
+                                    rewritePaths(itj.value());
+                                }
+                            }
+                        } else if (node.is_array()) {
+                            for (auto& el : node) rewritePaths(el);
+                        }
+                    };
+                    rewritePaths(archive);
+                }
+            }
+
             const std::filesystem::path verFinal = verDir / "save.json";
             std::filesystem::path verTmp = verFinal;
             verTmp += ".tmp";
@@ -454,6 +621,14 @@ void Project::advanceBeatPosition(double dtSec) {
         else hi = mid;
     }
     deltaBeats = hi;
+}
+
+void Project::setRecording(bool on) {
+    isRecording = on;
+    if (!um) return;
+    // Deliberately separate from syncTransportToAudio: toggling record must not bump
+    // dspTransportGeneration (that would flush every active voice).
+    um->enqueueAudioSync([this, on]() { dspRecording = on; });
 }
 
 void Project::syncTransportToAudio(bool playing, double beat, double seconds) {

@@ -68,19 +68,6 @@ ResizeEmbeddedWindowAction::ResizeEmbeddedWindowAction(Project* p, std::vector<i
     };
 }
 
-ToggleNodeVisibleAction::ToggleNodeVisibleAction(Project* p, std::vector<int> managerPath, int nodeId) :
-        ProjectAction(p, ToggleNodeVisible),
-        managerPath(std::move(managerPath)),
-        nodeId(nodeId) {
-    name = "Toggle Node Visible";
-    doAction = [this]() {
-        NodeManager& nm = requireManager(this->p, this->managerPath);
-        auto* n = nm.getNode(static_cast<uint16_t>(this->nodeId));
-        n->visible = !n->visible;
-    };
-    undoAction = doAction;
-}
-
 MoveNodeAction::MoveNodeAction(Project* p, std::vector<int> managerPath, int nodeId,
                                float fromX, float fromY, float toX, float toY) :
         ProjectAction(p, MoveNode),

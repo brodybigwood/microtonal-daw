@@ -50,6 +50,28 @@ DelayNode::~DelayNode() {
     chain = nullptr;
 }
 
+void DelayNode::setup() {
+    if (!chain || !chain->inNode || !chain->outNode) return;
+    // The feedback graph's interface follows the delay's actual channel counts: one inner
+    // Input output and one inner Output input per channel of the surrounding signal path.
+    const int wantCh = std::max({1, in ? in->numChannels : 1, out ? out->numChannels : 1});
+    const size_t want = static_cast<size_t>(wantCh);
+    bool changed = false;
+    while (chain->inNode->countWaveformOutputs() < want) {
+        chain->inNode->addWaveformOutputChannel();
+        changed = true;
+    }
+    while (chain->outNode->countWaveformInputs() < want) {
+        chain->outNode->addWaveformInputChannel();
+        changed = true;
+    }
+    if (changed) {
+        chain->inNode->makeConnectionRects();
+        chain->outNode->makeConnectionRects();
+        chain->markTopologyDirty();
+    }
+}
+
 void DelayNode::ensureCapacity(int channels) {
     const int sr = sampleRate > 0 ? sampleRate : 48000;
     const int wantLen = sr * 8;
@@ -81,7 +103,8 @@ void DelayNode::process() {
     int delay = static_cast<int>(std::lround(static_cast<double>(beats) * secPerBeat * sr));
     delay = std::clamp(delay, 1, lineLen - 1);
 
-    const float fb = feedbackKnob[0] * 0.95f;
+    // 100% feedback holds the repeats at the same level instead of capping at 0.95.
+    const float fb = std::clamp(feedbackKnob[0], 0.0f, 1.0f);
     const float mix = mixKnob[0];
     const bool haveIn = in && in->is_connected && in->buffer;
 
@@ -101,9 +124,15 @@ void DelayNode::process() {
         }
     }
 
-    // Feedback graph: its input is the summed signal, its output feeds the line.
+    // Feedback graph: its input is the summed signal, its output feeds the line. The graph
+    // is the signal path — if nothing is wired into its Output node, there is no wet signal.
     int chainOutCh = ch;
+    bool innerWired = false;
     if (chain) {
+        for (auto* c : chain->outNode->inputs.connections)
+            if (c && c->type == DataType::Waveform && c->is_connected) { innerWired = true; break; }
+    }
+    if (chain && innerWired) {
         chain->inNode->input = sumBuf.data();
         chain->inNode->numChannels = ch;
         const int innerOut = static_cast<int>(chain->outNode->totalWaveformChannels());
@@ -111,20 +140,21 @@ void DelayNode::process() {
         chainBuf.assign(static_cast<size_t>(chainOutCh) * bs, 0.0f);
         chain->process(chainBuf.data(), bs, chainOutCh, sr);
     } else {
-        chainBuf = sumBuf;
-        chainOutCh = ch;
+        chainBuf.assign(static_cast<size_t>(chainOutCh) * bs, 0.0f);
     }
 
-    // Write the chain output into the line and mix it with the dry signal.
+    // The chain output is what goes back into the delay line; the wet signal is the line
+    // read, so 100% wet is purely the delayed signal (no dry leakage).
     for (int c = 0; c < ch; ++c) {
         const int srcCh = haveIn ? std::min(c, std::max(0, in->numChannels - 1)) : 0;
         const float* inCh = haveIn ? in->channel(srcCh) : nullptr;
-        const float* wet = chainBuf.data() + static_cast<size_t>(std::min(c, chainOutCh - 1)) * bs;
+        const float* lineIn = chainBuf.data() + static_cast<size_t>(std::min(c, chainOutCh - 1)) * bs;
+        const float* wet = prevBuf.data() + static_cast<size_t>(c) * bs;
         float* outCh = out->channel(c);
         std::vector<float>& buf = line[static_cast<size_t>(c)];
         for (int i = 0; i < bs; ++i) {
             int writeIdx = (writePos + i) % lineLen;
-            buf[static_cast<size_t>(writeIdx)] = wet[i];
+            buf[static_cast<size_t>(writeIdx)] = lineIn[i];
             outCh[i] = (inCh ? inCh[i] : 0.0f) * (1.0f - mix) + wet[i] * mix;
         }
     }

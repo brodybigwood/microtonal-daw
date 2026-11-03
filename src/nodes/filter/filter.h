@@ -18,6 +18,7 @@ public:
     void renderContent(SDL_Renderer*) override;
     bool handleCustomInput(SDL_Event&) override;
     void setup() override;
+    bool widthFollowsInput() const override { return true; }
 
     json extraSerialize() override;
     void extraDeSerialize(const json&) override;
@@ -49,7 +50,8 @@ private:
     std::vector<int> slopeOptionsDb{6, 12, 18, 24, 36, 48};
     size_t slopeIndex = 0;
 
-    std::array<SvfStage, 4> stages{};
+    // One independent filter state per channel (mono/stereo/multichannel).
+    std::vector<std::array<SvfStage, 4>> channelStages;
     bool coeffDirty = true;
     float lastCutoffValue = -1.0f;
     float lastResonanceValue = -1.0f;

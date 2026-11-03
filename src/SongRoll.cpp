@@ -852,9 +852,15 @@ void SongRoll::clickMouse(SDL_Event& e) {
                 last_lmb_x = mouseX;
                 last_lmb_y = mouseY;
 
-                if (mouseY < topMargin && mouseX < leftMargin && gridRhythmButtonHit(mouseX, mouseY)) {
-                    applyTransportToGrid();
-                    return;
+                if (mouseY < topMargin && mouseX < leftMargin) {
+                    if (recordButtonHit(mouseX, mouseY)) {
+                        project->setRecording(!project->isRecording);
+                        return;
+                    }
+                    if (gridRhythmButtonHit(mouseX, mouseY)) {
+                        applyTransportToGrid();
+                        return;
+                    }
                 }
 
                 // Ctrl on the transport strip: drag between two transport lines.

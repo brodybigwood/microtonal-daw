@@ -260,6 +260,7 @@ json handleQuery(Project* p, const json& req) {
     if (q == "transport") {
         return json{
             {"isPlaying", p->isPlaying},
+            {"isRecording", p->isRecording},
             {"beatPosition", p->beatPosition},
             {"timeSeconds", p->timeSeconds},
             {"effectiveBeatPosition", p->effectiveBeatPosition},
@@ -377,7 +378,9 @@ namespace {
 
 json dispatch(const json& req) {
     const json id = req.contains("id") ? req["id"] : json();
-    const std::string op = req.value("op", "");
+    // Malformed requests (missing or null "op") must not throw out of the dispatcher.
+    const std::string op = (req.contains("op") && req["op"].is_string())
+        ? req["op"].get<std::string>() : "";
 
     if (op == "ping") return ok(id, json{{"pong", true}, {"control", 1}});
 
@@ -570,6 +573,19 @@ json dispatch(const json& req) {
             auto w = std::make_unique<PatcherExpandedWindow>(pat, p);
             return opened(wm->addWindow(std::move(w), 1200, 800, title.c_str()), title);
         }
+        if (kind == "mixer_chain") {
+            auto* mx = dynamic_cast<MixerNode*>(nodeByID(req.value("nodeID", -1)));
+            if (!mx) return err(id, "not_found", "mixer node not found");
+            const int ci = req.value("chainIndex", 0);
+            if (ci < 0 || ci >= static_cast<int>(mx->chains.size()))
+                return err(id, "bad_request", "chainIndex out of range");
+            const int chainID = mx->chains[static_cast<size_t>(ci)]->id;
+            mx->openChainWindow(chainID);
+            if (req.contains("insertIndex") && req["insertIndex"].is_number_integer())
+                mx->selectChainWindowInsert(req["insertIndex"].get<int>());
+            const std::string title = "Mixer Chain " + std::to_string(chainID);
+            return opened(wm->findByTitle(title.c_str()), title);
+        }
         if (kind == "sample_editor") {
             auto* sn = dynamic_cast<SamplerNode*>(nodeByID(req.value("nodeID", -1)));
             if (!sn) return err(id, "not_found", "sampler node not found");
@@ -588,7 +604,7 @@ json dispatch(const json& req) {
             return opened(wm->findByTitle("Piano Roll"), "Piano Roll");
         }
         return err(id, "bad_request", "unknown window to open: " + kind +
-                       " (preferences, undo_tree, arranger, patcher, sample_editor, piano_roll)");
+                       " (preferences, undo_tree, arranger, patcher, sample_editor, piano_roll, mixer_chain)");
     }
 
     if (op == "save") {
@@ -616,6 +632,11 @@ json dispatch(const json& req) {
         if (req.contains("seekBeat")) p->seekBeat(req["seekBeat"].get<double>());
         return ok(id, json{{"isPlaying", p->isPlaying}, {"beatPosition", p->beatPosition},
                            {"timeSeconds", p->timeSeconds}});
+    }
+
+    if (op == "record") {
+        p->setRecording(req.value("on", true));
+        return ok(id, json{{"isRecording", p->isRecording}});
     }
 
     if (op == "shutdown") {

@@ -117,9 +117,13 @@ class GridView : public Window {
 
         // Left-margin button above the grid: copies the transport line set into the grid rhythm.
         SDL_FRect gridRhythmButtonRect{0, 0, 0, 0};
+        // Global record button (song roll only): occupies the tempo-curve band of the corner.
+        SDL_FRect recordButtonRect{0, 0, 0, 0};
+        virtual bool showRecordButtons() const { return false; }
         virtual void applyTransportToGrid() {}
         void renderGridRhythmButton(SDL_Renderer* renderer);
         bool gridRhythmButtonHit(float x, float y) const;
+        bool recordButtonHit(float x, float y) const;
         virtual void createElement() {};
         virtual void deleteElement() {};
 

@@ -177,6 +177,29 @@ Node* MixerNode::createNode(NodeType type) {
     return n;
 }
 
+static void stampChainOwnership(Node* n, uint16_t mixerID, int chainID) {
+    if (!n) return;
+    n->mixerOwnerNodeID = static_cast<int>(mixerID);
+    n->mixerOwnerChainID = chainID;
+    // Nested graphs (Delay feedback patcher) need an address that resolves through the
+    // mixer chain: [mixerID, chainID, insertID].
+    if (auto* d = dynamic_cast<DelayNode*>(n); d && d->chain) {
+        std::vector<int> path = n->nm ? n->nm->managerPath : std::vector<int>{};
+        path.push_back(static_cast<int>(mixerID));
+        path.push_back(chainID);
+        path.push_back(static_cast<int>(n->id));
+        d->chain->managerPath = std::move(path);
+    }
+}
+
+Node* MixerNode::chainNodeByID(int chainID, int nodeID) {
+    Chain* c = chainByID(chainID);
+    if (!c) return nullptr;
+    for (Node* n : c->nodes)
+        if (n && static_cast<int>(n->id) == nodeID) return n;
+    return nullptr;
+}
+
 void MixerNode::destroyNode(Node* n) {
     delete n;
 }
@@ -202,6 +225,7 @@ void MixerNode::applyChainNodes(int chainID, const json& nodesJson) {
             Node* n = Node::deSerialize(jn, nm, false);
             if (!n) continue;
             nodeIdPool_.reserveID(n->id);
+            stampChainOwnership(n, id, chainID);
             c->nodes.push_back(n);
         }
     }
@@ -216,6 +240,7 @@ void MixerNode::addNodeToChain(int chainIndex, NodeType type) {
     const json before = chainNodesJson(c->id);
     Node* n = createNode(type);
     if (!n) return;
+    stampChainOwnership(n, id, c->id);
     c->nodes.push_back(n);
     c->appliedInCh = -1;
     if (project && project->um && nm) {
@@ -362,6 +387,7 @@ void MixerNode::restoreChain(const json& jc) {
             Node* n = Node::deSerialize(jn, nm, false);
             if (!n) continue;
             nodeIdPool_.reserveID(n->id);
+            stampChainOwnership(n, id, cid);
             c->nodes.push_back(n);
         }
     }
@@ -631,7 +657,10 @@ bool MixerNode::handleCustomInput(SDL_Event& e) {
         for (size_t i = 0; i < chains.size(); ++i) {
             auto& c = *chains[i];
             const float cx = columnLeft(i, scrollOffset_);
+            // Both axes: a click above/below the node (e.g. on a port) must never be
+            // interpreted as a column click.
             if (mx < cx || mx > cx + kColW) continue;
+            if (my < listTop || my > listTop + colContentH) continue;
             float cy = listTop + 2.f;
 
             // Pan knob.
@@ -721,13 +750,18 @@ void MixerNode::handleWindowInput(SDL_Event& e) {
             dragTargetInsert_ = -1;
             if (to < 0) to = 0;
             if (to >= static_cast<int>(chains.size())) to = static_cast<int>(chains.size()) - 1;
+            // Only a press-and-release without movement counts as a click. Otherwise a
+            // drag that stayed inside its own column would open the chain window.
+            const float dx = mx - dragStartX_;
+            const float dy = my - dragStartY_;
+            const bool moved = dx * dx + dy * dy > 9.f;
             if (from != to && from >= 0 && to >= 0 && static_cast<size_t>(to) < chains.size()) {
                 std::vector<size_t> order(chains.size());
                 std::iota(order.begin(), order.end(), static_cast<size_t>(0));
                 order.erase(order.begin() + from);
                 order.insert(order.begin() + to, static_cast<size_t>(from));
                 reorderChains(order);
-            } else if (from == to && from >= 0 && from < static_cast<int>(chains.size())) {
+            } else if (!moved && from == to && from >= 0 && from < static_cast<int>(chains.size())) {
                 openChainWindow(chains[static_cast<size_t>(from)]->id);
             }
             return;
@@ -798,11 +832,16 @@ void MixerNode::openChainWindow(int chainID) {
 
     auto win = std::make_unique<MixerChainWindow>(this, chainID);
     MixerChainWindow* ptr = win.get();
-    ExpandedWindow* ew = wm->addWindow(std::move(win), 260, 320,
+    ExpandedWindow* ew = wm->addWindow(std::move(win), 520, 380,
         ("Mixer Chain " + std::to_string(chainID)).c_str());
     if (!ew) return;
     ew->show();
     chainWindow_ = ptr;
+}
+
+void MixerNode::selectChainWindowInsert(int index) {
+    if (chainWindow_)
+        chainWindow_->setSelectedRow(index);
 }
 
 void MixerNode::closeChainWindow() {
@@ -814,6 +853,16 @@ void MixerNode::closeChainWindow() {
 
 MixerChainWindow::MixerChainWindow(MixerNode* node, int chainID)
     : mixerNode(node), chainID(chainID) {}
+
+MixerChainWindow::~MixerChainWindow() {
+    if (mixerNode)
+        mixerNode->detachChainWindow(this);
+}
+
+void MixerNode::detachChainWindow(MixerChainWindow* w) {
+    if (chainWindow_ == w)
+        chainWindow_ = nullptr;
+}
 
 void MixerChainWindow::render() {
     SDL_Renderer* R = renderer;
@@ -828,10 +877,15 @@ void MixerChainWindow::render() {
     drawText(R, 8.f, 6.f, "Chain " + std::to_string(chainID), SDL_Color{230, 230, 230, 255});
 
     MixerNode::Chain* c = mixerNode->chainByID(chainID);
+    if (c && !c->nodes.empty())
+        selectedRow_ = std::clamp(selectedRow_, 0, static_cast<int>(c->nodes.size()) - 1);
+    else
+        selectedRow_ = 0;
+
     const float rowH = 22.f;
     float y = 30.f;
 
-    SDL_FRect list{6.f, y, static_cast<float>(ww) - 12.f, static_cast<float>(wh) - y - 40.f};
+    SDL_FRect list{6.f, y, 240.f, static_cast<float>(wh) - y - 40.f};
     SDL_SetRenderDrawColor(R, 30, 30, 34, 255);
     SDL_RenderFillRect(R, &list);
     SDL_SetRenderDrawColor(R, 90, 90, 100, 255);
@@ -840,7 +894,11 @@ void MixerChainWindow::render() {
     if (c) {
         for (size_t i = 0; i < c->nodes.size(); ++i) {
             SDL_FRect row{list.x, list.y + static_cast<float>(i) * rowH, list.w, rowH};
-            SDL_SetRenderDrawColor(R, (i % 2) ? 44 : 48, (i % 2) ? 44 : 48, (i % 2) ? 49 : 53, 255);
+            const bool selected = static_cast<int>(i) == selectedRow_;
+            if (selected)
+                SDL_SetRenderDrawColor(R, 60, 80, 115, 255);
+            else
+                SDL_SetRenderDrawColor(R, (i % 2) ? 44 : 48, (i % 2) ? 44 : 48, (i % 2) ? 49 : 53, 255);
             SDL_RenderFillRect(R, &row);
             drawText(R, row.x + 6.f, row.y + 3.f,
                      std::to_string(i + 1) + ": " + typeName(c->nodes[i]),
@@ -863,6 +921,56 @@ void MixerChainWindow::render() {
         SDL_RenderFillRect(R, &addRow);
         drawText(R, addRow.x + 6.f, addRow.y + 3.f, "+ Add Insert", SDL_Color{235, 235, 235, 255});
     }
+
+    Node* selected = nullptr;
+    if (c && selectedRow_ >= 0 && selectedRow_ < static_cast<int>(c->nodes.size()))
+        selected = c->nodes[static_cast<size_t>(selectedRow_)];
+    renderPreview(R, selected);
+}
+
+void MixerChainWindow::renderPreview(SDL_Renderer* R, Node* sel) {
+    // Param textures cache their creating renderer. A new chain window has a new renderer,
+    // so drop the cached textures when it changes or knobs draw as garbage.
+    if (previewRenderer_ != R) {
+        previewRenderer_ = R;
+        if (mixerNode) {
+            if (auto* c = mixerNode->chainByID(chainID)) {
+                for (Node* n : c->nodes) {
+                    if (!n) continue;
+                    n->clearParamTextures();
+                    n->clearCustomTextures();
+                }
+            }
+        }
+    }
+
+    const SDL_FRect preview{258.f, 30.f, 200.f, 180.f};
+    SDL_SetRenderDrawColor(R, 26, 26, 30, 255);
+    SDL_RenderFillRect(R, &preview);
+    SDL_SetRenderDrawColor(R, 90, 90, 100, 255);
+    SDL_RenderRect(R, &preview);
+
+    if (!sel) {
+        drawText(R, preview.x + 10.f, preview.y + 10.f, "(no insert selected)",
+                 SDL_Color{150, 150, 160, 255});
+        return;
+    }
+
+    // Node content draws in local node coordinates (0..NODE_W/H); the viewport maps
+    // those onto the preview rectangle.
+    SDL_Rect vp{static_cast<int>(preview.x), static_cast<int>(preview.y),
+                static_cast<int>(preview.w), static_cast<int>(preview.h)};
+    SDL_SetRenderViewport(R, &vp);
+    SDL_SetRenderDrawColor(R, 52, 52, 56, 255);
+    SDL_FRect local{0.f, 0.f, preview.w, preview.h};
+    SDL_RenderFillRect(R, &local);
+    sel->renderContent(R);
+    SDL_SetRenderViewport(R, nullptr);
+
+    SDL_SetRenderDrawColor(R, 90, 90, 100, 255);
+    SDL_RenderRect(R, &preview);
+    drawText(R, preview.x, preview.y + preview.h + 6.f,
+             typeName(sel) + " — selected insert", SDL_Color{210, 210, 215, 255});
 }
 
 bool MixerChainWindow::handleInput(SDL_Event& e) {
@@ -884,10 +992,37 @@ bool MixerChainWindow::handleInput(SDL_Event& e) {
     const float rowH = 22.f;
     const float listTop = 30.f;
     const float listBottom = static_cast<float>(wh) - 40.f;
+    const float listRight = 6.f + 240.f;
+
+    // Selected insert preview: forward the event to that node's own GUI. Node content
+    // is laid out in local node coordinates, so translate into the preview rect.
+    {
+        const SDL_FRect preview{258.f, 30.f, 200.f, 180.f};
+        Node* sel = (!c->nodes.empty() && selectedRow_ >= 0 &&
+                     selectedRow_ < static_cast<int>(c->nodes.size()))
+            ? c->nodes[static_cast<size_t>(selectedRow_)] : nullptr;
+        const bool overPreview = mx >= preview.x && mx <= preview.x + preview.w &&
+                                 my >= preview.y && my <= preview.y + preview.h;
+        if (sel && (overPreview || previewDragging_)) {
+            sel->msX = mx - preview.x;
+            sel->msY = my - preview.y;
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT)
+                previewDragging_ = true;
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_RIGHT) {
+                sel->openParameterMenuAt(e, sel->msX, sel->msY);
+            } else {
+                sel->customInputHandled_ = false;
+                sel->handleWindowInput(e);
+            }
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_UP)
+                previewDragging_ = false;
+            return true;
+        }
+    }
 
     // Scroll over a row moves that node up/down the insert order.
     if (e.type == SDL_EVENT_MOUSE_WHEEL && my >= listTop && my <= listBottom &&
-        mx >= 6.f && mx <= static_cast<float>(ww) - 6.f && e.wheel.y != 0.f) {
+        mx >= 6.f && mx <= listRight && e.wheel.y != 0.f) {
         const int row = static_cast<int>((my - listTop) / rowH);
         const int count = static_cast<int>(c->nodes.size());
         if (row >= 0 && row < count) {
@@ -935,7 +1070,7 @@ bool MixerChainWindow::handleInput(SDL_Event& e) {
     }
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && my >= listTop && my <= listBottom &&
-        mx >= 6.f && mx <= static_cast<float>(ww) - 6.f) {
+        mx >= 6.f && mx <= listRight) {
         const int row = static_cast<int>((my - listTop) / rowH);
         const int count = static_cast<int>(c->nodes.size());
 
@@ -959,6 +1094,7 @@ bool MixerChainWindow::handleInput(SDL_Event& e) {
         }
 
         if (e.button.button == SDL_BUTTON_LEFT && row >= 0 && row < count) {
+            selectedRow_ = row;
             draggingNode_ = row;
             dragTargetInsert_ = row;
             return true;
@@ -1050,6 +1186,7 @@ void MixerNode::extraDeSerialize(const json& j) {
                     Node* n = Node::deSerialize(jn, nm, false);
                     if (!n) continue;
                     nodeIdPool_.reserveID(n->id);
+                    stampChainOwnership(n, id, c->id);
                     c->nodes.push_back(n);
                 }
             }

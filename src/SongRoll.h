@@ -45,6 +45,7 @@ class SongRoll : public GridView{
 
         bool customTick(SDL_Renderer* renderer) override;
         void syncLayout();
+        bool showRecordButtons() const override { return true; }
 
         SDL_Texture* texture = nullptr;
         SDL_Texture* regionTexture = nullptr;

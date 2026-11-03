@@ -1,4 +1,5 @@
 #include "gain.h"
+#include <algorithm>
 #include <cstring>
 
 GainNode::GainNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::Gain) {
@@ -25,11 +26,19 @@ void GainNode::process() {
         return;
     }
 
+    const int inCh = std::max(1, in->numChannels);
     for (int ch = 0; ch < out->numChannels; ++ch) {
-        float* inCh = in->channel(ch);
         float* outCh = out->channel(ch);
+        if (!outCh) continue;
+        // The output can be wider than the input when something downstream requires
+        // more channels than the source carries; the extra channels are silent.
+        if (ch >= inCh) {
+            std::memset(outCh, 0, static_cast<size_t>(bufferSize) * sizeof(float));
+            continue;
+        }
+        float* srcCh = in->channel(ch);
         for (int i = 0; i < bufferSize; ++i) {
-            outCh[i] = inCh[i] * gain[i] * 2.0f;
+            outCh[i] = srcCh[i] * gain[i] * 2.0f;
         }
     }
 }

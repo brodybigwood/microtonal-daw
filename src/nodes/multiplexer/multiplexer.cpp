@@ -218,7 +218,6 @@ void MultiplexerNode::process() {
 // --- chrome (sized for NODE_H) ---
 static constexpr float kDotR = 8.f;
 static constexpr float kDotSpacing = 20.f;
-static constexpr float kBtnW = 30.f;
 static constexpr float kChromeY = 10.f;
 static constexpr float kChromeX = 10.f;
 
@@ -252,13 +251,6 @@ void MultiplexerNode::renderContent(SDL_Renderer* renderer) {
         cx += kDotSpacing;
     }
 
-    // Eye toggle
-    cx += 40.f;
-    SDL_FRect eyeBtn{cx, kChromeY - kBtnW * 0.5f, kBtnW, kBtnW};
-    bool vis = activeIndex < patchers.size() && patchers[activeIndex]->visible;
-    SDL_SetRenderDrawColor(renderer, vis ? 100 : 50, vis ? 150 : 70, vis ? 200 : 70, 220);
-    SDL_RenderFillRect(renderer, &eyeBtn);
-
     renderParams(renderer);
 }
 
@@ -276,15 +268,6 @@ bool MultiplexerNode::handleCustomInput(SDL_Event& e) {
             return true;
         }
         cx += kDotSpacing;
-    }
-
-    // Eye toggle
-    cx += 40.f;
-    if (msX >= cx && msX <= cx + kBtnW && msY >= kChromeY - kBtnW * 0.5f && msY <= kChromeY + kBtnW * 0.5f) {
-        if (activeIndex < patchers.size() && project && project->um) {
-            project->um->newAction(new ToggleNodeVisibleAction(project, nm->managerPath, patchers[activeIndex]->id));
-        }
-        return true;
     }
 
     return false;

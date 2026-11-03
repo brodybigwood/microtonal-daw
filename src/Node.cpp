@@ -82,7 +82,10 @@ bool Node::handleContentInput(SDL_Event& e) {
     msX = (*mouseX - dstRect.x) / zoomRatio;
     msY = (*mouseY - dstRect.y) / zoomRatio;
 
-    if (inPolygon(vx, vy, vCount, msX, msY) || captured_) {
+    const bool inBody = inPolygon(vx, vy, vCount, msX, msY);
+    const bool insideNode = inBody || captured_;
+
+    if (insideNode) {
         handled = true;
         if (!captured_) hoveredConnection = -1;
     } else if (showConnectionPorts()) {
@@ -122,10 +125,16 @@ bool Node::handleContentInput(SDL_Event& e) {
         switch (e.type) {
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
                 customInputHandled_ = false;
-                if (!handleCustomInput(e))
+                // A click on a port (outside the node body) is a cable drag, never the
+                // node's own content input. Use the polygon, not captured_: the editor
+                // sets captured_ just before dispatching this press.
+                if (!inBody) {
                     clickMouse(e);
-                else
+                } else if (!handleCustomInput(e)) {
+                    clickMouse(e);
+                } else {
                     customInputHandled_ = true;
+                }
                 break;
             case SDL_EVENT_MOUSE_WHEEL:
                 break;
@@ -530,9 +539,20 @@ void Node::handleWindowInput(SDL_Event& e) {
             p->handleInput(e);
             if (p->value != oldValue && project && project->um) {
                 std::vector<int> mgrPath = nm ? nm->managerPath : std::vector<int>{};
+                const bool inMixerChain = mixerOwnerNodeID >= 0 && mixerOwnerChainID >= 0;
                 // Coalesce rapid wheel events into a single undo action.
                 bool merged = false;
-                if (project->um->current->type == SetParamValue) {
+                if (inMixerChain && project->um->current->type == MixerChainNodeParam) {
+                    auto* prev = static_cast<MixerChainNodeParamAction*>(project->um->current);
+                    if (prev->mixerNodeID == mixerOwnerNodeID && prev->chainID == mixerOwnerChainID &&
+                        prev->chainNodeID == static_cast<int>(id) && prev->paramIndex == pi &&
+                        prev->managerPath == mgrPath) {
+                        prev->newValue = p->value;
+                        merged = true;
+                        ProjectAction* cap = prev;
+                        project->um->enqueueAudioSync([cap]() { cap->doAction(); });
+                    }
+                } else if (!inMixerChain && project->um->current->type == SetParamValue) {
                     auto* prev = static_cast<SetParamValueUndoAction*>(project->um->current);
                     if (prev->nodeID == static_cast<int>(id) && prev->paramPath == std::vector<size_t>{pi} && prev->managerPath == mgrPath) {
                         prev->newValue = p->value;
@@ -542,8 +562,15 @@ void Node::handleWindowInput(SDL_Event& e) {
                     }
                 }
                 if (!merged) {
-                    auto* pa = new SetParamValueUndoAction(project, std::move(mgrPath), static_cast<int>(id), {pi},
-                        oldValue, p->value, "Knob Change");
+                    ProjectAction* pa;
+                    if (inMixerChain) {
+                        pa = new MixerChainNodeParamAction(project, std::move(mgrPath), mixerOwnerNodeID,
+                            mixerOwnerChainID, static_cast<int>(id), pi, oldValue, p->value,
+                            "Knob Change");
+                    } else {
+                        pa = new SetParamValueUndoAction(project, std::move(mgrPath), static_cast<int>(id), {pi},
+                            oldValue, p->value, "Knob Change");
+                    }
                     project->um->newAction(pa);
                 }
             }

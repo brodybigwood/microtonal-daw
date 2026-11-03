@@ -5,6 +5,7 @@
 #include "PianoRoll.h"
 #include "TrackManager.h"
 #include "ElementManager.h"
+#include "AudioClip.h"
 #include "ArrangerExpandedWindow.h"
 #include "WindowManager.h"
 #include "NodeProcessor.h"
@@ -43,9 +44,35 @@ void ArrangerNode::process() {
     if (!tracks || !elements) return;
     tracks->process(nullptr, bufferSize);
     elements->process(bufferSize);
+    tracks->captureTakes(project, bufferSize);
+    tracks->processAfterElements(bufferSize);
 }
 
 void ArrangerNode::setup() {
+}
+
+void ArrangerNode::syncWidthsFromInputs() {
+    if (!tracks || !elements) return;
+    for (Track* t : tracks->getTracks()) {
+        if (!t || !t->connection || t->connection->type != DataType::Waveform) continue;
+        int clipCh = 1;
+        for (GridElement* el : elements->elements) {
+            if (el->type != ElementType::audioClip) continue;
+            auto* ac = static_cast<AudioClip*>(el);
+            for (auto* pos : el->positions)
+                if (pos->trackID == t->id && ac->numChannels > clipCh)
+                    clipCh = ac->numChannels;
+        }
+        int inCh = 0;
+        if (t->inputConnection && t->inputConnection->is_connected)
+            inCh = std::max(1, t->inputConnection->numChannels);
+        const int need = std::max(clipCh, inCh);
+        if (t->connection->minChannels != need) {
+            t->connection->minChannels = need;
+            t->connection->updateNumChannels();
+            if (nm) nm->markTopologyDirty();
+        }
+    }
 }
 
 // Layout rects for arranger node buttons.
@@ -160,6 +187,16 @@ json ArrangerNode::extraSerialize() {
     }
     j["outputs"] = o;
 
+    json in = json::array();
+    for (auto c : inputs.connections) {
+        json jc;
+        jc["id"] = c->id;
+        jc["type"] = c->type;
+        jc["numChannels"] = c->numChannels;
+        in.push_back(jc);
+    }
+    j["inputs"] = in;
+
     return j;
 }
 
@@ -198,6 +235,38 @@ void ArrangerNode::extraDeSerialize(const json& j) {
             outputs.connections.push_back(c);
             outputs.id_pool.reserveID(c->id);
             outputs.ids[c->id] = outputs.connections.size() - 1;
+        }
+    }
+
+    // Input ports must exist before TrackManager::fromJSON resolves their ids. Cables are
+    // restored later by NodeManager::deSerialize via makeNodeConnectionNow.
+    for (auto* c : inputs.connections) {
+        inputs.id_pool.releaseID(c->id);
+        delete c;
+    }
+    inputs.connections.clear();
+    inputs.ids.clear();
+    inputs.id_pool = idManager();
+    if (j.contains("inputs") && j["inputs"].is_array()) {
+        for (const auto& jc : j["inputs"]) {
+            auto* c = new Connection;
+            c->nm = inputs.nm;
+            c->id = static_cast<uint16_t>(jc["id"].get<int>());
+            c->dir = Direction::input;
+            c->type = static_cast<DataType>(jc["type"].get<int>());
+            c->numChannels = jc.value("numChannels", 1);
+            c->is_connected = false;
+            c->input_node = -1;
+            c->input_connection = -1;
+            c->output_node = id;
+            c->output_connection = c->id;
+            c->events = nullptr;
+            c->buffer = nullptr;
+            c->bufferSize = 0;
+            c->allocChannels = c->numChannels;
+            inputs.connections.push_back(c);
+            inputs.id_pool.reserveID(c->id);
+            inputs.ids[c->id] = inputs.connections.size() - 1;
         }
     }
     makeConnectionRects();

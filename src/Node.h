@@ -54,6 +54,12 @@ class Node : public EmbeddedWindow {
         uint16_t id;
         std::string name;
 
+        // Set when this node is an insert inside a mixer chain. Such nodes live in the
+        // chain's list, not in the NodeManager's node list, so undo actions address them
+        // through the owning mixer + chain.
+        int mixerOwnerNodeID = -1;
+        int mixerOwnerChainID = -1;
+
         connectionSet inputs;
 
         connectionSet outputs;
@@ -105,6 +111,10 @@ class Node : public EmbeddedWindow {
         // Nodes that process whatever width they receive report true, so the manager
         // propagates their input's channel count forward to their outputs.
         virtual bool widthFollowsInput() const { return false; }
+
+        // Nodes with several independent outputs (the arranger's per-track ports) map each
+        // input port to its own output; called after the generic input-width propagation.
+        virtual void syncWidthsFromInputs() {}
 
         // Latency compensation. Nodes that add processing latency (lookahead plugins) report
         // it; the graph delays the shorter parallel paths to match, per input connection.
@@ -184,5 +194,8 @@ class Node : public EmbeddedWindow {
 
         // EmbeddedWindow polygon: use the node's existing shape. Fixed size — no resize.
         ResizeZone getResizeZone(float, float) const override { return ResizeZone::None; }
+        // Nodes have no title bar and no close box; without this, the base class's
+        // (invisible) close-button hit test can hide a node on an accidental click.
+        bool hasRectResize() const override { return false; }
         void buildHitPolygon(std::vector<SDL_FPoint>& out) const override;
 }; 

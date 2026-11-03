@@ -209,6 +209,7 @@ void NodeManager::refreshChannelWidths() {
                 }
             }
         }
+        n->syncWidthsFromInputs();
     }
 }
 
@@ -352,6 +353,7 @@ void NodeManager::process(float* output, int& bufferSize, int& numChannels, int&
                         }
                     }
                 }
+                n->syncWidthsFromInputs();
             }
             return changed;
         };
@@ -386,7 +388,16 @@ void NodeManager::process(float* output, int& bufferSize, int& numChannels, int&
 
     outNode->output = output;
     outNode->processTree();
+    // An arranger that is not routed to the Output node still has to run: armed-track
+    // recording and input monitoring must work regardless of how the tracks are wired.
+    for (auto node : nodes) {
+        if (node->nodeType == NodeType::Arranger && !node->isProcessed)
+            node->processTree();
+    }
     outNode->resetProcessTree();
+    for (auto node : nodes) {
+        if (node->isProcessed) node->resetProcessTree();
+    }
 }
 
 Node* NodeManager::addNodeNow(NodeType t, float x, float y, int forcedID) {
@@ -532,6 +543,7 @@ void NodeManager::severConnectionNow(uint16_t srcNodeID, uint16_t srcConID, uint
     dstCon->is_connected = false;
     dstCon->buffer = nullptr;
     dstCon->events = nullptr;
+    topologyDirty = true;
 }
 
 bool NodeManager::snapshotNode(uint16_t nodeID, json& nodeData, json& connections) {

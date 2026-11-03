@@ -1,4 +1,5 @@
 #include "Note.h"
+#include "RecordedTake.h"
 #include <utility>
 #include <vector>
 #include <iostream>
@@ -72,6 +73,14 @@ class Project : public Window {
         std::thread saveThread;
         std::mutex saveThreadMutex;
 
+        // Finished recording takes, DSP thread -> GUI thread.
+        void pushRecordedTake(RecordedTake&& take);
+        void drainRecordedTakes();
+        std::mutex takeQueueMutex;
+        std::vector<RecordedTake> pendingTakes;
+        /** Resolved project folder, or empty when the project has never been saved. */
+        std::string projectFolder() const;
+
         void createNote(int, std::vector<std::pair<int,int>>, std::vector<std::pair<int,int>>, int, std::vector<int> managerPath = {},
                         std::vector<std::pair<int, int>> pitchVector = {});
 
@@ -98,6 +107,11 @@ class Project : public Window {
 
         bool isPlaying = false;
         bool dspIsPlaying = false;
+
+        // Global record arm (FL style): armed tracks record their inputs while playing.
+        bool isRecording = false;
+        bool dspRecording = false;
+        void setRecording(bool on);
         bool loading = false;
         bool dspLoading = false;
 

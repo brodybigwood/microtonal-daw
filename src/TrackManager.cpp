@@ -8,6 +8,47 @@
 #include "nodes/nodetypes.h"
 #include "UndoManager.h"
 #include "NodeManager.h"
+#include "AudioManager.h"
+#include <cstring>
+
+namespace {
+struct TrackButtons {
+    SDL_FRect solo, mute, arm, monitor;
+};
+
+TrackButtons trackButtonsFor(const SDL_FRect& row) {
+    const float bh = 18.f;
+    const float bw = 26.f;
+    const float gap = 4.f;
+    const float x = row.x + row.w / 10.f + 6.f;
+    const float y = row.y + (row.h - bh) * 0.5f;
+    return {
+        SDL_FRect{x, y, bw, bh},
+        SDL_FRect{x + bw + gap, y, bw, bh},
+        SDL_FRect{x + 2.f * (bw + gap), y, bw, bh},
+        SDL_FRect{x + 3.f * (bw + gap), y, bw, bh}
+    };
+}
+
+void renderSmallButton(SDL_Renderer* renderer, const SDL_FRect& rect, const char* label, SDL_Color fill) {
+    SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
+    SDL_RenderFillRect(renderer, &rect);
+    SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
+    SDL_RenderRect(renderer, &rect);
+    if (!fonts.mainFont) return;
+    SDL_Color textColor{235, 235, 235, 255};
+    SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, label, 0, textColor);
+    if (!surf) return;
+    SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
+    if (tex) {
+        float tw = static_cast<float>(surf->w), th = static_cast<float>(surf->h);
+        SDL_FRect dst{rect.x + rect.w * 0.5f - tw * 0.5f, rect.y + rect.h * 0.5f - th * 0.5f, tw, th};
+        SDL_RenderTexture(renderer, tex, nullptr, &dst);
+        SDL_DestroyTexture(tex);
+    }
+    SDL_DestroySurface(surf);
+}
+} // namespace
 
 TrackManager::TrackManager(ArrangerNode* n) : parentNode(n), newTrackE(nullptr), newTrackW(nullptr) {}
 
@@ -67,7 +108,8 @@ void TrackManager::addTrack(TrackType tp) {
     parentNode->project->um->newAction(pa);
 }
 
-Track* TrackManager::addTrackNow(TrackType tp, int forcedTrackID, int forcedConnectionID, int forcedIndex) {
+Track* TrackManager::addTrackNow(TrackType tp, int forcedTrackID, int forcedConnectionID, int forcedIndex,
+                                 int forcedInputConnectionID) {
     uint16_t id;
     if (forcedTrackID >= 0) {
         id = static_cast<uint16_t>(forcedTrackID);
@@ -120,8 +162,281 @@ Track* TrackManager::addTrackNow(TrackType tp, int forcedTrackID, int forcedConn
     } else {
         parentNode->outputs.addConnection(c);
     }
+
+    // One input port per track, in track order.
+    int trackIndex = -1;
+    for (size_t i = 0; i < tracks.size(); ++i) {
+        if (tracks[i] == t) { trackIndex = static_cast<int>(i); break; }
+    }
+    t->inputConnection = addInputConnection(tp, forcedInputConnectionID, trackIndex);
+
     parentNode->makeConnectionRects();
+    parentNode->nm->markTopologyDirty();
     return t;
+}
+
+Connection* TrackManager::addInputConnection(TrackType tp, int forcedID, int insertIndex) {
+    auto* c = new Connection;
+    c->nm = parentNode->inputs.nm;
+    c->dir = Direction::input;
+    c->type = (tp == TrackType::Notes) ? DataType::Events : DataType::Waveform;
+    c->is_connected = false;
+    c->input_node = -1;
+    c->input_connection = -1;
+    c->output_node = parentNode->id;
+    c->events = nullptr;
+    c->buffer = nullptr;
+    c->bufferSize = 0;
+    c->allocChannels = c->numChannels;
+
+    if (forcedID >= 0) {
+        c->id = static_cast<uint16_t>(forcedID);
+        parentNode->inputs.id_pool.reserveID(c->id);
+    } else {
+        c->id = parentNode->inputs.id_pool.newID();
+    }
+    c->output_connection = c->id;
+
+    auto& in = parentNode->inputs;
+    if (insertIndex >= 0 && static_cast<size_t>(insertIndex) <= in.connections.size())
+        in.connections.insert(in.connections.begin() + static_cast<ptrdiff_t>(insertIndex), c);
+    else
+        in.connections.push_back(c);
+
+    in.ids.clear();
+    for (size_t i = 0; i < in.connections.size(); ++i)
+        in.ids[in.connections[i]->id] = static_cast<uint16_t>(i);
+    parentNode->makeConnectionRects();
+    parentNode->nm->markTopologyDirty();
+    return c;
+}
+
+void TrackManager::removeInputConnectionForTrack(Track* track) {
+    if (!track || !track->inputConnection) return;
+    Connection* c = track->inputConnection;
+    if (c->is_connected && parentNode->nm)
+        parentNode->nm->severConnectionNow(static_cast<uint16_t>(c->input_node),
+                                           static_cast<uint16_t>(c->input_connection),
+                                           static_cast<uint16_t>(c->output_node),
+                                           static_cast<uint16_t>(c->output_connection));
+    auto& in = parentNode->inputs;
+    auto it = std::find(in.connections.begin(), in.connections.end(), c);
+    if (it != in.connections.end()) in.connections.erase(it);
+    in.ids.erase(c->id);
+    in.id_pool.releaseID(c->id);
+    track->inputConnection = nullptr;
+    delete c;
+    syncInputPortOrder();
+}
+
+void TrackManager::syncInputPortOrder() {
+    auto& in = parentNode->inputs;
+    std::vector<Connection*> ordered;
+    ordered.reserve(in.connections.size());
+    for (auto* t : tracks) {
+        if (t && t->inputConnection) ordered.push_back(t->inputConnection);
+    }
+    // Keep any non-track input port (e.g. a future mapped parameter) after the track ports.
+    for (auto* c : in.connections) {
+        if (std::find(ordered.begin(), ordered.end(), c) == ordered.end())
+            ordered.push_back(c);
+    }
+    if (ordered.size() != in.connections.size())
+        return; // a track is missing its port; leave the set untouched
+    in.connections = std::move(ordered);
+    in.ids.clear();
+    for (size_t i = 0; i < in.connections.size(); ++i)
+        in.ids[in.connections[i]->id] = static_cast<uint16_t>(i);
+    parentNode->makeConnectionRects();
+    if (parentNode->nm) parentNode->nm->markTopologyDirty();
+}
+
+bool TrackManager::isSoloed(uint16_t id) const {
+    return std::find(soloTracks.begin(), soloTracks.end(), id) != soloTracks.end();
+}
+
+bool TrackManager::isMuted(uint16_t id) const {
+    return std::find(muteTracks.begin(), muteTracks.end(), id) != muteTracks.end();
+}
+
+bool TrackManager::isAudible(uint16_t id) const {
+    const bool anySolo = !soloTracks.empty();
+    const bool solo = isSoloed(id);
+    const bool mute = isMuted(id);
+    if (anySolo && !solo) return false;
+    return !mute;
+}
+
+void TrackManager::setSoloState(uint16_t id, bool on) {
+    auto it = std::find(soloTracks.begin(), soloTracks.end(), id);
+    if (on && it == soloTracks.end()) soloTracks.push_back(id);
+    else if (!on && it != soloTracks.end()) soloTracks.erase(it);
+}
+
+void TrackManager::setMuteState(uint16_t id, bool on) {
+    auto it = std::find(muteTracks.begin(), muteTracks.end(), id);
+    if (on && it == muteTracks.end()) muteTracks.push_back(id);
+    else if (!on && it != muteTracks.end()) muteTracks.erase(it);
+}
+
+void TrackManager::setRecordArmedState(uint16_t id, bool on) {
+    Track* t = getTrack(id);
+    if (t) t->recordArmed = on;
+}
+
+void TrackManager::setMonitorState(uint16_t id, bool on) {
+    Track* t = getTrack(id);
+    if (t) t->monitor = on;
+}
+
+void TrackManager::processAfterElements(int bufferSize) {
+    for (auto* t : tracks) {
+        if (!t || !t->connection) continue;
+
+        if (t->type == TrackType::Audio && t->monitor && t->inputConnection &&
+            t->inputConnection->is_connected && t->inputConnection->buffer &&
+            t->buffer && *t->buffer) {
+            const int outCh = t->connection->allocChannels;
+            const int inCh = std::max(1, t->inputConnection->numChannels);
+            const int n = std::min(inCh, outCh);
+            const int inStride = t->inputConnection->bufferSize > 0 ? t->inputConnection->bufferSize : bufferSize;
+            const int outStride = t->connection->bufferSize > 0 ? t->connection->bufferSize : bufferSize;
+            for (int ch = 0; ch < n; ++ch) {
+                const float* src = t->inputConnection->buffer + static_cast<size_t>(ch) * static_cast<size_t>(inStride);
+                float* dst = *t->buffer + static_cast<size_t>(ch) * static_cast<size_t>(outStride);
+                for (int i = 0; i < bufferSize; ++i) dst[i] += src[i];
+            }
+        } else if (t->type == TrackType::Notes && t->monitor && t->inputConnection &&
+                   t->inputConnection->is_connected && t->inputConnection->events &&
+                   t->events && *t->events &&
+                   t->inputConnection->events != *t->events) {
+            auto& out = **t->events;
+            out.insert(out.end(), t->inputConnection->events->begin(), t->inputConnection->events->end());
+        }
+
+        if (!isAudible(t->id)) {
+            if (t->type == TrackType::Audio && t->buffer && *t->buffer) {
+                std::memset(*t->buffer, 0, sizeof(float) * static_cast<size_t>(bufferSize) *
+                    static_cast<size_t>(t->connection->allocChannels));
+            } else if (t->type == TrackType::Notes && t->events && *t->events) {
+                (*t->events)->clear();
+            }
+        }
+    }
+}
+
+void TrackManager::captureTakes(Project* project, int bufferSize) {
+    if (!project || bufferSize <= 0) return;
+
+    const double blockStart = project->activeBeatPosition();
+    const double blockEnd = blockStart + project->deltaBeats;
+    const bool playing = project->dspIsPlaying;
+    const bool recording = project->dspRecording;
+    const bool genChanged = (project->dspTransportGeneration != lastSeenTransportGeneration);
+    lastSeenTransportGeneration = project->dspTransportGeneration;
+
+    for (Track* t : tracks) {
+        if (!t || !t->inputConnection) continue;
+
+        const bool wanted = playing && recording && t->recordArmed;
+
+        // A discontinuity (seek) ends the take where it had reached; a new take starts at the
+        // new position in this block.
+        if (t->capture.active && (!wanted || genChanged))
+            finalizeTake(project, t);
+
+        if (!t->capture.active && wanted) {
+            const bool ready = (t->type == TrackType::Audio)
+                ? (t->inputConnection->is_connected && t->inputConnection->buffer != nullptr)
+                : (t->inputConnection->is_connected && t->inputConnection->events != nullptr);
+            if (!ready) continue;
+            auto& cap = t->capture;
+            cap.active = true;
+            cap.startBeat = blockStart;
+            cap.endBeat = blockEnd;
+            cap.channels = (t->type == TrackType::Audio) ? std::max(1, t->inputConnection->numChannels) : 0;
+            cap.audio.clear();
+            cap.pendingNotes.clear();
+        }
+
+        if (!t->capture.active) continue;
+        auto& cap = t->capture;
+        cap.endBeat = blockEnd;
+
+        if (t->type == TrackType::Audio) {
+            if (cap.channels <= 0) continue;
+            const size_t oldFrames = cap.audio.size() / static_cast<size_t>(cap.channels);
+            const size_t newFrames = oldFrames + static_cast<size_t>(bufferSize);
+            cap.audio.resize(newFrames * static_cast<size_t>(cap.channels), 0.0f);
+            if (t->inputConnection->is_connected && t->inputConnection->buffer) {
+                const int inCh = std::max(1, t->inputConnection->numChannels);
+                const int n = std::min(cap.channels, inCh);
+                const int stride = t->inputConnection->bufferSize > 0 ? t->inputConnection->bufferSize : bufferSize;
+                for (int ch = 0; ch < n; ++ch) {
+                    const float* src = t->inputConnection->buffer + static_cast<size_t>(ch) * static_cast<size_t>(stride);
+                    float* dst = cap.audio.data() + static_cast<size_t>(ch) * newFrames + oldFrames;
+                    std::memcpy(dst, src, sizeof(float) * static_cast<size_t>(bufferSize));
+                }
+            }
+        } else if (t->type == TrackType::Notes) {
+            if (!t->inputConnection->is_connected || !t->inputConnection->events) continue;
+            for (const Event& ev : *t->inputConnection->events) {
+                const double beat = blockStart + project->deltaBeats *
+                    (static_cast<double>(ev.sampleOffset) / static_cast<double>(bufferSize));
+                if (ev.type == noteEventType::noteOn) {
+                    RecordedTakeNote note;
+                    note.pitch = ev.num;
+                    note.channel = ev.channel;
+                    note.startBeat = beat;
+                    note.endBeat = beat;
+                    t->capture.pendingNotes[ev.id] = note;
+                } else if (ev.type == noteEventType::noteOff) {
+                    auto it = t->capture.pendingNotes.find(ev.id);
+                    if (it != t->capture.pendingNotes.end()) {
+                        it->second.endBeat = std::max(it->second.startBeat, beat);
+                        t->capture.pendingNotes.erase(it);
+                    }
+                }
+            }
+        }
+    }
+}
+
+void TrackManager::finalizeTake(Project* project, Track* track) {
+    if (!track || !track->capture.active) return;
+    auto& cap = track->capture;
+
+    RecordedTake take;
+    take.managerPath = parentNode && parentNode->nm ? parentNode->nm->managerPath : std::vector<int>{};
+    take.nodeID = parentNode ? static_cast<int>(parentNode->id) : 0;
+    take.trackID = track->id;
+    take.startBeat = cap.startBeat;
+    take.endBeat = cap.endBeat;
+
+    if (track->type == TrackType::Audio) {
+        take.isAudio = true;
+        take.channels = cap.channels;
+        take.frames = cap.channels > 0 ? cap.audio.size() / static_cast<size_t>(cap.channels) : 0;
+        AudioManager* am = AudioManager::instance();
+        take.sampleRate = am ? static_cast<int>(am->sampleRate) : 48000;
+        take.audio = std::move(cap.audio);
+    } else {
+        take.isAudio = false;
+        take.notes.reserve(cap.pendingNotes.size());
+        for (auto& [voiceId, note] : cap.pendingNotes) {
+            RecordedTakeNote n = note;
+            n.endBeat = std::max(n.startBeat, take.endBeat);
+            take.notes.push_back(n);
+        }
+        std::sort(take.notes.begin(), take.notes.end(),
+            [](const RecordedTakeNote& a, const RecordedTakeNote& b) { return a.startBeat < b.startBeat; });
+    }
+
+    cap = Track::TakeCapture{};
+
+    const bool empty = take.isAudio ? (take.frames == 0 || take.channels <= 0) : take.notes.empty();
+    if (!empty && project)
+        project->pushRecordedTake(std::move(take));
 }
 
 void TrackManager::removeTrackNow(uint16_t trackID) {
@@ -132,6 +447,11 @@ void TrackManager::removeTrackNow(uint16_t trackID) {
     Track* track = tracks[index];
     Connection* connection = track->connection;
     auto& out = parentNode->outputs;
+
+    if (track->capture.active)
+        finalizeTake(parentNode->project, track);
+
+    removeInputConnectionForTrack(track);
 
     if (connection) {
         auto cit = std::find(out.connections.begin(), out.connections.end(), connection);
@@ -158,6 +478,7 @@ void TrackManager::removeTrackNow(uint16_t trackID) {
     delete tracks.back();
     tracks.pop_back();
 
+    syncInputPortOrder();
     parentNode->makeConnectionRects();
 }
 
@@ -252,17 +573,31 @@ void TrackManager::render(SDL_Renderer* renderer) {
     newTrackW->render();
 }
 
-void TrackManager::handleTrackInput(Track* track, int y, SDL_Event& e) {
+bool TrackManager::handleTrackInput(Track* track, int y, SDL_Event& e) {
     SDL_FRect trackRect{
-        dstRect->x, y + dstRect->y - *scrollY, dstRect->w, *divHeight
+        dstRect->x, static_cast<float>(y) - static_cast<float>(*scrollY), dstRect->w, *divHeight
     };
 
-    switch (e.type) {
-        case SDL_EVENT_MOUSE_BUTTON_DOWN:
-            break;
-        default:
-            break;
-    }
+    if (e.type != SDL_EVENT_MOUSE_BUTTON_DOWN || e.button.button != SDL_BUTTON_LEFT)
+        return false;
+
+    const TrackButtons buttons = trackButtonsFor(trackRect);
+    auto hit = [this](const SDL_FRect& r) {
+        return *mouseX >= r.x && *mouseX < r.x + r.w && *mouseY >= r.y && *mouseY < r.y + r.h;
+    };
+
+    int control = -1;
+    if (hit(buttons.solo)) control = 0;
+    else if (hit(buttons.mute)) control = 1;
+    else if (hit(buttons.arm)) control = 2;
+    else if (hit(buttons.monitor)) control = 3;
+    if (control < 0) return false;
+
+    Project* p = parentNode ? parentNode->project : nullptr;
+    if (!p || !p->um || !parentNode->nm) return true;
+    p->um->newAction(new ArrangerTrackControlAction(p, parentNode->nm->managerPath,
+        static_cast<int>(parentNode->id), track->id, control));
+    return true;
 }
 
 void TrackManager::moveTrack() {
@@ -298,26 +633,30 @@ void TrackManager::moveTrack() {
     parentNode->outputs.ids.clear();
     for (size_t i = 0; i < connections.size(); ++i) parentNode->outputs.ids[connections[i]->id] = i;
 
+    syncInputPortOrder();
     parentNode->makeConnectionRects();
 }
 
 void TrackManager::handleInput(SDL_Event& e) {
-    
+
     hoveredTrack = nullptr;
+    bool consumed = false;
 
     int y = dstRect->y;
     for (auto track : tracks) {
-        if (*mouseY >= y && *mouseY < y + *divHeight) {
+        const float rowTop = static_cast<float>(y) - static_cast<float>(*scrollY);
+        if (*mouseY >= rowTop && *mouseY < rowTop + *divHeight) {
             hoveredTrack = track;
-            handleTrackInput(track, y, e);
+            consumed = handleTrackInput(track, y, e);
             break;
         }
-        y += *divHeight;
+        y += static_cast<int>(*divHeight);
     }
 
     switch(e.type) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             if (e.button.button == SDL_BUTTON_LEFT) {
+                if (consumed) break;
                 if( newTrackE->hover()) newTrackE->onClick();
                 else if( newTrackW->hover()) {
                     newTrackW->onClick();
@@ -404,6 +743,17 @@ void TrackManager::renderTrack(SDL_Renderer* renderer, Track* track, SDL_FRect* 
     SDL_DestroySurface(surf);
     SDL_DestroyTexture(tex);
 
+    // Per-track controls: solo, mute, record-arm, monitor.
+    const TrackButtons buttons = trackButtonsFor(*rect);
+    renderSmallButton(renderer, buttons.solo, "S",
+        isSoloed(track->id) ? SDL_Color{255, 200, 50, 255} : SDL_Color{70, 70, 75, 255});
+    renderSmallButton(renderer, buttons.mute, "M",
+        isMuted(track->id) ? SDL_Color{255, 60, 60, 255} : SDL_Color{70, 70, 75, 255});
+    renderSmallButton(renderer, buttons.arm, "R",
+        track->recordArmed ? SDL_Color{210, 30, 30, 255} : SDL_Color{70, 70, 75, 255});
+    renderSmallButton(renderer, buttons.monitor, "I",
+        track->monitor ? SDL_Color{70, 190, 120, 255} : SDL_Color{70, 70, 75, 255});
+
     //borders
     SDL_SetRenderDrawColor(renderer, colors.trackBorder[0], colors.trackBorder[1], colors.trackBorder[2], colors.trackBorder[3]);
     SDL_RenderRect(renderer, &typeRect); //type
@@ -440,6 +790,15 @@ void TrackManager::fromJSON(json j) {
         tr->events = &(tr->connection->events);
         tr->fromJSON(t);
         tracks.push_back(tr);
+
+        // Resolve the per-track input port; older saves have none, so create one in track
+        // order. Both graph copies deserialize the same JSON in the same order.
+        const int inputID = t.value("inputConnectionID", -1);
+        tr->inputConnection = inputID >= 0
+            ? parentNode->inputs.getConnection(static_cast<uint16_t>(inputID))
+            : nullptr;
+        if (!tr->inputConnection)
+            tr->inputConnection = addInputConnection(tr->type, -1, static_cast<int>(tracks.size()) - 1);
     }
 
     id_pool.fromJSON(j["id_pool"]);
@@ -455,9 +814,10 @@ json TrackManager::toJSON() {
     j["muteTracks"] = muteTracks;
 
     j["tracks"] = json::array();
-    for( auto t : tracks ){ 
+    for( auto t : tracks ){
         auto jt = t->toJSON();
         jt["connectionID"] = t->connection->id;
+        jt["inputConnectionID"] = t->inputConnection ? static_cast<int>(t->inputConnection->id) : -1;
         j["tracks"].push_back(jt);
     };
 
