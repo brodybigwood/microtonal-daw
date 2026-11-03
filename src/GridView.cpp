@@ -206,3 +206,26 @@ float GridView::getHoveredTimeSec() {
 float GridView::getX(float time) {
     return time * dW + leftMargin - scrollX;
 }
+
+void GridView::renderGridRhythmButton(SDL_Renderer* renderer) {
+    gridRhythmButtonRect = {dstRect->x + 4.f, dstRect->y + 4.f,
+                            std::max(20.f, leftMargin - 8.f), topMargin - 8.f};
+    SDL_SetRenderDrawColor(renderer, 50, 50, 54, 255);
+    SDL_RenderFillRect(renderer, &gridRhythmButtonRect);
+    SDL_SetRenderDrawColor(renderer, 130, 130, 130, 255);
+    SDL_RenderRect(renderer, &gridRhythmButtonRect);
+
+    // "Take the transport lines into the grid": an arrow pointing from the strip down-left.
+    const float cx = gridRhythmButtonRect.x + gridRhythmButtonRect.w * 0.5f;
+    const float cy = gridRhythmButtonRect.y + gridRhythmButtonRect.h * 0.5f;
+    const float r = std::min(gridRhythmButtonRect.w, gridRhythmButtonRect.h) * 0.25f;
+    SDL_RenderLine(renderer, cx - r, cy - r * 0.6f, cx + r, cy - r * 0.6f);
+    SDL_RenderLine(renderer, cx + r, cy - r * 0.6f, cx + r * 0.3f, cy - r);
+    SDL_RenderLine(renderer, cx + r, cy - r * 0.6f, cx + r * 0.3f, cy - r * 0.2f);
+    SDL_RenderLine(renderer, cx + r * 0.5f, cy - r * 0.2f, cx + r * 0.5f, cy + r);
+}
+
+bool GridView::gridRhythmButtonHit(float x, float y) const {
+    return x >= gridRhythmButtonRect.x && x <= gridRhythmButtonRect.x + gridRhythmButtonRect.w &&
+           y >= gridRhythmButtonRect.y && y <= gridRhythmButtonRect.y + gridRhythmButtonRect.h;
+}

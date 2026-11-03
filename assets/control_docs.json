@@ -1,0 +1,540 @@
+{
+  "concepts": {
+    "request": "One JSON object per line over the control socket. Shape: {\"id\":<any scalar>,\"op\":\"<verb>\",...}. The id is echoed in the reply. Verbs: action, query, undo, redo, goto, save, load, transport, help, list_actions, describe_action, list_queries, describe_query, ping, shutdown.",
+    "response": "{\"id\":..,\"ok\":true,\"result\":..} on success, or {\"id\":..,\"ok\":false,\"error\":{\"code\":..,\"message\":..}}. Codes: bad_json, bad_request, unknown_op, unknown_action, unknown_query, not_found, execution_failed, no_project.",
+    "managerPath": "Addresses which graph to act on. [] is the root graph. [p] descends into the Patcher node with id p. [m,q] descends into patcher q of the Multiplexer node m. Paths nest further. Enumerate valid ones with the `managers` query.",
+    "nodeID": "0 is the Output node, 1 is the Input node. Anything else is a node you created with add_node. List them with the `nodes` query.",
+    "portID": "Nodes own input/output ports, each with its own id. The `node` query lists them under inputs[]/outputs[] with dataType (0 = Events/MIDI, 1 = Waveform/audio) and connection state. Connections are (nodeID, portID) pairs.",
+    "undo": "Every `action` is recorded in an undo tree, applied to the GUI graph and replayed on the audio graph. `undo`, `redo` and `goto` walk that tree; `goto` takes a child-index path from the root.",
+    "note pitch": "pitchVector is a positional list of [num,den] exponent pairs over primes [2,3,5,7,11,13,...]: pitch = 69 + 12*log2(product(prime_i ^ (num_i/den_i))). [] is 1/1 = MIDI 69. The 5-limit ratio 5/4 is [[-2,1],[0,1],[1,1]].",
+    "note rhythm": "rhythmVector / rhythmEndVector are the note's start and end in BEATS, as the same prime-exponent pairs: value = sum((num_i/den_i) * log2(prime_i)). [] is beat 0, [[1,1]] is beat 1, [[1,2]] is beat 0.5.",
+    "tuning": "A region carries the scale. tuningMode 0 = harmonic lattice, 1 = EDO. In harmonic mode, tuningAnchorHarmonic is the anchor harmonic A and tuningHarmonicAnchorVector is that harmonic's pitch; lattice line h sits at anchorVec - dense(A) + dense(h), where dense(h) is h's prime factorisation. A note's tuningAnchorHarmonic is WHICH line it sits on (its scale degree) — not the region's anchor. A note's tuningMode is inherited from the region when the note is created.",
+    "degrees": "Harmonic scale degrees are named by harmonic number: I = 1/2/4/8 (any power of two), II = 9, III = 5 or 10, IV = 4, V = 3 or 6, VI = 5 or 10, VII = 15.",
+    "transport position": "beatPosition/timeSeconds are the transport ANCHOR (the seek target, set when playback starts). The live playhead is effectiveBeatPosition/effectiveTime, published from the audio thread. A playhead that looks stuck at the anchor is normal while playing — read the effective pair.",
+    "threading": "Requests run on the GUI thread, so mutations always land on the authoritative graph copies and are mirrored to the audio graph. No request blocks audio.",
+    "read-live rule": "Actions take INTENT, not state. You pass what you want; the DAW reads the current value itself (old parameter values, existing cables, the note's prior snapshot). Never send a value you read back earlier — it may be stale and will corrupt the undo entry.",
+    "arranger elements": "An Arranger node holds elements and tracks. An ELEMENT is the content — a region (notes), an audio clip, or an automation curve; type 0/1/2 respectively. Regions, clips and curves SHARE one id space per arranger, so an element id is unambiguous. That same id is what you pass as elementID / regionID / curveID depending on the action.",
+    "positions": "A POSITION is a placement of an element on a track at a time — separate from the element itself, and one element can have many. Keys: startOffsetPairs (extra start offset in beats, [] = 0), rhythmVector (start beat), rhythmEndVector (end beat), trackID, id (the positionID used by delete_position / move_element_position), plus rhythmEdo* snapshots. Get them from the `elements` or `region` query.",
+    "tracks": "An Arranger track is {type, id, connectionID}. type 0 = Audio, 1 = Notes. connectionID is the track's output port on the Arranger node (Waveform for Audio, Events for Notes) — adding a Notes track is what gives the arranger its event output. Get them from the `tracks` query.",
+    "automation curve points": "A curve point is {timeVec, v, shape, shapeParam}. timeVec is the X position in BEATS, encoded exactly like note rhythm (value = sum((num_i/den_i)*log2(prime_i)); [] = beat 0, [[1,1]] = beat 1, [[9,1]] = beat 9). v is the value — BPM for the tempo curve, otherwise the target parameter's range. shape: 0 = Hold, 1 = Single (smooth bow), 2 = Double (smoother); shapeParam is -1..1, a bow amount for Single and a balance for Double.",
+    "embedded windows": "Nodes are floating windows inside the canvas and have their own id space, SEPARATE from node ids: ewID comes from the editor's pool (0 and 1 are reserved, so on a fresh graph the Output node gets ewID 2 and the Input node ewID 3). Never compute it — read it from the `embedded_windows` query, and pass it to move_embedded_window / resize_embedded_window.",
+    "vst state blobs": "compState / ctrlState in vst_state_change are base64 strings (standard alphabet, = padding) of the plugin's raw component/controller state. Get the current ones from the plugin, or pass neither to re-apply the current state.",
+    "undo tree": "The `undo` query returns {head, version}. head is the root action; each node has type (an ActionType int), its action-specific fields, children[], name, last_index and optionally savedMainManager (the graph snapshot). version is the child-index path from head to the current action — [] is the root. `goto` consumes exactly that array.",
+    "created ids": "Every action that creates something returns it in result.created: add_node -> nodeID, create_region/automation_curve/audio_clip -> regionID/curveID/clipID, create_note -> noteID, create_notes -> noteIDs, create_position -> positionID, add_arranger_track -> trackID+connectionID, sampler_add_sample -> sampleIndex, io_port_channel (add) -> connectionId+connectionIndex. Never guess an id.",
+    "capture": "op capture takes {\"target\":\"main\"} (the node canvas), \"node:<nodeID>\" (just that node on the canvas, including live meters/spectra it draws — for a VST node with its editor open this captures the plugin editor window itself), or a window title / numeric id from the `windows` query, and replies with {target, format:\"png\", width, height, data:<base64 PNG>}. The reply is produced after the next frame is rendered, so it is always fresh; it just arrives a frame later. Add \"beat\": N to hold the capture until the transport reaches that absolute beat (frame-synced, useful for transient stems); if the transport is stopped it captures immediately. Use it to see the actual UI. Open a VST editor with the `window` op: {\"op\":\"window\",\"open\":\"vst_editor\",\"nodeID\":N} (add \"closeEditor\":true to hide it).",
+    "windows": "The `windows` query lists the main canvas plus every expanded window (title, id, sdlWindowID, size, visibility). The `window` op opens/closes them: open preferences, undo_tree, arranger (nodeID), patcher (nodeID), sample_editor (nodeID, sampleIndex) or piano_roll (nodeID, regionID); close by title or id. Open a window, then capture it by title.",
+    "pitch tokens": "create_note / create_notes accept either an explicit int[][] vector or a token string that resolves to the same vector: m69 or midi:69 (MIDI note -> 2^((n-69)/12)), e7/12 or edo:7/12 (EDO steps), 3/2 or ji:3/2 or ratio:3/2 (just ratio, prime-factorised into the positional vector), h9 or harmonic:9 (harmonic 9 octave-reduced to 9/8). Bare integers are MIDI notes, bare fractions are ratios. Tokens are exact vectors, so they work identically in EDO and harmonic-lattice regions.",
+    "note rhythm offsets": "The first slot is prime 2, so a single pair [[num,den]] means exactly num/den beats (log2(2^(num/den))). Placing notes on sixteenths is therefore [[1,4]], [[2,4]], [[3,4]], [[5,4]], [[9,4]], ... and a bar line is [[9,1]] for beat 9. Later slots add log2(prime_i)^(num/den) over primes 3,5,7,...",
+    "sampler": "A Sampler has one slot per loaded sample, in slot order. The Master event input (port 0) selects the slot from the note number: note 69 + index plays slot `index` (clamped to the last slot); any fraction is ignored (round-to-nearest). Each slot also has its own event input `S<n> Evt` (ports 1..n) that selects that slot regardless of pitch, and one stereo waveform output `S<n> Out` (port ids 0..n-1). Playback pitch is note - the slot's pitch parameter (default 69), so set a slot's pitch param to the note number you will play for native rate. Each slot contributes 9 consecutive params starting at index slotIndex*9: volume, pitch, pan, offset, cutoff, attack, decay, sustain, release.",
+    "audio routing": "The Output node (id 0) has one waveform input per output channel and copies channel 0 of each input to that channel — connect to both inputs for stereo. Bus (nodeType 17) SUMS every connected waveform input into one output whose width is the widest source; use it to mix several cables. Merger (nodeType 2) does not mix: it places each input on its own output channel. An unconnected output or input is silent.",
+    "self-description": "`help` returns these concepts plus indexes. `describe_action` / `describe_query` / `describe_op` return one entry in full, including parameters and a worked example. Prefer those over guessing."
+  },
+  "actions": {
+    "add_node": {
+      "summary": "Create a node in a graph.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeType": {"type": "int", "meaning": "NodeType index — see the node_types query", "required": true},
+        "x": {"type": "float", "meaning": "canvas x", "required": true},
+        "y": {"type": "float", "meaning": "canvas y", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"add_node\",\"args\":{\"managerPath\":[],\"nodeType\":1,\"x\":300,\"y\":200}}"
+    },
+    "remove_node": {
+      "summary": "Delete a node and sever its cables.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "node to remove", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"remove_node\",\"args\":{\"managerPath\":[],\"nodeID\":2}}"
+    },
+    "make_node_connection": {
+      "summary": "Connect an output port to an input port.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "srcNodeID": {"type": "int", "meaning": "source node", "required": true},
+        "srcConID": {"type": "int", "meaning": "source output port id", "required": true},
+        "dstNodeID": {"type": "int", "meaning": "destination node", "required": true},
+        "dstConID": {"type": "int", "meaning": "destination input port id", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"make_node_connection\",\"args\":{\"managerPath\":[],\"srcNodeID\":2,\"srcConID\":0,\"dstNodeID\":3,\"dstConID\":0}}"
+    },
+    "sever_node_connection": {
+      "summary": "Disconnect a cable.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "srcNodeID": {"type": "int", "meaning": "", "required": true},
+        "srcConID": {"type": "int", "meaning": "", "required": true},
+        "dstNodeID": {"type": "int", "meaning": "", "required": true},
+        "dstConID": {"type": "int", "meaning": "", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"sever_node_connection\",\"args\":{\"managerPath\":[],\"srcNodeID\":2,\"srcConID\":0,\"dstNodeID\":3,\"dstConID\":0}}"
+    },
+    "reassign_node_connection": {
+      "summary": "Move a cable onto ports, replacing whatever is already on them (one undo step). The replaced cables are read live.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "srcNodeID": {"type": "int", "meaning": "new source node", "required": true},
+        "srcConID": {"type": "int", "meaning": "new source port", "required": true},
+        "dstNodeID": {"type": "int", "meaning": "new destination node", "required": true},
+        "dstConID": {"type": "int", "meaning": "new destination port", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"reassign_node_connection\",\"args\":{\"managerPath\":[],\"srcNodeID\":2,\"srcConID\":0,\"dstNodeID\":4,\"dstConID\":0}}"
+    },
+    "move_node": {
+      "summary": "Move a node to an absolute canvas position.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "", "required": true},
+        "toX": {"type": "float", "meaning": "", "required": true},
+        "toY": {"type": "float", "meaning": "", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"move_node\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"toX\":400,\"toY\":250}}"
+    },
+    "toggle_node_visible": {
+      "summary": "Show/hide a node.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"toggle_node_visible\",\"args\":{\"managerPath\":[],\"nodeID\":2}}"
+    },
+    "pan_nodes": {
+      "summary": "Pan the canvas by a delta.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "dx": {"type": "float", "meaning": "", "required": true},
+        "dy": {"type": "float", "meaning": "", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"pan_nodes\",\"args\":{\"managerPath\":[],\"dx\":100,\"dy\":0}}"
+    },
+    "zoom_nodes": {
+      "summary": "Retained for history compatibility; zoom was removed, so this is a no-op.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "amount": {"type": "float", "meaning": "", "required": true},
+        "mx": {"type": "float", "meaning": "", "required": false},
+        "my": {"type": "float", "meaning": "", "required": false}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"zoom_nodes\",\"args\":{\"managerPath\":[],\"amount\":1.1}}"
+    },
+    "set_param_value": {
+      "summary": "Set a node parameter. The previous value is read live and stored for undo.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "", "required": true},
+        "paramIndex": {"type": "int", "meaning": "index into the node's params[], from the node or params query", "required": true},
+        "value": {"type": "float", "meaning": "new value", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"set_param_value\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"paramIndex\":0,\"value\":0.75}}"
+    },
+    "create_region": {
+      "summary": "Create an empty region on an Arranger node.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "Arranger node", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"create_region\",\"args\":{\"managerPath\":[],\"nodeID\":2}}"
+    },
+    "delete_region": {
+      "summary": "Delete a region.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "Arranger node", "required": true},
+        "regionID": {"type": "int", "meaning": "element id, see the elements query", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"delete_region\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"regionID\":0}}"
+    },
+    "create_automation_curve": {
+      "summary": "Create an automation curve on an Arranger node.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "Arranger node", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"create_automation_curve\",\"args\":{\"managerPath\":[],\"nodeID\":2}}"
+    },
+    "modify_curve_points": {
+      "summary": "Replace an automation curve's points. The prior point list is read live.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "Arranger node", "required": true},
+        "curveID": {"type": "int", "meaning": "element id of the curve", "required": true},
+        "points": {"type": "object[]", "meaning": "new points, each {timeVec, v, shape, shapeParam} — see the automation curve points concept", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"modify_curve_points\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"curveID\":0,\"points\":[{\"timeVec\":[],\"v\":120,\"shape\":1,\"shapeParam\":0}]}}"
+    },
+    "create_audio_clip": {
+      "summary": "Create an audio clip element from a file.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "Arranger node", "required": true},
+        "filepath": {"type": "string", "meaning": "absolute path to a wav/flac", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"create_audio_clip\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"filepath\":\"/home/me/kick.wav\"}}"
+    },
+    "create_position": {
+      "summary": "Place an element (region / clip / curve) on an arranger track at a time.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "Arranger node", "required": true},
+        "elementID": {"type": "int", "meaning": "element id from the elements query", "required": true},
+        "startPairs": {"type": "int[][]", "meaning": "start beat as prime-exponent pairs; [] = beat 0", "required": true},
+        "endPairs": {"type": "int[][]", "meaning": "end beat; [[3,1]] = beat 3", "required": false},
+        "trackID": {"type": "int", "meaning": "track id from the tracks query", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"create_position\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"elementID\":0,\"startPairs\":[],\"endPairs\":[[3,1]],\"trackID\":0}}"
+    },
+    "delete_position": {
+      "summary": "Remove a placement from the timeline.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "", "required": true},
+        "elementID": {"type": "int", "meaning": "", "required": true},
+        "positionID": {"type": "int", "meaning": "", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"delete_position\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"elementID\":0,\"positionID\":0}}"
+    },
+    "move_element_position": {
+      "summary": "Move a placement. before/after must both be FULL position objects; the action reads rhythmVector, rhythmEndVector, startOffsetPairs and trackID from each (the position keeps its existing id).",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "Arranger node", "required": true},
+        "elementID": {"type": "int", "meaning": "", "required": true},
+        "positionID": {"type": "int", "meaning": "", "required": true},
+        "before": {"type": "object", "meaning": "position snapshot to move away from, from the `elements` query", "required": true},
+        "after": {"type": "object", "meaning": "the same object with rhythmVector/rhythmEndVector/trackID changed", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"move_element_position\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"elementID\":0,\"positionID\":0,\"before\":{\"startOffsetPairs\":[],\"rhythmVector\":[],\"rhythmEndVector\":[[3,1]],\"trackID\":0},\"after\":{\"startOffsetPairs\":[],\"rhythmVector\":[[1,1]],\"rhythmEndVector\":[[4,1]],\"trackID\":0}}}"
+    },
+    "add_arranger_track": {
+      "summary": "Add a track to an Arranger node. A Notes track also creates the node's event output port.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "Arranger node", "required": true},
+        "trackType": {"type": "int", "meaning": "0 = Audio, 1 = Notes", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"add_arranger_track\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"trackType\":1}}"
+    },
+    "remove_arranger_track": {
+      "summary": "Remove an arranger track.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "", "required": true},
+        "trackType": {"type": "int", "meaning": "0 = Audio, 1 = Notes", "required": true},
+        "trackID": {"type": "int", "meaning": "", "required": true},
+        "connectionID": {"type": "int", "meaning": "the track's connection id", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"remove_arranger_track\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"trackType\":1,\"trackID\":0,\"connectionID\":0}}"
+    },
+    "create_note": {
+      "summary": "Create a note in a region. The note is stamped with the region's scale, and its lattice degree is derived from its pitch (or taken from tuningAnchorHarmonic).",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "Arranger node", "required": true},
+        "regionID": {"type": "int", "meaning": "region element id", "required": true},
+        "pitchVector": {"type": "int[][]|string", "meaning": "pitch as prime-exponent pairs; [] = 1/1 = MIDI 69. May instead be a token: m69, e7/12, 3/2, h9 (see the pitch tokens concept)", "required": true},
+        "rhythmVector": {"type": "int[][]", "meaning": "start beat; [] = beat 0", "required": false},
+        "rhythmEndVector": {"type": "int[][]", "meaning": "end beat; defaults to rhythmVector", "required": false},
+        "tuningAnchorHarmonic": {"type": "int", "meaning": "force the scale degree instead of deriving it", "required": false},
+        "intent": {"type": "object", "meaning": "override the anchors stamped from the region: tuningMode, tuningAnchorHarmonic, tuningEdo*, rhythmEdoSubdivisionSteps, rhythmEdoLowerVector, rhythmEdoUpperVector", "required": false}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"create_note\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"regionID\":0,\"pitchVector\":[[-2,1],[0,1],[1,1]],\"rhythmVector\":[],\"rhythmEndVector\":[[1,1]]}}"
+    },
+    "create_notes": {
+      "summary": "Create many notes in one undo step. Each entry takes the same pitchVector (vector or token), rhythmVector, rhythmEndVector and optional intent as create_note.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "Arranger node", "required": true},
+        "regionID": {"type": "int", "meaning": "region element id", "required": true},
+        "notes": {"type": "object[]", "meaning": "each {pitchVector, rhythmVector, rhythmEndVector?, intent?}", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"create_notes\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"regionID\":0,\"notes\":[{\"pitchVector\":\"m69\",\"rhythmVector\":[],\"rhythmEndVector\":[[3,4]]},{\"pitchVector\":\"m71\",\"rhythmVector\":[[1,4]],\"rhythmEndVector\":[[3,4]]}]}}"
+    },
+    "delete_note": {
+      "summary": "Delete a note.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "", "required": true},
+        "regionID": {"type": "int", "meaning": "", "required": true},
+        "noteID": {"type": "int", "meaning": "from the region query", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"delete_note\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"regionID\":0,\"noteID\":0}}"
+    },
+    "move_note": {
+      "summary": "Change a note. The prior snapshot is read live; you supply only the fields that change (intent).",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "", "required": true},
+        "regionID": {"type": "int", "meaning": "", "required": true},
+        "noteID": {"type": "int", "meaning": "", "required": true},
+        "intent": {"type": "object", "meaning": "any subset of: pitchVector, rhythmVector, rhythmEndVector, channel, tuningMode, tuningAnchorHarmonic, tuningEdo*, rhythmEdo*", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"move_note\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"regionID\":0,\"noteID\":0,\"intent\":{\"pitchVector\":[[-1,1],[1,1]]}}}"
+    },
+    "move_notes": {
+      "summary": "Change several notes at once (one undo step).",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "", "required": true},
+        "regionID": {"type": "int", "meaning": "", "required": true},
+        "notes": {"type": "object[]", "meaning": "each {noteID, intent}", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"move_notes\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"regionID\":0,\"notes\":[{\"noteID\":0,\"intent\":{\"rhythmVector\":[[1,1]]}}]}}"
+    },
+    "piano_roll_region_tuning": {
+      "summary": "Set a region's scale AND its rhythm grid. Prior tuning is read live; supply the fields that change. Set this BEFORE creating notes so they are stamped with it (this is also what Ctrl+Shift+Right-click on a note does, using that note's rhythm anchors).",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "", "required": true},
+        "regionID": {"type": "int", "meaning": "", "required": true},
+        "intent": {"type": "object", "meaning": "subset of: tuningMode, tuningAnchorHarmonic, tuningHarmonicAnchorVector, tuningEdoSubdivisionSteps, tuningEdoLowerVector, tuningEdoUpperVector, rhythmEdoSubdivisionSteps, rhythmEdoLowerVector, rhythmEdoUpperVector. The rhythm grid draws [rhythmEdoLowerVector, rhythmEdoUpperVector] split into rhythmEdoSubdivisionSteps ([] = beat 0, default upper [[1,1]] = beat 1).", "required": true},
+        "name": {"type": "string", "meaning": "undo entry label", "required": false}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"piano_roll_region_tuning\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"regionID\":0,\"intent\":{\"tuningMode\":0,\"tuningAnchorHarmonic\":8}}}"
+    },
+    "assign_note_harmonic": {
+      "summary": "Assign a note's tuning/harmonic (region tuning and note tuning change together).",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "", "required": true},
+        "regionID": {"type": "int", "meaning": "", "required": true},
+        "noteID": {"type": "int", "meaning": "", "required": true},
+        "intent": {"type": "object", "meaning": "tuning fields to apply", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"assign_note_harmonic\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"regionID\":0,\"noteID\":0,\"intent\":{\"tuningAnchorHarmonic\":9}}}"
+    },
+    "songroll_rhythm_edo": {
+      "summary": "Change an arranger's rhythm-EDO subdivision: the beat grid it draws is [lower, upper] split into `steps` equal parts (steps that land on a whole beat are marked as beats). Prior value read live.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "Arranger node", "required": true},
+        "after": {"type": "object", "meaning": "{steps: int (number of equal subdivisions), lower: [[num,den]...] lower time bound in beats ([] = 0), upper: [[num,den]...] upper time bound (default [[1,1]] = beat 1)}", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"songroll_rhythm_edo\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"after\":{\"steps\":4,\"lower\":[],\"upper\":[[2,1]]}}}"
+    },
+    "toggle_piano_roll_window": {
+      "summary": "Open or close a region's piano roll window.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "Arranger node", "required": true},
+        "regionID": {"type": "int", "meaning": "", "required": true},
+        "open": {"type": "bool", "meaning": "true to open, false to close", "required": false}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"toggle_piano_roll_window\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"regionID\":0,\"open\":true}}"
+    },
+    "move_embedded_window": {
+      "summary": "Move a floating window inside the canvas (nodes are embedded windows).",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "ewID": {"type": "int", "meaning": "embedded-window id from the embedded_windows query — NOT the node id", "required": true},
+        "toX": {"type": "float", "meaning": "", "required": true},
+        "toY": {"type": "float", "meaning": "", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"move_embedded_window\",\"args\":{\"managerPath\":[],\"ewID\":5,\"toX\":300,\"toY\":200}}"
+    },
+    "resize_embedded_window": {
+      "summary": "Resize a floating window.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "ewID": {"type": "int", "meaning": "", "required": true},
+        "toX": {"type": "float", "meaning": "", "required": true},
+        "toY": {"type": "float", "meaning": "", "required": true},
+        "toW": {"type": "float", "meaning": "", "required": true},
+        "toH": {"type": "float", "meaning": "", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"resize_embedded_window\",\"args\":{\"managerPath\":[],\"ewID\":5,\"toX\":300,\"toY\":200,\"toW\":500,\"toH\":400}}"
+    },
+    "map_parameter": {
+      "summary": "Map a node parameter to an input connection (so it can be driven by a cable).",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "", "required": true},
+        "paramIndex": {"type": "int", "meaning": "", "required": true},
+        "vstParamID": {"type": "int", "meaning": "for a VST node, the plugin parameter id", "required": false}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"map_parameter\",\"args\":{\"managerPath\":[],\"nodeID\":3,\"paramIndex\":0}}"
+    },
+    "unmap_parameter": {
+      "summary": "Remove a parameter mapping.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "", "required": true},
+        "paramIndex": {"type": "int", "meaning": "", "required": true},
+        "vstParamID": {"type": "int", "meaning": "", "required": false}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"unmap_parameter\",\"args\":{\"managerPath\":[],\"nodeID\":3,\"paramIndex\":0}}"
+    },
+    "paramnode_add_mod_row": {
+      "summary": "Add a modulator row to a Param node.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "Param node", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"paramnode_add_mod_row\",\"args\":{\"managerPath\":[],\"nodeID\":5}}"
+    },
+    "paramnode_remove_mod_row": {
+      "summary": "Remove a modulator row (snapshotted live).",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "Param node", "required": true},
+        "modIndex": {"type": "int", "meaning": "", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"paramnode_remove_mod_row\",\"args\":{\"managerPath\":[],\"nodeID\":5,\"modIndex\":0}}"
+    },
+    "paramnode_toggle_centered": {
+      "summary": "Toggle a modulator's centered flag. Old state read live.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "Param node", "required": true},
+        "modIndex": {"type": "int", "meaning": "", "required": true},
+        "newCentered": {"type": "bool", "meaning": "defaults to the negation of the current value", "required": false},
+        "newDepth": {"type": "float", "meaning": "defaults to the current depth", "required": false}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"paramnode_toggle_centered\",\"args\":{\"managerPath\":[],\"nodeID\":5,\"modIndex\":0}}"
+    },
+    "vst_load_plugin": {
+      "summary": "Load a VST3 into a VST node (the node gains its ports once loaded).",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "VST node", "required": true},
+        "path": {"type": "string", "meaning": "absolute path to the .so", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"vst_load_plugin\",\"args\":{\"managerPath\":[],\"nodeID\":3,\"path\":\"/home/me/.vst3/Foo.vst3/Contents/x86_64-linux/Foo.so\"}}"
+    },
+    "vst_param_change": {
+      "summary": "Set a VST parameter. paramID comes from the vst_params query; value is NORMALISED 0..1. The old value is read live from the plugin.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "VST node", "required": true},
+        "paramID": {"type": "int", "meaning": "stable plugin parameter id", "required": true},
+        "value": {"type": "float", "meaning": "normalised 0..1", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"vst_param_change\",\"args\":{\"managerPath\":[],\"nodeID\":3,\"paramID\":50832,\"value\":0.75}}"
+    },
+    "vst_state_change": {
+      "summary": "Apply a whole-plugin state blob (component + controller). The prior state is read live. Blobs are base64 strings (see the vst state blobs concept).",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "VST node", "required": true},
+        "compState": {"type": "string", "meaning": "base64 component state; omit to keep the current one", "required": false},
+        "ctrlState": {"type": "string", "meaning": "base64 controller state; omit to keep the current one", "required": false}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"vst_state_change\",\"args\":{\"managerPath\":[],\"nodeID\":3,\"compState\":\"AAEC\",\"ctrlState\":\"AwQF\"}}"
+    },
+    "tempo_curve_edit": {
+      "summary": "Set the project tempo curve. The X axis is BEATS and the value is BPM; the prior curve is read live, so you only supply `after`. Points outside the first/last point extend flat.",
+      "params": {
+        "after": {"type": "object[]", "meaning": "new points, each {timeVec (beat), v (BPM), shape, shapeParam} — see the automation curve points concept", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"tempo_curve_edit\",\"args\":{\"after\":[{\"timeVec\":[],\"v\":108,\"shape\":1,\"shapeParam\":0},{\"timeVec\":[[8,1]],\"v\":120,\"shape\":1,\"shapeParam\":0}]}}"
+    },
+    "io_port_channel": {
+      "summary": "Add/remove waveform or event sockets on the Input/Output node. Add ops take no id. For a remove op, read the node with the `node` query first — Input ops look at the INPUT node's (id 1) outputs[], Output ops at the OUTPUT node's (id 0) inputs[] — then pick the LAST entry matching the op's dataType (1 = Waveform, 0 = Events) whose connected is false, and pass its id and its index. If that last port is connected, removal fails.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "op": {"type": "int", "meaning": "0..7: InputAddWaveform=0, InputRemoveWaveform=1, InputAddEvent=2, InputRemoveEvent=3, OutputAddWaveform=4, OutputRemoveWaveform=5, OutputAddEvent=6, OutputRemoveEvent=7", "required": true},
+        "nodeID": {"type": "int", "meaning": "0 = Output node, 1 = Input node", "required": true},
+        "connectionId": {"type": "int", "meaning": "remove ops only: the port's id", "required": false},
+        "connectionIndex": {"type": "int", "meaning": "remove ops only: its 0-based index in that node's inputs[]/outputs[]", "required": false}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"io_port_channel\",\"args\":{\"managerPath\":[],\"op\":4,\"nodeID\":0}}"
+    },
+    "sampler_add_sample": {
+      "summary": "Add a sample slot to a Sampler node (optionally loading a file).",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "Sampler node", "required": true},
+        "filepath": {"type": "string", "meaning": "wav/flac to load", "required": false}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"sampler_add_sample\",\"args\":{\"managerPath\":[],\"nodeID\":6,\"filepath\":\"/home/me/hit.wav\"}}"
+    },
+    "sampler_remove_sample": {
+      "summary": "Remove a sample slot (snapshotted live).",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "", "required": true},
+        "sampleIndex": {"type": "int", "meaning": "", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"sampler_remove_sample\",\"args\":{\"managerPath\":[],\"nodeID\":6,\"sampleIndex\":0}}"
+    },
+    "sampler_reorder_samples": {
+      "summary": "Reorder sample slots.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "", "required": true},
+        "newOrder": {"type": "int[]", "meaning": "permutation of slot indices", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"sampler_reorder_samples\",\"args\":{\"managerPath\":[],\"nodeID\":6,\"newOrder\":[1,0]}}"
+    },
+    "sampler_load_sample_file": {
+      "summary": "Load a file into an existing sample slot. Old file info is read live.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "", "required": true},
+        "sampleIndex": {"type": "int", "meaning": "", "required": true},
+        "filepath": {"type": "string", "meaning": "", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"sampler_load_sample_file\",\"args\":{\"managerPath\":[],\"nodeID\":6,\"sampleIndex\":0,\"filepath\":\"/home/me/other.wav\"}}"
+    },
+    "sampler_toggle_sample_solo": {
+      "summary": "Toggle solo on a sample slot.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "", "required": true},
+        "sampleIndex": {"type": "int", "meaning": "", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"sampler_toggle_sample_solo\",\"args\":{\"managerPath\":[],\"nodeID\":6,\"sampleIndex\":0}}"
+    },
+    "sampler_toggle_sample_mute": {
+      "summary": "Toggle mute on a sample slot.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "", "required": true},
+        "sampleIndex": {"type": "int", "meaning": "", "required": true}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"sampler_toggle_sample_mute\",\"args\":{\"managerPath\":[],\"nodeID\":6,\"sampleIndex\":0}}"
+    }
+  },
+  "queries": {
+    "ping": {"summary": "Liveness/version check.", "params": {}, "example": "{\"op\":\"query\",\"query\":\"ping\"}"},
+    "node_types": {"summary": "Every NodeType index you can pass to add_node.", "params": {}, "example": "{\"op\":\"query\",\"query\":\"node_types\"}"},
+    "managers": {"summary": "Every graph in the project and its managerPath. Use these paths for the managerPath argument everywhere else.", "params": {}, "example": "{\"op\":\"query\",\"query\":\"managers\"}"},
+    "graph": {"summary": "Full serialized graph for one manager: nodes, connections, IO nodes.", "params": {"managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false}}, "example": "{\"op\":\"query\",\"query\":\"graph\",\"args\":{\"managerPath\":[]}}"},
+    "nodes": {"summary": "Node list for one manager: id, name, type, position, param count. Includes the Output node (id 0) and Input node (id 1).", "params": {"managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false}}, "example": "{\"op\":\"query\",\"query\":\"nodes\",\"args\":{\"managerPath\":[]}}"},
+    "node": {"summary": "One node in full: geometry, parameters, and its input/output ports with their ids and connection state.", "params": {"managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false}, "nodeID": {"type": "int", "meaning": "", "required": true}}, "example": "{\"op\":\"query\",\"query\":\"node\",\"args\":{\"managerPath\":[],\"nodeID\":3}}"},
+    "params": {"summary": "Just the parameter list of one node.", "params": {"managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false}, "nodeID": {"type": "int", "meaning": "", "required": true}}, "example": "{\"op\":\"query\",\"query\":\"params\",\"args\":{\"managerPath\":[],\"nodeID\":3}}"},
+    "connections": {"summary": "Every cable in one manager as (srcNodeID, srcConID, dstNodeID, dstConID).", "params": {"managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false}}, "example": "{\"op\":\"query\",\"query\":\"connections\",\"args\":{\"managerPath\":[]}}"},
+    "embedded_windows": {"summary": "Floating windows on a canvas (nodes are embedded windows) with geometry and visibility.", "params": {"managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false}}, "example": "{\"op\":\"query\",\"query\":\"embedded_windows\",\"args\":{\"managerPath\":[]}}"},
+    "piano_rolls": {"summary": "Piano-roll windows currently open in a manager.", "params": {"managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false}}, "example": "{\"op\":\"query\",\"query\":\"piano_rolls\",\"args\":{\"managerPath\":[]}}"},
+    "arranger": {"summary": "An Arranger node's tracks and elements together.", "params": {"managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false}, "nodeID": {"type": "int", "meaning": "Arranger node", "required": true}}, "example": "{\"op\":\"query\",\"query\":\"arranger\",\"args\":{\"managerPath\":[],\"nodeID\":2}}"},
+    "tracks": {"summary": "Arranger tracks: {tracks:[{type, id, connectionID}], soloTracks, muteTracks, id_pool, ids}. type 0 = Audio, 1 = Notes.", "params": {"managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false}, "nodeID": {"type": "int", "meaning": "Arranger node", "required": true}}, "example": "{\"op\":\"query\",\"query\":\"tracks\",\"args\":{\"managerPath\":[],\"nodeID\":2}}"},
+    "elements": {"summary": "Arranger elements: {id_pool, position_id_pool, elements:[{id, type, name, positions[], ...}]}. type 0 = region, 1 = audio clip, 2 = automation curve; all three share one id space. Each element lists its positions (placements on the timeline).", "params": {"managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false}, "nodeID": {"type": "int", "meaning": "Arranger node", "required": true}}, "example": "{\"op\":\"query\",\"query\":\"elements\",\"args\":{\"managerPath\":[],\"nodeID\":2}}"},
+    "region": {"summary": "One element in full. A region also lists every note as {id, channel, pitchVector, rhythmVector, rhythmEndVector, tuning*}; any element lists its positions. Use the element's id as regionID / elementID / curveID elsewhere.", "params": {"managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false}, "nodeID": {"type": "int", "meaning": "Arranger node", "required": true}, "regionID": {"type": "int", "meaning": "element id", "required": true}}, "example": "{\"op\":\"query\",\"query\":\"region\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"regionID\":0}}"},
+    "vst_params": {"summary": "Every parameter of a loaded VST: index, stable id, name, normalised value. Use the id with vst_param_change.", "params": {"managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false}, "nodeID": {"type": "int", "meaning": "VST node with a plugin loaded", "required": true}}, "example": "{\"op\":\"query\",\"query\":\"vst_params\",\"args\":{\"managerPath\":[],\"nodeID\":3}}"},
+    "transport": {"summary": "Transport + tempo curve. beatPosition/timeSeconds are the anchor; effectiveBeatPosition/effectiveTime are the live playhead.", "params": {}, "example": "{\"op\":\"query\",\"query\":\"transport\"}"},
+    "audio": {"summary": "Audio device state: sample rate, buffer size, channel counts, latency.", "params": {}, "example": "{\"op\":\"query\",\"query\":\"audio\"}"},
+    "undo": {"summary": "The whole undo tree: {head, version}. Each tree node has type (ActionType int), its action-specific fields, children[], name, last_index and optionally savedMainManager (a graph snapshot). version is the child-index path from head to the current action — the exact array `goto` takes.", "params": {}, "example": "{\"op\":\"query\",\"query\":\"undo\"}"},
+    "settings": {"summary": "The DAW's settings.json contents.", "params": {}, "example": "{\"op\":\"query\",\"query\":\"settings\"}"},
+    "windows": {"summary": "The main canvas plus every expanded window: {main:{target,sdlWindowID,width,height}, expanded:[{id,sdlWindowID,title,visible,width,height}]}. Use the title or id as a capture target and as the argument to the `window` op.", "params": {}, "example": "{\"op\":\"query\",\"query\":\"windows\"}"}
+  },
+  "ops": {
+    "ping": {"summary": "Liveness check.", "params": {}, "example": "{\"op\":\"ping\"}"},
+    "action": {"summary": "Run a registered action (undoable). See list_actions / describe_action.", "params": {"action": {"type": "string", "meaning": "action name", "required": true}, "args": {"type": "object", "meaning": "that action's parameters", "required": true}}, "example": "{\"op\":\"action\",\"action\":\"add_node\",\"args\":{\"managerPath\":[],\"nodeType\":1,\"x\":300,\"y\":200}}"},
+    "query": {"summary": "Read DAW state. See list_queries / describe_query.", "params": {"query": {"type": "string", "meaning": "query name", "required": true}, "args": {"type": "object", "meaning": "that query's arguments", "required": false}}, "example": "{\"op\":\"query\",\"query\":\"nodes\",\"args\":{\"managerPath\":[]}}"},
+    "undo": {"summary": "Undo one step.", "params": {}, "example": "{\"op\":\"undo\"}"},
+    "redo": {"summary": "Redo one step, or a specific branch.", "params": {"index": {"type": "int", "meaning": "child index to redo; omit for the default branch", "required": false}}, "example": "{\"op\":\"redo\"}"},
+    "goto": {"summary": "Jump to a position in the undo tree.", "params": {"version": {"type": "int[]", "meaning": "child-index path from the root, [] for the root", "required": true}}, "example": "{\"op\":\"goto\",\"version\":[0,1]}"},
+    "save": {"summary": "Save the project.", "params": {"path": {"type": "string", "meaning": "project folder; required if the project has no path yet", "required": false}}, "example": "{\"op\":\"save\",\"path\":\"/home/me/proj\"}"},
+    "load": {"summary": "Load a project folder.", "params": {"path": {"type": "string", "meaning": "project folder containing save.json", "required": true}}, "example": "{\"op\":\"load\",\"path\":\"/home/me/proj\"}"},
+    "transport": {"summary": "Transport control. seekBeat moves the playhead to an absolute beat.", "params": {"play": {"type": "bool", "meaning": "start playback", "required": false}, "stop": {"type": "bool", "meaning": "stop playback", "required": false}, "seekBeat": {"type": "float", "meaning": "absolute beat to seek to", "required": false}}, "example": "{\"op\":\"transport\",\"play\":true,\"seekBeat\":0}"},
+    "help": {"summary": "The shared concepts plus an index of every action, query and op (name + one-line summary). Use describe_action / describe_query for a full parameter list and example.", "params": {"concepts": {"type": "bool", "meaning": "include the concepts block (default true)", "required": false}}, "example": "{\"op\":\"help\"}"},
+    "list_actions": {"summary": "All action names with a one-line summary.", "params": {}, "example": "{\"op\":\"list_actions\"}"},
+    "describe_action": {"summary": "One action in full: summary, parameters and an example.", "params": {"action": {"type": "string", "meaning": "", "required": true}}, "example": "{\"op\":\"describe_action\",\"action\":\"create_note\"}"},
+    "list_queries": {"summary": "All query names with a one-line summary.", "params": {}, "example": "{\"op\":\"list_queries\"}"},
+    "describe_query": {"summary": "One query in full: summary, arguments and an example.", "params": {"query": {"type": "string", "meaning": "", "required": true}}, "example": "{\"op\":\"describe_query\",\"query\":\"region\"}"},
+    "describe_op": {"summary": "One op in full: summary, parameters and an example.", "params": {"describe": {"type": "string", "meaning": "the op to look up", "required": true}}, "example": "{\"op\":\"describe_op\",\"describe\":\"capture\"}"},
+    "capture": {"summary": "Screenshot a renderer as a PNG. Answered after the next frame is drawn, so it is always fresh. target is \"main\" (default), \"node:<nodeID>\" for one node's rectangle on the canvas, or a window title / id from the `windows` query. Returns {target, format:\"png\", width, height, data:<base64>}.", "params": {"target": {"type": "string", "meaning": "\"main\", \"node:<nodeID>\", or a window title/id from the windows query", "required": false}, "beat": {"type": "float", "meaning": "hold the capture until the transport reaches this absolute beat", "required": false}}, "example": "{\"op\":\"capture\",\"target\":\"node:4\",\"beat\":4.5}"},
+    "window": {"summary": "Open or close an expanded window. Open kinds: preferences, undo_tree, arranger (needs nodeID), patcher (nodeID), sample_editor (nodeID, sampleIndex), piano_roll (nodeID, regionID). Close by title or numeric id. Returns the window's id and sdlWindowID when opening.", "params": {"open": {"type": "string", "meaning": "preferences | undo_tree | arranger | patcher | sample_editor | piano_roll | vst_editor", "required": false}, "nodeID": {"type": "int", "meaning": "for arranger / patcher / sample_editor / piano_roll / vst_editor", "required": false}, "regionID": {"type": "int", "meaning": "for piano_roll", "required": false}, "sampleIndex": {"type": "int", "meaning": "for sample_editor", "required": false}, "close": {"type": "string", "meaning": "window title or numeric id to close", "required": false}, "closeEditor": {"type": "bool", "meaning": "vst_editor only: hide the plugin editor", "required": false}}, "example": "{\"op\":\"window\",\"open\":\"vst_editor\",\"nodeID\":5}"},
+    "shutdown": {"summary": "Quit the DAW.", "params": {}, "example": "{\"op\":\"shutdown\"}"}
+  }
+}

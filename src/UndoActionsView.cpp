@@ -1,5 +1,4 @@
 #include "UndoManager.h"
-#include "nodes/parametriceq/parametriceq.h"
 #include "nodes/vst/vstnode.h"
 #include "nodes/arranger/arranger.h"
 #include "SongRoll.h"

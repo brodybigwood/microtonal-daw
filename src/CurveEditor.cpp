@@ -67,13 +67,8 @@ void CurveEditor::render(SDL_Renderer* renderer) {
     for (const auto& rl : gridView_->rhythmLines) {
         float x = gridView_->getX(rl.seconds);
         if (x < area.x || x > area.x + area.w) continue;
-        if (rl.isBeat) {
-            SDL_SetRenderDrawColor(renderer, 100, 100, 120, 100);
-            SDL_RenderLine(renderer, x, area.y, x, area.y + area.h);
-        } else {
-            SDL_SetRenderDrawColor(renderer, 60, 60, 70, 60);
-            SDL_RenderLine(renderer, x, area.y, x, area.y + area.h);
-        }
+        SDL_SetRenderDrawColor(renderer, 100, 100, 120, 100);
+        SDL_RenderLine(renderer, x, area.y, x, area.y + area.h);
     }
 
     if (curve_->points.size() >= 2) {

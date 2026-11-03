@@ -8,12 +8,15 @@
 #include "ArrangerExpandedWindow.h"
 #include "WindowManager.h"
 #include "NodeProcessor.h"
+#include "PianoRollInternal.h"
 #include <cstring>
 
 ArrangerNode::ArrangerNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::Arranger) {
     slRect = new SDL_FRect{0, 0, NODE_W, NODE_H};
     tracks = new TrackManager(this);
     elements = new ElementManager(project, tracks, this);
+    // Transport strip starts as one span: beat 0 to beat 1, four divisions.
+    transportLines.push_back(defaultLatticeSpan(1));
 }
 
 ArrangerNode::~ArrangerNode() {
@@ -142,6 +145,8 @@ json ArrangerNode::extraSerialize() {
     j["rhythmEdoUpperVector"] = json::array();
     for (const auto& pr : rhythmEdoUpperVector)
         j["rhythmEdoUpperVector"].push_back(json::array({pr.first, pr.second}));
+    j["transportLines"] = latticeSpansToJSON(transportLines);
+    j["gridSpans"] = latticeSpansToJSON(gridSpans);
 
     json o = json::array();
     for (auto c : outputs.connections) {
@@ -210,6 +215,8 @@ void ArrangerNode::extraDeSerialize(const json& j) {
                 rhythmEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
     }
     if (rhythmEdoUpperVector.empty()) rhythmEdoUpperVector = {{1,1}};
+    transportLines = latticeSpansFromJSON(j, "transportLines");
+    gridSpans = latticeSpansFromJSON(j, "gridSpans");
 
     rebuildState(j);
 

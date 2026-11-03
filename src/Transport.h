@@ -29,6 +29,10 @@ public:
     bool draggingTimeline = false;
     void finishTempoDrag();
 
+    // The tempo curve belongs to the song roll; editors that don't own it (piano roll) turn
+    // this off so the area above the timeline strip is just background and ignores clicks.
+    bool showTempoCurve = true;
+
     CurveEditor* tempoCurveEditor = nullptr;
 
 private:

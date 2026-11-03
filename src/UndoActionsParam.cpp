@@ -1,5 +1,4 @@
 #include "UndoManager.h"
-#include "nodes/parametriceq/parametriceq.h"
 #include "nodes/paramnode/paramnode.h"
 #include "nodes/sampler/sampler.h"
 #include "nodes/vst/vstnode.h"

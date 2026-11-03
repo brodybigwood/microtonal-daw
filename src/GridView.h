@@ -37,6 +37,10 @@ class GridView : public Window {
         std::vector<float> lines;
         std::vector<float> times;
         std::vector<RhythmGridLine> rhythmLines;
+        // Transport strip lines. These are the editable set: Ctrl+drag on the strip picks two of
+        // them. Regions/arrangers own the exact positions (transportLines); this is the draw cache.
+        std::vector<RhythmGridLine> transportLineCache;
+        virtual void updateTransportLines() {}
 
         // Shared rhythm interval preview rendering
         void renderRhythmIntervalPreviewBand(SDL_Renderer* renderer, float startSec, float endSec);
@@ -110,6 +114,12 @@ class GridView : public Window {
         float getX(float);
 
         virtual float adjustTransportSeekSec(float rawSec) { return rawSec; }
+
+        // Left-margin button above the grid: copies the transport line set into the grid rhythm.
+        SDL_FRect gridRhythmButtonRect{0, 0, 0, 0};
+        virtual void applyTransportToGrid() {}
+        void renderGridRhythmButton(SDL_Renderer* renderer);
+        bool gridRhythmButtonHit(float x, float y) const;
         virtual void createElement() {};
         virtual void deleteElement() {};
 

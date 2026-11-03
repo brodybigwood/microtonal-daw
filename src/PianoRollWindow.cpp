@@ -22,11 +22,14 @@ void PianoRollWindow::onCreated() {
     lastH_ = h;
 
     // Sync PianoRoll's EmbeddedWindow to this SDL window.
+    // This window has no embedded chrome, but pianoRollSyncCoords offsets dstRect by the
+    // title bar / border and subtracts them from the size. Cancel both here, otherwise the
+    // content sits 24px down with a black band and comes up short on the right and bottom.
     pianoRoll_->window = window;
-    pianoRoll_->EmbeddedWindow::w = static_cast<float>(w);
-    pianoRoll_->EmbeddedWindow::h = static_cast<float>(h);
-    pianoRoll_->EmbeddedWindow::x = 0.f;
-    pianoRoll_->EmbeddedWindow::y = 0.f;
+    pianoRoll_->EmbeddedWindow::w = static_cast<float>(w) + EmbeddedWindow::kBorderW * 2.f;
+    pianoRoll_->EmbeddedWindow::h = static_cast<float>(h) + EmbeddedWindow::kTitleBarH + EmbeddedWindow::kBorderW;
+    pianoRoll_->EmbeddedWindow::x = -EmbeddedWindow::kBorderW;
+    pianoRoll_->EmbeddedWindow::y = -EmbeddedWindow::kTitleBarH;
 }
 
 void PianoRollWindow::render() {
@@ -41,8 +44,9 @@ void PianoRollWindow::render() {
     if (w != lastW_ || h != lastH_) {
         lastW_ = w;
         lastH_ = h;
-        pianoRoll_->EmbeddedWindow::w = static_cast<float>(w);
-        pianoRoll_->EmbeddedWindow::h = static_cast<float>(h);
+        // Same chrome compensation as onCreated, so the content still fills the window.
+        pianoRoll_->EmbeddedWindow::w = static_cast<float>(w) + EmbeddedWindow::kBorderW * 2.f;
+        pianoRoll_->EmbeddedWindow::h = static_cast<float>(h) + EmbeddedWindow::kTitleBarH + EmbeddedWindow::kBorderW;
         needsInit_ = true;
     }
 

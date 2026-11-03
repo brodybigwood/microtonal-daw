@@ -23,6 +23,8 @@ struct RegionTuningSnapshot {
     int rhythmEdoSubdivisionSteps = 1;
     std::vector<std::pair<int, int>> rhythmEdoLowerVector;
     std::vector<std::pair<int, int>> rhythmEdoUpperVector;
+    std::vector<RhythmLatticeSpan> transportLines;
+    std::vector<RhythmLatticeSpan> gridSpans;
 };
 
 struct NoteTuningSnapshot {
@@ -32,6 +34,7 @@ struct NoteTuningSnapshot {
     std::vector<std::pair<int, int>> tuningEdoLowerVector;
     std::vector<std::pair<int, int>> tuningEdoUpperVector;
 };
+
 
 inline bool isPrimeInt(int p) {
     if (p < 2)
@@ -225,6 +228,8 @@ inline RegionTuningSnapshot captureRegionTuning(const Region* region) {
     s.rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
     s.rhythmEdoLowerVector = region->rhythmEdoLowerVector;
     s.rhythmEdoUpperVector = region->rhythmEdoUpperVector;
+    s.transportLines = region->transportLines;
+    s.gridSpans = region->gridSpans;
     return s;
 }
 
@@ -239,6 +244,8 @@ inline void applyRegionTuning(Region* region, const RegionTuningSnapshot& s) {
     region->rhythmEdoSubdivisionSteps = s.rhythmEdoSubdivisionSteps;
     region->rhythmEdoLowerVector = s.rhythmEdoLowerVector;
     region->rhythmEdoUpperVector = s.rhythmEdoUpperVector;
+    region->transportLines = s.transportLines;
+    region->gridSpans = s.gridSpans;
 }
 
 inline json regionTuningSnapshotToUndoJson(const RegionTuningSnapshot& s) {
@@ -262,6 +269,8 @@ inline json regionTuningSnapshotToUndoJson(const RegionTuningSnapshot& s) {
     j["rhythmEdoUpperVector"] = json::array();
     for (const auto& pr : s.rhythmEdoUpperVector)
         j["rhythmEdoUpperVector"].push_back(json::array({pr.first, pr.second}));
+    j["transportLines"] = latticeSpansToJSON(s.transportLines);
+    j["gridSpans"] = latticeSpansToJSON(s.gridSpans);
     return j;
 }
 
@@ -305,7 +314,8 @@ inline void applyNoteTuningSnapshot(const std::shared_ptr<Note>& n, const NoteTu
 struct RhythmGridLine {
     float seconds = 0.f;
     std::vector<std::pair<int, int>> integerPairs;
-    bool isBeat = false;
+    // Thickness only: span boundaries are drawn thick.
+    bool isBoundary = false;
     explicit RhythmGridLine(float s) : seconds(s) {}
 };
 
@@ -329,7 +339,7 @@ inline void generateRhythmLines(std::vector<RhythmGridLine>& outLines,
             auto pairs = lower;
             outLines.emplace_back(lowerSec);
             outLines.back().integerPairs = std::move(pairs);
-            outLines.back().isBeat = true;
+            outLines.back().isBoundary = true;
             outLabels.push_back("0");
         }
         return;
@@ -343,9 +353,196 @@ inline void generateRhythmLines(std::vector<RhythmGridLine>& outLines,
         const float s = Note::beatsFromVector(pairs);
         outLines.emplace_back(s);
         outLines.back().integerPairs = std::move(pairs);
-        outLines.back().isBeat = (k % steps == 0);
+        outLines.back().isBoundary = (k % steps == 0);
         outLabels.push_back(std::to_string(k));
     }
+}
+
+/// Lines of one span over the given window. The span's spacing is what matters — the window
+/// is clipped to the span's slice of the timeline, and the outermost spans run to infinity.
+inline void appendSpanLines(std::vector<RhythmGridLine>& outLines,
+                            std::vector<std::string>& outLabels,
+                            const RhythmLatticeSpan& span, float loSec, float hiSec) {
+    std::vector<RhythmGridLine> tmp;
+    std::vector<std::string> tmpLabels;
+    generateRhythmLines(tmp, tmpLabels, span.steps, span.lower, span.upper, loSec, hiSec);
+    const float spanLo = Note::beatsFromVector(span.lower);
+    const float spanHi = Note::beatsFromVector(span.upper);
+    const float stepSec = (spanHi - spanLo) / static_cast<float>(std::max(1, span.steps));
+    for (size_t i = 0; i < tmp.size(); ++i) {
+        if (tmp[i].seconds < loSec - 0.0005f || tmp[i].seconds > hiSec + 0.0005f) continue;
+        // The span-boundary pattern repeats every span length, so it carries on past the
+        // span's own bounds — e.g. a span of 4 divisions over one beat marks every beat thick.
+        if (stepSec > 0.0005f) {
+            const long long k = std::llround((tmp[i].seconds - spanLo) / stepSec);
+            tmp[i].isBoundary = (k % std::max(1, span.steps)) == 0;
+        } else {
+            tmp[i].isBoundary = true;
+        }
+        outLines.push_back(tmp[i]);
+        outLabels.push_back(i < tmpLabels.size() ? tmpLabels[i] : std::string());
+    }
+}
+
+/// The transport line set for a visible window: every span's lines, sorted and de-duplicated.
+/// Spans partition the timeline, so each one only owns its slice; the first and last extend
+/// their spacing outward without limit.
+inline void generateTransportLines(std::vector<RhythmGridLine>& outLines,
+                                   std::vector<std::string>& outLabels,
+                                   const std::vector<RhythmLatticeSpan>& spans,
+                                   float minSec, float maxSec) {
+    // Creation order matters: index 0 is the base rate and later spans are overrides.
+    const auto& sorted = spans;
+    const size_t n = sorted.size();
+    std::vector<float> lo(n), hi(n);
+    for (size_t i = 0; i < n; ++i) {
+        lo[i] = Note::beatsFromVector(sorted[i].lower);
+        hi[i] = Note::beatsFromVector(sorted[i].upper);
+    }
+
+    auto spanAt = [&](float t) -> size_t {
+        // A containing span owns t. Outside every span, the span to the LEFT governs (its
+        // division and offset carry on); if there is nothing to the left, the first span does.
+        for (size_t i = 0; i < n; ++i) {
+            if (t >= lo[i] - 0.0005f && t <= hi[i] + 0.0005f)
+                return i;
+        }
+        size_t left = SIZE_MAX;
+        for (size_t i = 0; i < n; ++i) {
+            if (lo[i] <= t && (left == SIZE_MAX || lo[i] > lo[left])) left = i;
+        }
+        if (left != SIZE_MAX) return left;
+        size_t first = 0;
+        for (size_t i = 1; i < n; ++i)
+            if (lo[i] < lo[first]) first = i;
+        return first;
+    };
+
+    std::vector<std::pair<RhythmGridLine, std::string>> all;
+    for (size_t si = 0; si < n; ++si) {
+        std::vector<RhythmGridLine> tmp;
+        std::vector<std::string> tmpLabels;
+        // Each span's series is evaluated across the whole window at its own rate and offset;
+        // a line is kept only where this span is the one that owns that time.
+        appendSpanLines(tmp, tmpLabels, sorted[si], minSec, maxSec);
+        for (size_t i = 0; i < tmp.size(); ++i) {
+            if (spanAt(tmp[i].seconds) != si) continue;
+            all.emplace_back(tmp[i], i < tmpLabels.size() ? tmpLabels[i] : std::string());
+        }
+    }
+    std::sort(all.begin(), all.end(),
+        [](const std::pair<RhythmGridLine, std::string>& a,
+           const std::pair<RhythmGridLine, std::string>& b) { return a.first.seconds < b.first.seconds; });
+
+    outLines.clear();
+    outLabels.clear();
+    for (auto& e : all) {
+        if (!outLines.empty() && std::fabs(outLines.back().seconds - e.first.seconds) < 0.0005f)
+            continue;
+        outLines.push_back(std::move(e.first));
+        outLabels.push_back(std::move(e.second));
+    }
+}
+
+/// One division of a span: (upper - lower) / steps, as an exact vector.
+inline std::vector<std::pair<int, int>> latticeStepVec(const RhythmLatticeSpan& s) {
+    auto d = subVec(s.upper, s.lower);
+    for (auto& p : d) p = ratDivInt(p, std::max(1, s.steps));
+    return d;
+}
+
+/// The span's grid point at or before `t`, so a trimmed remainder keeps the old rate AND offset.
+inline std::vector<std::pair<int, int>> latticeAnchorAtOrBefore(const RhythmLatticeSpan& s,
+                                                               const std::vector<std::pair<int, int>>& t) {
+    const auto step = latticeStepVec(s);
+    const float stepSec = Note::beatsFromVector(step);
+    if (stepSec <= 0.0005f) return s.lower;
+    const float delta = Note::beatsFromVector(t) - Note::beatsFromVector(s.lower);
+    const long long k = static_cast<long long>(std::floor(delta / stepSec + 1e-4f));
+    auto shift = step;
+    for (auto& p : shift) p = ratMulInt(p, static_cast<int>(k));
+    return addVec(s.lower, shift);
+}
+
+/// Default span for a fresh region / song roll: beat 0 to beat 1, divided in four.
+inline RhythmLatticeSpan defaultLatticeSpan(int division) {
+    RhythmLatticeSpan s;
+    s.steps = std::max(1, division);
+    s.lower = {};
+    s.upper = {{1, 1}};
+    return s;
+}
+
+/// The span's first grid point at or after `t`, so a right remainder keeps the old offset.
+inline std::vector<std::pair<int, int>> latticeAnchorAtOrAfter(const RhythmLatticeSpan& s,
+                                                              const std::vector<std::pair<int, int>>& t) {
+    const auto step = latticeStepVec(s);
+    const float stepSec = Note::beatsFromVector(step);
+    if (stepSec <= 0.0005f) return s.lower;
+    const float delta = Note::beatsFromVector(t) - Note::beatsFromVector(s.lower);
+    const long long k = static_cast<long long>(std::ceil(delta / stepSec - 1e-4f));
+    auto shift = step;
+    for (auto& p : shift) p = ratMulInt(p, static_cast<int>(k));
+    return addVec(s.lower, shift);
+}
+
+/// One division before `t` in the span's grid, used to make a one-period preservation span.
+inline std::vector<std::pair<int, int>> latticeBefore(const RhythmLatticeSpan& s,
+                                                      const std::vector<std::pair<int, int>>& t) {
+    const auto step = latticeAnchorAtOrBefore(s, t);
+    auto back = latticeStepVec(s);
+    for (auto& p : back) p = ratMulInt(p, -1);
+    return addVec(step, back);
+}
+
+/// Insert a span covering [lower, upper] into the partition. Overlapping spans are split into
+/// left/right remainders that keep the old division and offset. Where the new span reaches
+/// into territory that had no span, a one-period span of the old rate is left on each side so
+/// the undefined region still evaluates exactly as it did before.
+inline void insertLatticeSpan(std::vector<RhythmLatticeSpan>& spans, RhythmLatticeSpan span) {
+    const float lo = Note::beatsFromVector(span.lower);
+    const float hi = Note::beatsFromVector(span.upper);
+    if (hi <= lo + 0.0005f) return;
+    span.steps = std::max(1, span.steps);
+
+    if (spans.empty()) {
+        spans.push_back(std::move(span));
+        return;
+    }
+
+    std::sort(spans.begin(), spans.end(), [](const RhythmLatticeSpan& a, const RhythmLatticeSpan& b) {
+        return Note::beatsFromVector(a.lower) < Note::beatsFromVector(b.lower);
+    });
+
+    std::vector<RhythmLatticeSpan> kept;
+    for (const auto& s : spans) {
+        const float sLo = Note::beatsFromVector(s.lower);
+        const float sHi = Note::beatsFromVector(s.upper);
+        if (sHi <= lo + 0.0005f) { kept.push_back(s); continue; }
+        if (sLo >= hi - 0.0005f) { kept.push_back(s); continue; }
+        // Remainders keep the old step size, not the old count: trimming a span must not
+        // re-divide it, so the number of divisions is recomputed from the length.
+        const float stepSec = (sHi - sLo) / static_cast<float>(std::max(1, s.steps));
+        if (sLo < lo - 0.0005f) {
+            RhythmLatticeSpan left = s;
+            left.upper = span.lower;
+            left.steps = std::max(1, static_cast<int>(std::lround((lo - sLo) / stepSec)));
+            kept.push_back(std::move(left));
+        }
+        if (sHi > hi + 0.0005f) {
+            RhythmLatticeSpan right = s;
+            right.lower = latticeAnchorAtOrAfter(s, span.upper);
+            const float rightLen = sHi - Note::beatsFromVector(right.lower);
+            right.steps = std::max(1, static_cast<int>(std::lround(rightLen / stepSec)));
+            kept.push_back(std::move(right));
+        }
+    }
+
+    kept.push_back(span);
+    spans = std::move(kept);
+    std::sort(spans.begin(), spans.end(), [](const RhythmLatticeSpan& a, const RhythmLatticeSpan& b) {
+        return Note::beatsFromVector(a.lower) < Note::beatsFromVector(b.lower);
+    });
 }
 
 /// Find the index of the rhythm line closest to the given seconds value.

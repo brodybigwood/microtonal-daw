@@ -6,9 +6,12 @@
 #include "Project.h"
 #include "styles.h"
 #include "ElementManager.h"
+#include "PianoRollInternal.h"
 
 Region::Region(Project* p, ArrangerNode* n) : GridElement(p, n) {
     type = ElementType::region;
+    // Transport strip starts as one span: beat 0 to beat 1, four divisions.
+    transportLines.push_back(defaultLatticeSpan(1));
 }
 
 Region::~Region() {
@@ -69,6 +72,8 @@ json Region::toJSON() {
     j["rhythmEdoUpperVector"] = json::array();
     for (const auto& pr : rhythmEdoUpperVector)
         j["rhythmEdoUpperVector"].push_back(json::array({pr.first, pr.second}));
+    j["transportLines"] = latticeSpansToJSON(transportLines);
+    j["gridSpans"] = latticeSpansToJSON(gridSpans);
 
     return j;
 }
@@ -123,6 +128,8 @@ void Region::fromJSON(json j) {
                 rhythmEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
         }
     }
+    transportLines = latticeSpansFromJSON(j, "transportLines");
+    gridSpans = latticeSpansFromJSON(j, "gridSpans");
 }
 
 json Region::tuningUndoToJSON() const {
@@ -146,6 +153,8 @@ json Region::tuningUndoToJSON() const {
     j["rhythmEdoUpperVector"] = json::array();
     for (const auto& pr : rhythmEdoUpperVector)
         j["rhythmEdoUpperVector"].push_back(json::array({pr.first, pr.second}));
+    j["transportLines"] = latticeSpansToJSON(transportLines);
+    j["gridSpans"] = latticeSpansToJSON(gridSpans);
     return j;
 }
 
@@ -189,6 +198,8 @@ void Region::applyTuningUndoFromJSON(const json& j) {
                 rhythmEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
         }
     }
+    transportLines = latticeSpansFromJSON(j, "transportLines");
+    gridSpans = latticeSpansFromJSON(j, "gridSpans");
 }
 
 int Region::createNote(std::vector<std::pair<int, int>> startPairs, std::vector<std::pair<int, int>> endPairs, std::vector<std::pair<int, int>> pitchVector) {

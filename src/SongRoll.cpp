@@ -221,6 +221,21 @@ bool SongRoll::customTick(SDL_Renderer* renderer) {
     }
 
     renderMargins(renderer);
+    renderGridRhythmButton(renderer);
+
+    if (selectingTransportLines) {
+        // The drag is on the transport strip, so the highlight belongs in the strip.
+        const float startSec = Note::beatsFromVector(transportLineDragStartPairs);
+        const float endSec = Note::beatsFromVector(transportLineDragEndPairs);
+        const float x1 = dstRect->x + getX(startSec);
+        const float x2 = dstRect->x + getX(endSec);
+        SDL_FRect band{std::min(x1, x2), dstRect->y + topMargin - Transport::kTimelineHeight,
+                       std::max(1.0f, std::fabs(x2 - x1)), Transport::kTimelineHeight};
+        SDL_SetRenderDrawColor(renderer, 70, 150, 235, 90);
+        SDL_RenderFillRect(renderer, &band);
+        SDL_SetRenderDrawColor(renderer, 70, 150, 235, 200);
+        SDL_RenderRect(renderer, &band);
+    }
 
     playHead->render(renderer, dW, scrollX);
     return true;
@@ -340,7 +355,11 @@ void SongRoll::updateRhythmLines() {
         ? parentNode->rhythmEdoUpperVector : kOneSec;
     const float minSec = (static_cast<float>(scrollX) - leftMargin) / static_cast<float>(dW);
     const float maxSec = (static_cast<float>(scrollX) + width - leftMargin) / static_cast<float>(dW);
-    generateRhythmLines(rhythmLines, rhythmLineLabels, steps, lower, upper, minSec, maxSec);
+    if (parentNode && !parentNode->gridSpans.empty())
+        generateTransportLines(rhythmLines, rhythmLineLabels, parentNode->gridSpans, minSec, maxSec);
+    else
+        generateRhythmLines(rhythmLines, rhythmLineLabels, steps, lower, upper, minSec, maxSec);
+    updateTransportLines();
     times.clear();
     for (const auto& rl : rhythmLines)
         times.push_back(rl.seconds);
@@ -362,7 +381,7 @@ void SongRoll::RenderGridTexture(SDL_Renderer* renderer) {
         float x = getX(rl.seconds);
         if (x < 0 || x > width) continue;
         setRenderColor(renderer, colors.grid);
-        if (rl.isBeat) {
+        if (rl.isBoundary) {
             SDL_FRect lineRect{x - 1.f, 0, 2.f, static_cast<float>(height)};
             SDL_RenderFillRect(renderer, &lineRect);
         } else {
@@ -488,6 +507,17 @@ void SongRoll::handleCustomInput(SDL_Event& e) {
                         refreshGrid = true;
                     }
                 }
+            }
+
+            if (selectingTransportLines) {
+                refreshHoveredTransportLineIndex();
+                if (hoveredTransportLineIndex != SIZE_MAX && hoveredTransportLineIndex < transportLineCache.size()) {
+                    transportLineDragEndPairs = transportLineCache[hoveredTransportLineIndex].integerPairs;
+                    if (transportLineDragEndPairs != transportLineDragStartPairs)
+                        transportLineDragMoved = true;
+                }
+                refreshGrid = true;
+                break;
             }
 
             if (selectingRhythmInterval) {
@@ -793,6 +823,31 @@ void SongRoll::clickMouse(SDL_Event& e) {
                 last_lmb_x = mouseX;
                 last_lmb_y = mouseY;
 
+                if (mouseY < topMargin && mouseX < leftMargin && gridRhythmButtonHit(mouseX, mouseY)) {
+                    applyTransportToGrid();
+                    return;
+                }
+
+                // Ctrl on the transport strip: drag between two transport lines.
+                // Ctrl+Shift uses the same drag to rewrite the neighbouring lines instead.
+                {
+                    const float stripTop = topMargin - Transport::kTimelineHeight;
+                    if (isCtrlPressed && mouseY >= stripTop && mouseY <= topMargin &&
+                        mouseX > leftMargin && mouseX < rightRect.x) {
+                        updateTransportLines();
+                        refreshHoveredTransportLineIndex();
+                        selectingTransportLines = true;
+                        transportLineDragExtend = isShiftPressed;
+                        transportLineDragMoved = false;
+                        if (hoveredTransportLineIndex != SIZE_MAX && hoveredTransportLineIndex < transportLineCache.size())
+                            transportLineDragStartPairs = transportLineCache[hoveredTransportLineIndex].integerPairs;
+                        else
+                            transportLineDragStartPairs.clear();
+                        transportLineDragEndPairs = transportLineDragStartPairs;
+                        return;
+                    }
+                }
+
                 // Ctrl+Shift: start rhythm interval drag
                 if (isCtrlPressed && isShiftPressed && mouseX > leftMargin && mouseX < rightRect.x) {
                     rhythmEdoDefineDialogOpen = false;
@@ -974,6 +1029,31 @@ void SongRoll::clickMouse(SDL_Event& e) {
             break;
         case SDL_EVENT_MOUSE_BUTTON_UP:
             if (e.button.button == SDL_BUTTON_LEFT) {
+                // Ctrl+drag on the strip: commit or prompt.
+                if (selectingTransportLines) {
+                    selectingTransportLines = false;
+                    if (transportLineDragExtend) {
+                        if (transportLineDragMoved)
+                            extendTransportLines(transportLineDragEndPairs);
+                    } else if (transportLineDragMoved) {
+                        const auto aPairs = transportLineDragStartPairs;
+                        const auto bPairs = transportLineDragEndPairs;
+                        auto ctxMenu = ContextMenu::get();
+                        ctxMenu->skipNextEvent = true;
+                        if (project && project->window)
+                            SDL_StartTextInput(project->window);
+                        ctxMenu->activate();
+                        ctxMenu->dynamicTick = getTextInputTicker(
+                            [this, aPairs, bPairs](std::string text) {
+                                try {
+                                    subdivideBetweenRhythmLines(aPairs, bPairs, std::max(1, std::stoi(text)));
+                                } catch (...) {}
+                            },
+                            []() {});
+                    }
+                    refreshGrid = true;
+                }
+
                 // Ctrl+Shift: finish rhythm interval drag
                 if (selectingRhythmInterval) {
                     selectingRhythmInterval = false;
@@ -989,9 +1069,15 @@ void SongRoll::clickMouse(SDL_Event& e) {
                             before["upper"] = json::array();
                             for (const auto& pr : parentNode->rhythmEdoUpperVector)
                                 before["upper"].push_back(json::array({pr.first, pr.second}));
+                            before["transportLines"] = latticeSpansToJSON(parentNode->transportLines);
                             parentNode->rhythmEdoSubdivisionSteps = hoveredPosition->rhythmEdoSubdivisionSteps;
                             parentNode->rhythmEdoLowerVector = hoveredPosition->rhythmEdoLowerVector;
                             parentNode->rhythmEdoUpperVector = hoveredPosition->rhythmEdoUpperVector;
+                            RhythmLatticeSpan gridSpan;
+                            gridSpan.steps = hoveredPosition->rhythmEdoSubdivisionSteps;
+                            gridSpan.lower = hoveredPosition->rhythmEdoLowerVector;
+                            gridSpan.upper = hoveredPosition->rhythmEdoUpperVector;
+                            parentNode->gridSpans.assign(1, gridSpan);
                             updateRhythmLines();
                             json after;
                             after["steps"] = hoveredPosition->rhythmEdoSubdivisionSteps;
@@ -1001,6 +1087,7 @@ void SongRoll::clickMouse(SDL_Event& e) {
                             after["upper"] = json::array();
                             for (const auto& pr : hoveredPosition->rhythmEdoUpperVector)
                                 after["upper"].push_back(json::array({pr.first, pr.second}));
+                            after["transportLines"] = latticeSpansToJSON(parentNode->transportLines);
                             project->um->newAction(new SongRollRhythmEdoAction(project,
                                 parentNode->nm->managerPath, static_cast<int>(parentNode->id),
                                 before, after));
@@ -1054,9 +1141,15 @@ void SongRoll::clickMouse(SDL_Event& e) {
                                 before["upper"] = json::array();
                                 for (const auto& pr : parentNode->rhythmEdoUpperVector)
                                     before["upper"].push_back(json::array({pr.first, pr.second}));
+                                before["transportLines"] = latticeSpansToJSON(parentNode->transportLines);
                                 parentNode->rhythmEdoSubdivisionSteps = steps;
                                 parentNode->rhythmEdoLowerVector = lowerPairs;
                                 parentNode->rhythmEdoUpperVector = upperPairs;
+                                RhythmLatticeSpan gridSpan;
+                                gridSpan.steps = steps;
+                                gridSpan.lower = lowerPairs;
+                                gridSpan.upper = upperPairs;
+                                parentNode->gridSpans.assign(1, gridSpan);
                                 updateRhythmLines();
                                 refreshGrid = true;
                                 json after;
@@ -1067,6 +1160,7 @@ void SongRoll::clickMouse(SDL_Event& e) {
                                 after["upper"] = json::array();
                                 for (const auto& pr : upperPairs)
                                     after["upper"].push_back(json::array({pr.first, pr.second}));
+                                after["transportLines"] = latticeSpansToJSON(parentNode->transportLines);
                                 project->um->newAction(new SongRollRhythmEdoAction(project,
                                     parentNode->nm->managerPath, static_cast<int>(parentNode->id),
                                     before, after));
@@ -1215,4 +1309,127 @@ void SongRoll::createPianoRoll(Region* region, bool createUndo, int forceEwID) {
             0.f, 0.f, 800.f, 600.f, 0, true);
         project->um->newAction(action);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Ctrl+drag on the transport strip. The strip's lines are the arranger's
+// transportLines; press on one line, release on another, then type how many
+// parts to insert between them. Only those two lines are subdivided, so the
+// surrounding lines keep their spacing. Ctrl+Shift takes the spacing between
+// the two nearest lines on one side and writes it into the other direction,
+// overwriting the lines already there.
+// ---------------------------------------------------------------------------
+
+json SongRoll::arrangerRhythmEdoJson() const {
+    json j;
+    j["steps"] = parentNode ? parentNode->rhythmEdoSubdivisionSteps : 1;
+    j["lower"] = json::array();
+    if (parentNode)
+        for (const auto& pr : parentNode->rhythmEdoLowerVector)
+            j["lower"].push_back(json::array({pr.first, pr.second}));
+    j["upper"] = json::array();
+    if (parentNode)
+        for (const auto& pr : parentNode->rhythmEdoUpperVector)
+            j["upper"].push_back(json::array({pr.first, pr.second}));
+    j["transportLines"] = latticeSpansToJSON(parentNode ? parentNode->transportLines
+                                                        : std::vector<RhythmLatticeSpan>{});
+    j["gridSpans"] = latticeSpansToJSON(parentNode ? parentNode->gridSpans
+                                                  : std::vector<RhythmLatticeSpan>{});
+    return j;
+}
+
+void SongRoll::commitArrangerRhythmEdo(const json& before, const std::string& label) {
+    if (!parentNode || !project || !project->um) return;
+    updateRhythmLines();
+    auto* action = new SongRollRhythmEdoAction(project, parentNode->nm->managerPath,
+        static_cast<int>(parentNode->id), before, arrangerRhythmEdoJson());
+    action->name = label;
+    project->um->newAction(action);
+}
+
+void SongRoll::updateTransportLines() {
+    transportLineCache.clear();
+    if (!parentNode) return;
+
+    if (parentNode->transportLines.empty())
+        parentNode->transportLines.push_back(defaultLatticeSpan(1));
+
+    const float minSec = (static_cast<float>(scrollX) - leftMargin) / static_cast<float>(dW);
+    const float maxSec = (static_cast<float>(scrollX) + width - leftMargin) / static_cast<float>(dW);
+    std::vector<std::string> labels;
+    generateTransportLines(transportLineCache, labels, parentNode->transportLines, minSec, maxSec);
+}
+
+size_t SongRoll::closestTransportLineIndexForSeconds(float seconds) {
+    return ::closestRhythmLineIndexForSeconds(transportLineCache, seconds);
+}
+
+void SongRoll::refreshHoveredTransportLineIndex() {
+    hoveredTransportLineIndex = SIZE_MAX;
+    if (transportLineCache.empty()) return;
+    if (mouseX < leftMargin) return;
+    hoveredTransportLineIndex = closestTransportLineIndexForSeconds(secondsFromMouseX());
+}
+
+void SongRoll::applyTransportToGrid() {
+    if (!parentNode || parentNode->transportLines.empty()) return;
+    if (parentNode->transportLines == parentNode->gridSpans) return;
+    const json before = arrangerRhythmEdoJson();
+    parentNode->gridSpans = parentNode->transportLines;
+    commitArrangerRhythmEdo(before, "Grid From Transport");
+}
+
+void SongRoll::subdivideBetweenRhythmLines(const std::vector<std::pair<int, int>>& aPairs,
+                                           const std::vector<std::pair<int, int>>& bPairs,
+                                           int parts) {
+    if (!parentNode || parts < 2) return;
+
+    const bool aFirst = Note::beatsFromVector(aPairs) <= Note::beatsFromVector(bPairs);
+    RhythmLatticeSpan span;
+    span.steps = parts;
+    span.lower = aFirst ? aPairs : bPairs;
+    span.upper = aFirst ? bPairs : aPairs;
+
+    const json before = arrangerRhythmEdoJson();
+    insertLatticeSpan(parentNode->transportLines, span);
+
+    if (arrangerRhythmEdoJson() == before) return;
+    commitArrangerRhythmEdo(before, "Subdivide Rhythm Lines");
+}
+
+void SongRoll::extendTransportLines(const std::vector<std::pair<int, int>>& cursorPairs) {
+    if (!parentNode) return;
+    const float cursorSec = Note::beatsFromVector(cursorPairs);
+
+    // Spacing comes from the span the cursor sits in.
+    int sourceSteps = std::max(1, parentNode->rhythmEdoSubdivisionSteps);
+    for (const auto& s : parentNode->transportLines) {
+        if (Note::beatsFromVector(s.lower) <= cursorSec && cursorSec <= Note::beatsFromVector(s.upper)) {
+            sourceSteps = s.steps;
+            break;
+        }
+    }
+
+    // Write that spacing into the larger neighbouring interval, up to the beat line.
+    const RhythmGridLine* prevBeat = nullptr;
+    const RhythmGridLine* nextBeat = nullptr;
+    for (const auto& rl : rhythmLines) {
+        if (rl.seconds < cursorSec && (!prevBeat || rl.seconds > prevBeat->seconds)) prevBeat = &rl;
+        if (rl.seconds > cursorSec && (!nextBeat || rl.seconds < nextBeat->seconds)) nextBeat = &rl;
+    }
+    const float leftSpan = prevBeat ? cursorSec - prevBeat->seconds : -1.f;
+    const float rightSpan = nextBeat ? nextBeat->seconds - cursorSec : -1.f;
+    const bool useLeft = (leftSpan >= rightSpan);
+    if (useLeft ? !prevBeat : !nextBeat) return;
+
+    RhythmLatticeSpan span;
+    span.steps = sourceSteps;
+    span.lower = useLeft ? prevBeat->integerPairs : cursorPairs;
+    span.upper = useLeft ? cursorPairs : nextBeat->integerPairs;
+
+    const json before = arrangerRhythmEdoJson();
+    insertLatticeSpan(parentNode->transportLines, span);
+
+    if (arrangerRhythmEdoJson() == before) return;
+    commitArrangerRhythmEdo(before, "Extend Rhythm Lines");
 }

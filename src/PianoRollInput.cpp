@@ -34,7 +34,28 @@ void PianoRoll::clickMouse(SDL_Event& e) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             if (e.button.button == SDL_BUTTON_LEFT) {
                 lmb = true;
+                if (mouseY < topMargin && mouseX < leftMargin && gridRhythmButtonHit(mouseX, mouseY)) {
+                    applyTransportToGrid();
+                    return;
+                }
                 if(mouseY < topMargin) {
+                    // Transport strip. Ctrl+drag picks two transport lines and subdivides the
+                    // span between them; Ctrl+Shift rewrites the other side with that spacing.
+                    if (isCtrlPressed && mouseX > leftMargin) {
+                        updateTransportLines();
+                        refreshHoveredTransportLineIndex();
+                        SDL_Log("[transport] press ctrl mouseY=%.1f topMargin=%.1f hovered=%zu lines=%zu",
+                                mouseY, topMargin, hoveredTransportLineIndex, transportLineCache.size());
+                        selectingTransportLines = true;
+                        transportLineDragExtend = isShiftPressed;
+                        transportLineDragMoved = false;
+                        if (hoveredTransportLineIndex != SIZE_MAX && hoveredTransportLineIndex < transportLineCache.size()) {
+                            transportLineDragStartPairs = transportLineCache[hoveredTransportLineIndex].integerPairs;
+                        } else {
+                            transportLineDragStartPairs.clear();
+                        }
+                        transportLineDragEndPairs = transportLineDragStartPairs;
+                    }
                     return;
                 }
                 if(mouseY > height - bottomMargin) {
@@ -456,6 +477,37 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     movingNoteDragDirty = false;
                 }
                 movingNote = nullptr;
+                if (selectingTransportLines) {
+                    selectingTransportLines = false;
+                    SDL_Log("[transport] release moved=%d extend=%d start=%zu end=%zu",
+                            (int)transportLineDragMoved, (int)transportLineDragExtend,
+                            transportLineDragStartPairs.size(), transportLineDragEndPairs.size());
+                    if (transportLineDragExtend) {
+                        if (transportLineDragMoved)
+                            extendTransportLines(transportLineDragEndPairs);
+                    } else if (transportLineDragMoved) {
+                        const auto aPairs = transportLineDragStartPairs;
+                        const auto bPairs = transportLineDragEndPairs;
+                        auto ctxMenu = ContextMenu::get();
+                        ctxMenu->skipNextEvent = true;
+                        SDL_Window* inputWin = this->window ? this->window : project->window;
+                        if (inputWin) {
+                            SDL_StartTextInput(inputWin);
+                            ctxMenu->activate(renderer, SDL_GetWindowID(inputWin));
+                        } else {
+                            ctxMenu->activate();
+                        }
+                        ctxMenu->dynamicTick = getTextInputTicker(
+                            [this, aPairs, bPairs](std::string text) {
+                                SDL_Log("[transport] prompt text='%s'", text.c_str());
+                                try {
+                                    subdivideBetweenRhythmLines(aPairs, bPairs, std::max(1, std::stoi(text)));
+                                } catch (...) {}
+                            },
+                            []() {});
+                    }
+                    refreshGrid = true;
+                }
                 if (selectingRhythmInterval) {
                     auto endNote = std::dynamic_pointer_cast<Note>(hoveredElement);
                     const bool sameNoteClick = !rhythmIntervalDragMoved &&
@@ -528,6 +580,11 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                             after.rhythmEdoSubdivisionSteps = steps;
                             after.rhythmEdoLowerVector = lowerPairs;
                             after.rhythmEdoUpperVector = upperPairs;
+                            RhythmLatticeSpan gridSpan;
+                            gridSpan.steps = steps;
+                            gridSpan.lower = lowerPairs;
+                            gridSpan.upper = upperPairs;
+                            after.gridSpans.assign(1, gridSpan);
                             project->um->newAction(new PianoRollRegionTuningUndoAction(project, region->parentNode->nm->managerPath,
                                 region->parentNode->id, region->id, regionTuningSnapshotToUndoJson(before),
                                 regionTuningSnapshotToUndoJson(after), "Define Rhythm EDO"));
@@ -693,6 +750,19 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
         case SDL_EVENT_MOUSE_MOTION:
 
             handleMouse();
+
+            if (selectingTransportLines) {
+                refreshHoveredTransportLineIndex();
+                if (hoveredTransportLineIndex != SIZE_MAX && hoveredTransportLineIndex < transportLineCache.size()) {
+                    transportLineDragEndPairs = transportLineCache[hoveredTransportLineIndex].integerPairs;
+                    if (transportLineDragEndPairs != transportLineDragStartPairs)
+                        transportLineDragMoved = true;
+                }
+                SDL_Log("[transport] move mouseX=%.1f hovered=%zu moved=%d",
+                        mouseX, hoveredTransportLineIndex, (int)transportLineDragMoved);
+                refreshGrid = true;
+                break;
+            }
 
             if (selectingRhythmInterval) {
                 auto endNote = std::dynamic_pointer_cast<Note>(hoveredElement);
@@ -1074,5 +1144,121 @@ void PianoRoll::snapNoteRhythm(const std::shared_ptr<Note>& note) {
         note->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
         note->rhythmEdoUpperVector = region->rhythmEdoUpperVector;
     }
+}
+
+// ---------------------------------------------------------------------------
+// Ctrl+drag on the transport strip. The strip's lines come from the region's
+// transport line set — a list of {lower, upper, steps} spans covering the
+// timeline. Dragging between two lines and typing N replaces the span between
+// them with one of N parts, so only that range changes spacing. Ctrl+Shift
+// writes the current spacing into the neighbouring interval instead.
+// ---------------------------------------------------------------------------
+
+void PianoRoll::updateTransportLines() {
+    transportLineCache.clear();
+    if (!region) return;
+
+    if (region->transportLines.empty())
+        region->transportLines.push_back(defaultLatticeSpan(1));
+
+    const float minSec = (static_cast<float>(scrollX) - leftMargin) / static_cast<float>(dW);
+    const float maxSec = (static_cast<float>(scrollX) + width - leftMargin) / static_cast<float>(dW);
+    std::vector<std::string> labels;
+    generateTransportLines(transportLineCache, labels, region->transportLines, minSec, maxSec);
+}
+
+size_t PianoRoll::closestTransportLineIndexForSeconds(float seconds) {
+    return ::closestRhythmLineIndexForSeconds(transportLineCache, seconds);
+}
+
+void PianoRoll::refreshHoveredTransportLineIndex() {
+    hoveredTransportLineIndex = SIZE_MAX;
+    if (transportLineCache.empty()) return;
+    if (mouseX < leftMargin) return;
+    const float sec = (mouseX + scrollX - leftMargin) / dW;
+    hoveredTransportLineIndex = closestTransportLineIndexForSeconds(sec);
+}
+
+void PianoRoll::applyTransportToGrid() {
+    if (!region || region->transportLines.empty()) return;
+    auto before = captureRegionTuning(region);
+    if (region->transportLines == before.gridSpans) return;
+    auto after = before;
+    after.gridSpans = region->transportLines;
+    project->um->newAction(new PianoRollRegionTuningUndoAction(project, region->parentNode->nm->managerPath,
+        region->parentNode->id, region->id, regionTuningSnapshotToUndoJson(before),
+        regionTuningSnapshotToUndoJson(after), "Grid From Transport"));
+    refreshGrid = true;
+}
+
+void PianoRoll::subdivideBetweenRhythmLines(const std::vector<std::pair<int, int>>& aPairs,
+                                            const std::vector<std::pair<int, int>>& bPairs,
+                                            int parts) {
+    if (!region || parts < 2) return;
+
+    // The two dragged lines become the bounds of a new span with `parts` divisions, which
+    // replaces whatever spans covered that range.
+    const bool aFirst = Note::beatsFromVector(aPairs) <= Note::beatsFromVector(bPairs);
+    RhythmLatticeSpan span;
+    span.steps = parts;
+    span.lower = aFirst ? aPairs : bPairs;
+    span.upper = aFirst ? bPairs : aPairs;
+
+    auto before = captureRegionTuning(region);
+    auto after = before;
+    insertLatticeSpan(after.transportLines, span);
+
+    if (after.transportLines == before.transportLines)
+        return;
+
+    project->um->newAction(new PianoRollRegionTuningUndoAction(project, region->parentNode->nm->managerPath,
+        region->parentNode->id, region->id, regionTuningSnapshotToUndoJson(before),
+        regionTuningSnapshotToUndoJson(after), "Subdivide Rhythm Lines"));
+    refreshGrid = true;
+}
+
+void PianoRoll::extendTransportLines(const std::vector<std::pair<int, int>>& cursorPairs) {
+    if (!region) return;
+    const float cursorSec = Note::beatsFromVector(cursorPairs);
+
+    // Spacing comes from the span the cursor sits in.
+    int sourceSteps = std::max(1, region->rhythmEdoSubdivisionSteps);
+    for (const auto& s : region->transportLines) {
+        if (Note::beatsFromVector(s.lower) <= cursorSec && cursorSec <= Note::beatsFromVector(s.upper)) {
+            sourceSteps = s.steps;
+            break;
+        }
+    }
+
+    // Write that spacing into the larger neighbouring interval, up to the beat line.
+    const RhythmGridLine* prevBeat = nullptr;
+    const RhythmGridLine* nextBeat = nullptr;
+    for (const auto& rl : rhythmLines) {
+        if (rl.seconds < cursorSec &&
+            (!prevBeat || rl.seconds > prevBeat->seconds)) prevBeat = &rl;
+        if (rl.seconds > cursorSec &&
+            (!nextBeat || rl.seconds < nextBeat->seconds)) nextBeat = &rl;
+    }
+    const float leftSpan = prevBeat ? cursorSec - prevBeat->seconds : -1.f;
+    const float rightSpan = nextBeat ? nextBeat->seconds - cursorSec : -1.f;
+    const bool useLeft = (leftSpan >= rightSpan);
+    if (useLeft ? !prevBeat : !nextBeat) return;
+
+    RhythmLatticeSpan span;
+    span.steps = sourceSteps;
+    span.lower = useLeft ? prevBeat->integerPairs : cursorPairs;
+    span.upper = useLeft ? cursorPairs : nextBeat->integerPairs;
+
+    auto before = captureRegionTuning(region);
+    auto after = before;
+    insertLatticeSpan(after.transportLines, span);
+
+    if (after.transportLines == before.transportLines)
+        return;
+
+    project->um->newAction(new PianoRollRegionTuningUndoAction(project, region->parentNode->nm->managerPath,
+        region->parentNode->id, region->id, regionTuningSnapshotToUndoJson(before),
+        regionTuningSnapshotToUndoJson(after), "Extend Rhythm Lines"));
+    refreshGrid = true;
 }
 

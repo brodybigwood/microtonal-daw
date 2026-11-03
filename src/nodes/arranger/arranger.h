@@ -2,6 +2,7 @@
 
 #include "Node.h"
 #include "SongRoll.h"
+#include "RhythmLattice.h"
 
 class TrackManager;
 class ElementManager;
@@ -27,6 +28,11 @@ class ArrangerNode : public Node {
         int rhythmEdoSubdivisionSteps = 1;
         std::vector<std::pair<int, int>> rhythmEdoLowerVector; // default empty = time 0
         std::vector<std::pair<int, int>> rhythmEdoUpperVector = {{1,1}}; // default = 1 second
+        // The transport strip's line set: a partition of the timeline into {lower, upper, steps}
+        // spans, same structure as rhythm EDO. Shared by the song roll and its transport.
+        std::vector<RhythmLatticeSpan> transportLines;
+        // The grid's own rhythm in the same span structure; empty means use rhythmEdo* above.
+        std::vector<RhythmLatticeSpan> gridSpans;
 
         json extraSerialize() override;
         void extraDeSerialize(const json&) override;

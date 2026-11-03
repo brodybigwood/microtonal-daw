@@ -1,9 +1,9 @@
 #include "UndoManager.h"
-#include "nodes/parametriceq/parametriceq.h"
 #include "nodes/vst/vstnode.h"
 #include "nodes/arranger/arranger.h"
 #include "SongRoll.h"
 #include "PianoRollWindow.h"
+#include "PianoRollInternal.h"
 #include "GridElement.h"
 #include "AutomationCurve.h"
 #include "AudioClip.h"
@@ -389,6 +389,8 @@ SongRollRhythmEdoAction::SongRollRhythmEdoAction(Project* p, std::vector<int> ma
         for (const auto& el : this->after["upper"])
             if (el.is_array() && el.size() >= 2)
                 node->rhythmEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
+        node->transportLines = latticeSpansFromJSON(this->after, "transportLines");
+        node->gridSpans = latticeSpansFromJSON(this->after, "gridSpans");
         if (node->sl) node->sl->updateRhythmLines();
     };
     undoAction = [this]() {
@@ -404,6 +406,8 @@ SongRollRhythmEdoAction::SongRollRhythmEdoAction(Project* p, std::vector<int> ma
         for (const auto& el : this->before["upper"])
             if (el.is_array() && el.size() >= 2)
                 node->rhythmEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
+        node->transportLines = latticeSpansFromJSON(this->before, "transportLines");
+        node->gridSpans = latticeSpansFromJSON(this->before, "gridSpans");
         if (node->sl) node->sl->updateRhythmLines();
     };
 }

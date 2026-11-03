@@ -113,6 +113,25 @@ class SongRoll : public GridView{
         std::vector<std::pair<int, int>> rhythmDialogFrozenStartPairs;
         std::vector<std::pair<int, int>> rhythmDialogFrozenEndPairs;
 
+        // Ctrl+drag on the transport strip: subdivide only between two picked transport lines.
+        // The lines live on ArrangerNode::transportLines so every view of this arranger shares them.
+        bool selectingTransportLines = false;
+        bool transportLineDragExtend = false;
+        bool transportLineDragMoved = false;
+        std::vector<std::pair<int, int>> transportLineDragStartPairs;
+        std::vector<std::pair<int, int>> transportLineDragEndPairs;
+        size_t hoveredTransportLineIndex = SIZE_MAX;
+        void updateTransportLines() override;
+        void refreshHoveredTransportLineIndex();
+        size_t closestTransportLineIndexForSeconds(float seconds);
+        void subdivideBetweenRhythmLines(const std::vector<std::pair<int, int>>& aPairs,
+                                         const std::vector<std::pair<int, int>>& bPairs,
+                                         int parts);
+        void extendTransportLines(const std::vector<std::pair<int, int>>& cursorPairs);
+        void applyTransportToGrid() override;
+        json arrangerRhythmEdoJson() const;
+        void commitArrangerRhythmEdo(const json& before, const std::string& label);
+
         // Drag state for position snapping
         std::vector<std::pair<int, int>> positionDragStartPairs;
         std::vector<std::pair<int, int>> positionDragEndPairs;

@@ -1,6 +1,5 @@
 #include "UndoManager.h"
 #include "JsonBytes.h"
-#include "nodes/parametriceq/parametriceq.h"
 #include "nodes/vst/vstnode.h"
 #include "nodes/arranger/arranger.h"
 #include "SongRoll.h"
@@ -24,77 +23,7 @@
 #include <vector>
 #include "UndoInternal.h"
 
-// EQ-band and VST plugin/parameter actions (split from UndoManager.cpp).
-
-AddEQBandAction::AddEQBandAction(Project* p, std::vector<int> managerPath, int nodeID, int bandIndex, json bandState)
-    : ProjectAction(p, AddEQBand)
-    , managerPath(std::move(managerPath))
-    , nodeID(nodeID)
-    , bandIndex(bandIndex)
-    , bandState(std::move(bandState))
-{
-    skipInitialDo = true;
-    name = "Add EQ Band";
-
-    doAction = [this]() {
-        NodeManager& nm = requireManager(this->p, this->managerPath);
-        Node* node = nm.getNode(static_cast<uint16_t>(this->nodeID));
-        auto* eq = dynamic_cast<ParametricEQNode*>(node);
-        if (!eq) throw std::runtime_error("AddEQBandAction::doAction: node not found or not an EQ");
-        eq->addBand(this->bandIndex);
-        if (this->bandIndex >= 0 && this->bandIndex < static_cast<int>(eq->bands.size())) {
-            auto& b = *eq->bands[this->bandIndex];
-            b.type.value = this->bandState.value("type", 0.0f);
-            b.frequency.value = this->bandState.value("freq", 0.5f);
-            b.gain.value = this->bandState.value("gain", 0.5f);
-            b.q.value = this->bandState.value("q", 0.1f);
-            b.coeffDirty = true;
-        }
-    };
-
-    undoAction = [this]() {
-        NodeManager& nm = requireManager(this->p, this->managerPath);
-        Node* node = nm.getNode(static_cast<uint16_t>(this->nodeID));
-        auto* eq = dynamic_cast<ParametricEQNode*>(node);
-        if (!eq) throw std::runtime_error("AddEQBandAction::undoAction: node not found or not an EQ");
-        eq->removeBand(this->bandIndex);
-    };
-}
-
-RemoveEQBandAction::RemoveEQBandAction(Project* p, std::vector<int> managerPath, int nodeID, int bandIndex, json bandState)
-    : ProjectAction(p, RemoveEQBand)
-    , managerPath(std::move(managerPath))
-    , nodeID(nodeID)
-    , bandIndex(bandIndex)
-    , bandState(std::move(bandState))
-{
-    skipInitialDo = true;
-    name = "Remove EQ Band";
-
-    doAction = [this]() {
-        NodeManager& nm = requireManager(this->p, this->managerPath);
-        Node* node = nm.getNode(static_cast<uint16_t>(this->nodeID));
-        auto* eq = dynamic_cast<ParametricEQNode*>(node);
-        if (!eq) throw std::runtime_error("RemoveEQBandAction::doAction: node not found or not an EQ");
-        eq->removeBand(this->bandIndex);
-    };
-
-    undoAction = [this]() {
-        NodeManager& nm = requireManager(this->p, this->managerPath);
-        Node* node = nm.getNode(static_cast<uint16_t>(this->nodeID));
-        auto* eq = dynamic_cast<ParametricEQNode*>(node);
-        if (!eq) throw std::runtime_error("RemoveEQBandAction::undoAction: node not found or not an EQ");
-        eq->addBand(this->bandIndex);
-        if (this->bandIndex >= 0 && this->bandIndex < static_cast<int>(eq->bands.size())) {
-            auto& b = *eq->bands[this->bandIndex];
-            b.type.value = this->bandState.value("type", 0.0f);
-            b.frequency.value = this->bandState.value("freq", 0.5f);
-            b.gain.value = this->bandState.value("gain", 0.5f);
-            b.q.value = this->bandState.value("q", 0.1f);
-            b.coeffDirty = true;
-        }
-    };
-}
+// VST plugin/parameter actions (split from UndoManager.cpp).
 
 // ============================================================================
 // VstParameterChangeAction

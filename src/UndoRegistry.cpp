@@ -1,7 +1,6 @@
 #include "UndoManager.h"
 #include "JsonBytes.h"
 #include "AutomationCurve.h"
-#include "nodes/parametriceq/parametriceq.h"
 #include "nodes/paramnode/paramnode.h"
 #include "nodes/sampler/sampler.h"
 #include "nodes/vst/vstnode.h"
@@ -22,7 +21,11 @@
 #include "OutputNode.h"
 #include "Note.h"
 #include "PianoRoll.h"
+#include <algorithm>
+#include <cctype>
+#include <map>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <vector>
 #include "UndoInternal.h"
@@ -62,6 +65,7 @@ void applyRegionTuningIntent(json& region, const json& intent) {
         "tuningMode", "tuningAnchorHarmonic", "tuningEdoSubdivisionSteps",
         "tuningEdoLowerVector", "tuningEdoUpperVector", "tuningHarmonicAnchorVector",
         "rhythmEdoSubdivisionSteps", "rhythmEdoLowerVector", "rhythmEdoUpperVector",
+        "transportLines", "gridSpans",
     };
     applyFields(region, intent, kFields, sizeof(kFields) / sizeof(kFields[0]));
 }
@@ -104,14 +108,119 @@ std::vector<std::pair<int, int>> readPairs(const json& j) {
     return out;
 }
 
+long long gcdLL(long long a, long long b) {
+    a = a < 0 ? -a : a;
+    b = b < 0 ? -b : b;
+    while (b) { long long t = a % b; a = b; b = t; }
+    return a ? a : 1;
+}
+
+/// Prime-exponent vector (positional over 2,3,5,7,...) for a rational ratio.
+std::vector<std::pair<int, int>> vectorFromRatio(long long num, long long den) {
+    if (num == 0)
+        throw std::runtime_error("ratio must be non-zero");
+    if (den < 0) { num = -num; den = -den; }
+    std::map<int, int> exps;
+    auto factor = [&](long long v, int sign) {
+        for (long long p = 2; p * p <= v; ++p)
+            while (v % p == 0) { exps[static_cast<int>(p)] += sign; v /= p; }
+        if (v > 1) {
+            if (v > 1000000)
+                throw std::runtime_error("prime factor " + std::to_string(v) + " is too large");
+            exps[static_cast<int>(v)] += sign;
+        }
+    };
+    factor(num, 1);
+    factor(den, -1);
+    int maxPrime = 2;
+    for (const auto& kv : exps) maxPrime = std::max(maxPrime, kv.first);
+    std::vector<std::pair<int, int>> out;
+    for (int p = 2; p <= maxPrime; ++p) {
+        bool isPrime = true;
+        for (int d = 2; d * d <= p; ++d)
+            if (p % d == 0) { isPrime = false; break; }
+        if (!isPrime) continue;
+        auto it = exps.find(p);
+        out.push_back({it == exps.end() ? 0 : it->second, 1});
+    }
+    while (!out.empty() && out.back().first == 0) out.pop_back();
+    return out;
+}
+
+std::pair<long long, long long> parseFraction(const std::string& s) {
+    const size_t slash = s.find('/');
+    try {
+        if (slash == std::string::npos)
+            return {std::stoll(s), 1};
+        return {std::stoll(s.substr(0, slash)), std::stoll(s.substr(slash + 1))};
+    } catch (const std::exception&) {
+        throw std::runtime_error("bad ratio '" + s + "'");
+    }
+}
+
+/// Accepts an explicit int[][] vector or a token:
+///   m69 / midi:69           MIDI note -> 2^((n-69)/12)
+///   e7/12 / edo:7/12        EDO steps -> 2^(7/12)
+///   3/2 / ji:3/2            just ratio, prime-factorised
+///   h9 / harmonic:9         harmonic 9, octave-reduced (9/8)
+/// A bare integer is a MIDI note; a bare fraction is a JI ratio.
+std::vector<std::pair<int, int>> parsePitch(const json& j) {
+    if (!j.is_string()) return readPairs(j);
+
+    std::string t = j.get<std::string>();
+    const size_t b = t.find_first_not_of(" \t\r\n");
+    const size_t e = t.find_last_not_of(" \t\r\n");
+    if (b == std::string::npos) throw std::runtime_error("empty pitch token");
+    t = t.substr(b, e - b + 1);
+
+    auto startsFrom = [&](const char* prefix) { return t.rfind(prefix, 0) == 0; };
+    std::string body = t;
+    enum { Midi, Edo, Ratio, Harmonic } kind;
+    if (startsFrom("midi:"))          { kind = Midi;     body = t.substr(5); }
+    else if (startsFrom("edo:"))      { kind = Edo;      body = t.substr(4); }
+    else if (startsFrom("harmonic:")) { kind = Harmonic; body = t.substr(9); }
+    else if (startsFrom("ratio:"))    { kind = Ratio;    body = t.substr(6); }
+    else if (startsFrom("ji:"))       { kind = Ratio;    body = t.substr(3); }
+    else if (t.size() > 1 && (t[0] == 'm') && (std::isdigit(static_cast<unsigned char>(t[1])) || t[1] == '-' || t[1] == '.')) { kind = Midi; body = t.substr(1); }
+    else if (t.size() > 1 && t[0] == 'e' && std::isdigit(static_cast<unsigned char>(t[1]))) { kind = Edo; body = t.substr(1); }
+    else if (t.size() > 1 && t[0] == 'h' && std::isdigit(static_cast<unsigned char>(t[1]))) { kind = Harmonic; body = t.substr(1); }
+    else if (t.size() > 1 && t[0] == 'j' && std::isdigit(static_cast<unsigned char>(t[1]))) { kind = Ratio; body = t.substr(1); }
+    else if (t.find('/') != std::string::npos) { kind = Ratio; }
+    else { kind = Midi; }
+
+    if (kind == Harmonic) {
+        long long h;
+        try { h = std::stoll(body); } catch (const std::exception&) {
+            throw std::runtime_error("bad harmonic token '" + t + "'");
+        }
+        if (h <= 0 || h > 1000000)
+            throw std::runtime_error("harmonic must be in 1..1000000: '" + t + "'");
+        long long k = 0;
+        while ((1LL << (k + 1)) <= h) ++k;
+        return vectorFromRatio(h, 1LL << k);
+    }
+
+    auto [num, den] = parseFraction(body);
+    if (den <= 0)
+        throw std::runtime_error("bad pitch token '" + t + "' (denominator must be positive)");
+    if (kind == Ratio)
+        return vectorFromRatio(num, den);
+
+    // MIDI and EDO are exponent pairs on prime 2: (n-69)/12 and steps/den.
+    long long en = (kind == Midi) ? (num - 69 * den) : num;
+    long long ed = (kind == Midi) ? (12 * den) : den;
+    if (en == 0) return {};
+    const long long g = gcdLL(en, ed);
+    return {{static_cast<int>(en / g), static_cast<int>(ed / g)}};
+}
+
 /// Copies the surrounding scale onto a freshly created note, mirroring what
 /// PianoRoll::stampNoteTuning does on the mouse path, and persists the result on
 /// the action so redo re-applies it. Per-note tuning fields in `params` override
 /// the region's.
-void stampCreatedNoteTuning(Project* proj, CreateNoteAction* cn, const json& params) {
-    Region* region = undoResolveArrangerRegion(proj, cn->managerPath, cn->nodeID, cn->regionID);
+void stampNoteTuning(Region* region, int noteID, const json& intent, json& outSnapshot) {
     if (!region) return;
-    auto it = region->id_to_index.find(cn->noteID);
+    auto it = region->id_to_index.find(noteID);
     if (it == region->id_to_index.end()) return;
     const size_t idx = static_cast<size_t>(it->second);
     if (idx >= region->notes.size() || !region->notes[idx]) return;
@@ -129,7 +238,6 @@ void stampCreatedNoteTuning(Project* proj, CreateNoteAction* cn, const json& par
     n.rhythmEdoLowerVector = region->rhythmEdoLowerVector;
     n.rhythmEdoUpperVector = region->rhythmEdoUpperVector;
 
-    const json& intent = params.contains("intent") ? params["intent"] : params;
     if (intent.contains("rhythmEdoSubdivisionSteps")) n.rhythmEdoSubdivisionSteps = intent["rhythmEdoSubdivisionSteps"].get<int>();
     if (intent.contains("rhythmEdoLowerVector")) n.rhythmEdoLowerVector = readPairs(intent["rhythmEdoLowerVector"]);
     if (intent.contains("rhythmEdoUpperVector")) n.rhythmEdoUpperVector = readPairs(intent["rhythmEdoUpperVector"]);
@@ -140,7 +248,7 @@ void stampCreatedNoteTuning(Project* proj, CreateNoteAction* cn, const json& par
     if (intent.contains("tuningEdoUpperVector")) n.tuningEdoUpperVector = readPairs(intent["tuningEdoUpperVector"]);
 
     n.syncNumFromPitchVector();
-    cn->noteStampedSnapshot = n.toJSON();
+    outSnapshot = n.toJSON();
 }
 
 } // namespace
@@ -148,6 +256,7 @@ void stampCreatedNoteTuning(Project* proj, CreateNoteAction* cn, const json& par
 const std::unordered_map<std::string, ActionType>& UndoManager::actionRegistry() {
     static const std::unordered_map<std::string, ActionType> reg = {
         {"create_note", CreateNote},
+        {"create_notes", CreateNotes},
         {"add_arranger_track", AddArrangerTrack},
         {"add_node", AddNode},
         {"remove_node", RemoveNode},
@@ -162,8 +271,6 @@ const std::unordered_map<std::string, ActionType>& UndoManager::actionRegistry()
         {"move_element_position", MoveElementPosition},
         {"move_embedded_window", MoveEmbeddedWindow},
         {"resize_embedded_window", ResizeEmbeddedWindow},
-        {"add_eq_band", AddEQBand},
-        {"remove_eq_band", RemoveEQBand},
         {"vst_param_change", VstParameterChange},
         {"vst_load_plugin", VstLoadPlugin},
         {"vst_state_change", VstStateChange},
@@ -222,7 +329,10 @@ std::string UndoManager::actionSchema(const std::string& actionName) {
         return R"({"managerPath":[int,...],"nodeID":int,"trackType":int})";
     }
     if (actionName == "create_note") {
-        return R"({"managerPath":[int,...],"nodeID":int,"regionID":int,"pitchVector":[[int,int],...],"rhythmVector":[[int,int],...],"rhythmEndVector":[[int,int],...]})";
+        return R"({"managerPath":[int,...],"nodeID":int,"regionID":int,"pitchVector":[[int,int],...]|"token","rhythmVector":[[int,int],...],"rhythmEndVector":[[int,int],...]})";
+    }
+    if (actionName == "create_notes") {
+        return R"({"managerPath":[int,...],"nodeID":int,"regionID":int,"notes":[{"pitchVector":[[int,int],...]|"token","rhythmVector":[[int,int],...],"rhythmEndVector":[[int,int],...],"intent":{...}},...]})";
     }
     if (actionName == "create_region") {
         return R"({"managerPath":[int,...],"nodeID":int})";
@@ -238,12 +348,6 @@ std::string UndoManager::actionSchema(const std::string& actionName) {
     }
     if (actionName == "move_element_position") {
         return R"({"managerPath":[int,...],"nodeID":int,"elementID":int,"positionID":int,"before":object,"after":object})";
-    }
-    if (actionName == "add_eq_band") {
-        return R"({"managerPath":[int,...],"nodeID":int,"bandIndex":int,"bandState":object})";
-    }
-    if (actionName == "remove_eq_band") {
-        return R"({"managerPath":[int,...],"nodeID":int,"bandIndex":int,"bandState":object})";
     }
     if (actionName == "vst_param_change") {
         return R"({"managerPath":[int,...],"nodeID":int,"paramID":int,"oldValue":float,"newValue":float})";
@@ -311,10 +415,6 @@ std::string UndoManager::actionSchema(const std::string& actionName) {
         return R"({"managerPath":[int,...],"nodeID":int,"regionID":int,"intent":{...tuning fields...},"name":string?})";
     if (actionName == "assign_note_harmonic")
         return R"({"managerPath":[int,...],"nodeID":int,"regionID":int,"noteID":int,"intent":{...tuning fields...}})";
-    if (actionName == "add_eq_band")
-        return R"({"managerPath":[int,...],"nodeID":int,"bandIndex":int?,"type":int?,"freq":float?,"gain":float?,"q":float?,"state":object?})";
-    if (actionName == "remove_eq_band")
-        return R"({"managerPath":[int,...],"nodeID":int,"bandIndex":int})";
     if (actionName == "vst_param_change")
         return R"({"managerPath":[int,...],"nodeID":int,"paramID":int,"value":float})";
     // oldState is read live from the plugin; supply the new blobs.
@@ -435,10 +535,7 @@ ProjectAction* UndoManager::buildRegisteredAction(const std::string& actionName,
         case CreateNote: {
             auto managerPath = params.at("managerPath").get<std::vector<int>>();
             requireManager(head->p, managerPath);
-            std::vector<std::pair<int, int>> pairs;
-            for (const auto& el : params.at("pitchVector")) {
-                pairs.push_back({el.at(0).get<int>(), el.at(1).get<int>()});
-            }
+            std::vector<std::pair<int, int>> pairs = parsePitch(params.at("pitchVector"));
             std::vector<std::pair<int,int>> rPairs;
             if (params.contains("rhythmVector") && params["rhythmVector"].is_array()) {
                 for (const auto& el : params["rhythmVector"])
@@ -455,6 +552,25 @@ ProjectAction* UndoManager::buildRegisteredAction(const std::string& actionName,
             pa = new CreateNoteAction(head->p, managerPath, params.at("nodeID").get<int>(), params.at("regionID").get<int>(),
                 std::move(rPairs), std::move(rEndPairs),
                 std::move(pairs));
+            break;
+        }
+        case CreateNotes: {
+            auto managerPath = params.at("managerPath").get<std::vector<int>>();
+            requireManager(head->p, managerPath);
+            if (!params.contains("notes") || !params["notes"].is_array())
+                throw std::runtime_error("create_notes: 'notes' must be an array");
+            std::vector<CreateNoteSpec> specs;
+            for (const auto& n : params.at("notes")) {
+                CreateNoteSpec spec;
+                spec.pitchVector = parsePitch(n.at("pitchVector"));
+                spec.rhythmVector = readPairs(n.value("rhythmVector", json::array()));
+                spec.rhythmEndVector = readPairs(n.value("rhythmEndVector", json::array()));
+                if (spec.rhythmEndVector.empty()) spec.rhythmEndVector = spec.rhythmVector;
+                if (n.contains("intent")) spec.intent = n["intent"];
+                specs.push_back(std::move(spec));
+            }
+            pa = new CreateNotesAction(head->p, managerPath, params.at("nodeID").get<int>(),
+                params.at("regionID").get<int>(), std::move(specs));
             break;
         }
         case CreateRegion:
@@ -598,35 +714,6 @@ ProjectAction* UndoManager::buildRegisteredAction(const std::string& actionName,
             pa = new AssignNoteHarmonicUndoAction(head->p, std::move(mp), nodeID, regionID, noteID,
                 std::move(beforeRegion), std::move(afterRegion),
                 std::move(beforeNote), std::move(afterNote));
-            break;
-        }
-        case AddEQBand: {
-            json state = params.value("state", json::object());
-            if (!state.contains("type")) state["type"] = params.value("type", 0);
-            if (!state.contains("freq")) state["freq"] = params.value("freq", 1000.0f);
-            if (!state.contains("gain")) state["gain"] = params.value("gain", 0.0f);
-            if (!state.contains("q"))    state["q"] = params.value("q", 0.7f);
-            pa = new AddEQBandAction(head->p, params.at("managerPath").get<std::vector<int>>(),
-                params.at("nodeID").get<int>(), params.value("bandIndex", -1), std::move(state));
-            break;
-        }
-        case RemoveEQBand: {
-            auto mp = params.at("managerPath").get<std::vector<int>>();
-            NodeManager& nm = requireManager(head->p, mp);
-            const int nodeID = params.at("nodeID").get<int>();
-            auto* eq = dynamic_cast<ParametricEQNode*>(nm.getNode(static_cast<uint16_t>(nodeID)));
-            if (!eq) throw std::runtime_error("remove_eq_band: node is not a ParametricEQ");
-            const int bi = params.at("bandIndex").get<int>();
-            if (bi < 0 || static_cast<size_t>(bi) >= eq->bands.size())
-                throw std::runtime_error("remove_eq_band: bandIndex out of range");
-            // Snapshot the band that is about to be removed, straight from live state.
-            auto& band = *eq->bands[static_cast<size_t>(bi)];
-            json state;
-            state["type"] = band.type.value;
-            state["freq"] = band.frequency.value;
-            state["gain"] = band.gain.value;
-            state["q"] = band.q.value;
-            pa = new RemoveEQBandAction(head->p, std::move(mp), nodeID, bi, std::move(state));
             break;
         }
         case VstParameterChange: {
@@ -806,10 +893,13 @@ json createdIdsFor(ProjectAction* pa) {
         case CreateAutomationCurve: { auto* a = static_cast<CreateAutomationCurveAction*>(pa); r["curveID"] = a->curveID; break; }
         case CreateAudioClip:       { auto* a = static_cast<CreateAudioClipAction*>(pa);       r["clipID"] = a->clipID; break; }
         case CreateNote:            { auto* a = static_cast<CreateNoteAction*>(pa);            r["noteID"] = a->noteID; break; }
+        case CreateNotes:           { auto* a = static_cast<CreateNotesAction*>(pa);
+                                      r["noteIDs"] = json::array();
+                                      for (const auto& spec : a->notes) r["noteIDs"].push_back(spec.noteID);
+                                      break; }
         case CreatePosition:        { auto* a = static_cast<CreatePositionAction*>(pa);        r["positionID"] = a->positionID; break; }
         case AddArrangerTrack:      { auto* a = static_cast<AddArrangerTrackAction*>(pa);      r["trackID"] = a->trackID; r["connectionID"] = a->connectionID; break; }
-        case AddEQBand:             { auto* a = static_cast<AddEQBandAction*>(pa);             r["bandIndex"] = a->bandIndex; break; }
-        case SamplerAddSample:      { auto* a = static_cast<SamplerAddSampleUndoAction*>(pa);  r["sampleIndex"] = a->insertedIndex; break; }
+        case SamplerAddSample:     { auto* a = static_cast<SamplerAddSampleUndoAction*>(pa);  r["sampleIndex"] = a->insertedIndex; break; }
         case IoPortChannel:         { auto* a = static_cast<IoPortChannelAction*>(pa);         r["connectionId"] = a->connectionId; r["connectionIndex"] = a->connectionIndex; break; }
         default: break;
     }
@@ -841,8 +931,19 @@ bool UndoManager::runRegisteredAction(const std::string& actionName, const json&
         // roll stamps the surrounding tuning onto each note it creates; a scripted
         // create must do the same, or the note carries bare ratios with no scale.
         // `current == pa` guards the coalesce path, which deletes the action.
-        if (pa->type == CreateNote && current == pa)
-            stampCreatedNoteTuning(head->p, static_cast<CreateNoteAction*>(pa), params);
+        if (current == pa) {
+            if (pa->type == CreateNote) {
+                auto* cn = static_cast<CreateNoteAction*>(pa);
+                const json& intent = params.contains("intent") ? params["intent"] : params;
+                stampNoteTuning(undoResolveArrangerRegion(head->p, cn->managerPath, cn->nodeID, cn->regionID),
+                                cn->noteID, intent, cn->noteStampedSnapshot);
+            } else if (pa->type == CreateNotes) {
+                auto* cn = static_cast<CreateNotesAction*>(pa);
+                Region* region = undoResolveArrangerRegion(head->p, cn->managerPath, cn->nodeID, cn->regionID);
+                for (auto& spec : cn->notes)
+                    stampNoteTuning(region, spec.noteID, spec.intent, spec.noteStampedSnapshot);
+            }
+        }
         return true;
     } catch (const std::exception& e) {
         error = e.what();

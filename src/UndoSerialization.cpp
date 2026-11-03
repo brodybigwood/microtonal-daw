@@ -1,5 +1,4 @@
 #include "UndoManager.h"
-#include "nodes/parametriceq/parametriceq.h"
 #include "nodes/vst/vstnode.h"
 #include "nodes/arranger/arranger.h"
 #include "SongRoll.h"
@@ -53,6 +52,32 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
             if (j.contains("noteStampedSnapshot") && !j["noteStampedSnapshot"].is_null())
                 cn->noteStampedSnapshot = j["noteStampedSnapshot"];
             pa = cn;
+            break;
+        }
+        case CreateNotes: {
+            auto readPairsFromJson = [](const json& jn2) {
+                std::vector<std::pair<int, int>> out;
+                for (const auto& el : jn2)
+                    if (el.is_array() && el.size() >= 2)
+                        out.push_back({el[0].get<int>(), el[1].get<int>()});
+                return out;
+            };
+            std::vector<CreateNoteSpec> specs;
+            for (const auto& jn : j.at("notes")) {
+                CreateNoteSpec spec;
+                spec.pitchVector = readPairsFromJson(jn.at("pitchVector"));
+                spec.rhythmVector = readPairsFromJson(jn.value("rhythmVector", json::array()));
+                spec.rhythmEndVector = readPairsFromJson(jn.value("rhythmEndVector", json::array()));
+                if (spec.rhythmEndVector.empty()) spec.rhythmEndVector = spec.rhythmVector;
+                if (jn.contains("intent")) spec.intent = jn["intent"];
+                spec.noteID = jn.at("noteID").get<int>();
+                if (jn.contains("noteStampedSnapshot") && !jn["noteStampedSnapshot"].is_null())
+                    spec.noteStampedSnapshot = jn["noteStampedSnapshot"];
+                specs.push_back(std::move(spec));
+            }
+            pa = new CreateNotesAction(p, j.at("managerPath").get<std::vector<int>>(),
+                                       j.at("nodeID").get<int>(), j.at("regionID").get<int>(),
+                                       std::move(specs));
             break;
         }
         case AddArrangerTrack: {
@@ -266,16 +291,6 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
                 j.at("name").get<std::string>());
             break;
         }
-        case AddEQBand: {
-            pa = new AddEQBandAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(),
-                j.at("bandIndex").get<int>(), j.at("bandState"));
-            break;
-        }
-        case RemoveEQBand: {
-            pa = new RemoveEQBandAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(),
-                j.at("bandIndex").get<int>(), j.at("bandState"));
-            break;
-        }
         case VstParameterChange: {
             pa = new VstParameterChangeAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(),
                 j.at("paramID").get<uint32_t>(), j.at("oldValue").get<float>(), j.at("newValue").get<float>());
@@ -449,6 +464,29 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["noteID"] = cn->noteID;
             if (!cn->noteStampedSnapshot.is_null())
                 j["noteStampedSnapshot"] = cn->noteStampedSnapshot;
+            break;
+        }
+        case CreateNotes: {
+            auto cn = static_cast<CreateNotesAction*>(pa);
+            auto pairsJson = [](const std::vector<std::pair<int, int>>& pairs) {
+                json a = json::array();
+                for (const auto& pr : pairs) a.push_back(json::array({pr.first, pr.second}));
+                return a;
+            };
+            j["managerPath"] = cn->managerPath;
+            j["nodeID"] = cn->nodeID;
+            j["regionID"] = cn->regionID;
+            j["notes"] = json::array();
+            for (const auto& spec : cn->notes) {
+                json jn;
+                jn["pitchVector"] = pairsJson(spec.pitchVector);
+                jn["rhythmVector"] = pairsJson(spec.rhythmVector);
+                jn["rhythmEndVector"] = pairsJson(spec.rhythmEndVector);
+                jn["noteID"] = spec.noteID;
+                if (!spec.intent.empty()) jn["intent"] = spec.intent;
+                if (!spec.noteStampedSnapshot.is_null()) jn["noteStampedSnapshot"] = spec.noteStampedSnapshot;
+                j["notes"].push_back(std::move(jn));
+            }
             break;
         }
         case AddArrangerTrack: {
@@ -748,22 +786,6 @@ json ProjectAction::serialize(ProjectAction* pa) {
             j["paramPath"] = sv->paramPath;
             j["oldValue"] = sv->oldValue;
             j["newValue"] = sv->newValue;
-            break;
-        }
-        case AddEQBand: {
-            auto* ab = static_cast<AddEQBandAction*>(pa);
-            j["managerPath"] = ab->managerPath;
-            j["nodeID"] = ab->nodeID;
-            j["bandIndex"] = ab->bandIndex;
-            j["bandState"] = ab->bandState;
-            break;
-        }
-        case RemoveEQBand: {
-            auto* rb = static_cast<RemoveEQBandAction*>(pa);
-            j["managerPath"] = rb->managerPath;
-            j["nodeID"] = rb->nodeID;
-            j["bandIndex"] = rb->bandIndex;
-            j["bandState"] = rb->bandState;
             break;
         }
         case VstParameterChange: {

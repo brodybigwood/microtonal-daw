@@ -32,6 +32,9 @@ PianoRoll::PianoRoll(Region* region_, Window* parent)
 {
     leftMargin = 80.0f;
 
+    // The tempo curve belongs to the song roll; the piano roll only shows the strip.
+    transport->showTempoCurve = false;
+
     updateLines();
     updateRhythmLines();
 
@@ -172,7 +175,7 @@ void PianoRoll::renderPianoRollGridTexture(SDL_Renderer* renderer) {
         float x = getX(rl.seconds);
         if (x < leftMargin) continue;
         setRenderColor(renderer, colors.grid);
-        if (rl.isBeat) {
+        if (rl.isBoundary) {
             SDL_FRect lineRect{x - 1.f, 0, 2.f, static_cast<float>(height)};
             SDL_RenderFillRect(renderer, &lineRect);
         } else {
@@ -216,6 +219,14 @@ void PianoRoll::RenderDestinations(SDL_Renderer* renderer) {
     SDL_SetRenderTarget(renderer, PianoTexture);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0); // Transparent
     SDL_RenderClear(renderer);
+    // Clip the key strip so rows/labels scrolled above the strip are cut at the
+    // boundary instead of painting over the tempo/transport band (this texture is
+    // blitted after the transport).
+    SDL_Rect keyClip{0,
+                     static_cast<int>(topMargin),
+                     static_cast<int>(leftMargin),
+                     static_cast<int>(height - topMargin - bottomMargin)};
+    SDL_SetRenderClipRect(renderer, &keyClip);
     SDL_Color textColor = {0, 0, 0, 255};
 
 
@@ -262,7 +273,8 @@ void PianoRoll::RenderDestinations(SDL_Renderer* renderer) {
         SDL_RenderLine(renderer, tw, y, leftMargin, y);
         SDL_RenderTexture(renderer, tex, NULL, &textRect);
     }
-    
+
+    SDL_SetRenderClipRect(renderer, nullptr);
     SDL_SetRenderTarget(renderer, target);
 
 }
@@ -302,6 +314,7 @@ bool PianoRoll::customTick(SDL_Renderer* renderer) {
     }
 
     updateRhythmLines();
+    updateTransportLines();
 
     if(refreshGrid) {
         refreshGrid = false;
@@ -337,10 +350,12 @@ bool PianoRoll::customTick(SDL_Renderer* renderer) {
         renderRhythmIntervalPreviewBand(renderer, startSec, endSec);
     }
 
+
     SDL_RenderTexture(renderer, gridTexture, nullptr, dstRect);
     SDL_RenderTexture(renderer, NotesTexture, nullptr, dstRect);
 
     transport->render(renderer);
+    renderGridRhythmButton(renderer);
 
     for(auto pos : region->positions) {
         float posStart = Note::beatsFromVector(pos->rhythmVector);
@@ -359,6 +374,20 @@ bool PianoRoll::customTick(SDL_Renderer* renderer) {
     if (showRhythmIntervalPreview) {
         const float endSec = selectingRhythmInterval ? rhythmIntervalEndSec : rhythmDialogFrozenEndSec;
         renderRhythmIntervalEndLine(renderer, endSec);
+    }
+
+    if (selectingTransportLines) {
+        // The drag is on the transport strip, so the highlight belongs in the strip, not the grid.
+        const float startSec = Note::beatsFromVector(transportLineDragStartPairs);
+        const float endSec = Note::beatsFromVector(transportLineDragEndPairs);
+        const float x1 = dstRect->x + getX(startSec);
+        const float x2 = dstRect->x + getX(endSec);
+        SDL_FRect band{std::min(x1, x2), dstRect->y + topMargin - Transport::kTimelineHeight,
+                       std::max(1.0f, std::fabs(x2 - x1)), Transport::kTimelineHeight};
+        SDL_SetRenderDrawColor(renderer, 70, 150, 235, 90);
+        SDL_RenderFillRect(renderer, &band);
+        SDL_SetRenderDrawColor(renderer, 70, 150, 235, 200);
+        SDL_RenderRect(renderer, &band);
     }
 
     SDL_FRect bottomRect{

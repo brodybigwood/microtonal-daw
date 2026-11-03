@@ -19,9 +19,12 @@ constexpr float kBeatLineW = 2.f;
 static float snappedBeat(GridView* view, float mouseX) {
     float rawBeat = (mouseX + view->scrollX - view->leftMargin) / view->dW;
     rawBeat = view->adjustTransportSeekSec(rawBeat);
-    size_t idx = closestRhythmLineIndexForSeconds(view->rhythmLines, rawBeat);
-    if (idx != SIZE_MAX && idx < view->rhythmLines.size())
-        return view->rhythmLines[idx].seconds;
+    // Snapping follows the transport's own line set, falling back to the grid lattice only
+    // while the transport set is still empty.
+    const auto& lines = view->transportLineCache.empty() ? view->rhythmLines : view->transportLineCache;
+    size_t idx = closestRhythmLineIndexForSeconds(lines, rawBeat);
+    if (idx != SIZE_MAX && idx < lines.size())
+        return lines[idx].seconds;
     return rawBeat;
 }
 
@@ -168,8 +171,9 @@ void Transport::handleTempoMouseMove(float areaH) {
 void Transport::clickMouse(uint8_t button) {
     const float barY = view->topMargin - kTimelineHeight;
 
-    // Tempo curve area
-    if (mouseY >= 0 && mouseY < barY) {
+    // Tempo curve area (the left margin above the grid belongs to the view's button)
+    if (mouseY >= 0 && mouseY < barY && mouseX >= view->leftMargin) {
+        if (!showTempoCurve) return;
         updateTempoCurveBounds();
         float areaH = view->topMargin - kTimelineHeight;
         tempoCurveEditor->updateArea(view->dstRect->y, areaH);
@@ -200,8 +204,13 @@ void Transport::clickMouse(uint8_t button) {
         return;
     }
 
-    // Timeline bar
-    if (mouseY >= barY && mouseY <= barY + Transport::kTimelineHeight) {
+    // Timeline bar (the left margin above the grid belongs to the view, not the transport)
+    if (mouseX >= view->leftMargin &&
+        mouseY >= barY && mouseY <= barY + Transport::kTimelineHeight) {
+        // Ctrl+drag on the strip edits its transport lines instead of seeking; the view's own
+        // clickMouse handles the drag, so just don't start a seek or a timeline drag here.
+        if (button == SDL_BUTTON_LEFT && view->isCtrlPressed)
+            return;
         draggingTimeline = true;
         view->project->seekBeat(static_cast<double>(snappedBeat(view, mouseX)));
     }
@@ -214,7 +223,7 @@ void Transport::handleMotion() {
     }
 
     // Tempo curve drag
-    if (tempoCurveEditor->draggingPointIdx >= 0 || dragState) {
+    if (showTempoCurve && (tempoCurveEditor->draggingPointIdx >= 0 || dragState)) {
         updateTempoCurveBounds();
         float areaH = view->topMargin - kTimelineHeight;
         tempoCurveEditor->updateArea(view->dstRect->y, areaH);
@@ -238,29 +247,37 @@ void Transport::finishTempoDrag() {
 void Transport::render(SDL_Renderer* renderer) {
     const float barY = view->dstRect->y + view->topMargin - Transport::kTimelineHeight;
 
+    // The left margin belongs to the view (grid-rhythm button), so the transport renders from
+    // the end of the left margin to the right edge.
+    const float x0 = view->dstRect->x + view->leftMargin;
+    const float w0 = std::max(0.f, view->dstRect->w - view->leftMargin);
+
     // Tempo curve area background
     float areaH = view->topMargin - kTimelineHeight;
     SDL_SetRenderDrawColor(renderer, 40, 40, 45, 255);
-    SDL_FRect topBg{view->dstRect->x, view->dstRect->y, view->dstRect->w, areaH};
+    SDL_FRect topBg{x0, view->dstRect->y, w0, areaH};
     SDL_RenderFillRect(renderer, &topBg);
 
-    // Tempo curve
-    updateTempoCurveBounds();
-    tempoCurveEditor->updateArea(view->dstRect->y, areaH);
-    tempoCurveEditor->hoveredPointIdx = tempoCurveEditor->hitTestPoint(mouseX, mouseY);
-    tempoCurveEditor->hoveredTensionSeg = tempoCurveEditor->hitTestTension(mouseX, mouseY);
-    tempoCurveEditor->render(renderer);
+    // Tempo curve — only the view that owns it draws it.
+    if (showTempoCurve) {
+        updateTempoCurveBounds();
+        tempoCurveEditor->updateArea(view->dstRect->y, areaH);
+        tempoCurveEditor->hoveredPointIdx = tempoCurveEditor->hitTestPoint(mouseX, mouseY);
+        tempoCurveEditor->hoveredTensionSeg = tempoCurveEditor->hitTestTension(mouseX, mouseY);
+        tempoCurveEditor->render(renderer);
+    }
 
     // Timeline bar
     uint8_t barColor[4] = {35, 35, 40, 255};
     SDL_SetRenderDrawColor(renderer, barColor[0], barColor[1], barColor[2], barColor[3]);
-    SDL_FRect barRect{view->dstRect->x, barY, view->dstRect->w, Transport::kTimelineHeight};
+    SDL_FRect barRect{x0, barY, w0, Transport::kTimelineHeight};
     SDL_RenderFillRect(renderer, &barRect);
 
-    for (const auto& rl : view->rhythmLines) {
+    // The strip draws (and Ctrl+drag selects from) the transport line set, not the grid lattice.
+    for (const auto& rl : view->transportLineCache) {
         float x = view->dstRect->x + view->getX(rl.seconds);
-        if (x < view->dstRect->x || x > view->dstRect->x + view->dstRect->w) continue;
-        if (rl.isBeat) {
+        if (x < x0 || x > view->dstRect->x + view->dstRect->w) continue;
+        if (rl.isBoundary) {
             SDL_SetRenderDrawColor(renderer, 90, 90, 90, 255);
             SDL_FRect lineRect{x - kBeatLineW / 2.f, barY, kBeatLineW, Transport::kTimelineHeight};
             SDL_RenderFillRect(renderer, &lineRect);

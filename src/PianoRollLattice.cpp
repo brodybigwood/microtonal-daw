@@ -152,7 +152,10 @@ void PianoRoll::updateRhythmLines() {
         ? region->rhythmEdoUpperVector : kOneSec;
     const float minSec = (static_cast<float>(scrollX) - leftMargin) / static_cast<float>(dW);
     const float maxSec = (static_cast<float>(scrollX) + width - leftMargin) / static_cast<float>(dW);
-    generateRhythmLines(rhythmLines, rhythmLineLabels, steps, lower, upper, minSec, maxSec);
+    if (region && !region->gridSpans.empty())
+        generateTransportLines(rhythmLines, rhythmLineLabels, region->gridSpans, minSec, maxSec);
+    else
+        generateRhythmLines(rhythmLines, rhythmLineLabels, steps, lower, upper, minSec, maxSec);
 }
 
 size_t PianoRoll::closestRhythmLineIndexForSeconds(float seconds) {

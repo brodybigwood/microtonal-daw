@@ -11,7 +11,6 @@ enum NodeType {
     Patcher,
     Multiplexer,
     Gain,
-    ParametricEQ,
     Vst,
     SurroundToStereo,
     Param,

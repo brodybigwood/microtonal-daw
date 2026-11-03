@@ -42,8 +42,6 @@ enum ActionType {
     ToggleNodeVisible = 24,
     PanNodes = 25,
     ZoomNodes = 26,
-    AddEQBand = 27,
-    RemoveEQBand = 28,
     VstParameterChange = 29,
     VstLoadPlugin = 30,
     TogglePianoRollWindow = 31,
@@ -67,6 +65,7 @@ enum ActionType {
     SamplerLoadSampleFile = 49,
     SamplerToggleSampleSolo = 50,
     SamplerToggleSampleMute = 51,
+    CreateNotes = 52,
 };
 
 
@@ -339,6 +338,26 @@ struct CreateNoteAction : ProjectAction {
 
     CreateNoteAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, std::vector<std::pair<int,int>> startPairs, std::vector<std::pair<int,int>> endPairs,
                      std::vector<std::pair<int, int>> pitchVector);
+};
+
+/// One note inside a CreateNotesAction (bulk creation, one undo step).
+struct CreateNoteSpec {
+    std::vector<std::pair<int, int>> rhythmVector;
+    std::vector<std::pair<int, int>> rhythmEndVector;
+    std::vector<std::pair<int, int>> pitchVector;
+    json intent = json::object();
+    int noteID = -1;
+    json noteStampedSnapshot = json();
+};
+
+struct CreateNotesAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    int regionID = -1;
+    std::vector<CreateNoteSpec> notes;
+
+    CreateNotesAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID,
+                      std::vector<CreateNoteSpec> notes);
 };
 
 struct CreateRegionAction : ProjectAction {
@@ -665,24 +684,6 @@ struct IoPortChannelAction : ProjectAction {
     bool idAssigned = false;
 
     IoPortChannelAction(Project* p, int op, std::vector<int> managerPath, uint16_t connectionId, size_t connectionIndex);
-};
-
-struct AddEQBandAction : ProjectAction {
-    std::vector<int> managerPath;
-    int nodeID = 0;
-    int bandIndex = 0;
-    json bandState;
-
-    AddEQBandAction(Project* p, std::vector<int> managerPath, int nodeID, int bandIndex, json bandState);
-};
-
-struct RemoveEQBandAction : ProjectAction {
-    std::vector<int> managerPath;
-    int nodeID = 0;
-    int bandIndex = 0;
-    json bandState;
-
-    RemoveEQBandAction(Project* p, std::vector<int> managerPath, int nodeID, int bandIndex, json bandState);
 };
 
 struct VstParameterChangeAction : ProjectAction {

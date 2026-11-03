@@ -10,6 +10,7 @@
 #include "GridElement.h"
 
 #include <nlohmann/json.hpp>
+#include "RhythmLattice.h"
 using json = nlohmann::json;
 
 #ifndef REGION_H
@@ -50,6 +51,13 @@ std::vector<std::pair<int, int>> tuningEdoUpperVector;
 int rhythmEdoSubdivisionSteps = 1;
 std::vector<std::pair<int, int>> rhythmEdoLowerVector; // default empty = time 0
 std::vector<std::pair<int, int>> rhythmEdoUpperVector; // default [(1,1)] = 1 second
+// The transport strip's line set: a partition of the timeline into {lower, upper, steps}
+// spans, the same structure as the single rhythm EDO above. Region is the source of truth,
+// so every piano roll on it draws the same set. Mutable from the strip and the grid.
+std::vector<RhythmLatticeSpan> transportLines;
+// The grid's own rhythm, in the same span structure. Empty means "use the rhythm EDO fields
+// above"; the grid dialog writes a single span here, and the button copies transportLines in.
+std::vector<RhythmLatticeSpan> gridSpans;
 
 void draw(SDL_Renderer*, float, int) override;
 

@@ -12,7 +12,6 @@
 #include "nodes/patcher/patcher.h"
 #include "nodes/multiplexer/multiplexer.h"
 #include "nodes/gain/gain.h"
-#include "nodes/parametriceq/parametriceq.h"
 #include "nodes/vst/vstnode.h"
 #include "nodes/surroundtostereo/surroundtostereo.h"
 #include "nodes/paramnode/paramnode.h"
@@ -32,7 +31,6 @@ inline std::string NodeTypeStr[] = {
     "Patcher",
     "Multiplexer",
     "Gain",
-    "ParametricEQ",
     "VST",
     "Surround->Stereo",
     "Param",
@@ -66,8 +64,6 @@ inline Node* byType(NodeType t, int id, NodeManager* nm) {
             return new MultiplexerNode(id, nm);
         case NodeType::Gain:
             return new GainNode(id, nm);
-        case NodeType::ParametricEQ:
-            return new ParametricEQNode(id, nm);
         case NodeType::Vst:
             return new VstNode(id, nm);
         case NodeType::SurroundToStereo:

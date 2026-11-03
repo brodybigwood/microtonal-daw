@@ -242,6 +242,22 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         size_t closestRhythmLineIndexForSeconds(float seconds);
         void renderPianoRollGridTexture(SDL_Renderer* renderer);
 
+        // Transport strip Ctrl+drag: subdivide only between the two picked transport lines.
+        bool selectingTransportLines = false;
+        bool transportLineDragExtend = false;
+        bool transportLineDragMoved = false;
+        std::vector<std::pair<int, int>> transportLineDragStartPairs;
+        std::vector<std::pair<int, int>> transportLineDragEndPairs;
+        size_t hoveredTransportLineIndex = SIZE_MAX;
+        void updateTransportLines() override;
+        void refreshHoveredTransportLineIndex();
+        size_t closestTransportLineIndexForSeconds(float seconds);
+        void subdivideBetweenRhythmLines(const std::vector<std::pair<int, int>>& aPairs,
+                                         const std::vector<std::pair<int, int>>& bPairs,
+                                         int parts);
+        void extendTransportLines(const std::vector<std::pair<int, int>>& cursorPairs);
+        void applyTransportToGrid() override;
+
     public:
         bool needsInit_ = false;
 };

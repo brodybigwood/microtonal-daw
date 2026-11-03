@@ -1,5 +1,4 @@
 #include "UndoManager.h"
-#include "nodes/parametriceq/parametriceq.h"
 #include "nodes/vst/vstnode.h"
 #include "nodes/arranger/arranger.h"
 #include "SongRoll.h"
@@ -51,6 +50,36 @@ CreateNoteAction::CreateNoteAction(Project* p, std::vector<int> managerPath, int
     undoAction = [this]() {
         Region& region = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
         region.deleteNote(this->noteID);
+    };
+}
+
+CreateNotesAction::CreateNotesAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID,
+                                     std::vector<CreateNoteSpec> notes) :
+        ProjectAction(p, CreateNotes),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        regionID(regionID),
+        notes(std::move(notes)) {
+    name = "Create Notes";
+    doAction = [this]() {
+        Region& region = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
+        for (auto& spec : this->notes) {
+            spec.noteID = region.createNote(spec.rhythmVector, spec.rhythmEndVector, spec.pitchVector);
+            if (!spec.noteStampedSnapshot.is_null()) {
+                auto it = region.id_to_index.find(spec.noteID);
+                if (it != region.id_to_index.end()) {
+                    const size_t idx = static_cast<size_t>(it->second);
+                    if (idx < region.notes.size() && region.notes[idx])
+                        region.notes[idx]->applyUndoSnapshot(spec.noteStampedSnapshot);
+                }
+            }
+        }
+        name = "Create " + std::to_string(this->notes.size()) + " Notes";
+    };
+    undoAction = [this]() {
+        Region& region = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
+        for (auto it = this->notes.rbegin(); it != this->notes.rend(); ++it)
+            if (it->noteID >= 0) region.deleteNote(it->noteID);
     };
 }
 
