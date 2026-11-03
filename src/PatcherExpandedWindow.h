@@ -3,12 +3,14 @@
 #include "WindowManager.h"
 
 class PatcherNode;
+class NodeEditor;
 class Project;
 
-/// PatcherNode content in its own top-level SDL3 window.
+/// A node editor (patcher or another node's inner graph) in its own top-level SDL3 window.
 class PatcherExpandedWindow : public ExpandedWindow {
 public:
     PatcherExpandedWindow(PatcherNode* node, Project* project);
+    PatcherExpandedWindow(NodeEditor* editor, Project* project);
     ~PatcherExpandedWindow() override;
 
     void render() override;
@@ -18,6 +20,7 @@ public:
 
 private:
     PatcherNode* patcherNode_ = nullptr;
+    NodeEditor* editor_ = nullptr;
     Project* project_ = nullptr;
     bool needsInit_ = true;
     int lastW_ = 0, lastH_ = 0;

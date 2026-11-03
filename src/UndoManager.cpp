@@ -1,5 +1,6 @@
 #include "UndoManager.h"
 #include "nodes/vst/vstnode.h"
+#include "nodes/delay/delay.h"
 #include "nodes/arranger/arranger.h"
 #include "SongRoll.h"
 #include "PianoRollWindow.h"
@@ -38,6 +39,11 @@ NodeManager& requireManager(Project* p, const std::vector<int>& path) {
         auto* patcher = dynamic_cast<PatcherNode*>(node);
         if (patcher && patcher->mainManager) {
             nm = patcher->mainManager;
+            continue;
+        }
+        auto* delayNode = dynamic_cast<DelayNode*>(node);
+        if (delayNode && delayNode->chain) {
+            nm = delayNode->chain;
             continue;
         }
         auto* mux = dynamic_cast<MultiplexerNode*>(node);
@@ -99,6 +105,8 @@ void UndoManager::newAction(ProjectAction* pa) {
             }
             if (patcher && patcher->mainManager)
                 nm = patcher->mainManager;
+            else if (auto* dly = dynamic_cast<DelayNode*>(node); dly && dly->chain)
+                nm = dly->chain;
             else if (!mux2)
                 break;
         }

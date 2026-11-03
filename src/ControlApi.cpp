@@ -13,6 +13,7 @@
 #include "UndoManager.h"
 #include "WindowHandler.h"
 #include "nodes/nodetypes.h"
+#include "nodes/delay/delay.h"
 #include "nodes/sampler/sampler.h"
 #include "nodes/vst/vstnode.h"
 #include "PreferencesExpandedWindow.h"
@@ -203,6 +204,8 @@ void collectManagers(NodeManager& nm, const std::vector<int>& path, json& out) {
         childPath.push_back(static_cast<int>(n->id));
         if (auto* pat = dynamic_cast<PatcherNode*>(n)) {
             if (pat->mainManager) collectManagers(*pat->mainManager, childPath, out);
+        } else if (auto* dly = dynamic_cast<DelayNode*>(n)) {
+            if (dly->chain) collectManagers(*dly->chain, childPath, out);
         } else if (auto* mux = dynamic_cast<MultiplexerNode*>(n)) {
             for (auto* mp : mux->patchers) {
                 if (!mp || !mp->mainManager) continue;
