@@ -10,6 +10,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <iostream>
 #include <SDL3_ttf/SDL_ttf.h>
 
@@ -778,6 +781,21 @@ json VstNode::extraSerialize() {
 
 void VstNode::extraDeSerialize(const json& j) {
     bypass.value = j.value("bypass", 0.0f);
+    // Blobs are in sidecar files next to save.json; older saves had them inline as base64.
+    auto readBlob = [this, &j](const char* fileKey, const char* inlineKey) -> std::vector<uint8_t> {
+        if (j.contains(fileKey) && j[fileKey].is_string() && project) {
+            std::filesystem::path folder(project->filepath);
+            if (folder.is_relative())
+                folder = std::filesystem::path(project->startupCWD) / folder;
+            std::ifstream f(folder / j[fileKey].get<std::string>(), std::ios::binary);
+            if (f.is_open())
+                return std::vector<uint8_t>(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+            return {};
+        }
+        if (j.contains(inlineKey))
+            return jsonBytesDecode(j[inlineKey]);
+        return {};
+    };
     if (j.contains("pluginPath")) {
         loadedPath = j["pluginPath"].get<std::string>();
         plugin = VstPluginCache::instance().getOrCreatePlugin(static_cast<int>(id), nm ? nm->managerPath : std::vector<int>{}, loadedPath);
@@ -785,10 +803,10 @@ void VstNode::extraDeSerialize(const json& j) {
             name = plugin->getName();
             wirePluginCallbacks();
             restoringState = true;
-            if (j.contains("compState"))
-                plugin->setComponentState(jsonBytesDecode(j["compState"]));
-            if (j.contains("ctrlState"))
-                plugin->setControllerState(jsonBytesDecode(j["ctrlState"]));
+            if (j.contains("compStateFile") || j.contains("compState"))
+                plugin->setComponentState(readBlob("compStateFile", "compState"));
+            if (j.contains("ctrlStateFile") || j.contains("ctrlState"))
+                plugin->setControllerState(readBlob("ctrlStateFile", "ctrlState"));
             restoringState = false;
             rebuildConnections();
             int sr = sampleRate > 0 ? sampleRate : 48000;

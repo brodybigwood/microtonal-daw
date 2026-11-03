@@ -3,6 +3,8 @@
 #include <memory>
 #include <filesystem>
 #include <fstream>
+#include <functional>
+#include "JsonBytes.h"
 #include <stdexcept>
 #include <limits>
 #include "AudioManager.h"
@@ -185,6 +187,36 @@ void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {
             this->um->current->savedMainManager = this->processor->serialize();
 
         j["undoManager"] = this->um->serialize();
+
+        // VST states live in sidecar files, not inside save.json. Every snapshot in the
+        // tree gets its own file, so undo history keeps the exact state it recorded.
+        {
+            std::filesystem::path vstDir = folder / "vst";
+            std::filesystem::create_directories(vstDir, ec);
+            int vstFileCounter = 0;
+            std::function<void(json&)> externalize = [&](json& o) {
+                if (o.is_object()) {
+                    for (const char* key : {"compState", "ctrlState"}) {
+                        auto it = o.find(key);
+                        if (it == o.end() || !it->is_string()) continue;
+                        const auto bytes = jsonBytesDecode(*it);
+                        const std::string rel = "vst/" + std::to_string(vstFileCounter++) + ".bin";
+                        std::ofstream f(folder / rel, std::ios::binary);
+                        if (f.is_open())
+                            f.write(reinterpret_cast<const char*>(bytes.data()),
+                                    static_cast<std::streamsize>(bytes.size()));
+                        o[std::string(key) + "File"] = rel;
+                        o.erase(it);
+                    }
+                    for (auto& el : o.items())
+                        externalize(el.value());
+                } else if (o.is_array()) {
+                    for (auto& el : o)
+                        externalize(el);
+                }
+            };
+            externalize(j);
+        }
 
         std::ofstream outFile(file);
         if (outFile.is_open()) {
