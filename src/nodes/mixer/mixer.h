@@ -1,0 +1,123 @@
+#pragma once
+
+#include "Node.h"
+#include "Parameter.h"
+#include "WindowManager.h"
+#include "idManager.h"
+#include <string>
+#include <vector>
+#include <memory>
+
+class MixerNode;
+
+// Simple insert list for one chain, like a Logic channel strip's inserts.
+class MixerChainWindow : public ExpandedWindow {
+public:
+    MixerChainWindow(MixerNode* node, int chainID);
+    void render() override;
+    bool handleInput(SDL_Event& e) override;
+
+    MixerNode* mixerNode;
+    int chainID;
+
+private:
+    int draggingNode_ = -1;
+    int dragTargetInsert_ = -1;
+};
+
+class MixerNode : public Node {
+public:
+    MixerNode(uint16_t, NodeManager*);
+    ~MixerNode() override;
+
+    void process() override;
+    void setup() override;
+    int reportedLatency() const override { return cachedLatency_; }
+    void render(SDL_Renderer* r) override;
+    void renderContent(SDL_Renderer*) override;
+    bool handleCustomInput(SDL_Event&) override;
+    void handleWindowInput(SDL_Event&) override;
+
+    json extraSerialize() override;
+    void extraDeSerialize(const json&) override;
+
+    // One mixer column: a serial list of nodes (top -> bottom).
+    struct Chain {
+        int id = -1;
+        Connection* inflow = nullptr; // this chain's multichannel input port
+        std::vector<Node*> nodes;
+        Knob pan;
+        Bar volume;
+        bool solo = false;
+        bool mute = false;
+
+        // Processing scratch.
+        std::vector<float> buf;          // last output of the chain
+        std::vector<std::vector<float>> ring; // latency-alignment delay
+        int writePos = 0;
+        int delay = 0;
+        int latency = 0;
+        int channels = 0;
+        int appliedInCh = -1;
+
+        Chain();
+    };
+
+    std::vector<std::unique_ptr<Chain>> chains;
+
+    void openChainWindow(int chainID);
+    void addNodeToChain(int chainIndex, NodeType type);
+    void removeNodeFromChain(int chainIndex, int nodeIndex);
+    void addChain(uint16_t inputPortID = 0);
+    void removeChain(int index);
+
+    // Structural operations run on whichever graph this node belongs to; the undo
+    // action calls these through requireManager on both copies.
+    void addChainOnGraph(int chainID, uint16_t portID);
+    void removeChainOnGraph(int chainID);
+    void reorderChainsOnGraph(const std::vector<int>& chainIDs);
+    json chainJson(int chainID) const;
+    void restoreChain(const json& jc);
+    json chainNodesJson(int chainID) const;
+    void applyChainNodes(int chainID, const json& nodes);
+    Chain* chainByID(int chainID);
+
+    static constexpr float kColW = 22.f;
+    static constexpr float kColPad = 4.f;
+    static constexpr float kPanH = 30.f;
+    static constexpr float kRowH = 14.f;
+    static constexpr float kBtnSz = 12.f;
+    static constexpr float kSliderH = 40.f;
+    static constexpr float kFooterH = 24.f;
+    static constexpr float kListTop = 4.f;
+    static constexpr float kNODE_H = 180.f;
+
+private:
+    Connection* out = nullptr;
+    idManager chainIdPool_;
+    idManager nodeIdPool_;
+
+    float scrollOffset_ = 0.f;
+    int hoveredChainIndex_ = -1;
+    int draggingChain_ = -1;
+    int dragTargetInsert_ = -1;
+    float dragStartX_ = 0.f;
+    float dragStartY_ = 0.f;
+
+    int draggingVolumeIdx_ = -1;
+    float oldVolume_ = 0.f;
+
+    MixerChainWindow* chainWindow_ = nullptr;
+    std::vector<float> silence_;
+    int cachedLatency_ = 0;
+    int outChannelsTarget_ = 1;
+
+    Connection* addInputPort(uint16_t forcedID = 0);
+    void removeInputPort(Connection* c);
+
+    Node* createNode(NodeType type);
+    void destroyNode(Node*);
+    void reorderChains(const std::vector<size_t>& newOrder);
+    void closeChainWindow();
+    void syncChainParams();
+};

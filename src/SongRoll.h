@@ -90,6 +90,7 @@ class SongRoll : public GridView{
         std::vector<PianoRollWindow*> pianoRollWindows;
         void createPianoRoll(Region*, bool createUndo = true, int forceEwID = -1);
         void clearPianoRoll(int regionId, bool createUndo = true);
+        void closePianoRollWindow(PianoRollWindow* prw, bool createUndo);
 
         // Rhythm grid — same model as PianoRoll
         void RenderGridTexture(SDL_Renderer* renderer) override;

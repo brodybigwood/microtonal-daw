@@ -1,4 +1,7 @@
 #include "Parameter.h"
+#include "Node.h"
+#include "NodeManager.h"
+#include "UndoManager.h"
 #include <algorithm>
 #include "SDL3_gfx/SDL3_gfxPrimitives.h"
 #include <SDL3_image/SDL_image.h>
@@ -28,6 +31,116 @@ Parameter::Parameter(float value, std::pair<std::vector<float>, std::vector<floa
     defaultValue(value),
     vx(std::move(bound.first)),
     vy(std::move(bound.second)) {}
+
+Parameter::Parameter(const Parameter& other)
+    : value(other.value), defaultValue(other.defaultValue), label(other.label),
+      clampOutput(other.clampOutput), mappedConnection(other.mappedConnection),
+      lockMapping(other.lockMapping), vx(other.vx), vy(other.vy) {}
+
+Parameter& Parameter::operator=(const Parameter& other) {
+    if (this == &other) return *this;
+    clearTextures();
+    value = other.value;
+    defaultValue = other.defaultValue;
+    label = other.label;
+    clampOutput = other.clampOutput;
+    mappedConnection = other.mappedConnection;
+    lockMapping = other.lockMapping;
+    vx = other.vx;
+    vy = other.vy;
+    return *this;
+}
+
+Parameter::Parameter(Parameter&& other) noexcept
+    : value(other.value), defaultValue(other.defaultValue), label(std::move(other.label)),
+      clampOutput(other.clampOutput), mappedConnection(other.mappedConnection),
+      lockMapping(other.lockMapping), vx(std::move(other.vx)), vy(std::move(other.vy)) {
+    other.textures.clear();
+}
+
+Parameter& Parameter::operator=(Parameter&& other) noexcept {
+    if (this == &other) return *this;
+    clearTextures();
+    value = other.value;
+    defaultValue = other.defaultValue;
+    label = std::move(other.label);
+    clampOutput = other.clampOutput;
+    mappedConnection = other.mappedConnection;
+    lockMapping = other.lockMapping;
+    vx = std::move(other.vx);
+    vy = std::move(other.vy);
+    other.textures.clear();
+    return *this;
+}
+
+// Knob keeps a cached texture in its own member; the base's textures list holds
+// &texture. Moving must re-point it at this instance and null the source.
+Knob::Knob(Knob&& other) noexcept
+    : Parameter(std::move(other)),
+      thetaMin(other.thetaMin), thetaMax(other.thetaMax),
+      label(std::move(other.label)), displayLabel(std::move(other.displayLabel)),
+      labelColor(other.labelColor), filepath(std::move(other.filepath)),
+      knobRect(other.knobRect), texture(other.texture),
+      wheelVelocity(other.wheelVelocity) {
+    other.texture = nullptr;
+    other.textures.clear();
+    textures.clear();
+    if (texture) textures.push_back(&texture);
+}
+
+Knob& Knob::operator=(Knob&& other) noexcept {
+    if (this == &other) return *this;
+    Parameter::operator=(std::move(other));
+    thetaMin = other.thetaMin;
+    thetaMax = other.thetaMax;
+    label = std::move(other.label);
+    displayLabel = std::move(other.displayLabel);
+    labelColor = other.labelColor;
+    filepath = std::move(other.filepath);
+    knobRect = other.knobRect;
+    texture = other.texture;
+    other.texture = nullptr;
+    other.textures.clear();
+    textures.clear();
+    if (texture) textures.push_back(&texture);
+    wheelVelocity = other.wheelVelocity;
+    return *this;
+}
+
+void Parameter::beginDrag(Node* owner, size_t paramIndex) {
+    ownerNode = owner;
+    ownerIndex = paramIndex;
+    dragActive = true;
+    dragPushed = false;
+    dragStartValue = value;
+    dragLastValue = value;
+}
+
+void Parameter::dragToValue(float v) {
+    const float nv = clampOutput ? std::clamp(v, 0.f, 1.f) : v;
+    if (!dragActive) {
+        value = nv;
+        return;
+    }
+    if (std::fabs(nv - value) <= 0.0005f) return;
+    // First change records the pre-drag value; later changes coalesce into it.
+    const float old = dragPushed ? dragLastValue : dragStartValue;
+    value = nv;
+    if (ownerNode && ownerNode->project && ownerNode->project->um && ownerNode->nm) {
+        std::vector<size_t> pp{ownerIndex};
+        ownerNode->project->um->newAction(new SetParamValueUndoAction(
+            ownerNode->project, ownerNode->nm->managerPath, static_cast<int>(ownerNode->id),
+            std::move(pp), old, nv, label.empty() ? std::string("Parameter") : label));
+        dragPushed = true;
+        dragLastValue = nv;
+    }
+}
+
+void Parameter::endDrag() {
+    dragActive = false;
+    ownerNode = nullptr;
+    dragPushed = false;
+}
 
 float Parameter::operator[](size_t i) {
     if (mappedConnection && mappedConnection->is_connected && mappedConnection->buffer) {
@@ -136,6 +249,58 @@ void Knob::handleInput(SDL_Event& e) {
             wheelVelocity = 0.75f * wheelVelocity + 0.25f * e.wheel.y;
             value = std::clamp(value + wheelVelocity * 0.05f, 0.0f, 1.0f);
         break;
+    }
+}
+
+// --- Bar ---
+
+Bar::Bar(float value, float x, float y, float w, float h)
+    : Parameter(value, generateRect(x, y, w, h)), barRect{x, y, w, h} {}
+
+void Bar::reposition(float x, float y, float w, float h) {
+    barRect = {x, y, w, h};
+    auto poly = generateRect(x, y, w, h);
+    vx = std::move(poly.first);
+    vy = std::move(poly.second);
+}
+
+void Bar::render(SDL_Renderer* renderer) {
+    SDL_SetRenderDrawColor(renderer, 60, 60, 65, 255);
+    SDL_RenderFillRect(renderer, &barRect);
+    const float fillH = value * barRect.h;
+    SDL_FRect fill{barRect.x, barRect.y + barRect.h - fillH, barRect.w, fillH};
+    SDL_SetRenderDrawColor(renderer, 100, 180, 255, 255);
+    SDL_RenderFillRect(renderer, &fill);
+    SDL_SetRenderDrawColor(renderer, 120, 120, 130, 255);
+    SDL_RenderRect(renderer, &barRect);
+}
+
+void Bar::handleInputAt(SDL_Event& e, float mx, float my) {
+    auto valueAt = [this](float y) {
+        return std::clamp(1.f - (y - barRect.y) / barRect.h, 0.f, 1.f);
+    };
+    switch (e.type) {
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            if (e.button.button != SDL_BUTTON_LEFT) return;
+            if (mx < barRect.x - 4.f || mx > barRect.x + barRect.w + 4.f) return;
+            if (my < barRect.y || my > barRect.y + barRect.h) return;
+            beginDrag(ownerNode, ownerIndex);
+            dragToValue(valueAt(my));
+            break;
+        case SDL_EVENT_MOUSE_MOTION:
+            if (!dragging()) return;
+            dragToValue(valueAt(my));
+            break;
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+            if (dragging()) endDrag();
+            break;
+        case SDL_EVENT_MOUSE_WHEEL:
+            if (mx < barRect.x || mx > barRect.x + barRect.w) return;
+            if (my < barRect.y || my > barRect.y + barRect.h) return;
+            beginDrag(ownerNode, ownerIndex);
+            dragToValue(value + e.wheel.y * 0.05f);
+            endDrag();
+            break;
     }
 }
 

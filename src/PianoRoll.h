@@ -258,7 +258,14 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         void extendTransportLines(const std::vector<std::pair<int, int>>& cursorPairs);
         void applyTransportToGrid() override;
 
+        // Note clipboard: Ctrl+C / Ctrl+V (at playhead), Ctrl+B (at end of the copied set),
+        // Ctrl+D (in place).
+        void copySelectedNotes();
+        void pasteCopiedNotes(float firstBeat);
+        bool hasNoteClipboard() const;
+
     public:
+        bool handleKeyboard(SDL_Event& e) override;
         bool needsInit_ = false;
 };
 

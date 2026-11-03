@@ -10,8 +10,9 @@
 
 Region::Region(Project* p, ArrangerNode* n) : GridElement(p, n) {
     type = ElementType::region;
-    // Transport strip starts as one span: beat 0 to beat 1, four divisions.
+    // Transport strip and the grid both start as one span: beat 0 to beat 1, one division.
     transportLines.push_back(defaultLatticeSpan(1));
+    gridSpans.push_back(defaultLatticeSpan(1));
 }
 
 Region::~Region() {
@@ -130,6 +131,7 @@ void Region::fromJSON(json j) {
     }
     transportLines = latticeSpansFromJSON(j, "transportLines");
     gridSpans = latticeSpansFromJSON(j, "gridSpans");
+    if (gridSpans.empty()) gridSpans.push_back(defaultLatticeSpan(1));
 }
 
 json Region::tuningUndoToJSON() const {
@@ -200,6 +202,7 @@ void Region::applyTuningUndoFromJSON(const json& j) {
     }
     transportLines = latticeSpansFromJSON(j, "transportLines");
     gridSpans = latticeSpansFromJSON(j, "gridSpans");
+    if (gridSpans.empty()) gridSpans.push_back(defaultLatticeSpan(1));
 }
 
 int Region::createNote(std::vector<std::pair<int, int>> startPairs, std::vector<std::pair<int, int>> endPairs, std::vector<std::pair<int, int>> pitchVector) {

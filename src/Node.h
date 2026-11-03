@@ -102,6 +102,10 @@ class Node : public EmbeddedWindow {
 
         void update(int, int);
 
+        // Nodes that process whatever width they receive report true, so the manager
+        // propagates their input's channel count forward to their outputs.
+        virtual bool widthFollowsInput() const { return false; }
+
         // Latency compensation. Nodes that add processing latency (lookahead plugins) report
         // it; the graph delays the shorter parallel paths to match, per input connection.
         virtual int reportedLatency() const { return 0; }

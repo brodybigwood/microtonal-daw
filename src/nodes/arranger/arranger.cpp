@@ -15,8 +15,9 @@ ArrangerNode::ArrangerNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType
     slRect = new SDL_FRect{0, 0, NODE_W, NODE_H};
     tracks = new TrackManager(this);
     elements = new ElementManager(project, tracks, this);
-    // Transport strip starts as one span: beat 0 to beat 1, four divisions.
+    // Transport strip and the grid both start as one span: beat 0 to beat 1, one division.
     transportLines.push_back(defaultLatticeSpan(1));
+    gridSpans.push_back(defaultLatticeSpan(1));
 }
 
 ArrangerNode::~ArrangerNode() {
@@ -217,6 +218,7 @@ void ArrangerNode::extraDeSerialize(const json& j) {
     if (rhythmEdoUpperVector.empty()) rhythmEdoUpperVector = {{1,1}};
     transportLines = latticeSpansFromJSON(j, "transportLines");
     gridSpans = latticeSpansFromJSON(j, "gridSpans");
+    if (gridSpans.empty()) gridSpans.push_back(defaultLatticeSpan(1));
 
     rebuildState(j);
 

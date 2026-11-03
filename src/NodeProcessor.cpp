@@ -2,6 +2,7 @@
 #include "NodeManager.h"
 #include "NodeEditor.h"
 #include "WindowManager.h"
+#include <chrono>
 #include <cstring>
 
 NodeProcessor::NodeProcessor(Project* p) : project(p) {
@@ -83,7 +84,10 @@ void NodeProcessor::deSerialize(const json& j) {
     }
     guiGraph = new NodeManager(project);
     guiGraph->setNE(editor);
+    auto tGui = std::chrono::steady_clock::now();
     guiGraph->deSerialize(*src);
+    std::cout << "[load] gui graph: " << std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - tGui).count() << " ms" << std::endl;
 
     // Wipe and rebuild audio copy from the same JSON.
     if (dspGraph) {
@@ -92,7 +96,10 @@ void NodeProcessor::deSerialize(const json& j) {
         dspGraph = nullptr;
     }
     dspGraph = new NodeManager(project);
+    auto tDsp = std::chrono::steady_clock::now();
     dspGraph->deSerialize(*src);
+    std::cout << "[load] dsp graph: " << std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - tDsp).count() << " ms" << std::endl;
 
     setThreadActiveRoot(guiGraph);
 }

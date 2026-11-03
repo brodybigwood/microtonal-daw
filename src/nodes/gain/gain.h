@@ -8,6 +8,7 @@ public:
 
     void process() override;
     void setup() override;
+    bool widthFollowsInput() const override { return true; }
 
 private:
     Connection* in = nullptr;

@@ -237,6 +237,7 @@ void stampNoteTuning(Region* region, int noteID, const json& intent, json& outSn
     n.rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
     n.rhythmEdoLowerVector = region->rhythmEdoLowerVector;
     n.rhythmEdoUpperVector = region->rhythmEdoUpperVector;
+    n.gridSpans = region->gridSpans;
 
     if (intent.contains("rhythmEdoSubdivisionSteps")) n.rhythmEdoSubdivisionSteps = intent["rhythmEdoSubdivisionSteps"].get<int>();
     if (intent.contains("rhythmEdoLowerVector")) n.rhythmEdoLowerVector = readPairs(intent["rhythmEdoLowerVector"]);
@@ -861,7 +862,7 @@ ProjectAction* UndoManager::buildRegisteredAction(const std::string& actionName,
             const size_t si = static_cast<size_t>(params.at("sampleIndex").get<int>());
             if (si >= sampler->samples.size())
                 throw std::runtime_error("sampler_load_sample_file: sampleIndex out of range");
-            const auto& slab = sampler->samples[si];
+            const auto& slab = *sampler->samples[si];
             pa = new SamplerLoadSampleFileUndoAction(head->p, std::move(mp), nodeID, si,
                 slab.filepath, params.at("filepath").get<std::string>(),
                 slab.sampleRate, slab.numChannels, slab.sampleRate, slab.numChannels);

@@ -391,6 +391,7 @@ SongRollRhythmEdoAction::SongRollRhythmEdoAction(Project* p, std::vector<int> ma
                 node->rhythmEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
         node->transportLines = latticeSpansFromJSON(this->after, "transportLines");
         node->gridSpans = latticeSpansFromJSON(this->after, "gridSpans");
+        if (node->gridSpans.empty()) node->gridSpans.push_back(defaultLatticeSpan(1));
         if (node->sl) node->sl->updateRhythmLines();
     };
     undoAction = [this]() {
@@ -408,6 +409,7 @@ SongRollRhythmEdoAction::SongRollRhythmEdoAction(Project* p, std::vector<int> ma
                 node->rhythmEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
         node->transportLines = latticeSpansFromJSON(this->before, "transportLines");
         node->gridSpans = latticeSpansFromJSON(this->before, "gridSpans");
+        if (node->gridSpans.empty()) node->gridSpans.push_back(defaultLatticeSpan(1));
         if (node->sl) node->sl->updateRhythmLines();
     };
 }

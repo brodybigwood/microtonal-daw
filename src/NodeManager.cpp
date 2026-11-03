@@ -7,6 +7,9 @@
 
 #include <iostream>
 #include <limits>
+#include <functional>
+#include <unordered_map>
+#include <algorithm>
 #include "nodes/nodetypes.h"
 
 NodeManager::NodeManager(Project* p, std::vector<int> managerPath) : project(p), managerPath(std::move(managerPath)) {
@@ -165,6 +168,50 @@ std::vector<Node*> NodeManager::getNodes() {
     return nodes;
 }
 
+void NodeManager::refreshChannelWidths() {
+    if (!inNode || !outNode) return;
+
+    std::vector<Node*> order;
+    std::unordered_map<Node*, int> state; // 0 unvisited, 1 visiting, 2 done
+    std::function<void(Node*)> visit = [&](Node* n) {
+        if (!n || state[n] != 0) return;
+        state[n] = 1;
+        for (Connection* c : n->inputs.connections) {
+            if (c->type != DataType::Waveform || !c->is_connected) continue;
+            visit(getNode(static_cast<uint16_t>(c->input_node)));
+        }
+        state[n] = 2;
+        order.push_back(n);
+    };
+    visit(inNode);
+    visit(outNode);
+    for (Node* n : nodes) visit(n);
+
+    for (Node* n : order) {
+        if (!n) continue;
+        int maxInW = 0;
+        for (Connection* c : n->inputs.connections) {
+            if (c->type != DataType::Waveform || !c->is_connected) continue;
+            Node* src = getNode(static_cast<uint16_t>(c->input_node));
+            if (!src) continue;
+            Connection* ci = src->outputs.getConnection(static_cast<uint16_t>(c->input_connection));
+            if (!ci) continue;
+            const int w = std::max(1, ci->numChannels);
+            maxInW = std::max(maxInW, w);
+            if (c->numChannels != w) c->numChannels = w;
+        }
+        if (n->widthFollowsInput() && maxInW > 0) {
+            for (Connection* o : n->outputs.connections) {
+                if (o->type != DataType::Waveform) continue;
+                if (o->minChannels < maxInW) {
+                    o->minChannels = maxInW;
+                    o->updateNumChannels();
+                }
+            }
+        }
+    }
+}
+
 void NodeManager::markTopologyDirty() {
     topologyDirty = true;
 }
@@ -255,19 +302,79 @@ void NodeManager::process(float* output, int& bufferSize, int& numChannels, int&
     }
 
     if(update || topologyDirty) {
-        inNode->update(bufferSize, sampleRate);
-        for(auto node : nodes) {
-            node->update(bufferSize, sampleRate);
-        }
-        outNode->numChannels = numChannels;
-        outNode->update(bufferSize, sampleRate);
+        // Channel widths propagate FORWARD along cables: an input port reports what its
+        // source actually emits, and nodes that process any width push that width to
+        // their outputs (widthFollowsInput). This repeats because a width can grow as
+        // it travels (e.g. a stereo plugin inside a wider chain).
+        auto propagateInputWidths = [&]() -> bool {
+            bool changed = false;
 
-        // Second pass: relink all input pointers after every node has refreshed outputs.
-        inNode->relinkInputs();
-        for (auto node : nodes) {
-            node->relinkInputs();
+            // Topological order (sources before consumers); cycles are tolerated.
+            std::vector<Node*> order;
+            std::unordered_map<Node*, int> state; // 0 unvisited, 1 visiting, 2 done
+            std::function<void(Node*)> visit = [&](Node* n) {
+                if (!n || state[n] != 0) return;
+                state[n] = 1;
+                for (Connection* c : n->inputs.connections) {
+                    if (c->type != DataType::Waveform || !c->is_connected) continue;
+                    visit(getNode(static_cast<uint16_t>(c->input_node)));
+                }
+                state[n] = 2;
+                order.push_back(n);
+            };
+            visit(inNode);
+            visit(outNode);
+            for (Node* n : nodes) visit(n);
+
+            for (Node* n : order) {
+                if (!n) continue;
+                int maxInW = 0;
+                for (Connection* c : n->inputs.connections) {
+                    if (c->type != DataType::Waveform || !c->is_connected) continue;
+                    Node* src = getNode(static_cast<uint16_t>(c->input_node));
+                    if (!src) continue;
+                    Connection* ci = src->outputs.getConnection(static_cast<uint16_t>(c->input_connection));
+                    if (!ci) continue;
+                    const int w = std::max(1, ci->numChannels);
+                    maxInW = std::max(maxInW, w);
+                    if (c->numChannels != w) {
+                        c->numChannels = w;
+                        changed = true;
+                    }
+                }
+                if (n->widthFollowsInput() && maxInW > 0) {
+                    for (Connection* o : n->outputs.connections) {
+                        if (o->type != DataType::Waveform) continue;
+                        if (o->minChannels < maxInW) {
+                            o->minChannels = maxInW;
+                            o->updateNumChannels();
+                            changed = true;
+                        }
+                    }
+                }
+            }
+            return changed;
+        };
+
+        for (int iter = 0; iter < 4; ++iter) {
+            const bool widthsChanged = propagateInputWidths();
+
+            inNode->update(bufferSize, sampleRate);
+            for(auto node : nodes) {
+                node->update(bufferSize, sampleRate);
+            }
+            outNode->numChannels = numChannels;
+            outNode->update(bufferSize, sampleRate);
+
+            // Second pass: relink all input pointers after every node has refreshed outputs.
+            inNode->relinkInputs();
+            for (auto node : nodes) {
+                node->relinkInputs();
+            }
+            outNode->relinkInputs();
+
+            if (!widthsChanged) break;
         }
-        outNode->relinkInputs();
         topologyDirty = false;
 
         // Recompute per-node latency and the compensation delays on every input connection.

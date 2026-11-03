@@ -17,6 +17,7 @@
 #include "nodes/paramnode/paramnode.h"
 #include "nodes/sampler/sampler.h"
 #include "nodes/bus/bus.h"
+#include "nodes/mixer/mixer.h"
 
 inline std::string NodeTypeStr[] = {
     "Arranger",
@@ -35,7 +36,8 @@ inline std::string NodeTypeStr[] = {
     "Surround->Stereo",
     "Param",
     "Sampler",
-    "Bus"
+    "Bus",
+    "Mixer"
 };
 
 inline Node* byType(NodeType t, int id, NodeManager* nm) {
@@ -74,6 +76,8 @@ inline Node* byType(NodeType t, int id, NodeManager* nm) {
             return new SamplerNode(id, nm);
         case NodeType::Bus:
             return new BusNode(id, nm);
+        case NodeType::Mixer:
+            return new MixerNode(id, nm);
         default:
             return nullptr;
     }

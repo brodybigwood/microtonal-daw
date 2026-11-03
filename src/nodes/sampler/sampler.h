@@ -6,6 +6,7 @@
 #include "idManager.h"
 #include <string>
 #include <vector>
+#include <memory>
 
 #ifndef __EMSCRIPTEN__
 #include <sndfile.h>
@@ -21,7 +22,7 @@ struct SampleSlab {
 
     // Continuous controls — Knobs, auto-undo via SetParamValueUndoAction.
     // Values and positions set in SamplerNode::addSample().
-    Knob volume;          // 0–1
+    Bar volume;           // 0–1 (owns its drag input and undo)
     Knob pitch;           // MIDI note for native playback rate
     Knob pan;             // 0=L, 1=R
     Knob offset;          // sample start offset (0–1 fraction of num_samples)
@@ -34,12 +35,12 @@ struct SampleSlab {
     // Discrete toggles — NOT Parameters (dedicated undo actions).
     bool solo = false;
     bool mute = false;
+    // Output port width: stereo by default; mono duplicates the source's channels.
+    bool stereoOut = true;
 
     SDL_Texture* thumbnail = nullptr;
 
     SampleSlab();
-    SampleSlab(SampleSlab&& other) noexcept;
-    SampleSlab& operator=(SampleSlab&& other) noexcept;
     ~SampleSlab();
     void loadFile(const std::string& path);
 };
@@ -103,7 +104,7 @@ public:
     void setSampleFile(size_t index, const std::string& filepath);
     void rebuildConnections();
 
-    std::vector<SampleSlab> samples;
+    std::vector<std::unique_ptr<SampleSlab>> samples;
     static constexpr int kMaxVoices = 64;
     SamplerVoice voices[kMaxVoices];
 

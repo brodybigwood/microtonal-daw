@@ -2,6 +2,7 @@
 
 #include "vstplugin.h"
 #include "public.sdk/source/common/memorystream.h"
+#include "pluginterfaces/base/keycodes.h"
 #include <dlfcn.h>
 #include <cstring>
 #include <iostream>
@@ -363,12 +364,14 @@ public:
     void grabKey(KeySym keysym, unsigned int modifiers) {
         if (!display) return;
         int kc = XKeysymToKeycode(display, keysym);
-        XGrabKey(display, kc, modifiers, window, True, GrabModeAsync, GrabModeAsync);
+        // owner_events = False: the host sees these keys first, then asks the plugin
+        // (IPlugView::onKeyDown) whether it wants them before running its shortcut.
+        XGrabKey(display, kc, modifiers, window, False, GrabModeAsync, GrabModeAsync);
         if (modifiers != AnyModifier) {
             // Also grab with lock keys (CapsLock, NumLock, ScrollLock)
-            XGrabKey(display, kc, modifiers | LockMask, window, True, GrabModeAsync, GrabModeAsync);
-            XGrabKey(display, kc, modifiers | Mod2Mask, window, True, GrabModeAsync, GrabModeAsync); // NumLock
-            XGrabKey(display, kc, modifiers | LockMask | Mod2Mask, window, True, GrabModeAsync, GrabModeAsync);
+            XGrabKey(display, kc, modifiers | LockMask, window, False, GrabModeAsync, GrabModeAsync);
+            XGrabKey(display, kc, modifiers | Mod2Mask, window, False, GrabModeAsync, GrabModeAsync); // NumLock
+            XGrabKey(display, kc, modifiers | LockMask | Mod2Mask, window, False, GrabModeAsync, GrabModeAsync);
         }
     }
 
@@ -405,10 +408,46 @@ public:
         return true;
     }
 
+    // Ask the plugin whether it wants this key (text fields, its own shortcuts).
+    bool pluginConsumesKey(KeySym sym, bool ctrl, bool shift) {
+        if (!view) return false;
+        Steinberg::char16 ch = 0;
+        if (sym == XK_space) ch = ' ';
+        else if (sym == XK_z) ch = 'z';
+        else if (sym == XK_s) ch = 's';
+        Steinberg::int16 modifiers = 0;
+        if (ctrl) modifiers |= Steinberg::kControlKey;
+        if (shift) modifiers |= Steinberg::kShiftKey;
+        return view->onKeyDown(ch, static_cast<Steinberg::int16>(ch), modifiers) == Steinberg::kResultTrue;
+    }
+
+    // The grab stole the key from the plugin; replay it on the plugin's window.
+    void forwardKeyToPlugin(XKeyEvent& ev) {
+        if (!display || !window) return;
+        ::Window root = 0, parent = 0, *children = nullptr;
+        unsigned int n = 0;
+        ::Window target = window;
+        if (XQueryTree(display, window, &root, &parent, &children, &n) && children && n > 0) {
+            target = children[n - 1];
+            XFree(children);
+        }
+        XKeyEvent ke = ev;
+        ke.window = target;
+        ke.root = root;
+        XSendEvent(display, target, True, KeyPressMask, reinterpret_cast<XEvent*>(&ke));
+        XFlush(display);
+    }
+
     void handleGrabbedKey(XKeyEvent& ev) {
         KeySym sym = XLookupKeysym(&ev, 0);
         bool ctrl = (ev.state & ControlMask) != 0;
         bool shift = (ev.state & ShiftMask) != 0;
+
+        // Plugin first: only if it declines does the key act as a host shortcut.
+        if (pluginConsumesKey(sym, ctrl, shift)) {
+            forwardKeyToPlugin(ev);
+            return;
+        }
 
         SDL_Event sdle{};
         sdle.type = SDL_EVENT_KEY_DOWN;
@@ -920,14 +959,9 @@ bool VstPlugin::tickEditor() {
         editorOpen = false;
         return false;
     }
-    // Defer state polling while a pointer button is held: a continuous drag
-    // inside the plugin then commits as a single action on release (a pending
-    // forced poll stays queued in statePollRequested until then).
-    if (hostFrame && hostFrame->onStatePoll && !editorHost->pointerButtonDown()) {
-        bool force = hostFrame->statePollRequested;
-        hostFrame->statePollRequested = false;
-        hostFrame->onStatePoll(force);
-    }
+    // Periodic getState() polling while the editor is open crashes inside some
+    // plugins (Vital: va::Sample::stateToJson dereferences null). Capture the state
+    // when the editor closes instead (see the onStatePoll call above).
     return true;
 }
 

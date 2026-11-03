@@ -229,7 +229,7 @@ SamplerRemoveSampleUndoAction::SamplerRemoveSampleUndoAction(Project* p, std::ve
     NodeManager& nm = requireManager(p, this->managerPath);
     auto* target = dynamic_cast<SamplerNode*>(nm.getNode(static_cast<uint16_t>(nodeID)));
     if (target && sampleIndex < target->samples.size()) {
-        auto& s = target->samples[sampleIndex];
+        auto& s = *target->samples[sampleIndex];
         filepath = s.filepath;
         vol = s.volume.value; pitch = s.pitch.value; pan = s.pan.value;
         offset = s.offset.value; cutoff = s.cutoff.value;
@@ -269,7 +269,7 @@ SamplerRemoveSampleUndoAction::SamplerRemoveSampleUndoAction(Project* p, std::ve
         if (!target2) throw std::runtime_error("SamplerRemoveSample::undoAction: node not found");
         target2->insertSampleAt(this->sampleIndex, this->filepath);
         if (this->sampleIndex < target2->samples.size()) {
-            auto& s = target2->samples[this->sampleIndex];
+            auto& s = *target2->samples[this->sampleIndex];
             s.volume.value = this->vol;
             s.pitch.value = this->pitch;
             s.pan.value = this->pan;
@@ -356,13 +356,13 @@ SamplerToggleSampleSoloUndoAction::SamplerToggleSampleSoloUndoAction(Project* p,
         NodeManager& nm = requireManager(this->p, this->managerPath);
         auto* target = dynamic_cast<SamplerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
         if (!target || this->sampleIndex >= target->samples.size()) return;
-        target->samples[this->sampleIndex].solo = !target->samples[this->sampleIndex].solo;
+        target->samples[this->sampleIndex]->solo = !target->samples[this->sampleIndex]->solo;
     };
     undoAction = [this]() {
         NodeManager& nm = requireManager(this->p, this->managerPath);
         auto* target = dynamic_cast<SamplerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
         if (!target || this->sampleIndex >= target->samples.size()) return;
-        target->samples[this->sampleIndex].solo = !target->samples[this->sampleIndex].solo;
+        target->samples[this->sampleIndex]->solo = !target->samples[this->sampleIndex]->solo;
     };
 }
 
@@ -375,13 +375,13 @@ SamplerToggleSampleMuteUndoAction::SamplerToggleSampleMuteUndoAction(Project* p,
         NodeManager& nm = requireManager(this->p, this->managerPath);
         auto* target = dynamic_cast<SamplerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
         if (!target || this->sampleIndex >= target->samples.size()) return;
-        target->samples[this->sampleIndex].mute = !target->samples[this->sampleIndex].mute;
+        target->samples[this->sampleIndex]->mute = !target->samples[this->sampleIndex]->mute;
     };
     undoAction = [this]() {
         NodeManager& nm = requireManager(this->p, this->managerPath);
         auto* target = dynamic_cast<SamplerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
         if (!target || this->sampleIndex >= target->samples.size()) return;
-        target->samples[this->sampleIndex].mute = !target->samples[this->sampleIndex].mute;
+        target->samples[this->sampleIndex]->mute = !target->samples[this->sampleIndex]->mute;
     };
 }
 

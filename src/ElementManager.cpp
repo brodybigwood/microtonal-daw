@@ -147,7 +147,8 @@ void ElementManager::process(int bufferSize) {
                         const float trim = Note::beatsFromVector(pos.startOffsetPairs);
                         for (auto& note : region->notes) {
                             float start = note->startBeats() + posStartBeat - trim;
-                            if (start > posEndBeat) continue;
+                            // Notes at or past the position's end belong to nothing.
+                            if (start >= posEndBeat) continue;
                             float end = note->endBeats() + posStartBeat - trim;
 
                             auto activeIt = std::find_if(dispatched.begin(), dispatched.end(),

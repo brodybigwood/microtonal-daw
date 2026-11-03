@@ -66,6 +66,7 @@ enum ActionType {
     SamplerToggleSampleSolo = 50,
     SamplerToggleSampleMute = 51,
     CreateNotes = 52,
+    MixerChainEdit = 53,
 };
 
 
@@ -103,7 +104,7 @@ struct ProjectAction {
     }
 
     static json serialize(ProjectAction*);
-    static ProjectAction* deSerialize(json, Project*);
+    static ProjectAction* deSerialize(const json&, Project*);
 
     Project* p;
 
@@ -254,6 +255,24 @@ struct PianoRollRegionTuningUndoAction : ProjectAction {
 
     PianoRollRegionTuningUndoAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, json beforeRegion,
                                     json afterRegion, std::string actionName);
+};
+
+// Structural edit of one Mixer node's chains. The action performs the specific
+// operation on whichever graph it runs (GUI or audio), so both copies stay in
+// sync and undo works on both.
+struct MixerChainEditUndoAction : ProjectAction {
+    enum Op { Add = 0, Remove = 1, Reorder = 2, Solo = 3, Mute = 4, ChainNodes = 5 };
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    int op = Add;
+    int chainID = 0;
+    uint16_t portID = 0;
+    std::vector<int> order;   // Reorder: chain ids in the new order
+    json chainData;           // Remove: full chain snapshot to restore on undo
+
+    MixerChainEditUndoAction(Project* p, std::vector<int> managerPath, int nodeID, int op,
+                             int chainID, uint16_t portID, std::vector<int> order,
+                             json chainData, std::string actionName);
 };
 
 struct AssignNoteHarmonicUndoAction : ProjectAction {

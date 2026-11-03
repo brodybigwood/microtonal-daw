@@ -4,6 +4,14 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <mutex>
+#include <thread>
+#include <chrono>
+#include <ctime>
+#include <cstdio>
+#include <cstdlib>
+#include <cctype>
+#include <algorithm>
 #include "JsonBytes.h"
 #include <stdexcept>
 #include <limits>
@@ -13,6 +21,7 @@
 #include "NodeProcessor.h"
 #include "NodeManager.h"
 #include "WindowHandler.h"
+#include "WindowManager.h"
 #include "ContextMenu.h"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
@@ -66,8 +75,14 @@ void Project::handleWindowInput(SDL_Event& e) {
 }
 
 Project::~Project() {
+    waitForSave();
     delete um;
     delete processor;
+}
+
+void Project::waitForSave() {
+    std::lock_guard<std::mutex> lock(saveThreadMutex);
+    if (saveThread.joinable()) saveThread.join();
 }
 
 void Project::load(std::string path) {
@@ -93,8 +108,14 @@ void Project::load(std::string path) {
 
     filepath = path;
 
+    auto loadMs = [](auto t0) {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - t0).count();
+    };
+    auto lt = std::chrono::steady_clock::now();
     json j;
     inFile >> j;
+    std::cout << "[load] parse: " << loadMs(lt) << " ms" << std::endl;
 
     // Restore tempo curve from JSON (or fall back to legacy float, or default)
     if (j.contains("tempoCurve") && j["tempoCurve"].is_object()) {
@@ -125,16 +146,29 @@ void Project::load(std::string path) {
         tempoCurve.addPoint({}, legacyTempo, CurveShape::Single);
     }
 
+    // Expanded windows hold pointers to nodes that are about to be replaced by the graph
+    // being loaded; close them first so their input/render paths never touch stale nodes.
+    if (processor) {
+        if (auto* wm = processor->getWindowManager()) {
+            while (!wm->windows().empty())
+                wm->removeWindow(wm->windows().back().get());
+        }
+    }
+
     // Restore undo tree first (walks to version)
+    lt = std::chrono::steady_clock::now();
     um->deSerialize(j["undoManager"], this);
+    std::cout << "[load] undo deserialize: " << loadMs(lt) << " ms" << std::endl;
 
     // Restore NM state from current action's snapshot (falls back to legacy top-level)
+    lt = std::chrono::steady_clock::now();
     if (processor) {
         if (!um->current->savedMainManager.is_null())
             processor->deSerialize(um->current->savedMainManager);
         else if (j.contains("nodeManager"))
             processor->deSerialize(j["nodeManager"]);
     }
+    std::cout << "[load] graph deserialize: " << loadMs(lt) << " ms" << std::endl;
 
     loading = false;
     const float tempoMin = tempoCurve.valueRangeMin;
@@ -182,54 +216,164 @@ void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {
         }
         j["tempoCurve"] = std::move(tcj);
 
+        auto msSince = [](auto t0) {
+            return std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - t0).count();
+        };
         // Snapshot NM state onto current action before serializing the tree
+        auto t0 = std::chrono::steady_clock::now();
         if (this->processor && this->um && this->um->current)
             this->um->current->savedMainManager = this->processor->serialize();
+        std::cout << "[save] graph serialize: " << msSince(t0) << " ms" << std::endl;
 
+        t0 = std::chrono::steady_clock::now();
         j["undoManager"] = this->um->serialize();
+        std::cout << "[save] undo tree serialize: " << msSince(t0) << " ms" << std::endl;
 
-        // VST states live in sidecar files, not inside save.json. Every snapshot in the
-        // tree gets its own file, so undo history keeps the exact state it recorded.
-        {
+        // VST states live in sidecar files, not inside save.json, and the file writing runs
+        // on a worker thread so the GUI keeps pumping events (Space still pauses) while a
+        // large project is written. The thread is joinable, not detached: waitForSave()
+        // joins it at shutdown, otherwise exit() kills it mid-write.
+        std::lock_guard<std::mutex> threadLock(saveThreadMutex);
+        if (saveThread.joinable()) saveThread.join();
+        saveThread = std::thread([j = std::move(j), folder]() mutable {
+            // Self-contained snapshot (VST states still inline) kept as a version file.
+            // save.json references shared sidecars that later saves rewrite, so it is not
+            // a durable copy; this one is.
+            json archive = j;
+            std::error_code wec;
             std::filesystem::path vstDir = folder / "vst";
-            std::filesystem::create_directories(vstDir, ec);
-            int vstFileCounter = 0;
-            std::function<void(json&)> externalize = [&](json& o) {
+            std::filesystem::create_directories(vstDir, wec);
+            // Move inline VST blobs into <base>/vst/N.bin and leave compStateFile/ctrlStateFile
+            // refs behind. Each target folder gets its own numbered set of sidecars.
+            std::function<void(json&, const std::filesystem::path&, int&)> externalizeInto =
+                [&](json& o, const std::filesystem::path& base, int& counter) {
                 if (o.is_object()) {
                     for (const char* key : {"compState", "ctrlState"}) {
                         auto it = o.find(key);
                         if (it == o.end() || !it->is_string()) continue;
                         const auto bytes = jsonBytesDecode(*it);
-                        const std::string rel = "vst/" + std::to_string(vstFileCounter++) + ".bin";
-                        std::ofstream f(folder / rel, std::ios::binary);
-                        if (f.is_open())
+                        const std::string rel = "vst/" + std::to_string(counter++) + ".bin";
+                        // Write to a temp file and rename, so an interrupted save can
+                        // never leave a truncated sidecar behind.
+                        std::filesystem::path relPath = rel;
+                        std::filesystem::path tmpPath = base / relPath;
+                        tmpPath += ".tmp";
+                        std::ofstream f(tmpPath, std::ios::binary | std::ios::trunc);
+                        if (f.is_open()) {
                             f.write(reinterpret_cast<const char*>(bytes.data()),
                                     static_cast<std::streamsize>(bytes.size()));
+                            f.close();
+                            std::error_code rec;
+                            std::filesystem::rename(tmpPath, base / relPath, rec);
+                        }
                         o[std::string(key) + "File"] = rel;
                         o.erase(it);
                     }
                     for (auto& el : o.items())
-                        externalize(el.value());
+                        externalizeInto(el.value(), base, counter);
                 } else if (o.is_array()) {
                     for (auto& el : o)
-                        externalize(el);
+                        externalizeInto(el, base, counter);
                 }
             };
-            externalize(j);
-        }
+            auto tw = std::chrono::steady_clock::now();
+            int vstFileCounter = 0;
+            externalizeInto(j, folder, vstFileCounter);
+            std::cout << "[save] externalize: " << std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - tw).count() << " ms" << std::endl;
 
-        std::ofstream outFile(file);
-        if (outFile.is_open()) {
-            outFile << j.dump();
-            outFile.flush();
-            if (outFile.fail()) {
-                std::cerr << "[save] WRITE FAILED for " << file << std::endl;
+            tw = std::chrono::steady_clock::now();
+            // Atomic replace: dump to save.json.tmp, then rename over save.json. Opening
+            // save.json directly truncates it, so a save killed mid-write destroys the
+            // previous good file.
+            const std::filesystem::path finalPath = folder / "save.json";
+            const std::filesystem::path tmpPath = folder / "save.json.tmp";
+            std::ofstream outFile(tmpPath, std::ios::binary | std::ios::trunc);
+            bool mainWrote = false;
+            if (outFile.is_open()) {
+                outFile << j.dump();
+                outFile.flush();
+                const bool ok = !outFile.fail();
+                outFile.close();
+                std::error_code rec;
+                if (ok) std::filesystem::rename(tmpPath, finalPath, rec);
+                mainWrote = ok && !rec;
+                if (mainWrote) {
+                    std::cout << "[save] wrote " << finalPath << " (dump+write "
+                              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                                     std::chrono::steady_clock::now() - tw).count() << " ms)" << std::endl;
+                } else {
+                    std::cerr << "[save] WRITE FAILED for " << finalPath
+                              << (rec ? (": " + rec.message()) : std::string()) << std::endl;
+                }
             } else {
-                std::cout << "[save] wrote " << file << std::endl;
+                std::cerr << "[save] failed to open " << tmpPath << std::endl;
             }
-        } else {
-            std::cerr << "[save] failed to open " << file << std::endl;
-        }
+
+            // Sidecar numbering restarts at 0 each save, so files above this save's count
+            // are orphans from an earlier, larger project. Version folders hold their own
+            // copies, so the live folder only needs the ones save.json references.
+            if (mainWrote) {
+                for (const auto& entry : std::filesystem::directory_iterator(vstDir, wec)) {
+                    if (!entry.is_regular_file()) continue;
+                    const std::string fn = entry.path().filename().string();
+                    if (fn.size() >= 4 && fn.compare(fn.size() - 4, 4, ".tmp") == 0) {
+                        std::filesystem::remove(entry.path(), wec);
+                        continue;
+                    }
+                    if (fn.size() <= 4 || fn.compare(fn.size() - 4, 4, ".bin") != 0) continue;
+                    const std::string num = fn.substr(0, fn.size() - 4);
+                    if (num.empty() ||
+                        !std::all_of(num.begin(), num.end(), [](unsigned char c) { return std::isdigit(c); }))
+                        continue;
+                    if (std::atoi(num.c_str()) >= vstFileCounter)
+                        std::filesystem::remove(entry.path(), wec);
+                }
+            }
+
+            // Never-overwritten version copy: versions/save_v<seq>_<UTC stamp>/, a complete
+            // project folder with its own save.json and stamped vst/*.bin sidecars.
+            std::filesystem::path versionsDir = folder / "versions";
+            std::filesystem::create_directories(versionsDir, wec);
+            int nextVersion = 1;
+            for (const auto& entry : std::filesystem::directory_iterator(versionsDir, wec)) {
+                const std::string fn = entry.path().filename().string();
+                if (fn.rfind("save_v", 0) == 0) {
+                    const int v = std::atoi(fn.c_str() + 6);
+                    if (v >= nextVersion) nextVersion = v + 1;
+                }
+            }
+            std::time_t nowT = std::time(nullptr);
+            std::tm tmUtc{};
+            gmtime_r(&nowT, &tmUtc);
+            char stamp[32] = {};
+            std::strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", &tmUtc);
+            char verName[128] = {};
+            std::snprintf(verName, sizeof(verName), "save_v%04d_%s", nextVersion, stamp);
+            const std::filesystem::path verDir = versionsDir / verName;
+            std::filesystem::create_directories(verDir / "vst", wec);
+            int verCounter = 0;
+            externalizeInto(archive, verDir, verCounter);
+            const std::filesystem::path verFinal = verDir / "save.json";
+            std::filesystem::path verTmp = verFinal;
+            verTmp += ".tmp";
+            std::ofstream verFile(verTmp, std::ios::binary | std::ios::trunc);
+            if (verFile.is_open()) {
+                verFile << archive.dump();
+                verFile.flush();
+                const bool vok = !verFile.fail();
+                verFile.close();
+                std::error_code vrec;
+                if (vok) std::filesystem::rename(verTmp, verFinal, vrec);
+                if (vok && !vrec)
+                    std::cout << "[save] version " << verName << std::endl;
+                else
+                    std::cerr << "[save] version write failed: " << verFinal << std::endl;
+            } else {
+                std::cerr << "[save] failed to open " << verTmp << std::endl;
+            }
+        });
     };
 
     const bool uiSaveRequested = (triggerWindowID != 0) || (triggerRenderer != nullptr);

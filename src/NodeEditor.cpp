@@ -53,6 +53,7 @@ void NodeEditor::setEmbeddedCanvasSize(float w, float h) {
 
 void NodeEditor::tick(SDL_Renderer* r) {
     if (!nm || !r) return;
+    nm->refreshChannelWidths();
     SDL_FRect surface{0.f, 0.f, canvasW_, canvasH_};
     render(r, &surface);
 }

@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 #include <nlohmann/json.hpp>
+#include "RhythmLattice.h"
 using json = nlohmann::json;
 
 class Note {
@@ -28,6 +29,9 @@ class Note {
         int rhythmEdoSubdivisionSteps = 1;
         std::vector<std::pair<int, int>> rhythmEdoLowerVector;
         std::vector<std::pair<int, int>> rhythmEdoUpperVector;
+        // The region's whole grid span set when this note was created, so Ctrl+Shift+click
+        // can restore the exact rhythm view the note was made with.
+        std::vector<RhythmLatticeSpan> gridSpans;
         // Rational prime-power factors for pitch (same meaning as PianoRollPitchLine::integerPairs).
         // num = 69 + 12*log2(product of primes[i]^(num/den)); empty vector => product 1 => num 69.
         std::vector<std::pair<int, int>> pitchVector;

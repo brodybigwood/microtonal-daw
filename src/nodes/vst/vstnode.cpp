@@ -252,9 +252,12 @@ void VstNode::process() {
                     if (ev.type == noteOn) {
                         int mpeCh = allocMpeChannel(ev.id, &vstEvents);
                         if (mpeCh > 0) {
+                            // MPE standard pitch-bend range is ±48 semitones. Bend by
+                            // `frac` semitones in that range (the RPN below tells the
+                            // plugin the range; 48 is the spec default MPE plugins use).
                             Steinberg::int32 pb14 = 8192;
                             if (frac != 0.0f) {
-                                pb14 = 8192 + static_cast<Steinberg::int32>(frac / 2.0f * 8192.0f);
+                                pb14 = 8192 + static_cast<Steinberg::int32>(frac / 48.0f * 8192.0f);
                                 pb14 = std::max(0, std::min(16383, static_cast<int>(pb14)));
                             }
                             Steinberg::Vst::Event pb{};
@@ -798,7 +801,11 @@ void VstNode::extraDeSerialize(const json& j) {
     };
     if (j.contains("pluginPath")) {
         loadedPath = j["pluginPath"].get<std::string>();
+        auto tPlugin = std::chrono::steady_clock::now();
         plugin = VstPluginCache::instance().getOrCreatePlugin(static_cast<int>(id), nm ? nm->managerPath : std::vector<int>{}, loadedPath);
+        std::cout << "[load] vst node " << id << " (" << loadedPath << "): "
+                  << std::chrono::duration_cast<std::chrono::milliseconds>(
+                         std::chrono::steady_clock::now() - tPlugin).count() << " ms" << std::endl;
         if (plugin && plugin->isValid()) {
             name = plugin->getName();
             wirePluginCallbacks();
@@ -918,10 +925,11 @@ void VstNode::sendMpePitchBendRange(void* eventList) {
     rpn(0, 6, 15);  rpn(0, 38, 0);
     rpn(0, 101, 127); rpn(0, 100, 127);
 
-    // RPN 0 (Pitch Bend Sensitivity) = ±2 semitones (MPE standard)
+    // RPN 0 (Pitch Bend Sensitivity) = ±48 semitones (MPE default). Bends are
+    // scaled to this range, so plugins using the MPE default are correct.
     for (int ch = 0; ch <= 15; ++ch) {
         rpn(ch, 101, 0); rpn(ch, 100, 0);
-        rpn(ch, 6, 2);   rpn(ch, 38, 0);
+        rpn(ch, 6, 48);  rpn(ch, 38, 0);
         rpn(ch, 101, 127); rpn(ch, 100, 127);
     }
 }

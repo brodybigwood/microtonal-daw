@@ -24,7 +24,7 @@
 
 // ProjectAction JSON (de)serialization (split from UndoManager.cpp).
 
-ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
+ProjectAction* ProjectAction::deSerialize(const json& j, Project* p) {
     ProjectAction* pa;
     switch (j.at("type").get<int>()) {
         case CreateNote: {
@@ -78,6 +78,16 @@ ProjectAction* ProjectAction::deSerialize(json j, Project* p) {
             pa = new CreateNotesAction(p, j.at("managerPath").get<std::vector<int>>(),
                                        j.at("nodeID").get<int>(), j.at("regionID").get<int>(),
                                        std::move(specs));
+            break;
+        }
+        case MixerChainEdit: {
+            std::vector<int> order;
+            if (j.contains("order") && j["order"].is_array())
+                for (const auto& el : j["order"]) order.push_back(el.get<int>());
+            pa = new MixerChainEditUndoAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(), j.value("op", 0), j.value("chainID", 0),
+                static_cast<uint16_t>(j.value("portID", 0)), std::move(order),
+                j.value("chainData", json::object()), j.value("name", std::string("Mixer Edit")));
             break;
         }
         case AddArrangerTrack: {
@@ -487,6 +497,17 @@ json ProjectAction::serialize(ProjectAction* pa) {
                 if (!spec.noteStampedSnapshot.is_null()) jn["noteStampedSnapshot"] = spec.noteStampedSnapshot;
                 j["notes"].push_back(std::move(jn));
             }
+            break;
+        }
+        case MixerChainEdit: {
+            auto mx = static_cast<MixerChainEditUndoAction*>(pa);
+            j["managerPath"] = mx->managerPath;
+            j["nodeID"] = mx->nodeID;
+            j["op"] = mx->op;
+            j["chainID"] = mx->chainID;
+            j["portID"] = mx->portID;
+            j["order"] = mx->order;
+            j["chainData"] = mx->chainData;
             break;
         }
         case AddArrangerTrack: {
@@ -981,13 +1002,14 @@ json ProjectAction::serialize(ProjectAction* pa) {
             throw std::runtime_error("invalid undo action type when serializing");
     }
 
+    // Move each child's JSON into the array and the array into j. Copying a
+    // child's whole subtree into every ancestor made tree serialization
+    // quadratic in the number of actions (a 400 KB tree took ~55 s to save).
     json children = json::array();
-    for (auto c : pa->children) {
-        json jc = ProjectAction::serialize(c);
-        children.push_back(jc);
-    }
+    for (auto c : pa->children)
+        children.push_back(ProjectAction::serialize(c));
 
-    j["children"] = children;
+    j["children"] = std::move(children);
     j["name"] = pa->name;
     j["last_index"] = pa->last_index;
     j["undoTreeExpanded"] = pa->undoTreeExpanded;

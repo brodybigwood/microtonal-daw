@@ -16,5 +16,6 @@ enum NodeType {
     Param,
     Sampler,
     Bus,
+    Mixer,
     Count // for iteration
 };

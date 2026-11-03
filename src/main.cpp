@@ -82,6 +82,7 @@ int main(int argc, char* argv[]) {
 #endif
 
     project->save();
+    project->waitForSave(); // the save worker is joinable; exit() would kill it mid-write
 #ifndef __EMSCRIPTEN__
     ControlServer::instance().stop();
 #endif

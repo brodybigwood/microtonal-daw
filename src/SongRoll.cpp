@@ -74,6 +74,35 @@ void SongRoll::clearPianoRoll(int regionId, bool createUndo) {
     }
 }
 
+// Close exactly one piano-roll window (the one whose close button was pressed).
+void SongRoll::closePianoRollWindow(PianoRollWindow* prw, bool createUndo) {
+    if (!prw) return;
+    for (size_t i = 0; i < pianoRollWindows.size(); ++i) {
+        if (pianoRollWindows[i] != prw) continue;
+
+        int regionId = -1;
+        if (i < pianoRolls.size() && pianoRolls[i] && pianoRolls[i]->region)
+            regionId = static_cast<int>(pianoRolls[i]->region->id);
+
+        if (createUndo && regionId >= 0 && project && project->um && parentNode) {
+            auto* action = new TogglePianoRollWindowAction(project,
+                parentNode->nm->managerPath, static_cast<int>(parentNode->id),
+                regionId, 0, 0.f, 0.f, 0.f, 0.f, 0, false);
+            project->um->newAction(action);
+        }
+
+        pianoRollWindows.erase(pianoRollWindows.begin() + static_cast<ptrdiff_t>(i));
+        if (i < pianoRolls.size())
+            pianoRolls.erase(pianoRolls.begin() + static_cast<ptrdiff_t>(i));
+
+        if (project && project->processor) {
+            if (auto* wm = project->processor->getWindowManager())
+                wm->removeWindow(prw);
+        }
+        return; // one window only
+    }
+}
+
 void SongRoll::validateTimelinePointers() {
     for (size_t i = 0; i < pianoRolls.size(); ) {
         PianoRoll* pr = pianoRolls[i];
@@ -961,6 +990,9 @@ void SongRoll::clickMouse(SDL_Event& e) {
                 }
                 if (movingPosition) {
                     lastPosition = *movingPosition;
+                    // New positions take the shape of the last one touched by a click.
+                    lastPositionDurationPairs = subVec(movingPosition->rhythmEndVector, movingPosition->rhythmVector);
+                    lastPositionStartOffsetPairs = movingPosition->startOffsetPairs;
                     timelineDragElementId = static_cast<int>(movingPosition->element->id);
                     timelineDragPositionId = movingPosition->id;
                 }
@@ -1296,6 +1328,11 @@ void SongRoll::createPianoRoll(Region* region, bool createUndo, int forceEwID) {
 
     ExpandedWindow* ew = wm->addWindow(std::move(prw), 800, 600, "Piano Roll");
     if (!ew) return;
+
+    // The WM close button closes exactly this window (and only this window).
+    ew->onRequestClose = [this, ptr]() {
+        closePianoRollWindow(ptr, /*createUndo=*/true);
+    };
 
     ew->show();
     pianoRollWindows.push_back(ptr);

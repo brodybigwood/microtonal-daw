@@ -3,6 +3,8 @@
 #include <vector>
 #include <iostream>
 #include <cstdint>
+#include <mutex>
+#include <thread>
 #include "UndoManager.h"
 #include "Window.h"
 #include "AutomationCurve.h"
@@ -63,6 +65,12 @@ class Project : public Window {
         void load(std::string path = "");
 
         void save(uint32_t triggerWindowID = 0, SDL_Renderer* triggerRenderer = nullptr);
+
+        /** Block until the background save worker has finished. Call before process exit. */
+        void waitForSave();
+
+        std::thread saveThread;
+        std::mutex saveThreadMutex;
 
         void createNote(int, std::vector<std::pair<int,int>>, std::vector<std::pair<int,int>>, int, std::vector<int> managerPath = {},
                         std::vector<std::pair<int, int>> pitchVector = {});

@@ -28,6 +28,57 @@
 // Mouse/keyboard note editing: click handling, custom input, note creation,
 // deletion, dragging and stretching (split from PianoRoll.cpp).
 
+// Session-wide note clipboard (shared between piano rolls).
+namespace {
+struct NoteClipboard {
+    bool valid = false;
+    std::vector<json> notes;
+    float first = 0.f;   // earliest start in beats
+    float last = 0.f;    // latest end in beats
+};
+NoteClipboard g_noteClip;
+} // namespace
+
+bool PianoRoll::handleKeyboard(SDL_Event& e) {
+    if (e.type != SDL_EVENT_KEY_DOWN || e.key.repeat) return false;
+
+    switch (e.key.scancode) {
+        case SDL_SCANCODE_C:
+            if (isCtrlPressed) copySelectedNotes();
+            break;
+        case SDL_SCANCODE_V:
+            if (isCtrlPressed) pasteCopiedNotes(static_cast<float>(project->beatPosition));
+            break;
+        case SDL_SCANCODE_B:
+            if (isCtrlPressed) {
+                copySelectedNotes();
+                pasteCopiedNotes(g_noteClip.last); // first copied note starts at the last note's end
+            }
+            break;
+        case SDL_SCANCODE_D:
+            if (isCtrlPressed) {
+                copySelectedNotes();
+                pasteCopiedNotes(g_noteClip.first); // duplicate in place
+            }
+            break;
+        case SDL_SCANCODE_DELETE:
+        case SDL_SCANCODE_BACKSPACE:
+            deleteSelection();
+            break;
+        case SDL_SCANCODE_MINUS:
+            notesPerOctave -= 1;
+            UpdateGrid();
+            break;
+        case SDL_SCANCODE_EQUALS:
+            notesPerOctave += 1;
+            UpdateGrid();
+            break;
+        default:
+            break;
+    }
+    return true;
+}
+
 void PianoRoll::clickMouse(SDL_Event& e) {
     switch (e.type) {
 
@@ -273,6 +324,9 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                             after.rhythmEdoSubdivisionSteps = note->rhythmEdoSubdivisionSteps;
                             after.rhythmEdoLowerVector = note->rhythmEdoLowerVector;
                             after.rhythmEdoUpperVector = note->rhythmEdoUpperVector;
+                            // Notes saved before gridSpans existed carry none; fall
+                            // back to the region's grid they were drawn on.
+                            after.gridSpans = note->gridSpans.empty() ? region->gridSpans : note->gridSpans;
                             project->um->newAction(new PianoRollRegionTuningUndoAction(project, region->parentNode->nm->managerPath,
                                 region->parentNode->id, region->id, regionTuningSnapshotToUndoJson(before),
                                 regionTuningSnapshotToUndoJson(after), "Recall Note Rhythm View"));
@@ -725,28 +779,6 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
             needsInit_ = true;
             break;
 
-        case SDL_EVENT_KEY_DOWN:
-
-            switch (e.key.scancode) {
-                case SDL_SCANCODE_DELETE:
-                case SDL_SCANCODE_BACKSPACE:
-                    deleteSelection();
-                    break;
-                case SDL_SCANCODE_MINUS:
-                    notesPerOctave -= 1;
-                    UpdateGrid();
-                    break;
-                case SDL_SCANCODE_EQUALS:
-                    notesPerOctave += 1;
-                    UpdateGrid();
-                    break;
-                default:
-                    break;
-            }
-            break;
-
-        
-
         case SDL_EVENT_MOUSE_MOTION:
 
             handleMouse();
@@ -972,6 +1004,7 @@ void PianoRoll::createElement() {
         note->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
         note->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
         note->rhythmEdoUpperVector = region->rhythmEdoUpperVector;
+        note->gridSpans = region->gridSpans; // whole rhythm view the note was created with
         lastRhythmDurationPairs = subVec(note->rhythmEndVector, note->rhythmVector);
         stampNoteTuning(note);
         // CreateNoteAction::doAction does not rerun stampNoteTuning on redo; persist post-stamp state on the action.
@@ -1144,6 +1177,68 @@ void PianoRoll::snapNoteRhythm(const std::shared_ptr<Note>& note) {
         note->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
         note->rhythmEdoUpperVector = region->rhythmEdoUpperVector;
     }
+}
+
+bool PianoRoll::hasNoteClipboard() const { return g_noteClip.valid; }
+
+void PianoRoll::copySelectedNotes() {
+    if (!region) return;
+    std::vector<std::shared_ptr<Note>> src;
+    for (int nid : selectedNoteIds) {
+        auto it = region->id_to_index.find(nid);
+        if (it == region->id_to_index.end()) continue;
+        const size_t idx = static_cast<size_t>(it->second);
+        if (idx < region->notes.size() && region->notes[idx]) src.push_back(region->notes[idx]);
+    }
+    if (src.empty()) {
+        if (auto n = std::dynamic_pointer_cast<Note>(hoveredElement)) src.push_back(n);
+    }
+    if (src.empty()) return;
+
+    g_noteClip.notes.clear();
+    g_noteClip.first = FLT_MAX;
+    g_noteClip.last = -FLT_MAX;
+    for (const auto& n : src) {
+        g_noteClip.notes.push_back(n->toJSON());
+        g_noteClip.first = std::min(g_noteClip.first, n->startBeats());
+        g_noteClip.last = std::max(g_noteClip.last, n->endBeats());
+    }
+    g_noteClip.valid = true;
+}
+
+void PianoRoll::pasteCopiedNotes(float firstBeat) {
+    if (!region || !g_noteClip.valid || g_noteClip.notes.empty()) return;
+
+    // Shift the whole set so its earliest note lands on firstBeat. The shift is kept as an
+    // exact rational (1/48 beat grid) so the pasted rhythms stay exact.
+    std::vector<std::pair<int, int>> shift;
+    const float shiftBeats = firstBeat - g_noteClip.first;
+    if (std::fabs(shiftBeats) > 1e-6f) {
+        int den = 48;
+        int num = static_cast<int>(std::lround(shiftBeats * static_cast<float>(den)));
+        const int g = std::gcd(std::abs(num), den);
+        num /= g;
+        den /= g;
+        if (num != 0) shift = {{num, den}};
+    }
+
+    std::vector<CreateNoteSpec> specs;
+    specs.reserve(g_noteClip.notes.size());
+    for (const auto& j : g_noteClip.notes) {
+        CreateNoteSpec s;
+        s.pitchVector = pairsFromJSON(j.at("pitchVector"));
+        s.rhythmVector = pairsFromJSON(j.at("rhythmVector"));
+        s.rhythmEndVector = pairsFromJSON(j.at("rhythmEndVector"));
+        if (!shift.empty()) {
+            s.rhythmVector = addVec(s.rhythmVector, shift);
+            s.rhythmEndVector = addVec(s.rhythmEndVector, shift);
+        }
+        specs.push_back(std::move(s));
+    }
+
+    project->um->newAction(new CreateNotesAction(project, region->parentNode->nm->managerPath,
+        region->parentNode->id, region->id, std::move(specs)));
+    refreshGrid = true;
 }
 
 // ---------------------------------------------------------------------------

@@ -51,6 +51,9 @@ class NodeManager {
 
         void markTopologyDirty();
 
+        // Forward channel-width propagation for the GUI graph (no buffer allocation).
+        void refreshChannelWidths();
+
         Project* project;
 
         void setNE(NodeEditor*);

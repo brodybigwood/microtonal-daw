@@ -19,7 +19,7 @@
 // ============================================================================
 
 SampleSlab::SampleSlab()
-    : volume(1.0f, 0.f, 0.f, 8.f, "assets/knobs/1.png", -135.f, 135.f, ""),
+    : volume(1.0f, 0.f, 0.f, 8.f, 40.f),
       pitch(69.0f, 0.f, 0.f, 8.f, "assets/knobs/1.png", -135.f, 135.f, ""),
       pan(0.5f, 0.f, 0.f, 8.f, "assets/knobs/1.png", -135.f, 135.f, ""),
       offset(0.f, 0.f, 0.f, 8.f, "assets/knobs/1.png", -135.f, 135.f, ""),
@@ -28,49 +28,6 @@ SampleSlab::SampleSlab()
       decay(0.f, 0.f, 0.f, 8.f, "assets/knobs/1.png", -135.f, 135.f, ""),
       sustain(1.f, 0.f, 0.f, 8.f, "assets/knobs/1.png", -135.f, 135.f, ""),
       release(0.f, 0.f, 0.f, 8.f, "assets/knobs/1.png", -135.f, 135.f, "") {}
-
-SampleSlab::SampleSlab(SampleSlab&& other) noexcept
-    : id(other.id), filepath(std::move(other.filepath)),
-      buffer(other.buffer), num_samples(other.num_samples),
-      sampleRate(other.sampleRate), numChannels(other.numChannels),
-      volume(std::move(other.volume)), pitch(std::move(other.pitch)),
-      pan(std::move(other.pan)), offset(std::move(other.offset)),
-      cutoff(std::move(other.cutoff)), attack(std::move(other.attack)),
-      decay(std::move(other.decay)), sustain(std::move(other.sustain)),
-      release(std::move(other.release)),
-      solo(other.solo), mute(other.mute),
-      thumbnail(other.thumbnail) {
-    other.buffer = nullptr;
-    other.thumbnail = nullptr;
-}
-
-SampleSlab& SampleSlab::operator=(SampleSlab&& other) noexcept {
-    if (this != &other) {
-        if (buffer) delete[] buffer;
-        if (thumbnail) SDL_DestroyTexture(thumbnail);
-        id = other.id;
-        filepath = std::move(other.filepath);
-        buffer = other.buffer;
-        num_samples = other.num_samples;
-        sampleRate = other.sampleRate;
-        numChannels = other.numChannels;
-        volume = std::move(other.volume);
-        pitch = std::move(other.pitch);
-        pan = std::move(other.pan);
-        offset = std::move(other.offset);
-        cutoff = std::move(other.cutoff);
-        attack = std::move(other.attack);
-        decay = std::move(other.decay);
-        sustain = std::move(other.sustain);
-        release = std::move(other.release);
-        solo = other.solo;
-        mute = other.mute;
-        thumbnail = other.thumbnail;
-        other.buffer = nullptr;
-        other.thumbnail = nullptr;
-    }
-    return *this;
-}
 
 SampleSlab::~SampleSlab() {
     if (buffer) delete[] buffer;
@@ -213,7 +170,7 @@ void SamplerNode::rebuildConnections() {
         auto* c = new Connection;
         c->type = DataType::Events;
         c->dir = Direction::input;
-        c->label = "S" + std::to_string(samples[i].id) + " Evt";
+        c->label = "S" + std::to_string(samples[i]->id) + " Evt";
         inputs.addConnection(c);
     }
 
@@ -233,9 +190,9 @@ void SamplerNode::rebuildConnections() {
         auto* c = new Connection;
         c->type = DataType::Waveform;
         c->dir = Direction::output;
-        c->minChannels = samples[i].numChannels;
+        c->minChannels = samples[i]->stereoOut ? 2 : samples[i]->numChannels;
         c->updateNumChannels();
-        c->label = "S" + std::to_string(samples[i].id) + " Out";
+        c->label = "S" + std::to_string(samples[i]->id) + " Out";
         outputs.addConnection(c);
     }
 
@@ -272,7 +229,6 @@ void SamplerNode::rebuildConnections() {
 
 // Short, light labels for the sample editor knobs (the full labels are for the API).
 static void applySamplerKnobDisplay(SampleSlab& s) {
-    s.volume.displayLabel = "Vol";
     s.pitch.displayLabel = "Pitch";
     s.pan.displayLabel = "Pan";
     s.offset.displayLabel = "Offset";
@@ -282,7 +238,6 @@ static void applySamplerKnobDisplay(SampleSlab& s) {
     s.sustain.displayLabel = "Sus";
     s.release.displayLabel = "Rel";
     const SDL_Color light{220, 220, 220, 255};
-    s.volume.labelColor = light;
     s.pitch.labelColor = light;
     s.pan.labelColor = light;
     s.offset.labelColor = light;
@@ -296,7 +251,9 @@ static void applySamplerKnobDisplay(SampleSlab& s) {
 void SamplerNode::rebuildSampleParams() {
     params.clear();
     params.reserve(samples.size() * 9);
-    for (auto& slab : samples) {
+    for (size_t i = 0; i < samples.size(); ++i) {
+        SampleSlab& slab = *samples[i];
+        slab.volume.bind(this, i * 9);
         params.push_back(&slab.volume);
         params.push_back(&slab.pitch);
         params.push_back(&slab.pan);
@@ -310,13 +267,13 @@ void SamplerNode::rebuildSampleParams() {
 }
 
 void SamplerNode::addSample(const std::string& filepath) {
-    SampleSlab slab;
+    auto slab = std::make_unique<SampleSlab>();
     if (!filepath.empty())
-        slab.loadFile(filepath);
+        slab->loadFile(filepath);
 
     samples.push_back(std::move(slab));
     size_t idx = samples.size() - 1;
-    auto& s = samples[idx];
+    auto& s = *samples[idx];
     s.id = static_cast<int>(sampleIdPool_.newID());
     s.volume.value = 1.0f;
     s.pitch.value = 69.0f;
@@ -342,9 +299,9 @@ void SamplerNode::addSample(const std::string& filepath) {
 }
 
 void SamplerNode::insertSampleAt(size_t index, const std::string& filepath) {
-    SampleSlab slab;
+    auto slab = std::make_unique<SampleSlab>();
     if (!filepath.empty())
-        slab.loadFile(filepath);
+        slab->loadFile(filepath);
 
     if (index >= samples.size()) {
         samples.push_back(std::move(slab));
@@ -353,7 +310,7 @@ void SamplerNode::insertSampleAt(size_t index, const std::string& filepath) {
         samples.insert(samples.begin() + static_cast<ptrdiff_t>(index), std::move(slab));
     }
 
-    auto& s = samples[index];
+    auto& s = *samples[index];
     s.id = static_cast<int>(sampleIdPool_.newID());
     s.volume.value = 1.0f;
     s.pitch.value = 69.0f;
@@ -401,7 +358,7 @@ void SamplerNode::removeSample(size_t index) {
             v.sampleIndex--;
     }
 
-    sampleIdPool_.releaseID(static_cast<uint16_t>(samples[index].id));
+    sampleIdPool_.releaseID(static_cast<uint16_t>(samples[index]->id));
     samples.erase(samples.begin() + static_cast<ptrdiff_t>(index));
 
     // Remove 9 params for this sample.
@@ -428,10 +385,10 @@ void SamplerNode::reorderSamples(const std::vector<size_t>& newOrder) {
     }
 
     // Reorder samples.
-    std::vector<SampleSlab> reordered;
+    std::vector<std::unique_ptr<SampleSlab>> reordered;
     reordered.reserve(samples.size());
     for (size_t idx : newOrder)
-        reordered.push_back(std::move(samples[idx]));
+        reordered.push_back(std::move(samples[idx])); // moves pointers only
     samples = std::move(reordered);
 
     // Rebuild params from samples (old pointers were invalidated by the move).
@@ -469,10 +426,10 @@ void SamplerNode::setSampleFile(size_t index, const std::string& filepath) {
     for (auto& v : voices) {
         if (v.sampleIndex == static_cast<int>(index)) v.reset();
     }
-    samples[index].loadFile(filepath);
+    samples[index]->loadFile(filepath);
     if (index < outputs.connections.size()) {
         auto* c = outputs.connections[index];
-        c->minChannels = samples[index].numChannels;
+        c->minChannels = samples[index]->stereoOut ? 2 : samples[index]->numChannels;
         c->updateNumChannels();
     }
     if (nm) nm->markTopologyDirty();
@@ -512,13 +469,13 @@ void SamplerNode::process() {
                         nv.sampleIndex = si;
                         nv.phase = 0.f;
                         nv.envPhase = 0.f;
-                        nv.pan = samples[si].pan.value;
+                        nv.pan = samples[si]->pan.value;
                         nv.wait_on = event.sampleOffset;
                         // Master is slot selection only: default pitch, then
                         // the slot's pitch-shift knob.
-                        const float shift = samples[si].pitch.value - 69.0f;
+                        const float shift = samples[si]->pitch.value - 69.0f;
                         nv.pitchRatio = std::pow(2.f, shift / 12.f)
-                            * (static_cast<float>(samples[si].sampleRate) / sr);
+                            * (static_cast<float>(samples[si]->sampleRate) / sr);
                         break;
                     }
                 }
@@ -550,14 +507,14 @@ void SamplerNode::process() {
                         nv.sampleIndex = static_cast<int>(si);
                         nv.phase = 0.f;
                         nv.envPhase = 0.f;
-                        nv.pan = samples[si].pan.value;
+                        nv.pan = samples[si]->pan.value;
                         nv.wait_on = event.sampleOffset;
                         // Slot input: the note's pitch, shifted by the slot's
                         // pitch-shift knob.
                         float semitones = (event.num - 69.0f)
-                            + (samples[si].pitch.value - 69.0f);
+                            + (samples[si]->pitch.value - 69.0f);
                         nv.pitchRatio = std::pow(2.f, semitones / 12.f)
-                            * (static_cast<float>(samples[si].sampleRate) / sr);
+                            * (static_cast<float>(samples[si]->sampleRate) / sr);
                         break;
                     }
                 }
@@ -575,14 +532,14 @@ void SamplerNode::process() {
 
     // --- Process active voices ---
     bool anySolo = false;
-    for (auto& s : samples) { if (s.solo) { anySolo = true; break; } }
+    for (auto& sp : samples) { if (sp->solo) { anySolo = true; break; } }
 
     for (int vi = 0; vi < kMaxVoices; ++vi) {
         auto& v = voices[vi];
         if (!v.active) continue;
         if (v.sampleIndex < 0 || v.sampleIndex >= static_cast<int>(samples.size())) continue;
 
-        auto& slab = samples[v.sampleIndex];
+        auto& slab = *samples[v.sampleIndex];
 
         bool shouldPlay = slab.buffer && !slab.mute && (!anySolo || slab.solo);
         auto* outCon = (v.sampleIndex < static_cast<int>(outputs.connections.size()))
@@ -651,8 +608,10 @@ void SamplerNode::process() {
                     else if (idx < slab.num_samples)
                         chVal = chBuf[idx];
 
+                    // Mono sources are duplicated across both channels (stereoized),
+                    // and the pan control still places them in the stereo field.
                     float pg = 1.f;
-                    if (nch >= 2 && slabCh >= 2)
+                    if (nch >= 2)
                         pg = (ch == 0) ? panL : panR;
                     outBuf[static_cast<size_t>(ch) * static_cast<size_t>(bufferSize) + static_cast<size_t>(i)] +=
                         chVal * vol * env * pg;
@@ -672,7 +631,7 @@ static float columnLeft(size_t i, float scroll) { return SamplerNode::kColPad + 
 
 void SamplerNode::ensureThumbnail(size_t index, SDL_Renderer* R) {
     if (index >= samples.size()) return;
-    auto& s = samples[index];
+    auto& s = *samples[index];
     if (s.thumbnail || !s.buffer) return;
 
     int tw = static_cast<int>(kColW - 4);
@@ -751,14 +710,14 @@ void SamplerNode::renderContent(SDL_Renderer* R) {
     float listTop = kListTop + 24.f; // below port rects
 
     // Total content height of a column (without add button).
-    float colContentH = kThumbH + kRowH + 2.f * kBtnSz + 2.f + kSliderH + 4.f;
+    float colContentH = kThumbH + kRowH + 3.f * kBtnSz + 6.f + kSliderH + 4.f;
 
     // Sample columns.
     for (size_t i = 0; i < samples.size(); ++i) {
         float cx = columnLeft(i, scrollOffset_);
         if (cx + kColW < 0.f || cx > NODE_W) continue;
 
-        auto& slab = samples[i];
+        auto& slab = *samples[i];
         ensureThumbnail(i, R);
 
         // Column background.
@@ -795,22 +754,26 @@ void SamplerNode::renderContent(SDL_Renderer* R) {
         }
         cy += kRowH;
 
-        // Solo [S] and Mute [M].
+        // Solo [S], Mute [M], stereo output [2/1].
         const float btnX = cx + (kColW - kBtnSz) * 0.5f;
         SDL_FRect soloR{btnX, cy, kBtnSz, kBtnSz};
         SDL_FRect muteR{btnX, cy + kBtnSz + 2.f, kBtnSz, kBtnSz};
+        SDL_FRect stereoR{btnX, cy + 2.f * kBtnSz + 4.f, kBtnSz, kBtnSz};
         SDL_Color soloCol = slab.solo ? SDL_Color{255, 200, 50, 255} : SDL_Color{70, 70, 75, 255};
         SDL_Color muteCol = slab.mute ? SDL_Color{255, 60, 60, 255} : SDL_Color{70, 70, 75, 255};
+        SDL_Color stereoCol = slab.stereoOut ? SDL_Color{80, 150, 220, 255} : SDL_Color{70, 70, 75, 255};
         SDL_SetRenderDrawColor(R, soloCol.r, soloCol.g, soloCol.b, soloCol.a);
         SDL_RenderFillRect(R, &soloR);
         SDL_SetRenderDrawColor(R, muteCol.r, muteCol.g, muteCol.b, muteCol.a);
         SDL_RenderFillRect(R, &muteR);
+        SDL_SetRenderDrawColor(R, stereoCol.r, stereoCol.g, stereoCol.b, stereoCol.a);
+        SDL_RenderFillRect(R, &stereoR);
 
-        // Label the two square buttons so they are recognisable.
+        // Label the square buttons so they are recognisable.
         if (fonts.mainFont) {
-            const char* lbls[2] = {"S", "M"};
-            SDL_FRect rects[2] = {soloR, muteR};
-            for (int bi = 0; bi < 2; ++bi) {
+            const char* lbls[3] = {"S", "M", slab.stereoOut ? "2" : "1"};
+            SDL_FRect rects[3] = {soloR, muteR, stereoR};
+            for (int bi = 0; bi < 3; ++bi) {
                 SDL_Surface* bs = TTF_RenderText_Blended(fonts.mainFont, lbls[bi], 1, SDL_Color{235, 235, 235, 255});
                 if (!bs) continue;
                 SDL_Texture* bt = SDL_CreateTextureFromSurface(R, bs);
@@ -825,21 +788,13 @@ void SamplerNode::renderContent(SDL_Renderer* R) {
                 SDL_DestroySurface(bs);
             }
         }
-        cy += 2.f * kBtnSz + 4.f;
+        cy += 3.f * kBtnSz + 6.f;
 
-        // Volume slider.
+        // Volume bar owns its own input and undo step.
         float sliderW = 10.f;
         float sliderX = cx + (kColW - sliderW) / 2.f;
-        SDL_FRect sliderTrack{sliderX, cy, sliderW, kSliderH};
-        SDL_SetRenderDrawColor(R, 60, 60, 65, 255);
-        SDL_RenderFillRect(R, &sliderTrack);
-
-        float volH = slab.volume.value * kSliderH;
-        SDL_FRect sliderFill{sliderX, cy + kSliderH - volH, sliderW, volH};
-        SDL_SetRenderDrawColor(R, 100, 180, 255, 255);
-        SDL_RenderFillRect(R, &sliderFill);
-        SDL_SetRenderDrawColor(R, 120, 120, 130, 255);
-        SDL_RenderRect(R, &sliderTrack);
+        slab.volume.reposition(sliderX, cy, sliderW, kSliderH);
+        slab.volume.render(R);
     }
 
     // Add button.
@@ -943,7 +898,7 @@ bool SamplerNode::handleCustomInput(SDL_Event& e) {
     }
 
     // --- Sample columns ---
-    float colContentH = kThumbH + kRowH + 2.f * kBtnSz + 2.f + kSliderH + 4.f;
+    float colContentH = kThumbH + kRowH + 3.f * kBtnSz + 6.f + kSliderH + 4.f;
     for (size_t i = 0; i < samples.size(); ++i) {
         float cx = columnLeft(i, scrollOffset_);
         if (mx < cx || mx > cx + kColW) continue;
@@ -959,7 +914,7 @@ bool SamplerNode::handleCustomInput(SDL_Event& e) {
                     project->um->newAction(new SamplerToggleSampleSoloUndoAction(project, std::move(mp),
                         static_cast<int>(id), i));
                 } else {
-                    samples[i].solo = !samples[i].solo;
+                    samples[i]->solo = !samples[i]->solo;
                 }
                 return true;
             }
@@ -974,27 +929,36 @@ bool SamplerNode::handleCustomInput(SDL_Event& e) {
                     project->um->newAction(new SamplerToggleSampleMuteUndoAction(project, std::move(mp),
                         static_cast<int>(id), i));
                 } else {
-                    samples[i].mute = !samples[i].mute;
+                    samples[i]->mute = !samples[i]->mute;
                 }
                 return true;
             }
         }
 
-        // Volume slider.
-        float sliderW = 10.f;
-        float sliderX = cx + (kColW - sliderW) / 2.f;
-        float sliderY = cy + kThumbH + kRowH + 2.f * kBtnSz + 4.f;
-        SDL_FRect sliderTrack{sliderX, sliderY, sliderW, kSliderH};
-        if (mx >= sliderTrack.x - 4.f && mx <= sliderTrack.x + sliderW + 4.f &&
-            my >= sliderTrack.y && my <= sliderTrack.y + kSliderH) {
+        // Stereo output toggle [2/1].
+        SDL_FRect stereoR{btnX, cy + kThumbH + kRowH + 2.f * kBtnSz + 4.f, kBtnSz, kBtnSz};
+        if (mx >= stereoR.x && mx <= stereoR.x + stereoR.w && my >= stereoR.y && my <= stereoR.y + stereoR.h) {
             if (e.button.button == SDL_BUTTON_LEFT) {
-                draggingVolumeIdx_ = static_cast<int>(i);
-                oldVolume_ = samples[i].volume.value;
-                float frac = 1.f - (my - sliderTrack.y) / kSliderH;
-                if (frac < 0.f) frac = 0.f; if (frac > 1.f) frac = 1.f;
-                samples[i].volume.value = frac;
+                samples[i]->stereoOut = !samples[i]->stereoOut;
+                if (i < outputs.connections.size()) {
+                    auto* oc = outputs.connections[i];
+                    oc->minChannels = samples[i]->stereoOut ? 2 : samples[i]->numChannels;
+                    oc->updateNumChannels();
+                }
+                if (nm) nm->markTopologyDirty();
                 return true;
             }
+        }
+
+        // Volume bar (owns press/drag/undo).
+        float sliderW = 10.f;
+        float sliderX = cx + (kColW - sliderW) / 2.f;
+        const float sliderY = cy + kThumbH + kRowH + 3.f * kBtnSz + 6.f;
+        samples[i]->volume.reposition(sliderX, sliderY, sliderW, kSliderH);
+        samples[i]->volume.handleInputAt(e, mx, my);
+        if (samples[i]->volume.dragging()) {
+            draggingVolumeIdx_ = static_cast<int>(i);
+            return true;
         }
 
         // Right-click → context menu.
@@ -1018,9 +982,9 @@ bool SamplerNode::handleCustomInput(SDL_Event& e) {
             auto reload = uTreeEntry();
             reload->label = "Reload File";
             reload->click = [this, si]() {
-                if (!samples[si].filepath.empty()) {
+                if (!samples[si]->filepath.empty()) {
                     if (project && project->um) {
-                        auto& s = samples[si];
+                        auto& s = *samples[si];
                         std::vector<int> mp = nm ? nm->managerPath : std::vector<int>{};
                         project->um->newAction(new SamplerLoadSampleFileUndoAction(project, std::move(mp),
                             static_cast<int>(id), si,
@@ -1028,7 +992,7 @@ bool SamplerNode::handleCustomInput(SDL_Event& e) {
                             s.sampleRate, s.numChannels,
                             s.sampleRate, s.numChannels));
                     } else {
-                        setSampleFile(si, samples[si].filepath);
+                        setSampleFile(si, samples[si]->filepath);
                     }
                 }
             };
@@ -1106,31 +1070,11 @@ void SamplerNode::handleWindowInput(SDL_Event& e) {
         return;
     }
 
-    // --- Volume slider drag ---
+    // --- Volume bar drag (input handled by the Bar parameter) ---
     if (draggingVolumeIdx_ >= 0 && draggingVolumeIdx_ < static_cast<int>(samples.size())) {
-        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-            draggingVolumeIdx_ = -1;
-            return;
-        }
-        if (e.type == SDL_EVENT_MOUSE_MOTION) {
-            const int idx = draggingVolumeIdx_;
-            float cx = columnLeft(static_cast<size_t>(idx), scrollOffset_);
-            float sliderW = 10.f;
-            float sliderX = cx + (kColW - sliderW) / 2.f;
-            float sliderY = listTop + kThumbH + kRowH + 2.f * kBtnSz + 4.f;
-            float frac = 1.f - (my - sliderY) / kSliderH;
-            if (frac < 0.f) frac = 0.f; if (frac > 1.f) frac = 1.f;
-            const float oldVal = samples[idx].volume.value;
-            if (std::fabs(frac - oldVal) > 0.0005f && project && project->um) {
-                // Coalesces with the previous motion into one undo step for the drag.
-                std::vector<int> mp = nm ? nm->managerPath : std::vector<int>{};
-                std::vector<size_t> pp{static_cast<size_t>(idx) * 9};
-                project->um->newAction(new SetParamValueUndoAction(project, std::move(mp),
-                    static_cast<int>(id), std::move(pp), oldVal, frac, "Volume"));
-            }
-            samples[idx].volume.value = frac;
-            return;
-        }
+        samples[draggingVolumeIdx_]->volume.handleInputAt(e, mx, my);
+        if (!samples[draggingVolumeIdx_]->volume.dragging()) draggingVolumeIdx_ = -1;
+        return;
     }
 
     // Hover tracking.
@@ -1138,7 +1082,7 @@ void SamplerNode::handleWindowInput(SDL_Event& e) {
         hoveredSampleIndex_ = -1;
         for (size_t i = 0; i < samples.size(); ++i) {
             float cx = columnLeft(i, scrollOffset_);
-            if (mx >= cx && mx <= cx + kColW && my >= listTop && my <= listTop + kThumbH + kRowH + 2.f * kBtnSz + 2.f + kSliderH + 4.f) {
+            if (mx >= cx && mx <= cx + kColW && my >= listTop && my <= listTop + kThumbH + kRowH + 3.f * kBtnSz + 6.f + kSliderH + 4.f) {
                 hoveredSampleIndex_ = static_cast<int>(i);
                 break;
             }
@@ -1168,7 +1112,7 @@ void SampleEditorWindow::setSample(size_t idx) { sampleIndex = idx; }
 
 void SampleEditorWindow::render() {
     if (!samplerNode || sampleIndex >= samplerNode->samples.size()) return;
-    auto& slab = samplerNode->samples[sampleIndex];
+    auto& slab = *samplerNode->samples[sampleIndex];
     SDL_Renderer* R = renderer;
     if (!R) return;
 
@@ -1257,11 +1201,9 @@ void SampleEditorWindow::render() {
         SDL_RenderTexture(R, tx, nullptr, &r); SDL_DestroySurface(sf); SDL_DestroyTexture(tx); }
     ey += 16.f;
     float sw = 200.f;
-    SDL_FRect track{ex, ey, sw, 8.f};
-    SDL_SetRenderDrawColor(R, 50, 50, 55, 255); SDL_RenderFillRect(R, &track);
-    SDL_FRect fill{ex, ey, sw * slab.volume.value, 8.f};
-    SDL_SetRenderDrawColor(R, 100, 160, 220, 255); SDL_RenderFillRect(R, &fill);
-    SDL_SetRenderDrawColor(R, 100, 100, 110, 255); SDL_RenderRect(R, &track);
+    // Volume bar (same parameter class as the node strip: owns input and undo).
+    slab.volume.reposition(ex, ey, sw, 10.f);
+    slab.volume.render(R);
     ey += 14.f + 8.f;
 
     // Knobs for the rest — reposition and render.
@@ -1315,7 +1257,15 @@ bool SampleEditorWindow::handleInput(SDL_Event& e) {
     auto* p = samplerNode->project;
     auto& nm = *samplerNode->nm;
     int nid = static_cast<int>(samplerNode->id);
-    auto& slab = samplerNode->samples[sampleIndex];
+    auto& slab = *samplerNode->samples[sampleIndex];
+
+    // Motion/release for an in-progress bar drag.
+    if (slab.volume.dragging()) {
+        int wx, wy; SDL_GetWindowPosition(window, &wx, &wy);
+        float gx, gy; SDL_GetGlobalMouseState(&gx, &gy);
+        slab.volume.handleInputAt(e, gx - static_cast<float>(wx), gy - static_cast<float>(wy));
+        return true;
+    }
 
     // Right-click on a knob opens its parameter menu (same one the node canvas shows).
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_RIGHT) {
@@ -1325,34 +1275,9 @@ bool SampleEditorWindow::handleInput(SDL_Event& e) {
             return true;
     }
 
-    // Volume slider rect (matches render layout: filepath + waveform view + label).
-    float volY = 8.f + 24.f + 60.f + 16.f;
-    SDL_FRect volTrack{8.f, volY, 200.f, 8.f};
-
-    // --- Volume slider drag ---
-    if (draggingVolume_) {
-        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-            draggingVolume_ = false;
-            return true;
-        }
-        if (e.type == SDL_EVENT_MOUSE_MOTION) {
-            int wx, wy; SDL_GetWindowPosition(window, &wx, &wy);
-            float gx, gy; SDL_GetGlobalMouseState(&gx, &gy);
-            float frac = 1.f - (gy - static_cast<float>(wy) - volTrack.y) / volTrack.h;
-            if (frac < 0.f) frac = 0.f; if (frac > 1.f) frac = 1.f;
-            const float oldVal = slab.volume.value;
-            if (std::fabs(frac - oldVal) > 0.0005f && p && p->um) {
-                // Coalesces with the previous motion into one undo step for the drag.
-                std::vector<int> mp = nm.managerPath;
-                std::vector<size_t> pp{static_cast<size_t>(sampleIndex) * 9};
-                p->um->newAction(new SetParamValueUndoAction(p, std::move(mp), nid,
-                    std::move(pp), oldVal, frac, slab.volume.label));
-            }
-            slab.volume.value = frac;
-            return true;
-        }
-        return false;
-    }
+    // Volume bar (input + undo owned by the parameter).
+    const float volY = 8.f + 24.f + 60.f + 16.f;
+    slab.volume.reposition(8.f, volY, 200.f, 10.f);
 
     // Wheel → pass to Knob under cursor (coalescing handled by undo system).
     if (e.type == SDL_EVENT_MOUSE_WHEEL) {
@@ -1385,16 +1310,10 @@ bool SampleEditorWindow::handleInput(SDL_Event& e) {
         float mx = gx - static_cast<float>(wx);
         float my = gy - static_cast<float>(wy);
 
-        // Volume slider.
-        if (mx >= volTrack.x - 4.f && mx <= volTrack.x + volTrack.w + 4.f &&
-            my >= volTrack.y - 4.f && my <= volTrack.y + volTrack.h + 4.f) {
-            draggingVolume_ = true;
-            volDragStart_ = slab.volume.value;
-            float frac = 1.f - (my - volTrack.y) / volTrack.h;
-            if (frac < 0.f) frac = 0.f; if (frac > 1.f) frac = 1.f;
-            slab.volume.value = frac;
-            return true;
-        }
+        // Volume bar (owns its own drag + undo).
+        slab.volume.reposition(8.f, 8.f + 24.f + 60.f + 16.f, 200.f, 10.f);
+        slab.volume.handleInputAt(e, mx, my);
+        if (slab.volume.dragging()) return true;
 
         // Reload/Delete buttons.
         // Matches the render layout: filepath, waveform, volume label + track, then the
@@ -1453,12 +1372,14 @@ json SamplerNode::extraSerialize() {
     json j;
     j["sampleIdPool"] = sampleIdPool_.toJSON();
     j["samples"] = json::array();
-    for (auto& s : samples) {
+    for (auto& sp : samples) {
+        SampleSlab& s = *sp;
         json sj;
         sj["id"] = s.id;
         sj["filepath"] = s.filepath;
         sj["solo"] = s.solo;
         sj["mute"] = s.mute;
+        sj["stereoOut"] = s.stereoOut;
         sj["sampleRate"] = s.sampleRate;
         sj["numChannels"] = s.numChannels;
         sj["vol"] = s.volume.value;
@@ -1485,19 +1406,20 @@ void SamplerNode::extraDeSerialize(const json& j) {
 
     for (auto& sj : j["samples"]) {
         std::string fp = sj.value("filepath", "");
-        SampleSlab slab;
-        slab.id = sj.value("id", -1);
+        auto slab = std::make_unique<SampleSlab>();
+        slab->id = sj.value("id", -1);
         if (!fp.empty())
-            slab.loadFile(fp);
-        slab.solo = sj.value("solo", false);
-        slab.mute = sj.value("mute", false);
-        if (!slab.buffer) {
-            slab.sampleRate = sj.value("sampleRate", 0);
-            slab.numChannels = sj.value("numChannels", 1);
+            slab->loadFile(fp);
+        slab->solo = sj.value("solo", false);
+        slab->mute = sj.value("mute", false);
+        slab->stereoOut = sj.value("stereoOut", true);
+        if (!slab->buffer) {
+            slab->sampleRate = sj.value("sampleRate", 0);
+            slab->numChannels = sj.value("numChannels", 1);
         }
         samples.push_back(std::move(slab));
         size_t idx = samples.size() - 1;
-        auto& s = samples[idx];
+        auto& s = *samples[idx];
         if (s.id >= 0) sampleIdPool_.reserveID(static_cast<uint16_t>(s.id));
         else s.id = static_cast<int>(sampleIdPool_.newID());
         s.volume.value = sj.value("vol", 1.0f);
