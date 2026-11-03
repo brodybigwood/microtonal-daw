@@ -25,7 +25,12 @@
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
 
+#ifndef __EMSCRIPTEN__
+#include "X11Capture.h"
+#endif
+
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <nlohmann/json.hpp>
@@ -81,9 +86,7 @@ size_t SDLCALL memWrite(void* u, const void* ptr, size_t size, SDL_IOStatus*) {
 bool SDLCALL memFlush(void*, SDL_IOStatus*) { return true; }
 bool SDLCALL memClose(void*) { return true; }
 
-bool rendererToPng(SDL_Renderer* r, std::vector<uint8_t>& png, int& w, int& h) {
-    if (!r) return false;
-    SDL_Surface* surf = SDL_RenderReadPixels(r, nullptr);
+bool surfaceToPng(SDL_Surface* surf, std::vector<uint8_t>& png, int& w, int& h) {
     if (!surf) return false;
     w = surf->w;
     h = surf->h;
@@ -98,13 +101,28 @@ bool rendererToPng(SDL_Renderer* r, std::vector<uint8_t>& png, int& w, int& h) {
     iface.close = memClose;
     SDL_IOStream* io = SDL_OpenIO(&iface, &mem);
     const bool saved = io && IMG_SavePNG_IO(surf, io, true);
-    SDL_DestroySurface(surf);
     if (!saved) return false;
     png = std::move(mem.data);
     return !png.empty();
 }
 
-struct PendingCapture { int fd = -1; json id; std::string target; };
+bool rendererToPng(SDL_Renderer* r, std::vector<uint8_t>& png, int& w, int& h,
+                   const SDL_Rect* rect = nullptr) {
+    if (!r) return false;
+    SDL_Surface* surf = SDL_RenderReadPixels(r, rect);
+    const bool ok = surfaceToPng(surf, png, w, h);
+    if (surf) SDL_DestroySurface(surf);
+    return ok;
+}
+
+struct PendingCapture {
+    int fd = -1;
+    json id;
+    std::string target;
+    bool beatSync = false;   // wait until the transport reaches atBeat
+    double atBeat = 0.0;
+    Uint64 deadlineMs = 0;   // give up waiting after this
+};
 std::vector<PendingCapture> g_pendingCaptures;   // GUI thread only
 
 std::vector<int> readManagerPath(const json& args) {
@@ -475,6 +493,21 @@ json dispatch(const json& req) {
     }
 
     if (op == "window") {
+        // A VST editor is a native X11 window, not an ExpandedWindow.
+        if (req.value("open", "") == "vst_editor") {
+            Node* n = (p->processor && p->processor->guiGraph)
+                ? p->processor->guiGraph->getNode(static_cast<uint16_t>(req.value("nodeID", -1)))
+                : nullptr;
+            auto* vn = dynamic_cast<VstNode*>(n);
+            if (!vn || !vn->plugin)
+                return err(id, "not_found", "VST node not found or no plugin loaded");
+            const bool close = req.value("closeEditor", false);
+            if (close) vn->plugin->hideEditor();
+            else vn->plugin->showEditor();
+            return ok(id, json{{close ? "closed" : "opened", "VST Editor"},
+                               {"nodeID", vn->id}, {"editorOpen", vn->plugin->isEditorOpen()}});
+        }
+
         WindowManager* wm = p->processor ? p->processor->getWindowManager() : nullptr;
         if (!wm) return err(id, "internal", "no window manager");
 
@@ -608,7 +641,16 @@ std::string ControlApi::handle(const std::string& line, int clientFd) {
     if (req.value("op", "") == "capture") {
         if (clientFd < 0)
             return err(id, "bad_request", "capture is only available over the control socket").dump();
-        g_pendingCaptures.push_back({clientFd, id, req.value("target", std::string("main"))});
+        PendingCapture pc;
+        pc.fd = clientFd;
+        pc.id = id;
+        pc.target = req.value("target", std::string("main"));
+        if (req.contains("beat") && req["beat"].is_number()) {
+            pc.beatSync = true;
+            pc.atBeat = req["beat"].get<double>();
+            pc.deadlineMs = SDL_GetTicks() + 15000;   // transport may be stopped
+        }
+        g_pendingCaptures.push_back(std::move(pc));
         return {};
     }
 
@@ -622,16 +664,81 @@ std::string ControlApi::handle(const std::string& line, int clientFd) {
 }
 
 std::vector<std::pair<int, std::string>> ControlApi::flushCaptures(SDL_Renderer* mainRenderer,
-                                                                   WindowManager* wm) {
+                                                                   WindowManager* wm,
+                                                                   NodeManager* guiGraph,
+                                                                   double beat,
+                                                                   bool playing) {
     std::vector<std::pair<int, std::string>> out;
     if (g_pendingCaptures.empty()) return out;
 
     std::vector<PendingCapture> pending;
     pending.swap(g_pendingCaptures);
 
+    std::vector<PendingCapture> stillWaiting;
     for (const auto& pc : pending) {
+        // Beat-synced capture: hold the reply until the transport reaches the
+        // requested beat, then grab the frame that was just rendered.
+        if (pc.beatSync && playing && beat < pc.atBeat) {
+            if (SDL_GetTicks() < pc.deadlineMs) {
+                stillWaiting.push_back(pc);
+                continue;
+            }
+            out.push_back({pc.fd, err(pc.id, "capture_timeout",
+                "transport did not reach beat " + std::to_string(pc.atBeat)).dump()});
+            continue;
+        }
+
         SDL_Renderer* r = nullptr;
-        if (pc.target == "main") {
+        SDL_Rect rect{};
+        const bool nodeTarget = pc.target.rfind("node:", 0) == 0;
+
+        if (nodeTarget) {
+            if (!guiGraph || !mainRenderer) {
+                out.push_back({pc.fd, err(pc.id, "not_found",
+                    "cannot capture " + pc.target + ": no graph").dump()});
+                continue;
+            }
+            const int nodeID = std::atoi(pc.target.c_str() + 5);
+            Node* n = guiGraph->getNode(static_cast<uint16_t>(nodeID));
+            if (!n) {
+                out.push_back({pc.fd, err(pc.id, "not_found",
+                    "no node with id " + std::to_string(nodeID)).dump()});
+                continue;
+            }
+#ifndef __EMSCRIPTEN__
+            if (auto* vn = dynamic_cast<VstNode*>(n)) {
+                if (vn->plugin && vn->plugin->isEditorOpen()) {
+                    std::vector<uint8_t> png;
+                    int w = 0, h = 0;
+                    if (x11WindowToPng(vn->plugin->getEditorWindowHandle(), png, w, h)) {
+                        json res{{"target", pc.target}, {"format", "png"}, {"width", w},
+                                 {"height", h}, {"data", jsonBytesEncode(png)}};
+                        out.push_back({pc.fd, ok(pc.id, std::move(res)).dump()});
+                    } else {
+                        out.push_back({pc.fd, err(pc.id, "capture_failed",
+                            "could not read the VST editor window").dump()});
+                    }
+                    continue;
+                }
+            }
+#endif
+            int ow = 0, oh = 0;
+            SDL_GetRenderOutputSize(mainRenderer, &ow, &oh);
+            const int pad = 8;
+            const int x = static_cast<int>(std::lround(n->dstRect.x)) - pad;
+            const int y = static_cast<int>(std::lround(n->dstRect.y)) - pad;
+            const int w = static_cast<int>(std::lround(n->dstRect.w)) + pad * 2;
+            const int h = static_cast<int>(std::lround(n->dstRect.h)) + pad * 2;
+            const int x0 = std::max(0, x), y0 = std::max(0, y);
+            const int x1 = std::min(ow, x + w), y1 = std::min(oh, y + h);
+            if (x1 <= x0 || y1 <= y0) {
+                out.push_back({pc.fd, err(pc.id, "not_found",
+                    "node " + std::to_string(nodeID) + " is off-screen").dump()});
+                continue;
+            }
+            rect = {x0, y0, x1 - x0, y1 - y0};
+            r = mainRenderer;
+        } else if (pc.target == "main") {
             r = mainRenderer;
         } else if (wm) {
             if (ExpandedWindow* ew = wm->findByTitle(pc.target.c_str()))
@@ -646,7 +753,7 @@ std::vector<std::pair<int, std::string>> ControlApi::flushCaptures(SDL_Renderer*
         }
         std::vector<uint8_t> png;
         int w = 0, h = 0;
-        if (!rendererToPng(r, png, w, h)) {
+        if (!rendererToPng(r, png, w, h, nodeTarget ? &rect : nullptr)) {
             out.push_back({pc.fd, err(pc.id, "capture_failed",
                 "could not read pixels from " + pc.target + ": " + SDL_GetError()).dump()});
             continue;
@@ -655,5 +762,7 @@ std::vector<std::pair<int, std::string>> ControlApi::flushCaptures(SDL_Renderer*
                  {"data", jsonBytesEncode(png)}};
         out.push_back({pc.fd, ok(pc.id, std::move(res)).dump()});
     }
+    for (auto& pc : stillWaiting)
+        g_pendingCaptures.push_back(std::move(pc));
     return out;
 }

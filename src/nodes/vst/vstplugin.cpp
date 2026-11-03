@@ -14,6 +14,11 @@
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
 
+// Must run before SDL/any other Xlib use: plugin editors and SDL touch Xlib
+// from different threads, and without this Xlib's global state races (seen as
+// XOpenDisplay hanging forever when opening a plugin editor).
+void initVstX11Threads() { XInitThreads(); }
+
 // Prevent X11 errors from killing the app.
 static int xErrorHandler(Display* d, XErrorEvent* e) {
     char buf[256];
@@ -327,7 +332,10 @@ public:
         XStoreName(display, window, "VST3 Editor");
         XSelectInput(display, window, ExposureMask | StructureNotifyMask);
         XMapWindow(display, window);
-        XFlush(display);
+        // Wait until the server has actually mapped the window: plugins that
+        // create an EGL/GL surface against this XID (e.g. Vital/BGFX) fail
+        // "Failed to set context" if it is still unmapped.
+        XSync(display, False);
         windowOpen = true;
 
         wmDeleteMessage = XInternAtom(display, "WM_DELETE_WINDOW", False);
@@ -890,6 +898,11 @@ void VstPlugin::hideEditor() {
     }
     editorHost.reset();
     editorOpen = false;
+}
+
+void* VstPlugin::getEditorWindowHandle() const {
+    if (!editorOpen || !editorHost) return nullptr;
+    return editorHost->getNativeWindowHandle();
 }
 
 bool VstPlugin::tickEditor() {

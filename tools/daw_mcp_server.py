@@ -9,6 +9,10 @@ that channel as MCP tools, so an agent can drive the DAW and read its state.
 The DAW loads settings.json relative to its working directory; running `./DAW`
 from `build/` means editing `build/assets/settings.json`.
 
+The documentation (help, list_*, describe_*) is read from
+assets/control_docs.json, the same file the DAW loads, so those tools work with
+no DAW running. Only live state and actions need the control socket.
+
 Dependency-free: implements the small slice of MCP needed (initialize, tools/list,
 tools/call) by hand so it runs under a bare python3.
 
@@ -25,7 +29,47 @@ PROTOCOL_VERSION = "2024-11-05"
 DEFAULT_SOCKET = "/tmp/microtonal-daw.sock"
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SETTINGS_PATH = os.path.join(REPO_ROOT, "build", "assets", "settings.json")
+DOCS_PATH = os.path.join(REPO_ROOT, "assets", "control_docs.json")
 CALL_TIMEOUT = 30.0
+
+# The documentation is a data file shared with the DAW, so it can be served
+# with no DAW running. Only live state (queries, actions, captures) needs the
+# control socket.
+_docs = None
+
+
+def control_docs():
+    global _docs
+    if _docs is None:
+        with open(DOCS_PATH) as f:
+            _docs = json.load(f)
+    return _docs
+
+
+def docs_help():
+    d = control_docs()
+    index = lambda key: {n: e.get("summary", "") for n, e in d.get(key, {}).items()}
+    return {"actions": index("actions"), "queries": index("queries"),
+            "ops": index("ops"), "concepts": d.get("concepts", {})}
+
+
+def docs_list(kind):
+    docs = control_docs().get(kind, {})
+    return {kind: [{"name": n, "summary": e.get("summary", "")}
+                   for n, e in sorted(docs.items())]}
+
+
+def docs_describe(kind, name):
+    docs = control_docs().get(kind, {})
+    if name not in docs:
+        if kind == "queries":
+            raise RuntimeError(f"unknown_query: unknown query: {name}")
+        # Actions: unknown is not an error, the DAW reports known:false.
+        return {"summary": "", "params": {}, "example": "", "name": name, "known": False}
+    out = {**docs[name], "name": name}
+    if kind == "actions":
+        out["known"] = True
+    return out
 
 # ---------------------------------------------------------------- socket client
 
@@ -115,9 +159,10 @@ TOOLS = [
                         "node ids, the pitch/rhythm vector encoding, the tuning model and the "
                         "read-live rule. Then use daw_describe_action / daw_describe_query for "
                         "the exact parameters and a worked example of each one. "
-                        "If this call fails with 'no DAW control socket', the DAW is not running "
-                        "or is not controllable: it must be started with \"controlEnabled\": true "
-                        "in the assets/settings.json under its working directory (e.g. "
+                        "The docs are read from assets/control_docs.json, so they answer even "
+                        "when the DAW is not running; only live queries/actions need the socket. "
+                        "To use the control socket the DAW must be running with \"controlEnabled\": "
+                        "true in the assets/settings.json under its working directory (e.g. "
                         "build/assets/settings.json when run from build/). DAW_CONTROL_ENABLE is "
                         "not read by the DAW; DAW_CONTROL_SOCKET only changes which socket this "
                         "MCP server connects to."),
@@ -178,10 +223,14 @@ TOOLS = [
     {
         "name": "daw_capture",
         "description": ("Screenshot a DAW renderer and return it as a PNG image. target is \"main\" "
-                        "(the node canvas, default) or a window title / id from daw_windows — e.g. "
-                        "\"Piano Roll\", \"Arranger##2\". The reply is rendered fresh on the next frame. "
-                        "Open windows with daw_window first."),
-        "inputSchema": {"type": "object", "properties": {"target": {"type": "string"}}},
+                        "(the node canvas, default), \"node:<nodeID>\" (that node's rectangle on the "
+                        "canvas, including any spectrum/meter it draws), or a window title / id from "
+                        "daw_windows — e.g. \"Piano Roll\", \"Arranger##2\". The reply is rendered fresh "
+                        "on the next frame."),
+        "inputSchema": {"type": "object", "properties": {
+            "target": {"type": "string"},
+            "beat": {"type": "number", "description": "hold the capture until the transport reaches this absolute beat"},
+        }},
     },
     {
         "name": "daw_windows",
@@ -192,7 +241,8 @@ TOOLS = [
         "name": "daw_window",
         "description": ("Open or close an expanded window, so you can capture and inspect it. "
                         "open: preferences, undo_tree, arranger (nodeID), patcher (nodeID), "
-                        "sample_editor (nodeID, sampleIndex), piano_roll (nodeID, regionID). "
+                        "sample_editor (nodeID, sampleIndex), piano_roll (nodeID, regionID), "
+                        "vst_editor (nodeID; closeEditor:true hides it). "
                         "close: a window title or numeric id."),
         "inputSchema": {
             "type": "object",
@@ -202,6 +252,7 @@ TOOLS = [
                 "regionID": {"type": "integer"},
                 "sampleIndex": {"type": "integer"},
                 "close": {"type": "string"},
+                "closeEditor": {"type": "boolean"},
             },
         },
     },
@@ -267,28 +318,43 @@ def call_tool(name, args):
         return reply.get("result")
 
     if name == "daw_help":
-        return daw_op("help")
+        try:
+            return docs_help()
+        except OSError:
+            return daw_op("help")
     if name == "daw_capture":
-        return daw_op("capture", **({"target": args["target"]} if "target" in args else {}))
+        return daw_op("capture", **{k: args[k] for k in ("target", "beat") if k in args})
     if name == "daw_windows":
         return daw_op("query", query="windows")
     if name == "daw_window":
         if "close" in args:
             return daw_op("window", close=args["close"])
-        payload = {k: args[k] for k in ("open", "nodeID", "regionID", "sampleIndex") if k in args}
+        payload = {k: args[k] for k in ("open", "nodeID", "regionID", "sampleIndex", "closeEditor") if k in args}
         return daw_op("window", **payload)
     if name == "daw_action":
         return daw_op("action", action=args["name"], args=args.get("args", {}))
     if name == "daw_query":
         return daw_op("query", query=args["query"], args=args.get("args", {}))
     if name == "daw_list_actions":
-        return daw_op("list_actions")
+        try:
+            return docs_list("actions")
+        except OSError:
+            return daw_op("list_actions")
     if name == "daw_list_queries":
-        return daw_op("list_queries")
+        try:
+            return docs_list("queries")
+        except OSError:
+            return daw_op("list_queries")
     if name == "daw_describe_action":
-        return daw_op("describe_action", action=args["action"])
+        try:
+            return docs_describe("actions", args["action"])
+        except OSError:
+            return daw_op("describe_action", action=args["action"])
     if name == "daw_describe_query":
-        return daw_op("describe_query", query=args["query"])
+        try:
+            return docs_describe("queries", args["query"])
+        except OSError:
+            return daw_op("describe_query", query=args["query"])
     if name == "daw_undo":
         return daw_op("undo")
     if name == "daw_redo":

@@ -303,6 +303,9 @@ void ElementManager::fromJSON(json j) {
                 return; // unknown type, give up
         }
 
+        // Positions reserve ids while deserializing, so the pool must be wired
+        // before fromJSON runs (newRegion/newClip do the same for live creation).
+        ge->pos_id_pool = &position_id_pool;
         ge->fromJSON(e);
         id_pool.reserveID(ge->id);
         elements.push_back(ge);

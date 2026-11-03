@@ -6,6 +6,10 @@
 #include "Settings.h"
 #include "styles.h"
 
+#ifndef __EMSCRIPTEN__
+#include "nodes/vst/vstplugin.h"
+#endif
+
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
@@ -21,6 +25,10 @@ static std::atomic<bool> quit{false};
 int main(int argc, char* argv[]) {
     std::signal(SIGINT, [](int){ quit.store(true); });
     std::signal(SIGTERM, [](int){ quit.store(true); });
+
+#ifndef __EMSCRIPTEN__
+    initVstX11Threads();   // before SDL_Init touches Xlib
+#endif
 
     if(!initFonts()) {
         std::cerr << "ttf init failed" << std::endl;

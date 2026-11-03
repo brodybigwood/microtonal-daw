@@ -172,6 +172,9 @@ private:
     std::map<CacheKey, std::shared_ptr<VstPlugin>> instances;
 };
 
+/// Initializes Xlib's thread support. Call before SDL_Init.
+void initVstX11Threads();
+
 // ---------------------------------------------------------------------------
 // EditorWindowHost — abstract X11 window for the plugin editor
 // ---------------------------------------------------------------------------
@@ -293,6 +296,8 @@ public:
     void showEditor();
     void hideEditor();
     bool isEditorOpen() const { return editorOpen; }
+    /// Native (X11) window handle of the open editor, or nullptr.
+    void* getEditorWindowHandle() const;
     bool tickEditor();
 
     // Global list of open editors — ticked from NodeEditor event loop.
@@ -395,6 +400,7 @@ public:
     void showEditor() {}
     void hideEditor() {}
     bool isEditorOpen() const { return false; }
+    void* getEditorWindowHandle() const { return nullptr; }
     bool tickEditor() { return false; }
     static void commitPendingStateEdits() {}
     int getEditorWidth() const { return 0; }

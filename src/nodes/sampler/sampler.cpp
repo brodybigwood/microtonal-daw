@@ -270,6 +270,22 @@ void SamplerNode::rebuildConnections() {
     if (nm) nm->markTopologyDirty();
 }
 
+void SamplerNode::rebuildSampleParams() {
+    params.clear();
+    params.reserve(samples.size() * 9);
+    for (auto& slab : samples) {
+        params.push_back(&slab.volume);
+        params.push_back(&slab.pitch);
+        params.push_back(&slab.pan);
+        params.push_back(&slab.offset);
+        params.push_back(&slab.cutoff);
+        params.push_back(&slab.attack);
+        params.push_back(&slab.decay);
+        params.push_back(&slab.sustain);
+        params.push_back(&slab.release);
+    }
+}
+
 void SamplerNode::addSample(const std::string& filepath) {
     SampleSlab slab;
     if (!filepath.empty())
@@ -297,15 +313,7 @@ void SamplerNode::addSample(const std::string& filepath) {
     s.decay.label = "S" + std::to_string(s.id) + " Dec";
     s.sustain.label = "S" + std::to_string(s.id) + " Sus";
     s.release.label = "S" + std::to_string(s.id) + " Rel";
-    params.push_back(&s.volume);
-    params.push_back(&s.pitch);
-    params.push_back(&s.pan);
-    params.push_back(&s.offset);
-    params.push_back(&s.cutoff);
-    params.push_back(&s.attack);
-    params.push_back(&s.decay);
-    params.push_back(&s.sustain);
-    params.push_back(&s.release);
+    rebuildSampleParams();
     rebuildConnections();
 }
 
@@ -342,24 +350,7 @@ void SamplerNode::insertSampleAt(size_t index, const std::string& filepath) {
     s.sustain.label = "S" + std::to_string(s.id) + " Sus";
     s.release.label = "S" + std::to_string(s.id) + " Rel";
 
-    // Insert 9 params at correct position.
-    size_t paramBase = index * 9;
-    std::vector<Parameter*> newParams;
-    newParams.reserve(params.size() + 9);
-    for (size_t i = 0; i < paramBase && i < params.size(); ++i)
-        newParams.push_back(params[i]);
-    newParams.push_back(&s.volume);
-    newParams.push_back(&s.pitch);
-    newParams.push_back(&s.pan);
-    newParams.push_back(&s.offset);
-    newParams.push_back(&s.cutoff);
-    newParams.push_back(&s.attack);
-    newParams.push_back(&s.decay);
-    newParams.push_back(&s.sustain);
-    newParams.push_back(&s.release);
-    for (size_t i = paramBase; i < params.size(); ++i)
-        newParams.push_back(params[i]);
-    params = std::move(newParams);
+    rebuildSampleParams();
 
     rebuildConnections();
 }
@@ -419,18 +410,7 @@ void SamplerNode::reorderSamples(const std::vector<size_t>& newOrder) {
     samples = std::move(reordered);
 
     // Rebuild params from samples (old pointers were invalidated by the move).
-    params.clear();
-    for (auto& slab : samples) {
-        params.push_back(&slab.volume);
-        params.push_back(&slab.pitch);
-        params.push_back(&slab.pan);
-        params.push_back(&slab.offset);
-        params.push_back(&slab.cutoff);
-        params.push_back(&slab.attack);
-        params.push_back(&slab.decay);
-        params.push_back(&slab.sustain);
-        params.push_back(&slab.release);
-    }
+    rebuildSampleParams();
 
     // Reorder per-sample connections (master stays at index 0).
     {
@@ -509,8 +489,10 @@ void SamplerNode::process() {
                         nv.envPhase = 0.f;
                         nv.pan = samples[si].pan.value;
                         nv.wait_on = event.sampleOffset;
-                        float semitones = event.num - samples[si].pitch.value;
-                        nv.pitchRatio = std::pow(2.f, semitones / 12.f)
+                        // Master is slot selection only: default pitch, then
+                        // the slot's pitch-shift knob.
+                        const float shift = samples[si].pitch.value - 69.0f;
+                        nv.pitchRatio = std::pow(2.f, shift / 12.f)
                             * (static_cast<float>(samples[si].sampleRate) / sr);
                         break;
                     }
@@ -545,7 +527,10 @@ void SamplerNode::process() {
                         nv.envPhase = 0.f;
                         nv.pan = samples[si].pan.value;
                         nv.wait_on = event.sampleOffset;
-                        float semitones = event.num - samples[si].pitch.value;
+                        // Slot input: the note's pitch, shifted by the slot's
+                        // pitch-shift knob.
+                        float semitones = (event.num - 69.0f)
+                            + (samples[si].pitch.value - 69.0f);
                         nv.pitchRatio = std::pow(2.f, semitones / 12.f)
                             * (static_cast<float>(samples[si].sampleRate) / sr);
                         break;
@@ -1375,16 +1360,8 @@ void SamplerNode::extraDeSerialize(const json& j) {
         s.decay.label = "S" + std::to_string(s.id) + " Dec";
         s.sustain.label = "S" + std::to_string(s.id) + " Sus";
         s.release.label = "S" + std::to_string(s.id) + " Rel";
-        params.push_back(&s.volume);
-        params.push_back(&s.pitch);
-        params.push_back(&s.pan);
-        params.push_back(&s.offset);
-        params.push_back(&s.cutoff);
-        params.push_back(&s.attack);
-        params.push_back(&s.decay);
-        params.push_back(&s.sustain);
-        params.push_back(&s.release);
     }
 
+    rebuildSampleParams();
     rebuildConnections();
 }

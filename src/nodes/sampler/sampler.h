@@ -138,6 +138,9 @@ private:
     idManager sampleIdPool_;
 
     // Helpers
+    /// Rebuild params from samples. Required after any change that can move
+    /// SampleSlab objects in the vector: Knob addresses are stored in params.
+    void rebuildSampleParams();
     void ensureThumbnail(size_t index, SDL_Renderer*);
     void openSampleFileDialog();
 };

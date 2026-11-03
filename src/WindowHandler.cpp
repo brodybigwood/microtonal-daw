@@ -205,7 +205,9 @@ bool WindowHandler::tick() {
         // Control-channel captures read the freshly rendered (not yet presented)
         // backbuffers, so they must run between the render and present passes.
         {
-            auto caps = ControlApi::flushCaptures(project->renderer, wm);
+            auto caps = ControlApi::flushCaptures(project->renderer, wm,
+                (project->processor ? project->processor->guiGraph : nullptr),
+                project->effectiveBeatPosition, project->dspIsPlaying);
             if (!caps.empty())
                 ControlServer::instance().deliver(caps);
         }

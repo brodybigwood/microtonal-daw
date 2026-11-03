@@ -6,6 +6,7 @@
 
 struct SDL_Renderer;
 class WindowManager;
+class NodeManager;
 
 // Executes one JSON request line against the running DAW.
 //
@@ -20,5 +21,8 @@ public:
     /// Answered from WindowHandler::tick after rendering but before presenting,
     /// so SDL_RenderReadPixels sees the freshly drawn backbuffers.
     static std::vector<std::pair<int, std::string>> flushCaptures(SDL_Renderer* mainRenderer,
-                                                                  WindowManager* wm);
+                                                                  WindowManager* wm,
+                                                                  NodeManager* guiGraph,
+                                                                  double beat,
+                                                                  bool playing);
 };
