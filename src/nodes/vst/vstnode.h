@@ -13,6 +13,7 @@ public:
 
     void process() override;
     void setup() override;
+    int reportedLatency() const override { return plugin ? plugin->latencySamples() : 0; }
     void renderContent(SDL_Renderer*) override;
     bool handleCustomInput(SDL_Event&) override;
     void handleWindowInput(SDL_Event&) override;

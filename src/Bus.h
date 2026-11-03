@@ -71,7 +71,39 @@ struct Connection{
     int minChannels = 1;  // what the owning node needs; numChannels = max(minChannels, downstream)
     int allocChannels = 1; // actual channels the buffer was allocated for
 
-    float* channel(int ch) { return buffer + ch * bufferSize; }
+    // Latency compensation: when pdcDelay > 0 the consumer reads a delayed copy of the
+    // source block instead of the source buffer, so parallel paths stay aligned.
+    std::vector<std::vector<float>> pdcLine;
+    std::vector<float> pdcBuffer;
+    int pdcDelay = 0;
+    int pdcWrite = 0;
+    // Cumulative latency at this connection (source chain for an output, aligned arrival for
+    // an input). Shown on hover.
+    int latency = 0;
+    // For input connections: how many channels the connected source actually carries.
+    int sourceChannels = 1;
+
+    void setPdcDelay(int samples) {
+        if (samples <= 0) {
+            pdcDelay = 0;
+            pdcWrite = 0;
+            pdcLine.clear();
+            pdcBuffer.clear();
+            return;
+        }
+        if (pdcDelay != samples) {
+            pdcDelay = samples;
+            pdcWrite = 0;
+            pdcLine.assign(static_cast<size_t>(numChannels), std::vector<float>(static_cast<size_t>(samples), 0.0f));
+        }
+    }
+
+    float* channel(int ch) {
+        const size_t off = static_cast<size_t>(ch) * static_cast<size_t>(bufferSize);
+        if (pdcDelay > 0 && pdcBuffer.size() >= off + static_cast<size_t>(bufferSize))
+            return pdcBuffer.data() + off;
+        return buffer + ch * bufferSize;
+    }
 
     void allocateBuffer(int bs, int nch) {
         if (buffer) delete[] buffer;

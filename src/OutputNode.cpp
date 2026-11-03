@@ -165,17 +165,24 @@ OutputNode::OutputNode(NodeManager* nm) : Node(0, nm, NodeType::Count) {
 }
 
 void OutputNode::process() {
-    int wi = 0;
+    // Each input is multi-channel and lands at output channel (input index + channel), so a
+    // stereo cable on input 0 fills outputs 0 and 1. Overlapping channels are summed.
+    for (int ch = 0; ch < numChannels; ++ch)
+        std::memset(output + static_cast<size_t>(ch) * bufferSize, 0, bufferSize * sizeof(float));
+
+    int k = 0;
     for (auto* c : inputs.connections) {
         if (!c || c->type != DataType::Waveform) continue;
-        if (wi >= numChannels) return;
-
-        if (!c->is_connected) {
-            std::memset(output + wi * bufferSize, 0, bufferSize * sizeof(float));
-        } else {
-            std::memcpy(output + wi * bufferSize, c->channel(0), bufferSize * sizeof(float));
+        const int chans = c->is_connected && c->buffer ? c->sourceChannels : 0;
+        for (int cc = 0; cc < chans; ++cc) {
+            const int dstCh = k + cc;
+            if (dstCh >= numChannels) break;
+            const float* src = c->channel(cc);
+            float* dst = output + static_cast<size_t>(dstCh) * bufferSize;
+            for (int i = 0; i < bufferSize; ++i)
+                dst[i] += src[i];
         }
-        ++wi;
+        ++k;
     }
 }
 

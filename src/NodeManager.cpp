@@ -269,6 +269,12 @@ void NodeManager::process(float* output, int& bufferSize, int& numChannels, int&
         }
         outNode->relinkInputs();
         topologyDirty = false;
+
+        // Recompute per-node latency and the compensation delays on every input connection.
+        inNode->latencyComputed = false;
+        for (auto node : nodes) node->latencyComputed = false;
+        outNode->latencyComputed = false;
+        outNode->computeLatency();
     }
 
     outNode->output = output;

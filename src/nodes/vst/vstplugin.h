@@ -340,6 +340,11 @@ public:
     EditorHostFrame* getHostFrame() { return hostFrame.get(); }
     Steinberg::Vst::IEditController* getEditController() { return editController.get(); }
 
+    /// Processing latency the plugin reports for delay compensation.
+    int latencySamples() const {
+        return audioProcessor ? static_cast<int>(audioProcessor->getLatencySamples()) : 0;
+    }
+
 private:
     bool valid = false;
     bool needsSetup_ = false;

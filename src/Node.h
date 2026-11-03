@@ -102,6 +102,15 @@ class Node : public EmbeddedWindow {
 
         void update(int, int);
 
+        // Latency compensation. Nodes that add processing latency (lookahead plugins) report
+        // it; the graph delays the shorter parallel paths to match, per input connection.
+        virtual int reportedLatency() const { return 0; }
+        int latency = 0;             // output latency of this node's chain, in samples
+        int inputMaxLatency = 0;     // max latency among this node's inputs
+        bool latencyComputed = false;
+        int computeLatency();
+        void applyInputLatencyCompensation();
+
         float* mouseX;
         float* mouseY;
 

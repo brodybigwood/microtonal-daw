@@ -3,6 +3,7 @@
 #include "SDL_Events.h"
 #include "ContextMenu.h"
 #include <iostream>
+#include <cstdio>
 #include "NodeEditor.h"
 #include "WindowHandler.h"
 #include "Preferences.h"
@@ -127,9 +128,15 @@ void Node::render(SDL_Renderer* renderer) {
                 hovered = nullptr;
         }
         if (hovered) {
-            const std::string tipText = hovered->label.empty()
+            std::string tipText = hovered->label.empty()
                 ? (std::string(hovered->dir == Direction::input ? "Input " : "Output ") + std::to_string(hovered->id))
                 : hovered->label;
+            if (hovered->type == DataType::Waveform) {
+                const float ms = sampleRate > 0 ? 1000.0f * static_cast<float>(hovered->latency) / static_cast<float>(sampleRate) : 0.0f;
+                char lat[64];
+                std::snprintf(lat, sizeof(lat), "  |  %d smp (%.2f ms)", hovered->latency, ms);
+                tipText += lat;
+            }
             const float mx = ne ? ne->mouseX : 0.f;
             const float my = ne ? ne->mouseY : 0.f;
             SDL_Surface* tipSurf = TTF_RenderText_Blended(fonts.mainFont, tipText.c_str(), 0, SDL_Color{255, 255, 255, 255});

@@ -409,6 +409,7 @@ void Node::relinkInputs() {
         if (c->type == DataType::Waveform) {
             c->buffer = ci->buffer;
             c->bufferSize = bufferSize;
+            c->sourceChannels = std::max(1, ci->numChannels);
         } else {
             c->events = ci->events;
         }
@@ -431,9 +432,76 @@ void Node::processTree() {
         if (n) n->processTree();
     }
 
+    // Align this node's inputs (latency compensation) before it mixes them.
+    applyInputLatencyCompensation();
+
     // process final
     process();
     isProcessed = true;
+}
+
+int Node::computeLatency() {
+    if (latencyComputed) return latency;
+    latencyComputed = true; // guards against cycles
+
+    int maxIn = 0;
+    for (Connection* c : inputs.connections) {
+        if (c->type != DataType::Waveform || !c->is_connected) continue;
+        Node* src = getNodeInput(c);
+        if (!src) continue;
+        maxIn = std::max(maxIn, src->computeLatency());
+    }
+    inputMaxLatency = maxIn;
+    latency = maxIn + std::max(0, reportedLatency());
+
+    // Delay each input up to the longest one so the node mixes aligned signals.
+    for (Connection* c : inputs.connections) {
+        if (c->type != DataType::Waveform || !c->is_connected) {
+            c->setPdcDelay(0);
+            continue;
+        }
+        Node* src = getNodeInput(c);
+        const int srcLatency = src ? src->latency : 0;
+        c->setPdcDelay(std::max(0, maxIn - srcLatency));
+    }
+
+    // Latency reported per connection: outputs show the chain latency up to this node,
+    // inputs show the aligned arrival latency.
+    for (Connection* c : outputs.connections)
+        if (c->type == DataType::Waveform) c->latency = latency;
+    for (Connection* c : inputs.connections)
+        if (c->type == DataType::Waveform) c->latency = inputMaxLatency;
+    return latency;
+}
+
+void Node::applyInputLatencyCompensation() {
+    for (Connection* c : inputs.connections) {
+        if (c->type != DataType::Waveform || c->pdcDelay <= 0 || !c->buffer || bufferSize <= 0)
+            continue;
+        const int d = c->pdcDelay;
+        const int bs = bufferSize;
+        const int chans = std::max(1, c->sourceChannels);
+        if (static_cast<int>(c->pdcLine.size()) != chans) {
+            c->pdcLine.assign(static_cast<size_t>(chans), std::vector<float>(static_cast<size_t>(d), 0.0f));
+            c->pdcWrite = 0;
+        }
+        for (auto& chLine : c->pdcLine)
+            if (static_cast<int>(chLine.size()) != d) { chLine.assign(static_cast<size_t>(d), 0.0f); c->pdcWrite = 0; }
+        if (c->pdcBuffer.size() < static_cast<size_t>(chans) * static_cast<size_t>(bs))
+            c->pdcBuffer.assign(static_cast<size_t>(chans) * static_cast<size_t>(bs), 0.0f);
+
+        for (int cc = 0; cc < chans; ++cc) {
+            const float* src = c->buffer + static_cast<size_t>(cc) * static_cast<size_t>(bs);
+            float* dst = c->pdcBuffer.data() + static_cast<size_t>(cc) * static_cast<size_t>(bs);
+            std::vector<float>& ring = c->pdcLine[static_cast<size_t>(cc)];
+            for (int i = 0; i < bs; ++i) {
+                const int idx = (c->pdcWrite + i) % d;
+                dst[i] = ring[static_cast<size_t>(idx)];
+                ring[static_cast<size_t>(idx)] = src[i];
+            }
+        }
+        c->pdcWrite = (c->pdcWrite + bs) % d;
+    }
 }
 
 void Node::resetProcessTree() {
