@@ -8,6 +8,8 @@
 #include "NodeProcessor.h"
 #include "ControlServer.h"
 #include "ControlApi.h"
+#include "LoadingScreen.h"
+#include "Project.h"
 #include "nodes/vst/vstplugin.h"
 #include <algorithm>
 #include <cstdio>
@@ -38,6 +40,34 @@ bool WindowHandler::tick() {
     // External control requests run here, on the GUI thread, before the render
     // gate below — so control latency tracks the main loop (~5ms), not the frame rate.
     ControlServer::instance().poll();
+
+    // A project is being loaded on a worker thread: freeze the UI and show the
+    // same loading screen as startup. Input is not dispatched to the graph.
+    if (project && project->asyncLoadRunning()) {
+        SDL_Event e;
+        while (SDL_PollEvent(&e)) {
+            if (e.type == SDL_EVENT_QUIT) { running = false; break; }
+        }
+        if (!running) {
+            project->completeAsyncLoad();
+            return false;
+        }
+        if (project->asyncLoadFinished()) {
+            project->completeAsyncLoad();
+            lastTime = SDL_GetTicks();
+        } else {
+            int ww = 0, hh = 0;
+            SDL_GetWindowSize(project->window, &ww, &hh);
+            SDL_SetRenderDrawColor(project->renderer, 0, 0, 0, 255);
+            SDL_RenderClear(project->renderer);
+            const char* stage = project->loadStatusText.load();
+            const double secs = static_cast<double>(SDL_GetTicks() - project->loadStartMs.load()) / 1000.0;
+            loading::render(project->renderer, ww, hh, secs,
+                            project->loadProgressValue.load(), stage ? stage : "");
+            SDL_RenderPresent(project->renderer);
+            return true;
+        }
+    }
 
     double timeSinceLastFrame = double(SDL_GetTicks())-double(lastTime);
     if(timeSinceLastFrame >= frameTime) {

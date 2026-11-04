@@ -256,6 +256,19 @@ json handleQuery(Project* p, const json& req) {
         };
     }
     if (q == "settings") return Settings::instance().toJSON();
+    if (q == "project") {
+        json recent = json::array();
+        for (const auto& r : Settings::instance().getRecentProjects()) recent.push_back(r);
+        const char* stage = p->loadStatusText.load();
+        return json{
+            {"filepath", p->filepath},
+            {"dirty", p->dirty.load()},
+            {"loading", p->asyncLoadRunning()},
+            {"loadProgress", p->loadProgressValue.load()},
+            {"loadStage", stage ? stage : ""},
+            {"recentProjects", recent},
+        };
+    }
     if (q == "undo") return p->um->serialize();
     if (q == "transport") {
         return json{
@@ -626,14 +639,66 @@ json dispatch(const json& req) {
         if (p->filepath.empty())
             return err(id, "bad_request", "no 'path' given and project has no filepath yet");
         p->save();
+        Settings::instance().addRecentProject(p->filepath);
         return ok(id, json{{"saved", p->filepath}});
     }
+
+    if (op == "save_as") {
+        const std::string path = req.value("path", "");
+        if (path.empty()) return err(id, "bad_request", "save_as needs a 'path'");
+        p->filepath = path;
+        p->save();
+        Settings::instance().addRecentProject(path);
+        return ok(id, json{{"saved", path}});
+    }
+
+    // Loading runs on a worker so the GUI shows the loading screen; the reply
+    // means "started". Poll the `project` query for loading/loadProgress.
+    auto startLoadOp = [&](const std::string& path) -> json {
+        if (p->asyncLoadRunning())
+            return err(id, "busy", "a project load is already running");
+        bool force = req.value("force", false);
+        if (req.contains("args") && req["args"].is_object())
+            force = req["args"].value("force", force);
+        if (p->dirty.load() && !force)
+            return err(id, "dirty", "project has unsaved changes; save first or pass force=true");
+        p->startAsyncLoad(path);
+        return ok(id, json{{"loading", path}});
+    };
 
     if (op == "load") {
         const std::string path = req.value("path", "");
         if (path.empty()) return err(id, "bad_request", "load needs a 'path'");
-        p->load(path);
-        return ok(id, json{{"loaded", path}});
+        return startLoadOp(path);
+    }
+
+    if (op == "load_recent") {
+        const auto recent = Settings::instance().getRecentProjects();
+        const int index = req.value("index", 0);
+        if (index < 0 || index >= static_cast<int>(recent.size()))
+            return err(id, "not_found", "no recent project at that index");
+        return startLoadOp(recent[static_cast<size_t>(index)]);
+    }
+
+    if (op == "settings_set") {
+        // Accept fields either at the top level or inside "args" (older MCP
+        // clients drop properties missing from their cached tool schema).
+        const json& a = req.contains("args") && req["args"].is_object() ? req["args"] : json::object();
+        auto pick = [&](const char* key) -> json {
+            if (req.contains(key)) return req[key];
+            if (a.contains(key)) return a[key];
+            return json();
+        };
+        const json k = pick("key");
+        const json v = pick("value");
+        if (!k.is_string() || k.get<std::string>().empty() || v.is_null())
+            return err(id, "bad_request", "settings_set needs 'key' and 'value'");
+        const std::string key = k.get<std::string>();
+        if (v.is_boolean()) Settings::instance().setBool(key.c_str(), v.get<bool>());
+        else if (v.is_number_integer()) Settings::instance().setInt(key.c_str(), v.get<int>());
+        else if (v.is_string()) Settings::instance().setString(key.c_str(), v.get<std::string>());
+        else return err(id, "bad_request", "value must be a bool, int or string");
+        return ok(id, json{{"key", key}, {"value", Settings::instance().toJSON().value(key, json())}});
     }
 
     if (op == "transport") {

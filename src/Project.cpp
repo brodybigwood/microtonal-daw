@@ -19,6 +19,7 @@
 #include "TrackManager.h"
 #include "ElementManager.h"
 #include "NodeProcessor.h"
+#include "Settings.h"
 #include "NodeManager.h"
 #include "nodes/arranger/arranger.h"
 #include "WindowHandler.h"
@@ -176,8 +177,52 @@ void Project::handleWindowInput(SDL_Event& e) {
 
 Project::~Project() {
     waitForSave();
+    waitForLoadThread();
     delete um;
     delete processor;
+}
+
+void Project::startAsyncLoad(const std::string& path) {
+    if (loadInProgress.load()) return;
+
+    // Expanded windows own textures created on this renderer; close them on
+    // the GUI thread so the load worker never touches renderer state.
+    if (processor) {
+        if (auto* wm = processor->getWindowManager()) {
+            while (!wm->windows().empty())
+                wm->removeWindow(wm->windows().back().get());
+        }
+    }
+
+    waitForLoadThread();
+    loadFinished.store(false);
+    loadProgressValue.store(0.f);
+    loadStatusText.store("Opening project");
+    loadStartMs.store(SDL_GetTicks());
+    loadInProgress.store(true);
+    loadThread = std::thread([this, path] {
+        // Undo deserialization resolves graphs through the thread-local manager.
+        if (processor) NodeProcessor::setThreadActiveRoot(processor->guiGraph);
+        try {
+            load(path);
+        } catch (const std::exception& e) {
+            std::cerr << "[load] failed: " << e.what() << std::endl;
+        }
+        loadFinished.store(true);
+    });
+}
+
+void Project::waitForLoadThread() {
+    std::lock_guard<std::mutex> lock(loadThreadMutex);
+    if (loadThread.joinable()) loadThread.join();
+}
+
+void Project::completeAsyncLoad() {
+    waitForLoadThread();
+    loadInProgress.store(false);
+    // The worker replaced guiGraph; the GUI thread's thread-local manager still
+    // points at the deleted old graph.
+    if (processor) NodeProcessor::setThreadActiveRoot(processor->guiGraph);
 }
 
 void Project::waitForSave() {
@@ -201,6 +246,11 @@ void Project::load(std::string path) {
     }
 
     loading = true;
+    auto stage = [this](float p, const char* text) {
+        loadProgressValue.store(p, std::memory_order_relaxed);
+        loadStatusText.store(text, std::memory_order_relaxed);
+    };
+    stage(0.02f, "Opening project");
     if (um) {
         um->enqueueAudioSync([this]() {
             dspLoading = true;
@@ -218,6 +268,7 @@ void Project::load(std::string path) {
     json j;
     inFile >> j;
     std::cout << "[load] parse: " << loadMs(lt) << " ms" << std::endl;
+    stage(0.10f, "Parsing project");
 
     // Restore tempo curve from JSON (or fall back to legacy float, or default)
     if (j.contains("tempoCurve") && j["tempoCurve"].is_object()) {
@@ -261,9 +312,11 @@ void Project::load(std::string path) {
     lt = std::chrono::steady_clock::now();
     um->deSerialize(j["undoManager"], this);
     std::cout << "[load] undo deserialize: " << loadMs(lt) << " ms" << std::endl;
+    stage(0.24f, "Restoring history");
 
     // Restore NM state from current action's snapshot (falls back to legacy top-level)
     lt = std::chrono::steady_clock::now();
+    stage(0.28f, "Loading instruments and effects");
     if (processor) {
         if (!um->current->savedMainManager.is_null())
             processor->deSerialize(um->current->savedMainManager);
@@ -271,8 +324,10 @@ void Project::load(std::string path) {
             processor->deSerialize(j["nodeManager"]);
     }
     std::cout << "[load] graph deserialize: " << loadMs(lt) << " ms" << std::endl;
+    stage(0.93f, "Preparing audio engine");
 
     loading = false;
+    stage(1.0f, "Ready");
     const float tempoMin = tempoCurve.valueRangeMin;
     const float tempoMax = tempoCurve.valueRangeMax;
     const auto tempoPoints = tempoCurve.points;
@@ -284,6 +339,8 @@ void Project::load(std::string path) {
             dspLoading = false;
         });
     }
+    Settings::instance().addRecentProject(folder.string());
+    dirty.store(false);
 }
 
 void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {
@@ -541,6 +598,7 @@ void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {
                 std::cerr << "[save] failed to open " << verTmp << std::endl;
             }
         });
+        dirty.store(false);
     };
 
     const bool uiSaveRequested = (triggerWindowID != 0) || (triggerRenderer != nullptr);

@@ -190,6 +190,27 @@ bool Settings::hasBackup() const {
     return data_.contains("backup");
 }
 
+std::vector<std::string> Settings::getRecentProjects() const {
+    std::vector<std::string> result;
+    if (data_.contains("recentProjects")) {
+        for (auto& p : data_["recentProjects"]) {
+            try { result.push_back(p.get<std::string>()); } catch (...) {}
+        }
+    }
+    return result;
+}
+
+void Settings::addRecentProject(const std::string& folder) {
+    if (folder.empty()) return;
+    auto recent = getRecentProjects();
+    auto it = std::find(recent.begin(), recent.end(), folder);
+    if (it != recent.end()) recent.erase(it);
+    recent.insert(recent.begin(), folder);
+    if (recent.size() > 10) recent.resize(10);
+    data_["recentProjects"] = recent;
+    save();
+}
+
 std::vector<std::string> Settings::getVstHistory() const {
     std::vector<std::string> result;
     if (data_.contains("vstHistory")) {

@@ -4,6 +4,7 @@
 #include "NodeProcessor.h"
 #include "ControlServer.h"
 #include "Settings.h"
+#include "LoadingScreen.h"
 #include "styles.h"
 
 #ifndef __EMSCRIPTEN__
@@ -51,7 +52,45 @@ int main(int argc, char* argv[]) {
     audioManager->setProject(project);
 
     if (argc > 1) {
+#ifndef __EMSCRIPTEN__
+        // Load on a worker so the window can show the animated loading screen;
+        // the main thread only draws until the project is ready.
+        std::atomic<bool> loadDone{false};
+        std::thread loadThread([&] {
+            // Undo deserialization resolves graphs through the thread-local
+            // active manager; it is per-thread, so set it for the loader too.
+            NodeProcessor::setThreadActiveRoot(project->processor->guiGraph);
+            try {
+                project->load(argv[1]);
+            } catch (const std::exception& e) {
+                std::cerr << "[load] failed: " << e.what() << std::endl;
+            }
+            loadDone.store(true);
+        });
+        const Uint64 startTicks = SDL_GetTicks();
+        while (!loadDone.load() && !quit.load()) {
+            SDL_Event e;
+            while (SDL_PollEvent(&e)) {
+                if (e.type == SDL_EVENT_QUIT) quit.store(true);
+            }
+            int ww = 0, hh = 0;
+            SDL_GetWindowSize(project->window, &ww, &hh);
+            SDL_SetRenderDrawColor(project->renderer, 0, 0, 0, 255);
+            SDL_RenderClear(project->renderer);
+            const char* stage = project->loadStatusText.load();
+            loading::render(project->renderer, ww, hh,
+                            static_cast<double>(SDL_GetTicks() - startTicks) / 1000.0,
+                            project->loadProgressValue.load(), stage ? stage : "");
+            SDL_RenderPresent(project->renderer);
+            SDL_Delay(16);
+        }
+        loadThread.join();
+        // The loader replaced guiGraph on its own thread; this thread's
+        // thread-local manager still points at the deleted graph.
+        NodeProcessor::setThreadActiveRoot(project->processor->guiGraph);
+#else
         project->load(argv[1]);
+#endif
     }
 
     WindowHandler* windowHandler = WindowHandler::instance();

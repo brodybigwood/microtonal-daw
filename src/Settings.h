@@ -45,6 +45,10 @@ public:
     std::vector<std::string> getVstHistory() const;
     void addVstToHistory(const std::string& path);
 
+    // Recently opened project folders (most recent first).
+    std::vector<std::string> getRecentProjects() const;
+    void addRecentProject(const std::string& folder);
+
     // Load defaults from settings.json.default, saving current values to "backup".
     void loadDefaults();
 

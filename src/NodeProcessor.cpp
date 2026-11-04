@@ -87,6 +87,11 @@ void NodeProcessor::deSerialize(const json& j) {
     }
     guiGraph = new NodeManager(project);
     guiGraph->setNE(editor);
+    if (project) {
+        project->loadStatusText.store("Loading instruments and effects");
+        project->loadGraphBase.store(0.30f);
+        project->loadGraphSpan.store(0.40f);
+    }
     auto tGui = std::chrono::steady_clock::now();
     guiGraph->deSerialize(*src);
     std::cout << "[load] gui graph: " << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -99,6 +104,11 @@ void NodeProcessor::deSerialize(const json& j) {
         dspGraph = nullptr;
     }
     dspGraph = new NodeManager(project);
+    if (project) {
+        project->loadStatusText.store("Preparing audio engine");
+        project->loadGraphBase.store(0.72f);
+        project->loadGraphSpan.store(0.20f);
+    }
     auto tDsp = std::chrono::steady_clock::now();
     dspGraph->deSerialize(*src);
     std::cout << "[load] dsp graph: " << std::chrono::duration_cast<std::chrono::milliseconds>(

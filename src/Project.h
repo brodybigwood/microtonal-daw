@@ -1,5 +1,6 @@
 #include "Note.h"
 #include "RecordedTake.h"
+#include <atomic>
 #include <utility>
 #include <vector>
 #include <iostream>
@@ -65,6 +66,15 @@ class Project : public Window {
 
         void load(std::string path = "");
 
+        // Background project load with the animated loading screen. The GUI
+        // thread renders while a worker rebuilds the graphs.
+        void startAsyncLoad(const std::string& path);
+        bool asyncLoadRunning() const { return loadInProgress.load(); }
+        bool asyncLoadFinished() const { return loadFinished.load(); }
+        void completeAsyncLoad();
+        void waitForLoadThread();
+        std::atomic<uint64_t> loadStartMs{0};
+
         void save(uint32_t triggerWindowID = 0, SDL_Renderer* triggerRenderer = nullptr);
 
         /** Block until the background save worker has finished. Call before process exit. */
@@ -72,6 +82,10 @@ class Project : public Window {
 
         std::thread saveThread;
         std::mutex saveThreadMutex;
+        std::thread loadThread;
+        std::mutex loadThreadMutex;
+        std::atomic<bool> loadInProgress{false};
+        std::atomic<bool> loadFinished{false};
 
         // Finished recording takes, DSP thread -> GUI thread.
         void pushRecordedTake(RecordedTake&& take);
@@ -114,6 +128,14 @@ class Project : public Window {
         void setRecording(bool on);
         bool loading = false;
         bool dspLoading = false;
+        /** Set by any edit/undo, cleared by save/load; drives the load prompt. */
+        std::atomic<bool> dirty{false};
+
+        // Progress for the startup loading screen (written by Project::load).
+        std::atomic<float> loadProgressValue{0.f};
+        std::atomic<float> loadGraphBase{0.30f};
+        std::atomic<float> loadGraphSpan{0.40f};
+        std::atomic<const char*> loadStatusText{nullptr};
 
         void process(float* input, float* output, int& bufferSize, int& numChannelsIn, int& numChannelsOut, int& sampleRate);
 

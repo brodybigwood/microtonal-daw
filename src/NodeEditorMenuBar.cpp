@@ -14,7 +14,12 @@
 #include "nodes/vst/vstplugin.h"
 #endif
 #include "UndoManager.h"
+#include "Settings.h"
+#include "Project.h"
 #include <iostream>
+#include <cstdio>
+#include <filesystem>
+#include <functional>
 #include "Preferences.h"
 #include "styles.h"
 #include <algorithm>
@@ -101,9 +106,108 @@ void NodeEditor::renderRootMenuBarSkeleton(SDL_Renderer* ren, const SDL_FRect* s
     }
 }
 
+// Synchronous folder picker (zenity), on the calling GUI thread.
+static std::string chooseFolderDialog(const char* title) {
+    char cmd[512];
+    std::snprintf(cmd, sizeof(cmd),
+                  "zenity --file-selection --directory --title='%s' 2>/dev/null", title);
+    FILE* fp = popen(cmd, "r");
+    if (!fp) return std::string();
+    std::string out;
+    char buf[1024];
+    while (fgets(buf, sizeof(buf), fp)) out += buf;
+    pclose(fp);
+    while (!out.empty() && (out.back() == '\n' || out.back() == '\r')) out.pop_back();
+    return out;
+}
+
+// Ask before a load discards unsaved work. Three ways out: Save, Discard,
+// or the dialog's Cancel which aborts the load.
+static bool promptSaveBeforeLoad(Project* p) {
+    if (!p || !p->dirty.load()) return true;
+    FILE* fp = popen(
+        "zenity --list --radiolist --title='Unsaved changes' "
+        "--text='Save changes before loading another project?' "
+        "--column='Sel' --column='Action' --hide-column=1 --print-column=2 "
+        "TRUE 'Save' FALSE 'Discard' 2>/dev/null", "r");
+    if (!fp) return true;
+    std::string choice;
+    char buf[128];
+    while (fgets(buf, sizeof(buf), fp)) choice += buf;
+    const int rc = pclose(fp);
+    while (!choice.empty() && (choice.back() == '\n' || choice.back() == '\r')) choice.pop_back();
+    if (rc != 0) return false;            // dialog cancelled: don't load
+    if (choice == "Discard") return true; // load without saving
+    if (p->filepath.empty()) {
+        const std::string folder = chooseFolderDialog("Save Project As");
+        if (folder.empty()) return false;
+        p->filepath = folder;
+        p->save();
+        Settings::instance().addRecentProject(folder);
+    } else {
+        p->save();
+    }
+    return true;
+}
+
+static void saveProjectAs(Project* p) {
+    if (!p) return;
+    const std::string folder = chooseFolderDialog("Save Project As");
+    if (folder.empty()) return;
+    p->filepath = folder;
+    p->save();
+    Settings::instance().addRecentProject(folder);
+}
+
 std::shared_ptr<TreeEntry> NodeEditor::buildMenuTree(int menuIndex) {
     auto root = uTreeEntry();
     switch (menuIndex) {
+        case 0: { // File
+            root->label = "File";
+            auto add = [&](const char* label, std::function<void()> fn) {
+                auto item = uTreeEntry();
+                item->label = label;
+                item->click = std::move(fn);
+                root->addChild(item);
+            };
+
+            add("Save", [this]() {
+                Project* p = (nm) ? nm->project : nullptr;
+                if (!p) return;
+                if (p->filepath.empty()) saveProjectAs(p);
+                else p->save();
+            });
+            add("Save As...", [this]() {
+                saveProjectAs(nm ? nm->project : nullptr);
+            });
+            add("Load From...", [this]() {
+                Project* p = (nm) ? nm->project : nullptr;
+                if (!p) return;
+                const std::string folder = chooseFolderDialog("Open Project");
+                if (!folder.empty() && promptSaveBeforeLoad(p)) p->startAsyncLoad(folder);
+            });
+
+            auto recent = uTreeEntry();
+            recent->label = "Load Recent";
+            const auto paths = Settings::instance().getRecentProjects();
+            if (paths.empty()) {
+                auto none = uTreeEntry();
+                none->label = "(none)";
+                recent->addChild(none);
+            } else {
+                for (const auto& path : paths) {
+                    auto item = uTreeEntry();
+                    item->label = std::filesystem::path(path).filename().string();
+                    item->click = [this, path]() {
+                        Project* p = (nm) ? nm->project : nullptr;
+                        if (p && promptSaveBeforeLoad(p)) p->startAsyncLoad(path);
+                    };
+                    recent->addChild(item);
+                }
+            }
+            root->addChild(recent);
+            break;
+        }
         case 1: { // Edit
             root->label = "Edit";
             {

@@ -146,8 +146,9 @@ TOOLS = [
     {
         "name": "daw",
         "description": ("Escape hatch: send a raw control request to the DAW. "
-                        "ops: action, query, undo, redo, goto, save, load, list_actions, "
-                        "describe_action, transport, shutdown."),
+                        "ops: action, query, undo, redo, goto, save, save_as, load, "
+                        "load_recent, settings_set, record, list_actions, "
+                        "describe_action, transport, window, capture, shutdown."),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -156,8 +157,12 @@ TOOLS = [
                 "query": {"type": "string", "description": "for op=query: the query name"},
                 "args": {"type": "object", "description": "op-specific arguments"},
                 "version": {"type": "array", "items": {"type": "integer"}, "description": "for op=goto"},
-                "path": {"type": "string", "description": "for op=save/load"},
-                "index": {"type": "integer", "description": "for op=redo"},
+                "path": {"type": "string", "description": "for op=save/save_as/load"},
+                "index": {"type": "integer", "description": "for op=redo/load_recent"},
+                "force": {"type": "boolean", "description": "for op=load/load_recent: discard unsaved changes"},
+                "key": {"type": "string", "description": "for op=settings_set"},
+                "value": {"description": "for op=settings_set: bool, int or string"},
+                "on": {"type": "boolean", "description": "for op=record"},
             },
             "required": ["op"],
         },
@@ -311,16 +316,9 @@ TOOL_NAMES = {t["name"] for t in TOOLS}
 def call_tool(name, args):
     args = args or {}
     if name == "daw":
-        payload = {"op": args.get("op")}
-        if "action" in args:
-            payload["action"] = args["action"]
-        if "query" in args:
-            payload["query"] = args["query"]
-        if "args" in args:
-            payload["args"] = args["args"]
-        for k in ("version", "path", "index", "play", "stop", "seekBeat"):
-            if k in args:
-                payload[k] = args[k]
+        # Forward every argument verbatim: the DAW's control ops take their
+        # fields at the top level and new ops must not need a bridge update.
+        payload = dict(args)
         reply = daw_request(payload)
         if not reply.get("ok"):
             err = reply.get("error") or {}
@@ -376,7 +374,7 @@ def call_tool(name, args):
     if name == "daw_save":
         return daw_op("save", **({"path": args["path"]} if "path" in args else {}))
     if name == "daw_load":
-        return daw_op("load", path=args["path"])
+        return daw_op("load", **{k: args[k] for k in ("path", "force") if k in args})
     raise RuntimeError(f"unknown tool: {name}")
 
 # ------------------------------------------------------------------ stdin loop

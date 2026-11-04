@@ -111,6 +111,7 @@ NodeManager& requireManager(Project* p, const std::vector<int>& path) {
 }
 
 void UndoManager::newAction(ProjectAction* pa) {
+    if (pa && pa->p) pa->p->dirty.store(true);
     // --- Multiplexer replication: collect all mux levels in the path,
     //     then generate the full cartesian product of sibling paths. ---
     json j = ProjectAction::serialize(pa);
@@ -264,6 +265,7 @@ void UndoManager::newAction(ProjectAction* pa) {
 
 void UndoManager::undo() {
     if (current == head) return;
+    if (current->p) current->p->dirty.store(true);
     // Apply undo to GUI copy (active root is already GUI).
     try {
         current->undoAction();
@@ -306,6 +308,7 @@ ElementManager* undoResolveArrangerElementManager(Project* p, const std::vector<
 void UndoManager::redo(int childIndex) {
     if (current->children.empty())
         return;
+    if (current->p) current->p->dirty.store(true);
     int idx = childIndex;
     if (idx < 0) {
         idx = current->last_index;

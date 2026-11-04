@@ -95,6 +95,7 @@ void NodeManager::deSerialize(json j) {
 
     // Pass 1: create all nodes (skip extraDeSerialize so cross-node ID lookups work)
     std::vector<std::pair<Node*, json>> pendingExtra;
+    const size_t totalNodes = j["nodes"].size();
     int nodeIdx = 0;
     for (auto n : j["nodes"]) {
         auto node = Node::deSerialize(n, this, true);
@@ -106,6 +107,13 @@ void NodeManager::deSerialize(json j) {
                 pendingExtra.push_back({node, n["extra"]});
         }
         nodeIdx++;
+        if (project) {
+            const float base = project->loadGraphBase.load(std::memory_order_relaxed);
+            const float span = project->loadGraphSpan.load(std::memory_order_relaxed);
+            project->loadProgressValue.store(
+                base + span * static_cast<float>(nodeIdx) / static_cast<float>(std::max<size_t>(1, totalNodes)),
+                std::memory_order_relaxed);
+        }
     }
     // Pass 2: extraDeSerialize now that all nodes are in the ID map
     for (auto& [node, extra] : pendingExtra) {
