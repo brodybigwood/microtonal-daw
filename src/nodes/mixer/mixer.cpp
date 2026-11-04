@@ -53,6 +53,12 @@ static std::string typeName(const Node* n) {
     return (t >= 0 && t < static_cast<int>(NodeType::Count)) ? NodeTypeStr[t] : std::string("?");
 }
 
+// Insert list label: a VST shows the plugin (class) it has loaded, not "VST".
+static std::string insertLabel(const Node* n) {
+    if (n->nodeType == NodeType::Vst && !n->name.empty()) return n->name;
+    return typeName(n);
+}
+
 // ============================================================================
 // MixerNode::Chain
 // ============================================================================
@@ -537,6 +543,15 @@ void MixerNode::process() {
             din->bufferSize = bs;
             din->numChannels = ch;
             din->sourceChannels = ch;
+            // Extra input buses (e.g. sidechains) have no chain feed. Clear them so
+            // they cannot read a buffer left over from when this node was wired in
+            // the graph — those pointers dangle after an upstream reload.
+            for (Connection* extra : n->inputs.connections) {
+                if (extra == din || extra->type != DataType::Waveform) continue;
+                extra->is_connected = false;
+                extra->buffer = nullptr;
+                extra->sourceChannels = 0;
+            }
             n->process();
             if (dout->buffer) {
                 signal = dout->buffer;
@@ -969,7 +984,7 @@ void MixerChainWindow::render() {
                 SDL_SetRenderDrawColor(R, (i % 2) ? 44 : 48, (i % 2) ? 44 : 48, (i % 2) ? 49 : 53, 255);
             SDL_RenderFillRect(R, &row);
             drawText(R, row.x + 6.f, row.y + 3.f,
-                     std::to_string(i + 1) + ": " + typeName(c->nodes[i]),
+                     std::to_string(i + 1) + ": " + insertLabel(c->nodes[i]),
                      SDL_Color{210, 210, 215, 255});
         }
     }
@@ -1049,7 +1064,7 @@ void MixerChainWindow::renderPreview(SDL_Renderer* R, Node* sel) {
     SDL_SetRenderDrawColor(R, 90, 90, 100, 255);
     SDL_RenderRect(R, &preview);
     drawText(R, preview.x, preview.y + preview.h + 6.f,
-             typeName(sel) + " — selected insert", SDL_Color{210, 210, 215, 255});
+             insertLabel(sel) + " — selected insert", SDL_Color{210, 210, 215, 255});
 }
 
 bool MixerChainWindow::handleInput(SDL_Event& e) {
@@ -1158,7 +1173,7 @@ bool MixerChainWindow::handleInput(SDL_Event& e) {
             ctx->activate();
             auto root = uTreeEntry();
             auto del = uTreeEntry();
-            del->label = "Remove " + typeName(c->nodes[static_cast<size_t>(row)]);
+            del->label = "Remove " + insertLabel(c->nodes[static_cast<size_t>(row)]);
             const int nodeIndex = row;
             del->click = [this, nodeIndex]() {
                 for (size_t ci = 0; ci < mixerNode->chains.size(); ++ci)

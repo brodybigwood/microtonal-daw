@@ -200,8 +200,13 @@ host-issued value still has a true previous value. `performEdit` reports that
 shadow value and a gesture id; `beginEdit` opens a gesture and `endEdit`
 closes it. Actions carry the gesture id and only coalesce with edits of the
 same gesture, so a knob drag is one undo step and separate gestures on the
-same parameter are separate steps. An edit with no open gesture gets a fresh
-id and is its own step. State blobs are used only for save/load (applied while
+same parameter are separate steps. Plugins that never call beginEdit (LSP)
+are grouped by the editor pointer: one implicit gesture per parameter while a
+button is held, plus a 250 ms tail after release. Edits with no held button
+(wheel ticks, key nudges) group per parameter while less than 400 ms apart,
+so a scroll run is one step and a pause starts a new one — including plugins
+that bracket each notch in its own beginEdit/endEdit (LSP EQ), while a fresh
+pointer press clears the run so drags never merge into it. State blobs are used only for save/load (applied while
 the plugin is deactivated, per Ardour's `VST3PI::load_state`), never to derive
 undo entries.
 

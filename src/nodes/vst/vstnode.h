@@ -111,5 +111,13 @@ private:
         diff as connection-driven, so it re-baselines instead of acting. */
     std::unordered_map<int, float> mappedBaselineValues_;
     bool stateBaselineValid_ = false;
+    /** The plugin reported a preset load / internal state change; the next poll
+        diffs even though parameter edits made the baseline dirty. */
+    bool stateResetPending_ = false;
     uint64_t lastStatePollMs_ = 0;
+
+    /** Last latency the plugin reported. When it changes (often only after the
+        first process block), the graph recomputes compensation. */
+    int lastReportedLatency_ = -1;
+    uint64_t lastProcessLogMs_ = 0;
 };

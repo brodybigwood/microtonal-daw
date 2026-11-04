@@ -224,6 +224,7 @@ public:
 // ---------------------------------------------------------------------------
 class EditorHostFrame : public Steinberg::IPlugFrame,
                         public Steinberg::Vst::IComponentHandler,
+                        public Steinberg::Vst::IComponentHandler2,
                         public Steinberg::Linux::IRunLoop {
 public:
     // Parameter edit callbacks
@@ -236,6 +237,10 @@ public:
     /** State-diff undo driver, invoked from tickEditor on the GUI thread only.
         `force` skips the poll interval (window closing, restartComponent). */
     std::function<void(bool)> onStatePoll;
+    /** Plugin loaded a preset / changed non-parameter state (restartComponent,
+        setDirty). VstNode diffs the state blobs despite a dirty baseline. */
+    std::function<void()> onStateReset;
+    bool stateResetRequested = false;
     /** Set by restartComponent (any thread), consumed by the next tick. */
     bool statePollRequested = false;
     /** Open beginEdit/endEdit gestures; state-diff polling waits them out. */
@@ -247,6 +252,19 @@ public:
     uint64_t gestureFor(Steinberg::Vst::ParamID id);
     uint64_t nextGestureId = 1;
     std::unordered_map<Steinberg::Vst::ParamID, uint64_t> paramGestures;
+    /** Some plugins (LSP) never call beginEdit/endEdit. Group their performEdit
+        stream by editor drag: one id per parameter while a pointer button is
+        held, plus a short tail after release. Refresh from tickEditor. */
+    bool pointerIsDown = false;
+    uint64_t dragSession = 0;
+    std::unordered_map<Steinberg::Vst::ParamID, uint64_t> implicitGestures;
+    std::unordered_map<Steinberg::Vst::ParamID, uint64_t> implicitGestureSession;
+    std::unordered_map<Steinberg::Vst::ParamID, uint64_t> implicitLastUseMs;
+    /** Edits with no held button (wheel ticks, key nudges) group by parameter
+        within a short pause, whether or not the plugin brackets them with its
+        own beginEdit/endEdit, so a scroll run is one undo step. */
+    std::unordered_map<Steinberg::Vst::ParamID, uint64_t> freeGestures;
+    std::unordered_map<Steinberg::Vst::ParamID, uint64_t> freeLastUseMs;
 
     // IPlugFrame
     Steinberg::tresult PLUGIN_API resizeView(Steinberg::IPlugView* view, Steinberg::ViewRect* newSize) override;
@@ -256,6 +274,12 @@ public:
     Steinberg::tresult PLUGIN_API performEdit(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue valueNormalized) override;
     Steinberg::tresult PLUGIN_API endEdit(Steinberg::Vst::ParamID id) override;
     Steinberg::tresult PLUGIN_API restartComponent(Steinberg::int32 flags) override;
+
+    // IComponentHandler2
+    Steinberg::tresult PLUGIN_API setDirty(Steinberg::TBool state) override;
+    Steinberg::tresult PLUGIN_API requestOpenEditor(Steinberg::FIDString name) override;
+    Steinberg::tresult PLUGIN_API startGroupEdit() override;
+    Steinberg::tresult PLUGIN_API finishGroupEdit() override;
 
     // IRunLoop
     Steinberg::tresult PLUGIN_API registerEventHandler(Steinberg::Linux::IEventHandler* handler,

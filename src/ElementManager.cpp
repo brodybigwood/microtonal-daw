@@ -76,8 +76,9 @@ void ElementManager::process(int bufferSize) {
                 pos->dispatched.clear();
     };
 
-    // A seek is a discontinuity. Release old voices, then schedule only notes
-    // whose starts occur in the new block (no MIDI note chasing).
+    // A seek is a discontinuity: release old voices. Notes already sounding at
+    // the new position are chased below (a playhead that lands mid-note plays
+    // that note from its current point).
     if (lastTransportGeneration != project->dspTransportGeneration) {
         flushAllActiveNotes();
         lastTransportGeneration = project->dspTransportGeneration;
@@ -155,8 +156,18 @@ void ElementManager::process(int bufferSize) {
                                 [&note](const ActiveNote& active) { return active.note == note; });
                             const bool wasDispatched = activeIt != dispatched.end();
 
-                            if (!wasDispatched && start < currentBeat + beatWindow && start + epsilon >= currentBeat) {
-                                float secs = project->activeTempoCurve().secondsForBeats(currentBeat, start);
+                            // Start a note that begins in this block, or one that is
+                            // already sounding because the playhead landed inside it
+                            // (transport start or seek). Chase the latter at offset 0,
+                            // but not inside a position that has already ended.
+                            const bool startsNow = start + epsilon >= currentBeat;
+                            const bool soundingNow = start < currentBeat &&
+                                                     end > currentBeat && posEndBeat > currentBeat;
+                            if (!wasDispatched && start < currentBeat + beatWindow &&
+                                (startsNow || soundingNow)) {
+                                float secs = start > currentBeat
+                                    ? project->activeTempoCurve().secondsForBeats(currentBeat, start)
+                                    : 0.0f;
                                 int offset = std::max(0, std::min(static_cast<int>(secs * sampleRate), bufferSize - 1));
                                 ActiveNote active;
                                 active.note = note;

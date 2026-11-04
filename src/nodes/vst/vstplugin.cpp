@@ -253,6 +253,11 @@ Steinberg::tresult PLUGIN_API EditorHostFrame::queryInterface(const Steinberg::T
         addRef();
         return Steinberg::kResultTrue;
     }
+    if (Steinberg::FUnknownPrivate::iidEqual(_iid, Steinberg::Vst::IComponentHandler2::iid)) {
+        *obj = static_cast<Steinberg::Vst::IComponentHandler2*>(this);
+        addRef();
+        return Steinberg::kResultTrue;
+    }
     if (Steinberg::FUnknownPrivate::iidEqual(_iid, Steinberg::Linux::IRunLoop::iid)) {
         *obj = static_cast<Steinberg::Linux::IRunLoop*>(this);
         addRef();
@@ -288,11 +293,57 @@ Steinberg::tresult PLUGIN_API EditorHostFrame::beginEdit(Steinberg::Vst::ParamID
 }
 
 uint64_t EditorHostFrame::gestureFor(Steinberg::Vst::ParamID id) {
+    const uint64_t now = getNowMs();
+    static constexpr uint64_t kFreeGestureGapMs = 400;
+
     auto it = paramGestures.find(id);
-    if (it != paramGestures.end()) return it->second;
-    // performEdit without beginEdit: its own single-step gesture. Without this,
-    // consecutive host-less edits would look like one gesture and coalesce.
-    return nextGestureId++;
+    if (it != paramGestures.end()) {
+        const uint64_t explicitId = it->second;
+        if (!pointerIsDown) {
+            // Wheel/key gesture without a held button: the plugin may bracket
+            // every notch in its own beginEdit/endEdit (LSP EQ). Merge notches
+            // of the same parameter that are closer than a pause.
+            auto fg = freeGestures.find(id);
+            if (fg != freeGestures.end() && now - freeLastUseMs[id] < kFreeGestureGapMs) {
+                freeLastUseMs[id] = now;
+                return fg->second;
+            }
+            freeGestures[id] = explicitId;
+            freeLastUseMs[id] = now;
+        }
+        return explicitId;
+    }
+
+    // No beginEdit. Most such plugins still mean "one knob drag = one gesture",
+    // so group by the editor's pointer button. A fresh press starts a new drag
+    // session; a short tail after release keeps the final event in the same step.
+    if (pointerIsDown) {
+        auto ig = implicitGestures.find(id);
+        if (ig == implicitGestures.end() || implicitGestureSession[id] != dragSession) {
+            implicitGestures[id] = nextGestureId++;
+            implicitGestureSession[id] = dragSession;
+        }
+        implicitLastUseMs[id] = now;
+        return implicitGestures[id];
+    }
+    auto ig = implicitGestures.find(id);
+    if (ig != implicitGestures.end() && now - implicitLastUseMs[id] < 250) {
+        implicitLastUseMs[id] = now;
+        return ig->second;
+    }
+    if (ig != implicitGestures.end()) implicitGestures.erase(ig);
+
+    // Wheel ticks and key nudges have no button held and no beginEdit. Group
+    // successive edits of the same parameter separated by less than a pause.
+    auto fg = freeGestures.find(id);
+    if (fg != freeGestures.end() && now - freeLastUseMs[id] < kFreeGestureGapMs) {
+        freeLastUseMs[id] = now;
+        return fg->second;
+    }
+    const uint64_t gid = nextGestureId++;
+    freeGestures[id] = gid;
+    freeLastUseMs[id] = now;
+    return gid;
 }
 
 Steinberg::tresult PLUGIN_API EditorHostFrame::performEdit(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue valueNormalized) {
@@ -314,6 +365,28 @@ Steinberg::tresult PLUGIN_API EditorHostFrame::endEdit(Steinberg::Vst::ParamID i
 Steinberg::tresult PLUGIN_API EditorHostFrame::restartComponent(Steinberg::int32 flags) {
     // Plugin-initiated state reloads (preset change etc.) — poll for undo promptly.
     statePollRequested = true;
+    stateResetRequested = true;
+    return Steinberg::kResultTrue;
+}
+
+Steinberg::tresult PLUGIN_API EditorHostFrame::setDirty(Steinberg::TBool state) {
+    // "something besides parameters changed" — preset load, internal routing.
+    if (state) {
+        statePollRequested = true;
+        stateResetRequested = true;
+    }
+    return Steinberg::kResultTrue;
+}
+
+Steinberg::tresult PLUGIN_API EditorHostFrame::requestOpenEditor(Steinberg::FIDString) {
+    return Steinberg::kNotImplemented;
+}
+
+Steinberg::tresult PLUGIN_API EditorHostFrame::startGroupEdit() {
+    return Steinberg::kResultTrue;
+}
+
+Steinberg::tresult PLUGIN_API EditorHostFrame::finishGroupEdit() {
     return Steinberg::kResultTrue;
 }
 
@@ -681,8 +754,9 @@ VstPlugin::VstPlugin(const std::string& pluginPath, size_t classIndex) : pluginP
 }
 
 VstPlugin::~VstPlugin() {
-    // Clean up view resources directly — never touch the static openEditors
-    // list here, since the destructor may run on the audio thread.
+    // May run on the audio thread; the list is mutex-protected so a destroyed
+    // plugin can't be dereferenced by the next GUI tick.
+    unregisterEditor(this);
     if (view) {
         view->removed();
         view->release();
@@ -1065,8 +1139,30 @@ void* VstPlugin::getEditorWindowHandle() const {
 bool VstPlugin::tickEditor() {
     if (!editorOpen || !editorHost) return false;
 
+    // Track the pointer press/release before draining plugin events, so the
+    // performEdits below can be grouped into one drag (plugins that skip
+    // beginEdit/endEdit, e.g. LSP).
+    if (hostFrame) {
+        const bool down = editorHost->pointerButtonDown();
+        if (down && !hostFrame->pointerIsDown) {
+            // A new press is a drag: don't let its edits merge into a preceding
+            // wheel/key run of the same parameter.
+            hostFrame->dragSession++;
+            hostFrame->freeGestures.clear();
+        }
+        hostFrame->pointerIsDown = down;
+    }
+
     // Poll runloop — fires plugin timers and FD events
     if (hostFrame) hostFrame->pollRunLoop();
+
+    // Preset load / non-parameter state change: diff the state blobs now so the
+    // change becomes an undo entry without waiting for the editor to close.
+    if (hostFrame && hostFrame->stateResetRequested) {
+        hostFrame->stateResetRequested = false;
+        hostFrame->statePollRequested = false;
+        if (hostFrame->onStateReset) hostFrame->onStateReset();
+    }
 
     if (!editorHost->tick()) {
         // Final state check so edits made just before closing the window still
@@ -1075,6 +1171,7 @@ bool VstPlugin::tickEditor() {
         if (view) view->removed();
         editorHost.reset();
         editorOpen = false;
+        unregisterEditor(this);
         return false;
     }
     // Periodic getState() polling while the editor is open crashes inside some
@@ -1104,30 +1201,44 @@ void VstPluginCache::removePlugin(int nodeID, const std::vector<int>& managerPat
     instances.erase({nodeID, managerPath});
 }
 
-// Static editor tick — call from main event loop
+// Static editor tick — call from main event loop. Plugins can be destroyed on
+// the audio thread (undo replay), so entries are removed under the mutex and
+// iteration runs over a copy.
 static std::vector<VstPlugin*> openEditors;
+// Recursive: a plugin destroyed on the audio thread waits for the current GUI
+// tick, and a tick may unregister the plugin it is ticking.
+static std::recursive_mutex openEditorsMutex;
 
 void VstPlugin::registerEditor(VstPlugin* p) {
-    // WM-close leaves the entry in place (removal would invalidate the
-    // tickAllEditors iteration), so reopening must not add a duplicate.
+    std::lock_guard<std::recursive_mutex> lk(openEditorsMutex);
     if (std::find(openEditors.begin(), openEditors.end(), p) == openEditors.end())
         openEditors.push_back(p);
 }
 
 void VstPlugin::unregisterEditor(VstPlugin* p) {
+    std::lock_guard<std::recursive_mutex> lk(openEditorsMutex);
     openEditors.erase(std::remove(openEditors.begin(), openEditors.end(), p), openEditors.end());
 }
 
 void VstPlugin::tickAllEditors() {
-    for (auto* p : openEditors) {
+    std::lock_guard<std::recursive_mutex> lk(openEditorsMutex);
+    // The lock is held while ticking so a plugin destroyed on the audio thread
+    // cannot be freed mid-dereference. Index iteration, because tickEditor may
+    // unregister the entry it is ticking.
+    for (size_t i = 0; i < openEditors.size(); ) {
+        VstPlugin* p = openEditors[i];
         if (p->editorOpen) p->tickEditor();
+        if (i < openEditors.size() && openEditors[i] == p) ++i;
     }
 }
 
 void VstPlugin::commitPendingStateEdits() {
-    for (auto* p : openEditors) {
+    std::lock_guard<std::recursive_mutex> lk(openEditorsMutex);
+    for (size_t i = 0; i < openEditors.size(); ) {
+        VstPlugin* p = openEditors[i];
         if (p->editorOpen && p->undoStatePoll_ && p->hostFrame && p->hostFrame->onStatePoll)
             p->hostFrame->onStatePoll(true);
+        if (i < openEditors.size() && openEditors[i] == p) ++i;
     }
 }
 

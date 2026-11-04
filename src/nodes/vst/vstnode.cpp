@@ -55,6 +55,7 @@ VstNode::~VstNode() {
             frame->onBeginEdit = nullptr;
             frame->onPerformEdit = nullptr;
             frame->onStatePoll = nullptr;
+            frame->onStateReset = nullptr;
         }
         plugin->hideEditor();
     }
@@ -110,8 +111,14 @@ void VstNode::rebuildConnections() {
         ic->allocChannels = channels;
         ic->label = "In " + std::to_string(b + 1) + " (" + std::to_string(channels) + "ch)";
     }
-    for (int b = numAudioInBuses; b < static_cast<int>(audioInConns.size()); ++b)
+    for (int b = numAudioInBuses; b < static_cast<int>(audioInConns.size()); ++b) {
+        // Bus no longer exists on the plugin: drop any pointer it held so it can
+        // never be read after the buffer it referenced is freed.
         audioInConns[b]->label = "";
+        audioInConns[b]->is_connected = false;
+        audioInConns[b]->buffer = nullptr;
+        audioInConns[b]->sourceChannels = 0;
+    }
 
     for (int b = 0; b < numAudioOutBuses && b < static_cast<int>(audioOutConns.size()); ++b) {
         int channels = plugin->getAudioOutputChannels(b);
@@ -158,6 +165,13 @@ void VstNode::setup() {
         plugin->setup(sampleRate, bufferSize);
         applyPendingVstState();
         captureStateBaseline();
+        // Latency is often only known after setupProcessing/setActive. If it
+        // changed, recompute the graph's compensation delays.
+        const int lat = plugin->latencySamples();
+        if (lat != lastReportedLatency_) {
+            lastReportedLatency_ = lat;
+            if (nm) nm->markTopologyDirty();
+        }
     }
 }
 
@@ -263,6 +277,14 @@ void VstNode::process() {
             // Route audio input buses directly (both sides already planar)
             for (size_t bi = 0; bi < audioInConns.size(); ++bi) {
                 auto* c = audioInConns[bi];
+                if (bi < localPlugin->inputBusData.size() &&
+                    (!c || !c->is_connected || !c->buffer)) {
+                    // Unfed bus (sidechain, or a bus the chain doesn't wire): no
+                    // stale samples from an earlier block.
+                    std::fill(localPlugin->inputBusData[bi].begin(),
+                              localPlugin->inputBusData[bi].end(), 0.0f);
+                    continue;
+                }
                 if (!c || !c->is_connected || !c->buffer) continue;
                 if (bi >= localPlugin->inputBusData.size()) continue;
                 auto& data = localPlugin->inputBusData[bi];
@@ -381,7 +403,31 @@ void VstNode::process() {
                 }
             }
             bool playing = project ? project->dspIsPlaying : true;
+            const auto procStart = std::chrono::steady_clock::now();
             localPlugin->processAudio(bufferSize, &vstEvents, bpm, beatPos, samplePos, playing);
+            const auto procEnd = std::chrono::steady_clock::now();
+            const long long procUs = std::chrono::duration_cast<std::chrono::microseconds>(
+                procEnd - procStart).count();
+            const int lat = localPlugin->latencySamples();
+            if (lat != lastReportedLatency_) {
+                // Plugins may only report latency after their first block.
+                lastReportedLatency_ = lat;
+                if (nm) nm->markTopologyDirty();
+            }
+            if (std::getenv("DAW_VST_DEBUG")) {
+                const uint64_t nowMs = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                    procEnd.time_since_epoch()).count());
+                if (nowMs - lastProcessLogMs_ >= 1000) {
+                    lastProcessLogMs_ = nowMs;
+                    const long long deadlineUs = static_cast<long long>(bufferSize) * 1000000LL /
+                                                 (sampleRate > 0 ? sampleRate : 48000);
+                    if (procUs > deadlineUs / 2) {
+                        std::cout << "[vst-time] node=" << id << " " << localPlugin->getName()
+                                  << " process=" << procUs << "us deadline=" << deadlineUs
+                                  << "us ch=" << localPlugin->outputBusData.size() << std::endl;
+                    }
+                }
+            }
 
             // Route audio output buses directly (both sides planar)
             for (size_t bi = 0; bi < audioOutConns.size(); ++bi) {
@@ -562,6 +608,7 @@ bool VstNode::handleCustomInput(SDL_Event& e) {
 
             auto root = uTreeEntry();
             root->label = "VST Plugin";
+            root->maxListHeight = 300.f;
 
             auto history = Settings::instance().getVstHistory();
             for (const auto& p : history) {
@@ -672,6 +719,10 @@ void VstNode::loadPlugin(const std::string& path, bool createUndo, size_t classI
             plugin->refreshParameterShadow();
             rebuildConnections();
             invalidateOwnerChain();
+            // rebuildConnections reallocated this node's output buffers. Downstream
+            // connections (including a mixer's chain inflow) still point at the old
+            // blocks until the graph relinks, so force that before the next block.
+            nm->markTopologyDirty();
             Settings::instance().addVstToHistory(path);
             int sr = sampleRate > 0 ? sampleRate : 48000;
             int bs = bufferSize > 0 ? bufferSize : 1024;
@@ -681,6 +732,7 @@ void VstNode::loadPlugin(const std::string& path, bool createUndo, size_t classI
             plugin = nullptr;
             rebuildConnections();
             invalidateOwnerChain();
+            nm->markTopologyDirty();
         }
     }
 }
@@ -696,6 +748,8 @@ void VstNode::openPluginClassMenu(const std::string& path, bool createUndo) {
     ctxMenu->activate();
     auto root = uTreeEntry();
     root->label = "Plugin Class";
+    // Bundles such as LSP expose 100+ classes; the list must scroll.
+    root->maxListHeight = 300.f;
     for (size_t i = 0; i < lib->classCount(); ++i) {
         const PlugLib::ClassInfo* cls = lib->getClass(i);
         if (!cls) continue;
@@ -767,7 +821,7 @@ void VstNode::wirePluginCallbacks() {
                                     uint64_t gestureID) {
         float oldValue = plugin->swapShadowParameterValue(static_cast<int>(paramID),
                                                           static_cast<float>(newVal));
-        if (std::getenv("DAW_VST_PARAM_TRACE")) {
+        if (std::getenv("DAW_VST_DEBUG")) {
             std::cout << "[vst-perform] node=" << id << " param=" << paramID
                       << " " << oldValue << " -> " << newVal
                       << " gesture=" << gestureID << std::endl;
@@ -775,8 +829,14 @@ void VstNode::wirePluginCallbacks() {
         onPluginParameterChange(static_cast<int>(paramID), oldValue, static_cast<float>(newVal),
                                 gestureID);
     };
-    // Undo is parameter-based, as in Ardour. No state-blob diff is used for undo.
-    frame->onStatePoll = nullptr;
+    // Parameter undo is Ardour's model; the state-blob diff only covers what
+    // performEdit cannot report (preset loads, internal routing) and runs when
+    // the plugin says its state changed, or when the editor closes.
+    frame->onStatePoll = [this](bool force) { pollVstStateForUndo(force); };
+    frame->onStateReset = [this]() {
+        stateResetPending_ = true;
+        pollVstStateForUndo(true);
+    };
     plugin->refreshParameterShadow();
     frame->activeGestureCount = 0;
     stateBaselineValid_ = false;
@@ -826,7 +886,13 @@ void VstNode::pollVstStateForUndo(bool force) {
     auto ctrl = plugin->getControllerState();
     if (comp.empty() && ctrl.empty()) return;
 
-    if (mappedMoved || vstStateBaselineDirty || !stateBaselineValid_) {
+    // A reset means the plugin changed its own state (preset). Diff even when
+    // parameter edits have marked the baseline dirty, so the preset isn't
+    // absorbed into a re-baseline.
+    const bool stateReset = stateResetPending_;
+    stateResetPending_ = false;
+
+    if (mappedMoved || (vstStateBaselineDirty && !stateReset) || !stateBaselineValid_) {
         stateBaselineComp_ = std::move(comp);
         stateBaselineCtrl_ = std::move(ctrl);
         stateBaselineValid_ = true;
@@ -838,7 +904,10 @@ void VstNode::pollVstStateForUndo(bool force) {
         return;
     }
 
-    if (comp == stateBaselineComp_ && ctrl == stateBaselineCtrl_) return;
+    if (comp == stateBaselineComp_ && ctrl == stateBaselineCtrl_) {
+        vstStateBaselineDirty = false;
+        return;
+    }
 
     // No coalescing here: mutating an already-visible action would rewrite
     // history (redo would replay a later edit). Continuous drags don't spam

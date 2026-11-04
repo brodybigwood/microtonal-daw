@@ -1,6 +1,19 @@
 #include "gain.h"
 #include <algorithm>
+#include <cmath>
 #include <cstring>
+
+namespace {
+// Knob 0..1 -> linear gain. Centre stays unity and the lower half keeps the old
+// linear taper (0 at 0, 0.5 at 0.25) so existing projects are unchanged; the
+// upper half is a dB curve reaching +48 dB (x251.19) at full.
+float gainFactor(float v) {
+    v = std::clamp(v, 0.0f, 1.0f);
+    if (v <= 0.0f) return 0.0f;
+    if (v <= 0.5f) return v * 2.0f;
+    return std::exp2((v - 0.5f) * (96.0f / 6.020599913f));
+}
+} // namespace
 
 GainNode::GainNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::Gain) {
     in = new Connection;
@@ -38,7 +51,7 @@ void GainNode::process() {
         }
         float* srcCh = in->channel(ch);
         for (int i = 0; i < bufferSize; ++i) {
-            outCh[i] = srcCh[i] * gain[i] * 2.0f;
+            outCh[i] = srcCh[i] * gainFactor(gain[i]);
         }
     }
 }

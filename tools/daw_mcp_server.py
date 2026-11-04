@@ -31,6 +31,11 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SETTINGS_PATH = os.path.join(REPO_ROOT, "build", "assets", "settings.json")
 DOCS_PATH = os.path.join(REPO_ROOT, "assets", "control_docs.json")
 CALL_TIMEOUT = 30.0
+# A single query (the undo tree embeds graph snapshots) can be huge. Buffering
+# unbounded replies has killed the server with OOM; fail with a clear error
+# instead, and keep oversized tool results from being written to stdio.
+MAX_REPLY_BYTES = 64 * 1024 * 1024
+MAX_TOOL_RESULT_CHARS = 8 * 1024 * 1024
 
 # The documentation is a data file shared with the DAW, so it can be served
 # with no DAW running. Only live state (queries, actions, captures) needs the
@@ -107,6 +112,10 @@ def daw_request(payload):
                 if not chunk:
                     raise ConnectionError("DAW closed the connection")
                 buf += chunk
+                if len(buf) > MAX_REPLY_BYTES:
+                    raise RuntimeError(
+                        f"DAW reply exceeded {MAX_REPLY_BYTES // (1024 * 1024)} MiB; "
+                        "narrow the query (the undo tree embeds graph snapshots)")
             return json.loads(buf.split(b"\n", 1)[0].decode())
     except FileNotFoundError:
         raise RuntimeError(
@@ -373,8 +382,12 @@ def call_tool(name, args):
 
 
 def send(msg):
-    sys.stdout.write(json.dumps(msg) + "\n")
-    sys.stdout.flush()
+    try:
+        sys.stdout.write(json.dumps(msg) + "\n")
+        sys.stdout.flush()
+    except (BrokenPipeError, OSError):
+        # The client went away; nothing left to serve.
+        raise SystemExit(0)
 
 
 def handle(msg):
@@ -405,6 +418,10 @@ def handle(msg):
                     {"type": "image", "data": result["data"], "mimeType": "image/png"},
                 ]}
             text = json.dumps(result, indent=2)
+            if len(text) > MAX_TOOL_RESULT_CHARS:
+                return {"content": [{"type": "text", "text":
+                    f"result too large ({len(text)} chars, limit {MAX_TOOL_RESULT_CHARS}); "
+                    "narrow the query or query one node at a time"}], "isError": True}
             return {"content": [{"type": "text", "text": text}]}
         except Exception as e:  # surfaced to the agent as a tool error
             return {"content": [{"type": "text", "text": str(e)}], "isError": True}

@@ -11,6 +11,9 @@ ContextMenu* ContextMenu::get() {
 }
 
 void ContextMenu::activate() {
+    // Activating from inside a menu item's click opens the next menu; the tick
+    // that ran the click must not deactivate it afterwards.
+    if (active) keepOpenOnNextTreeLeafClick = true;
     // Use the currently focused window, falling back to the project window.
     SDL_Window* focused = SDL_GetMouseFocus();
     if (focused) {
@@ -31,6 +34,7 @@ void ContextMenu::activate() {
 }
 
 void ContextMenu::activate(SDL_Renderer* r, uint32_t wid) {
+    if (active) keepOpenOnNextTreeLeafClick = true;
     renderer = r;
     window_id = wid;
     SDL_GetMouseState(&locX, &locY);
