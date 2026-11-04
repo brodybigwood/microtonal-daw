@@ -4,6 +4,36 @@
 #include "nodes/mixer/mixer.h"
 #include <stdexcept>
 
+MixerChainInsertNodeAction::MixerChainInsertNodeAction(Project* p, std::vector<int> managerPath,
+                                                       int mixerNodeID, int chainID, json nodeSnapshot,
+                                                       bool removeOnDo, std::string actionName)
+    : ProjectAction(p, MixerChainInsertNode),
+      managerPath(std::move(managerPath)),
+      mixerNodeID(mixerNodeID),
+      chainID(chainID),
+      nodeSnapshot(std::move(nodeSnapshot)),
+      removeOnDo(removeOnDo) {
+    name = std::move(actionName);
+
+    auto resolve = [this]() -> MixerNode* {
+        try {
+            NodeManager& nm = requireManager(this->p, this->managerPath);
+            return dynamic_cast<MixerNode*>(nm.getNode(static_cast<uint16_t>(this->mixerNodeID)));
+        } catch (...) {
+            return nullptr;
+        }
+    };
+    auto doInsert = [this, resolve](bool remove) {
+        MixerNode* m = resolve();
+        if (!m) return;
+        const int nid = this->nodeSnapshot.value("id", -1);
+        if (remove) m->removeChainNodeByID(this->chainID, nid);
+        else m->insertChainNodeFromSnapshot(this->chainID, this->nodeSnapshot);
+    };
+    doAction = [doInsert, this]() { doInsert(this->removeOnDo); };
+    undoAction = [doInsert, this]() { doInsert(!this->removeOnDo); };
+}
+
 MixerChainNodeParamAction::MixerChainNodeParamAction(Project* p, std::vector<int> managerPath,
                                                      int mixerNodeID, int chainID, int chainNodeID,
                                                      size_t paramIndex, float oldValue, float newValue,

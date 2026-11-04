@@ -86,9 +86,8 @@ void NodeEditor::move() {
 }
 
 void NodeEditor::handleInput(SDL_Event& e) {
-#ifndef __EMSCRIPTEN__
-    VstPlugin::tickAllEditors();
-#endif
+    // Open VST editors are ticked every frame in NodeProcessor::render; ticking them
+    // here as well double-drives their run loops and crashes some plugins (LSP).
     moveMouse();
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {

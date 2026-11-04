@@ -23,16 +23,34 @@
 #include <functional>
 #include <atomic>
 
+/// Set while a mixer restores chain inserts from JSON. Their plugin state blobs are
+/// skipped because some plugins (LSP) fault on state I/O before the graph sets them up.
+extern thread_local bool g_vstLoadingChainInsert;
+
 // ---------------------------------------------------------------------------
 // PlugLib — caches a dlopen'd VST3 library and its factory state
 // One per .vst3 file path, shared across all VstNode instances via VstPluginCache
 // ---------------------------------------------------------------------------
 class PlugLib {
 public:
+    /** One plugin class inside a VST3 bundle (a bundle can expose hundreds). */
+    struct ClassInfo {
+        std::string name;
+        Steinberg::TUID componentCID{};
+        Steinberg::TUID controllerCID{};
+        bool hasController = false;
+    };
+
     explicit PlugLib(std::string path);
     ~PlugLib();
 
     bool isLoaded() const { return loaded; }
+
+    size_t classCount() const { return classes.size(); }
+    const ClassInfo* getClass(size_t index) const {
+        return index < classes.size() ? &classes[index] : nullptr;
+    }
+    std::vector<ClassInfo> classes;
 
     Steinberg::IPluginFactory* getFactory() const { return factory; }
     VST3::Hosting::PluginFactory& getFactoryWrapper() { return *factoryWrapper; }
@@ -162,7 +180,9 @@ public:
     bool isLoaded(const std::string& path) const;
 
     // Per-node VstPlugin instance cache (one shared across GUI+audio copies).
-    std::shared_ptr<VstPlugin> getOrCreatePlugin(int nodeID, const std::vector<int>& managerPath, const std::string& path);
+    // classIndex picks the class inside a multi-class bundle.
+    std::shared_ptr<VstPlugin> getOrCreatePlugin(int nodeID, const std::vector<int>& managerPath,
+                                                 const std::string& path, size_t classIndex = 0);
     void removePlugin(int nodeID, const std::vector<int>& managerPath);
 
 private:
@@ -190,6 +210,8 @@ public:
     /** True while any pointer button is held — state-diff polling waits for
         release so a continuous drag inside the plugin commits as one action. */
     virtual bool pointerButtonDown() { return false; }
+    /** Toolkits that rely on XEmbed (LSP) need notify/activate/focus after attach. */
+    virtual void notifyEmbedded() {}
 
     Steinberg::IPlugView* view = nullptr;
     bool windowOpen = false;
@@ -206,7 +228,10 @@ class EditorHostFrame : public Steinberg::IPlugFrame,
 public:
     // Parameter edit callbacks
     std::function<void(Steinberg::Vst::ParamID)> onBeginEdit;
-    std::function<void(Steinberg::Vst::ParamID, Steinberg::Vst::ParamValue, Steinberg::Vst::ParamValue)> onPerformEdit; // (paramID, oldValue, newValue)
+    /** (paramID, newValue, gestureID). gestureID is stable for every performEdit
+        between beginEdit and endEdit, and unique per edit when the plugin skips
+        beginEdit — matches Ardour's BeginGesture/ValueChange/EndGesture. */
+    std::function<void(Steinberg::Vst::ParamID, Steinberg::Vst::ParamValue, uint64_t)> onPerformEdit;
 
     /** State-diff undo driver, invoked from tickEditor on the GUI thread only.
         `force` skips the poll interval (window closing, restartComponent). */
@@ -216,9 +241,12 @@ public:
     /** Open beginEdit/endEdit gestures; state-diff polling waits them out. */
     int activeGestureCount = 0;
 
-    // Called by VstNode to snapshot pre-edit parameter value
-    void capturePreEditValue(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue val);
-    std::unordered_map<Steinberg::Vst::ParamID, Steinberg::Vst::ParamValue> preEditValues;
+    /** Gesture id for a parameter while its beginEdit/endEdit is open, and the
+        allocator. A performEdit with no open gesture takes a fresh id, so it is
+        its own undo step. */
+    uint64_t gestureFor(Steinberg::Vst::ParamID id);
+    uint64_t nextGestureId = 1;
+    std::unordered_map<Steinberg::Vst::ParamID, uint64_t> paramGestures;
 
     // IPlugFrame
     Steinberg::tresult PLUGIN_API resizeView(Steinberg::IPlugView* view, Steinberg::ViewRect* newSize) override;
@@ -268,10 +296,14 @@ private:
 // ---------------------------------------------------------------------------
 class VstPlugin {
 public:
-    VstPlugin(const std::string& pluginPath);
+    VstPlugin(const std::string& pluginPath, size_t classIndex = 0);
     ~VstPlugin();
 
     bool isValid() const { return valid; }
+
+    /** Class selected inside the bundle. */
+    size_t getClassIndex() const { return classIndex_; }
+    const std::string& getClassName() const { return className_; }
 
     const std::string& getName() const { return name; }
     const std::string& getVendor() const { return vendor; }
@@ -331,11 +363,28 @@ public:
     void setParameterValue(int paramID, float valueNormalized);
     void queueParameterChange(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue value);
 
+    // Parameter shadow (Ardour's VST3PI::_shadow_data): last value the host knows
+    // for each parameter, kept current on every host write, performEdit and state
+    // restore, so a plugin edit without beginEdit still has a true old value.
+    float shadowParameterValue(int paramID) const;
+    void setShadowParameterValue(int paramID, float valueNormalized);
+    /** Atomically read the previous shadow value and store the new one. */
+    float swapShadowParameterValue(int paramID, float valueNormalized);
+    /** Re-read every parameter from the controller after a state change. */
+    void refreshParameterShadow();
+
     // State serialization
     std::vector<uint8_t> getComponentState() const;
     std::vector<uint8_t> getControllerState() const;
     void setComponentState(const std::vector<uint8_t>& data);
     void setControllerState(const std::vector<uint8_t>& data);
+    /** Push the COMPONENT state into the controller via IEditController::setComponentState. */
+    void applyComponentStateToController(const std::vector<uint8_t>& data);
+    /** State must be applied while deactivated (Ardour's VST3PI::load_state sequence). */
+    void beginStateRestore();
+    void endStateRestore();
+    /** True when editor edits surface only through state diff (commit before undo). */
+    void setUndoStatePoll(bool on) { undoStatePoll_ = on; }
 
     EditorHostFrame* getHostFrame() { return hostFrame.get(); }
     Steinberg::Vst::IEditController* getEditController() { return editController.get(); }
@@ -352,6 +401,11 @@ private:
     std::string pluginPath;
     std::string name;
     std::string vendor;
+    size_t classIndex_ = 0;
+    std::string className_;
+    Steinberg::TUID componentCID_{};
+    Steinberg::TUID controllerCID_{};
+    bool hasController_ = false;
     std::atomic<bool> bypassed{false};
 
     PlugLib* lib = nullptr;
@@ -374,6 +428,16 @@ private:
     int processBufferSize = 0;
     int processSampleRate = 0;
     bool processingActive = false;
+    /** Edits surface only through state diff (no performEdit): commit before undo. */
+    bool undoStatePoll_ = false;
+    bool stateRestoreWasProcessing_ = false;
+    bool inStateRestore_ = false;
+
+    /** Ardour's VST3PI::_shadow_data — see shadowParameterValue(). Touched by
+        both the GUI thread (editor edits, state restore) and the audio thread
+        (mapped parameters, undo replay), so it has its own lock. */
+    mutable std::mutex paramShadowMutex_;
+    std::unordered_map<int, float> paramShadow_;
 
     // Host-initiated parameter changes pending delivery to the processor.
     std::mutex pendingParamMutex_;

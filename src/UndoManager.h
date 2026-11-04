@@ -71,6 +71,7 @@ enum ActionType {
     ArrangerTrackControl = 54,
     RecordTake = 55,
     MixerChainNodeParam = 56,
+    MixerChainInsertNode = 57,
 };
 
 
@@ -247,7 +248,8 @@ struct UndoManager {
     // Builds (but does not run) the action named by actionName; throws on unknown/bad params.
     ProjectAction* buildRegisteredAction(const std::string& actionName, const json& params);
     // Ops only reachable through a node method that builds+runs its own action.
-    bool runDelegatedAction(const std::string& actionName, const json& params, std::string& error);
+    bool runDelegatedAction(const std::string& actionName, const json& params, std::string& error,
+                            json* result);
 };
 
 struct PianoRollRegionTuningUndoAction : ProjectAction {
@@ -291,6 +293,19 @@ struct AssignNoteHarmonicUndoAction : ProjectAction {
 
     AssignNoteHarmonicUndoAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID, int noteID,
                                  json beforeRegion, json afterRegion, json beforeNote, json afterNote);
+};
+
+/** Insert or remove one mixer chain insert without rebuilding the other inserts. */
+struct MixerChainInsertNodeAction : ProjectAction {
+    std::vector<int> managerPath;
+    int mixerNodeID = 0;
+    int chainID = 0;
+    json nodeSnapshot = json::object();
+    bool removeOnDo = false;  // false = insert, true = remove
+
+    MixerChainInsertNodeAction(Project* p, std::vector<int> managerPath, int mixerNodeID, int chainID,
+                               json nodeSnapshot, bool removeOnDo = false,
+                               std::string actionName = "Mixer Insert Node");
 };
 
 /** Parameter edit on an insert node that lives inside a mixer chain (not in the graph's
@@ -778,9 +793,13 @@ struct VstParameterChangeAction : ProjectAction {
     uint32_t paramID = 0;
     float oldValue = 0;
     float newValue = 0;
+    /** beginEdit..endEdit gesture this change belongs to. Edits coalesce into one
+        action only while this id matches; 0 (deserialized) never coalesces. */
+    uint64_t gestureID = 0;
 
     VstParameterChangeAction(Project* p, std::vector<int> managerPath, int nodeID,
-                             uint32_t paramID, float oldValue, float newValue);
+                             uint32_t paramID, float oldValue, float newValue,
+                             uint64_t gestureID = 0);
 };
 
 struct VstLoadPluginAction : ProjectAction {

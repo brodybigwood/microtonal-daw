@@ -3,6 +3,8 @@
 #include "vstplugin.h"
 #include "public.sdk/source/common/memorystream.h"
 #include "pluginterfaces/base/keycodes.h"
+#include "pluginterfaces/vst/ivsthostapplication.h"
+#include <cstdlib>
 #include <dlfcn.h>
 #include <cstring>
 #include <iostream>
@@ -14,6 +16,8 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
+
+thread_local bool g_vstLoadingChainInsert = false;
 
 // Must run before SDL/any other Xlib use: plugin editors and SDL touch Xlib
 // from different threads, and without this Xlib's global state races (seen as
@@ -98,34 +102,62 @@ PlugLib::~PlugLib() {
 }
 
 bool PlugLib::fetchClassIDs() {
-    bool foundComponent = false, foundController = false;
+    struct Entry {
+        std::string name;
+        Steinberg::TUID cid{};
+    };
+    std::vector<Entry> components, controllers;
 
     for (Steinberg::int32 i = 0; i < factory->countClasses(); ++i) {
         Steinberg::PClassInfo info{};
         if (factory->getClassInfo(i, &info) != Steinberg::kResultTrue)
             continue;
-
-        if (!foundComponent && std::strcmp(info.category, "Audio Module Class") == 0) {
-            std::memcpy(componentCID, info.cid, sizeof(Steinberg::TUID));
-            displayName = info.name;
-            // Don't use PlugProvider here — it calls initialize(nullptr) which
-            // yabridge-wrapped plugins reject. We create the component manually
-            // in createComponent() where we can pass a proper context.
-            foundComponent = true;
-        }
-
-        if (!foundController && std::strcmp(info.category, "Component Controller Class") == 0) {
-            std::memcpy(controllerCID, info.cid, sizeof(Steinberg::TUID));
-            foundController = true;
-        }
-
-        if (foundComponent && foundController) break;
+        Entry e;
+        e.name = info.name;
+        std::memcpy(e.cid, info.cid, sizeof(Steinberg::TUID));
+        if (std::strcmp(info.category, "Audio Module Class") == 0)
+            components.push_back(std::move(e));
+        else if (std::strcmp(info.category, "Component Controller Class") == 0)
+            controllers.push_back(std::move(e));
     }
 
-    if (!foundComponent || !foundController) {
-        std::cerr << "[PlugLib] Failed to find component/controller CIDs" << std::endl;
+    if (components.empty()) {
+        std::cerr << "[PlugLib] Failed to find any Audio Module Class" << std::endl;
         return false;
     }
+
+    // Pair each component with its controller by class name; fall back to index order
+    // when a factory names them differently.
+    std::vector<bool> used(controllers.size(), false);
+    classes.clear();
+    classes.reserve(components.size());
+    for (const auto& comp : components) {
+        ClassInfo ci;
+        ci.name = comp.name;
+        std::memcpy(ci.componentCID, comp.cid, sizeof(Steinberg::TUID));
+        for (size_t j = 0; j < controllers.size(); ++j) {
+            if (!used[j] && controllers[j].name == comp.name) {
+                std::memcpy(ci.controllerCID, controllers[j].cid, sizeof(Steinberg::TUID));
+                ci.hasController = true;
+                used[j] = true;
+                break;
+            }
+        }
+        classes.push_back(ci);
+    }
+    if (controllers.size() == components.size()) {
+        for (size_t i = 0; i < classes.size(); ++i) {
+            if (!classes[i].hasController) {
+                std::memcpy(classes[i].controllerCID, controllers[i].cid, sizeof(Steinberg::TUID));
+                classes[i].hasController = true;
+            }
+        }
+    }
+
+    // Legacy fields describe the first class (used where a class isn't specified).
+    std::memcpy(componentCID, classes[0].componentCID, sizeof(Steinberg::TUID));
+    std::memcpy(controllerCID, classes[0].controllerCID, sizeof(Steinberg::TUID));
+    displayName = classes[0].name;
     return true;
 }
 
@@ -159,6 +191,51 @@ void VstPluginCache::unload(const std::string& path) {
 bool VstPluginCache::isLoaded(const std::string& path) const {
     return loaded.find(path) != loaded.end();
 }
+
+namespace {
+// Minimal IHostApplication. A bare FUnknown context makes LSP (and others) crash on
+// a null host pointer during initialize; plugins may call getName() unconditionally.
+class HostApplicationContext : public Steinberg::Vst::IHostApplication {
+public:
+    Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID iid, void** obj) override {
+        if (Steinberg::FUnknownPrivate::iidEqual(iid, Steinberg::Vst::IHostApplication::iid) ||
+            Steinberg::FUnknownPrivate::iidEqual(iid, Steinberg::FUnknown::iid)) {
+            addRef();
+            *obj = this;
+            return Steinberg::kResultTrue;
+        }
+        *obj = nullptr;
+        return Steinberg::kNoInterface;
+    }
+    Steinberg::uint32 PLUGIN_API addRef() override { return ++refCount; }
+    Steinberg::uint32 PLUGIN_API release() override {
+        if (--refCount == 0) return 0;
+        return refCount;
+    }
+
+    Steinberg::tresult PLUGIN_API getName(Steinberg::Vst::String128 name) override {
+        const char* n = "Microtonal DAW";
+        int i = 0;
+        for (; i < 127 && n[i]; ++i) name[i] = static_cast<Steinberg::Vst::TChar>(n[i]);
+        name[i] = 0;
+        return Steinberg::kResultTrue;
+    }
+    Steinberg::tresult PLUGIN_API createInstance(Steinberg::TUID, Steinberg::TUID, void** obj) override {
+        if (obj) *obj = nullptr;
+        return Steinberg::kNotImplemented;
+    }
+
+private:
+    std::atomic<Steinberg::uint32> refCount{1};
+};
+
+HostApplicationContext g_hostContext;
+
+bool vstDebug() {
+    static const bool on = std::getenv("DAW_VST_DEBUG") != nullptr;
+    return on;
+}
+} // namespace
 
 // ============================================================================
 // EditorHostFrame
@@ -204,20 +281,23 @@ Steinberg::tresult PLUGIN_API EditorHostFrame::beginEdit(Steinberg::Vst::ParamID
     // now so the post-gesture re-baseline can't absorb them.
     if (activeGestureCount == 0 && onStatePoll) onStatePoll(true);
     activeGestureCount++;
+    // Open a gesture for this parameter (Ardour: BeginGesture -> StartTouch).
+    paramGestures[id] = nextGestureId++;
     if (onBeginEdit) onBeginEdit(id);
     return Steinberg::kResultTrue;
 }
 
+uint64_t EditorHostFrame::gestureFor(Steinberg::Vst::ParamID id) {
+    auto it = paramGestures.find(id);
+    if (it != paramGestures.end()) return it->second;
+    // performEdit without beginEdit: its own single-step gesture. Without this,
+    // consecutive host-less edits would look like one gesture and coalesce.
+    return nextGestureId++;
+}
+
 Steinberg::tresult PLUGIN_API EditorHostFrame::performEdit(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue valueNormalized) {
-    if (onPerformEdit) {
-        // Look up pre-edit value captured by VstNode in beginEdit callback.
-        // Kept until endEdit so every performEdit of a drag gesture reports the
-        // true pre-gesture value; without beginEdit, oldValue == newValue and
-        // VstNode leaves the change to the state-diff poller.
-        auto it = preEditValues.find(id);
-        Steinberg::Vst::ParamValue oldValue = (it != preEditValues.end()) ? it->second : valueNormalized;
-        onPerformEdit(id, oldValue, valueNormalized);
-    }
+    uint64_t gesture = gestureFor(id);
+    if (onPerformEdit) onPerformEdit(id, valueNormalized, gesture);
     return Steinberg::kResultTrue;
 }
 
@@ -227,12 +307,8 @@ Steinberg::tresult PLUGIN_API EditorHostFrame::endEdit(Steinberg::Vst::ParamID i
     // out the poll interval, so an internal edit made right after a knob drag
     // isn't absorbed into the post-drag baseline.
     statePollRequested = true;
-    preEditValues.erase(id);
+    paramGestures.erase(id);
     return Steinberg::kResultTrue;
-}
-
-void EditorHostFrame::capturePreEditValue(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue val) {
-    preEditValues[id] = val;
 }
 
 Steinberg::tresult PLUGIN_API EditorHostFrame::restartComponent(Steinberg::int32 flags) {
@@ -383,6 +459,37 @@ public:
         return Steinberg::kPlatformTypeX11EmbedWindowID;
     }
 
+    void notifyEmbedded() override {
+        if (!display || !window) return;
+        Window root = 0, parent = 0, *children = nullptr;
+        unsigned int n = 0;
+        if (!XQueryTree(display, window, &root, &parent, &children, &n)) return;
+        const Atom xembed = XInternAtom(display, "_XEMBED", False);
+        for (unsigned int i = 0; i < n; ++i) {
+            const Window child = children[i];
+            auto sendEmbed = [&](long message, long detail) {
+                XEvent ev{};
+                ev.xclient.type = ClientMessage;
+                ev.xclient.window = child;
+                ev.xclient.message_type = xembed;
+                ev.xclient.format = 32;
+                ev.xclient.data.l[0] = CurrentTime;
+                ev.xclient.data.l[1] = message;
+                ev.xclient.data.l[2] = detail;
+                ev.xclient.data.l[3] = static_cast<long>(window);
+                ev.xclient.data.l[4] = 0;
+                XSendEvent(display, child, False, NoEventMask, &ev);
+            };
+            sendEmbed(0, 0);   // XEMBED_EMBEDDED_NOTIFY
+            sendEmbed(1, 0);   // XEMBED_WINDOW_ACTIVATE
+            sendEmbed(4, 0);   // XEMBED_FOCUS_IN / XEMBED_FOCUS_CURRENT
+            XSetInputFocus(display, child, RevertToParent, CurrentTime);
+            XRaiseWindow(display, child);
+        }
+        if (children) XFree(children);
+        XFlush(display);
+    }
+
     bool tick() override {
         if (!display || !windowOpen) return false;
 
@@ -515,15 +622,26 @@ std::unique_ptr<EditorWindowHost> EditorWindowHost::create() {
 // VstPlugin
 // ============================================================================
 
-VstPlugin::VstPlugin(const std::string& pluginPath) : pluginPath(pluginPath) {
+VstPlugin::VstPlugin(const std::string& pluginPath, size_t classIndex) : pluginPath(pluginPath) {
     lib = VstPluginCache::instance().load(pluginPath);
     if (!lib) {
         return;
     }
 
+    const PlugLib::ClassInfo* cls = lib->getClass(classIndex);
+    if (!cls) {
+        lib = nullptr;
+        return;
+    }
+    classIndex_ = classIndex;
+    className_ = cls->name;
+    std::memcpy(componentCID_, cls->componentCID, sizeof(Steinberg::TUID));
+    std::memcpy(controllerCID_, cls->controllerCID, sizeof(Steinberg::TUID));
+    hasController_ = cls->hasController;
+
     if (!createComponent()) { lib = nullptr; return; }
 
-    name = lib->getName();
+    name = cls->name;
     vendor = lib->getName();
     Steinberg::PFactoryInfo factoryInfo;
     if (lib->getFactory()->getFactoryInfo(&factoryInfo) == Steinberg::kResultTrue) {
@@ -548,9 +666,13 @@ VstPlugin::VstPlugin(const std::string& pluginPath) : pluginPath(pluginPath) {
     connectComponentController();
     if (editController) {
         // Sync component state to controller so getParamNormalized() returns
-        // the actual parameter values (not all zeros).
-        auto compState = getComponentState();
-        if (!compState.empty()) setControllerState(compState);
+        // the actual parameter values (not all zeros). Skipped while restoring a
+        // chain insert: some plugins fault on state I/O before graph setup.
+        if (!g_vstLoadingChainInsert) {
+            auto compState = getComponentState();
+            if (!compState.empty()) applyComponentStateToController(compState);
+        }
+        refreshParameterShadow();
 
         editController->setComponentHandler(hostFrame.get());
         view = editController->createView(Steinberg::Vst::ViewType::kEditor);
@@ -590,7 +712,7 @@ VstPlugin::~VstPlugin() {
 bool VstPlugin::createComponent() {
     Steinberg::FUnknown* componentUnknown = nullptr;
     auto result = lib->getFactory()->createInstance(
-        lib->getComponentCID(), Steinberg::Vst::IComponent::iid, (void**)&componentUnknown);
+        componentCID_, Steinberg::Vst::IComponent::iid, (void**)&componentUnknown);
 
     if (result != Steinberg::kResultTrue || !componentUnknown) {
         std::cerr << "[VstPlugin] Failed to create component" << std::endl;
@@ -600,6 +722,14 @@ bool VstPlugin::createComponent() {
     component = Steinberg::FUnknownPtr<Steinberg::Vst::IComponent>(componentUnknown);
     if (!component) return false;
 
+    if (vstDebug()) std::cout << "[vst] component initialize: " << className_ << std::endl;
+    if (component->initialize(&g_hostContext) != Steinberg::kResultTrue) {
+        std::cerr << "[VstPlugin] Component initialize failed" << std::endl;
+        return false;
+    }
+
+    // Query the processor only after the component is initialized: LSP rejects
+    // setProcessing() when the processor came from an uninitialized component.
     Steinberg::FUnknown* processorUnknown = nullptr;
     result = component->queryInterface(Steinberg::Vst::IAudioProcessor::iid, (void**)&processorUnknown);
     if (result != Steinberg::kResultTrue || !processorUnknown) {
@@ -608,31 +738,15 @@ bool VstPlugin::createComponent() {
     }
     audioProcessor = Steinberg::FUnknownPtr<Steinberg::Vst::IAudioProcessor>(processorUnknown);
 
-    // Pass a minimal FUnknown as context — yabridge/Serum need non-null
-    struct DummyContext : Steinberg::FUnknown {
-        Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID iid, void** obj) override {
-            if (Steinberg::FUnknownPrivate::iidEqual(iid, Steinberg::FUnknown::iid)) {
-                addRef(); *obj = this; return Steinberg::kResultTrue;
-            }
-            *obj = nullptr; return Steinberg::kNoInterface;
-        }
-        Steinberg::uint32 PLUGIN_API addRef() override { return 1; }
-        Steinberg::uint32 PLUGIN_API release() override { return 1; }
-    };
-    DummyContext ctx;
-    if (component->initialize(&ctx) != Steinberg::kResultTrue) {
-        std::cerr << "[VstPlugin] Component initialize failed" << std::endl;
-        return false;
-    }
-
     return true;
 }
 
 bool VstPlugin::createController() {
     if (editController) return true; // already created
+    if (!hasController_) return false;
     Steinberg::FUnknown* controllerUnknown = nullptr;
     auto result = lib->getFactory()->createInstance(
-        lib->getControllerCID(), Steinberg::Vst::IEditController::iid, (void**)&controllerUnknown);
+        controllerCID_, Steinberg::Vst::IEditController::iid, (void**)&controllerUnknown);
 
     if (result != Steinberg::kResultTrue || !controllerUnknown) {
         std::cerr << "[VstPlugin] Failed to create edit controller" << std::endl;
@@ -642,19 +756,8 @@ bool VstPlugin::createController() {
     editController = Steinberg::FUnknownPtr<Steinberg::Vst::IEditController>(controllerUnknown);
     if (!editController) return false;
 
-    // Same DummyContext trick for the controller
-    struct DummyContext : Steinberg::FUnknown {
-        Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID iid, void** obj) override {
-            if (Steinberg::FUnknownPrivate::iidEqual(iid, Steinberg::FUnknown::iid)) {
-                addRef(); *obj = this; return Steinberg::kResultTrue;
-            }
-            *obj = nullptr; return Steinberg::kNoInterface;
-        }
-        Steinberg::uint32 PLUGIN_API addRef() override { return 1; }
-        Steinberg::uint32 PLUGIN_API release() override { return 1; }
-    };
-    DummyContext ctx;
-    if (editController->initialize(&ctx) != Steinberg::kResultTrue) {
+    if (vstDebug()) std::cout << "[vst] controller initialize: " << className_ << std::endl;
+    if (editController->initialize(&g_hostContext) != Steinberg::kResultTrue) {
         std::cerr << "[VstPlugin] Edit controller initialize failed" << std::endl;
         return false;
     }
@@ -746,13 +849,22 @@ bool VstPlugin::activateComponent() {
 void VstPlugin::setup(int sampleRate, int bufferSize) {
     if (!valid || !audioProcessor) return;
 
-    if (needsSetup_) {
-        needsSetup_ = false;
-        component->setActive(true);
-    }
+    // Both graph copies (and the mixer's per-chain setup) call setup repeatedly. The
+    // instance is shared, so a second setupProcessing while processing breaks some
+    // plugins (LSP rejects setProcessing and would end up inactive).
+    if (processingActive && sampleRate == processSampleRate && bufferSize == processBufferSize)
+        return;
 
     processBufferSize = bufferSize;
     processSampleRate = sampleRate;
+    needsSetup_ = false;
+
+    // VST3 requires setupProcessing() while the component is inactive.
+    if (processingActive) {
+        audioProcessor->setProcessing(false);
+        processingActive = false;
+    }
+    component->setActive(false);
 
     Steinberg::Vst::ProcessSetup processSetup{};
     processSetup.sampleRate = sampleRate;
@@ -798,10 +910,13 @@ void VstPlugin::setup(int sampleRate, int bufferSize) {
         }
     }
 
-    if (audioProcessor->setProcessing(true) != Steinberg::kResultTrue) {
-        std::cerr << "[VstPlugin] setProcessing(true) failed" << std::endl;
-        return;
-    }
+    // setActive/setProcessing results are advisory. Some plugins (LSP) answer
+    // kResultFalse/kNotImplemented and process audio anyway; treating that as a
+    // failure silences the plugin entirely.
+    component->setActive(true);
+    const auto procResult = audioProcessor->setProcessing(true);
+    if (procResult != Steinberg::kResultTrue && vstDebug())
+        std::cout << "[vst] setProcessing returned " << procResult << " (continuing)" << std::endl;
 
     processingActive = true;
 }
@@ -881,7 +996,8 @@ void VstPlugin::showEditor() {
             connectComponentController();
             if (!view && editController) {
                 auto compState = getComponentState();
-                if (!compState.empty()) setControllerState(compState);
+                if (!compState.empty()) applyComponentStateToController(compState);
+                refreshParameterShadow();
 
                 editController->setComponentHandler(frame);
                 view = editController->createView(Steinberg::Vst::ViewType::kEditor);
@@ -921,6 +1037,8 @@ void VstPlugin::showEditor() {
         view->getSize(&vr);
         editorHost->resize(vr.right - vr.left, vr.bottom - vr.top);
         view->onSize(&vr);
+        if (pluginPath.find("lsp-plugins") != std::string::npos)
+            editorHost->notifyEmbedded();
         editorOpen = true;
         registerEditor(this);
         std::cout << "[VstPlugin::showEditor] native opened" << std::endl;
@@ -966,16 +1084,17 @@ bool VstPlugin::tickEditor() {
 }
 
 // Per-node instance cache — a single VstPlugin shared across GUI + audio copies.
-std::shared_ptr<VstPlugin> VstPluginCache::getOrCreatePlugin(int nodeID, const std::vector<int>& managerPath, const std::string& path) {
+std::shared_ptr<VstPlugin> VstPluginCache::getOrCreatePlugin(int nodeID, const std::vector<int>& managerPath,
+                                                            const std::string& path, size_t classIndex) {
     CacheKey key{nodeID, managerPath};
     auto it = instances.find(key);
     if (it != instances.end()) {
-        if (it->second->getPluginPath() == path)
+        if (it->second->getPluginPath() == path && it->second->getClassIndex() == classIndex)
             return it->second;
         instances.erase(it);
     }
     if (path.empty()) return nullptr;
-    auto p = std::make_shared<VstPlugin>(path);
+    auto p = std::make_shared<VstPlugin>(path, classIndex);
     if (!p->isValid()) return nullptr;
     instances[key] = p;
     return p;
@@ -1007,7 +1126,7 @@ void VstPlugin::tickAllEditors() {
 
 void VstPlugin::commitPendingStateEdits() {
     for (auto* p : openEditors) {
-        if (p->editorOpen && p->hostFrame && p->hostFrame->onStatePoll)
+        if (p->editorOpen && p->undoStatePoll_ && p->hostFrame && p->hostFrame->onStatePoll)
             p->hostFrame->onStatePoll(true);
     }
 }
@@ -1109,6 +1228,46 @@ void VstPlugin::setParameterValue(int paramID, float valueNormalized) {
     // hears the change via inputParameterChanges on the next audio block.
     queueParameterChange(static_cast<Steinberg::Vst::ParamID>(paramID),
                          static_cast<Steinberg::Vst::ParamValue>(valueNormalized));
+    // Ardour's set_parameter() updates _shadow_data; do the same so the next
+    // editor performEdit sees the value the host just wrote.
+    setShadowParameterValue(paramID, valueNormalized);
+}
+
+float VstPlugin::shadowParameterValue(int paramID) const {
+    {
+        std::lock_guard<std::mutex> lk(paramShadowMutex_);
+        auto it = paramShadow_.find(paramID);
+        if (it != paramShadow_.end()) return it->second;
+    }
+    return getParameterValue(paramID);
+}
+
+void VstPlugin::setShadowParameterValue(int paramID, float valueNormalized) {
+    std::lock_guard<std::mutex> lk(paramShadowMutex_);
+    paramShadow_[paramID] = valueNormalized;
+}
+
+float VstPlugin::swapShadowParameterValue(int paramID, float valueNormalized) {
+    const float fallback = getParameterValue(paramID);
+    std::lock_guard<std::mutex> lk(paramShadowMutex_);
+    auto it = paramShadow_.find(paramID);
+    const float previous = it != paramShadow_.end() ? it->second : fallback;
+    paramShadow_[paramID] = valueNormalized;
+    return previous;
+}
+
+void VstPlugin::refreshParameterShadow() {
+    if (!editController) return;
+    std::vector<std::pair<int, float>> values;
+    const int n = getParameterCount();
+    values.reserve(static_cast<size_t>(n > 0 ? n : 0));
+    for (int i = 0; i < n; ++i) {
+        const int pid = getParameterID(i);
+        if (pid >= 0) values.emplace_back(pid, getParameterValue(pid));
+    }
+    std::lock_guard<std::mutex> lk(paramShadowMutex_);
+    paramShadow_.clear();
+    for (auto& [pid, v] : values) paramShadow_[pid] = v;
 }
 
 void VstPlugin::queueParameterChange(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue value) {
@@ -1148,6 +1307,44 @@ void VstPlugin::setComponentState(const std::vector<uint8_t>& data) {
     Steinberg::int64 resultPos = 0;
     stream.seek(0, Steinberg::IBStream::kIBSeekSet, &resultPos);
     component->setState(&stream);
+    // The controller mirrors the component state (Ardour: setState(component),
+    // then controller->setComponentState(same stream)).
+    applyComponentStateToController(data);
+    refreshParameterShadow();
+}
+
+void VstPlugin::beginStateRestore() {
+    if (inStateRestore_) return;
+    inStateRestore_ = true;
+    stateRestoreWasProcessing_ = processingActive;
+    if (audioProcessor && processingActive) {
+        audioProcessor->setProcessing(false);
+        processingActive = false;
+    }
+    if (component) component->setActive(false);
+}
+
+void VstPlugin::endStateRestore() {
+    if (!inStateRestore_) return;
+    inStateRestore_ = false;
+    if (!component) return;
+    component->setActive(true);
+    if (audioProcessor && stateRestoreWasProcessing_) {
+        audioProcessor->setProcessing(true);
+        processingActive = true;
+    }
+    stateRestoreWasProcessing_ = false;
+    refreshParameterShadow();
+}
+
+void VstPlugin::applyComponentStateToController(const std::vector<uint8_t>& data) {
+    if (!editController || data.empty()) return;
+    Steinberg::MemoryStream stream;
+    Steinberg::int32 bytesWritten = 0;
+    stream.write(const_cast<uint8_t*>(data.data()), static_cast<Steinberg::int32>(data.size()), &bytesWritten);
+    Steinberg::int64 resultPos = 0;
+    stream.seek(0, Steinberg::IBStream::kIBSeekSet, &resultPos);
+    editController->setComponentState(&stream);
 }
 
 void VstPlugin::setControllerState(const std::vector<uint8_t>& data) {
@@ -1157,7 +1354,11 @@ void VstPlugin::setControllerState(const std::vector<uint8_t>& data) {
     stream.write(const_cast<uint8_t*>(data.data()), static_cast<Steinberg::int32>(data.size()), &bytesWritten);
     Steinberg::int64 resultPos = 0;
     stream.seek(0, Steinberg::IBStream::kIBSeekSet, &resultPos);
-    editController->setComponentState(&stream);
+    // Controller state is restored with setState(). setComponentState() expects the
+    // COMPONENT's state blob; feeding it controller state corrupts plugins (LSP logs
+    // "Invalid state signature" and double-frees).
+    editController->setState(&stream);
+    refreshParameterShadow();
 }
 
 #endif // __EMSCRIPTEN__

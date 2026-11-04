@@ -60,6 +60,8 @@ def main():
     ap.add_argument("--settings", default="build/assets/settings.json",
                     help="settings.json to read controlSocketPath from")
     ap.add_argument("--raw", action="store_true", help="print replies without pretty-printing")
+    ap.add_argument("--timeout", type=float, default=30.0,
+                    help="seconds to wait for the reply (default 30)")
     args = ap.parse_args()
 
     if args.request:
@@ -71,7 +73,7 @@ def main():
 
     sock_path = resolve_socket(args.sock, args.settings)
     try:
-        replies = send_lines(sock_path, lines)
+        replies = send_lines(sock_path, lines, timeout=args.timeout)
     except (FileNotFoundError, ConnectionRefusedError, FileNotFoundError) as e:
         sys.exit(f"could not connect to {sock_path}: {e}\n"
                  f"Is the DAW running with \"controlEnabled\": true in the settings.json "

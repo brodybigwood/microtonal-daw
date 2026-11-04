@@ -31,6 +31,7 @@ private:
     int selectedRow_ = 0;
     bool previewDragging_ = false;
     SDL_Renderer* previewRenderer_ = nullptr;
+    SDL_Texture* previewTex_ = nullptr;
 
     void renderPreview(SDL_Renderer*, Node* selected);
 };
@@ -80,7 +81,9 @@ public:
     void selectChainWindowInsert(int index);
     /** Called from ~MixerChainWindow so the dangling back-pointer is cleared. */
     void detachChainWindow(MixerChainWindow* w);
-    void addNodeToChain(int chainIndex, NodeType type);
+    /** Appends an insert (undoable); returns its node id (valid after the replayed
+        ChainNodes action recreates the list), or -1. */
+    int addNodeToChain(int chainIndex, NodeType type);
     void removeNodeFromChain(int chainIndex, int nodeIndex);
     void addChain(uint16_t inputPortID = 0);
     void removeChain(int index);
@@ -96,6 +99,9 @@ public:
     void applyChainNodes(int chainID, const json& nodes);
     Chain* chainByID(int chainID);
     Node* chainNodeByID(int chainID, int nodeID);
+    /** Append one insert from its serialized snapshot (id preserved). */
+    Node* insertChainNodeFromSnapshot(int chainID, const json& nodeSnapshot);
+    bool removeChainNodeByID(int chainID, int nodeID);
 
     static constexpr float kColW = 22.f;
     static constexpr float kColPad = 4.f;

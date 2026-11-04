@@ -170,11 +170,30 @@ MixerNode::Chain* MixerNode::chainByID(int chainID) {
 }
 
 Node* MixerNode::createNode(NodeType type) {
-    Node* n = byType(type, static_cast<int>(nodeIdPool_.newID()), nm);
+    const uint16_t nid = nm ? nm->allocateNodeID()
+                            : static_cast<uint16_t>(nodeIdPool_.newID());
+    Node* n = byType(type, static_cast<int>(nid), nm);
     if (!n) return nullptr;
+    if (nm) nm->registerExtraNode(n);
     n->update(bufferSize, sampleRate);
     n->setup();
     return n;
+}
+
+// Chain inserts share the owning manager's id namespace, so actions can resolve them
+// through the normal managerPath + nodeID lookup. Saved chains may carry ids from the
+// old per-chain pool; renumber any that collide with a graph node or system node.
+static uint16_t resolveChainNodeID(NodeManager* nm, const json& jn, json& out) {
+    out = jn;
+    const uint16_t want = static_cast<uint16_t>(jn.value("id", 0));
+    if (!nm) return want;
+    if (want > 1 && !nm->getNode(want)) {
+        nm->reserveNodeID(want);
+        return want;
+    }
+    const uint16_t id = nm->allocateNodeID();
+    out["id"] = id;
+    return id;
 }
 
 static void stampChainOwnership(Node* n, uint16_t mixerID, int chainID) {
@@ -200,7 +219,40 @@ Node* MixerNode::chainNodeByID(int chainID, int nodeID) {
     return nullptr;
 }
 
+Node* MixerNode::insertChainNodeFromSnapshot(int chainID, const json& nodeSnapshot) {
+    Chain* c = chainByID(chainID);
+    if (!c || !nm) return nullptr;
+    g_vstLoadingChainInsert = true;
+    Node* n = Node::deSerialize(nodeSnapshot, nm, false);
+    g_vstLoadingChainInsert = false;
+    if (!n) return nullptr;
+    nm->reserveNodeID(n->id);
+    nm->registerExtraNode(n);
+    stampChainOwnership(n, id, chainID);
+    c->nodes.push_back(n);
+    c->appliedInCh = -1;
+    nm->markTopologyDirty();
+    return n;
+}
+
+bool MixerNode::removeChainNodeByID(int chainID, int nodeID) {
+    Chain* c = chainByID(chainID);
+    if (!c) return false;
+    for (size_t i = 0; i < c->nodes.size(); ++i) {
+        Node* n = c->nodes[i];
+        if (!n || static_cast<int>(n->id) != nodeID) continue;
+        destroyNode(n);
+        c->nodes.erase(c->nodes.begin() + static_cast<ptrdiff_t>(i));
+        c->appliedInCh = -1;
+        if (nm) nm->markTopologyDirty();
+        return true;
+    }
+    return false;
+}
+
 void MixerNode::destroyNode(Node* n) {
+    if (!n) return;
+    if (nm) nm->unregisterExtraNode(n);
     delete n;
 }
 
@@ -222,9 +274,14 @@ void MixerNode::applyChainNodes(int chainID, const json& nodesJson) {
     c->nodes.clear();
     if (nodesJson.is_array()) {
         for (const auto& jn : nodesJson) {
-            Node* n = Node::deSerialize(jn, nm, false);
+            json jn2;
+            resolveChainNodeID(nm, jn, jn2);
+            g_vstLoadingChainInsert = true;
+            Node* n = Node::deSerialize(jn2, nm, false);
+            g_vstLoadingChainInsert = false;
             if (!n) continue;
             nodeIdPool_.reserveID(n->id);
+            if (nm) nm->registerExtraNode(n);
             stampChainOwnership(n, id, chainID);
             c->nodes.push_back(n);
         }
@@ -234,43 +291,38 @@ void MixerNode::applyChainNodes(int chainID, const json& nodesJson) {
     if (nm) nm->markTopologyDirty();
 }
 
-void MixerNode::addNodeToChain(int chainIndex, NodeType type) {
-    if (chainIndex < 0 || chainIndex >= static_cast<int>(chains.size())) return;
+int MixerNode::addNodeToChain(int chainIndex, NodeType type) {
+    if (chainIndex < 0 || chainIndex >= static_cast<int>(chains.size())) return -1;
     Chain* c = chains[chainIndex].get();
-    const json before = chainNodesJson(c->id);
-    Node* n = createNode(type);
-    if (!n) return;
-    stampChainOwnership(n, id, c->id);
-    c->nodes.push_back(n);
-    c->appliedInCh = -1;
-    if (project && project->um && nm) {
-        json cd;
-        cd["before"] = before;
-        cd["after"] = chainNodesJson(c->id);
-        project->um->newAction(new MixerChainEditUndoAction(project, nm->managerPath,
-            static_cast<int>(id), MixerChainEditUndoAction::ChainNodes, c->id, 0, {}, std::move(cd),
-            "Mixer Insert Node"));
+    Node* temp = createNode(type);
+    if (!temp) return -1;
+    const int addedID = static_cast<int>(temp->id);
+    json nodeSnapshot = temp->serialize();
+    destroyNode(temp);  // the action re-creates it from the snapshot
+
+    if (!project || !project->um || !nm) {
+        return insertChainNodeFromSnapshot(c->id, nodeSnapshot) ? addedID : -1;
     }
-    if (nm) nm->markTopologyDirty();
+    project->um->newAction(new MixerChainInsertNodeAction(project, nm->managerPath,
+        static_cast<int>(id), c->id, std::move(nodeSnapshot)));
+    return addedID;
 }
 
 void MixerNode::removeNodeFromChain(int chainIndex, int nodeIndex) {
     if (chainIndex < 0 || chainIndex >= static_cast<int>(chains.size())) return;
     Chain* c = chains[chainIndex].get();
     if (nodeIndex < 0 || nodeIndex >= static_cast<int>(c->nodes.size())) return;
-    const json before = chainNodesJson(c->id);
-    destroyNode(c->nodes[static_cast<size_t>(nodeIndex)]);
-    c->nodes.erase(c->nodes.begin() + nodeIndex);
-    c->appliedInCh = -1;
+    Node* n = c->nodes[static_cast<size_t>(nodeIndex)];
+    if (!n) return;
+    json nodeSnapshot = n->serialize();
+    const int nid = static_cast<int>(n->id);
     if (project && project->um && nm) {
-        json cd;
-        cd["before"] = before;
-        cd["after"] = chainNodesJson(c->id);
-        project->um->newAction(new MixerChainEditUndoAction(project, nm->managerPath,
-            static_cast<int>(id), MixerChainEditUndoAction::ChainNodes, c->id, 0, {}, std::move(cd),
+        project->um->newAction(new MixerChainInsertNodeAction(project, nm->managerPath,
+            static_cast<int>(id), c->id, std::move(nodeSnapshot), /*removeOnDo=*/true,
             "Mixer Remove Node"));
+    } else {
+        removeChainNodeByID(c->id, nid);
     }
-    if (nm) nm->markTopologyDirty();
 }
 
 void MixerNode::syncChainParams() {
@@ -384,9 +436,14 @@ void MixerNode::restoreChain(const json& jc) {
     c->mute = jc.value("mute", false);
     if (jc.contains("nodes") && jc["nodes"].is_array()) {
         for (const auto& jn : jc["nodes"]) {
-            Node* n = Node::deSerialize(jn, nm, false);
+            json jn2;
+            resolveChainNodeID(nm, jn, jn2);
+            g_vstLoadingChainInsert = true;
+            Node* n = Node::deSerialize(jn2, nm, false);
+            g_vstLoadingChainInsert = false;
             if (!n) continue;
             nodeIdPool_.reserveID(n->id);
+            if (nm) nm->registerExtraNode(n);
             stampChainOwnership(n, id, cid);
             c->nodes.push_back(n);
         }
@@ -481,8 +538,15 @@ void MixerNode::process() {
             din->numChannels = ch;
             din->sourceChannels = ch;
             n->process();
-            signal = dout->buffer ? dout->buffer : silence_.data();
-            ch = std::max(1, static_cast<int>(dout->numChannels));
+            if (dout->buffer) {
+                signal = dout->buffer;
+                ch = std::max(1, static_cast<int>(dout->numChannels));
+            } else {
+                // No output buffer (e.g. a node whose ports were rebuilt without an
+                // update): the only valid fallback is a single-channel silence block.
+                signal = silence_.data();
+                ch = 1;
+            }
             latency += std::max(0, n->reportedLatency());
         }
 
@@ -855,6 +919,10 @@ MixerChainWindow::MixerChainWindow(MixerNode* node, int chainID)
     : mixerNode(node), chainID(chainID) {}
 
 MixerChainWindow::~MixerChainWindow() {
+    if (previewTex_) {
+        SDL_DestroyTexture(previewTex_);
+        previewTex_ = nullptr;
+    }
     if (mixerNode)
         mixerNode->detachChainWindow(this);
 }
@@ -933,6 +1001,10 @@ void MixerChainWindow::renderPreview(SDL_Renderer* R, Node* sel) {
     // so drop the cached textures when it changes or knobs draw as garbage.
     if (previewRenderer_ != R) {
         previewRenderer_ = R;
+        if (previewTex_) {
+            SDL_DestroyTexture(previewTex_);
+            previewTex_ = nullptr;
+        }
         if (mixerNode) {
             if (auto* c = mixerNode->chainByID(chainID)) {
                 for (Node* n : c->nodes) {
@@ -958,14 +1030,21 @@ void MixerChainWindow::renderPreview(SDL_Renderer* R, Node* sel) {
 
     // Node content draws in local node coordinates (0..NODE_W/H); the viewport maps
     // those onto the preview rectangle.
-    SDL_Rect vp{static_cast<int>(preview.x), static_cast<int>(preview.y),
-                static_cast<int>(preview.w), static_cast<int>(preview.h)};
-    SDL_SetRenderViewport(R, &vp);
-    SDL_SetRenderDrawColor(R, 52, 52, 56, 255);
-    SDL_FRect local{0.f, 0.f, preview.w, preview.h};
-    SDL_RenderFillRect(R, &local);
-    sel->renderContent(R);
-    SDL_SetRenderViewport(R, nullptr);
+    // Render the node's local-coordinate content into an offscreen texture, then blit.
+    // (Changing the window viewport per frame made the window flicker on this backend.)
+    if (!previewTex_) {
+        previewTex_ = SDL_CreateTexture(R, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET,
+                                        static_cast<int>(preview.w), static_cast<int>(preview.h));
+    }
+    if (previewTex_) {
+        SDL_SetRenderTarget(R, previewTex_);
+        SDL_SetRenderDrawColor(R, 52, 52, 56, 255);
+        SDL_FRect local{0.f, 0.f, preview.w, preview.h};
+        SDL_RenderFillRect(R, &local);
+        sel->renderContent(R);
+        SDL_SetRenderTarget(R, nullptr);
+        SDL_RenderTexture(R, previewTex_, nullptr, &preview);
+    }
 
     SDL_SetRenderDrawColor(R, 90, 90, 100, 255);
     SDL_RenderRect(R, &preview);
@@ -1183,9 +1262,14 @@ void MixerNode::extraDeSerialize(const json& j) {
             c->mute = jc.value("mute", false);
             if (jc.contains("nodes") && jc["nodes"].is_array()) {
                 for (const auto& jn : jc["nodes"]) {
-                    Node* n = Node::deSerialize(jn, nm, false);
+                    json jn2;
+                    resolveChainNodeID(nm, jn, jn2);
+                    g_vstLoadingChainInsert = true;
+                    Node* n = Node::deSerialize(jn2, nm, false);
+                    g_vstLoadingChainInsert = false;
                     if (!n) continue;
                     nodeIdPool_.reserveID(n->id);
+                    if (nm) nm->registerExtraNode(n);
                     stampChainOwnership(n, id, c->id);
                     c->nodes.push_back(n);
                 }

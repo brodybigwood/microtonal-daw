@@ -21,8 +21,10 @@ public:
     json extraSerialize() override;
     void extraDeSerialize(const json&) override;
 
-    // Called by EditorHostFrame when plugin parameter changes
-    void onPluginParameterChange(int paramID, float oldValue, float newValue);
+    // Called by EditorHostFrame when plugin parameter changes. gestureID is the
+    // beginEdit..endEdit gesture the change belongs to; only edits of the same
+    // gesture coalesce into one undo step.
+    void onPluginParameterChange(int paramID, float oldValue, float newValue, uint64_t gestureID);
     void wirePluginCallbacks();
 
     bool restoringState = false;
@@ -35,9 +37,16 @@ public:
         window at ~one frame. */
     void requestStatePollSoon();
 
-    // Load a new plugin (with undo support)
-    void loadPlugin(const std::string& path, bool createUndo = false);
+    // Load a new plugin (with undo support). classIndex selects a class inside a
+    // multi-class bundle; SIZE_MAX keeps the current/zero index.
+    void loadPlugin(const std::string& path, bool createUndo = false,
+                    size_t classIndex = static_cast<size_t>(-1));
     void unloadPlugin();
+
+    /** Open a menu of the classes inside a bundle, then load the chosen one. */
+    void openPluginClassMenu(const std::string& path, bool createUndo);
+    size_t getClassIndex() const { return classIndex_; }
+    const std::string& getClassName() const { return className_; }
 
     // Map/unmap VST parameters to input connections.
     void mapVstParameter(int paramID);
@@ -57,6 +66,12 @@ public:
 
 private:
     void rebuildConnections();
+    /** Ports changed: the owning mixer chain must re-run its per-node port setup. */
+    void invalidateOwnerChain();
+    /** Apply state that arrived before the plugin was set up. */
+    void applyPendingVstState();
+    /** Record the post-load state as the undo baseline (GUI copy, editor closed). */
+    void captureStateBaseline();
 
     // Audio bus connections — one per bus, each with numChannels = bus channel count
     std::vector<Connection*> audioInConns;
@@ -70,6 +85,11 @@ private:
     SDL_FRect editorBtnRect_{8, 38, NODE_W - 16, 24};
 
     std::string loadedPath; // currently loaded plugin path
+    size_t classIndex_ = 0; // class inside the bundle
+    std::string className_;
+    // State restored from JSON before the plugin was set up; applied once setup runs.
+    std::vector<uint8_t> pendingCompState_;
+    std::vector<uint8_t> pendingCtrlState_;
 
     // MPE channel allocator: maps noteId -> channel (1-15)
     std::unordered_map<int, int> noteChannels;

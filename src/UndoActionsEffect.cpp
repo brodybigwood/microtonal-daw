@@ -30,13 +30,15 @@
 // ============================================================================
 
 VstParameterChangeAction::VstParameterChangeAction(Project* p, std::vector<int> managerPath, int nodeID,
-                                                     uint32_t paramID, float oldValue, float newValue)
+                                                     uint32_t paramID, float oldValue, float newValue,
+                                                     uint64_t gestureID)
     : ProjectAction(p, VstParameterChange)
     , managerPath(std::move(managerPath))
     , nodeID(nodeID)
     , paramID(paramID)
     , oldValue(oldValue)
     , newValue(newValue)
+    , gestureID(gestureID)
 {
     skipInitialDo = true;
     name = "VST Parameter Change";
@@ -89,13 +91,19 @@ VstLoadPluginAction::VstLoadPluginAction(Project* p, std::vector<int> managerPat
         auto* vst = dynamic_cast<VstNode*>(node);
         if (!vst) return;
         std::string path = this->newState.is_null() ? "" : this->newState.value("path", "");
-        vst->loadPlugin(path);
+        size_t cls = this->newState.is_null() ? 0 : this->newState.value("classIndex", static_cast<size_t>(0));
+        vst->loadPlugin(path, false, cls);
         if (!this->newState.is_null()) {
             vst->bypass.value = this->newState.value("bypass", 0.0f);
-            if (this->newState.contains("compState") && vst->plugin)
-                vst->plugin->setComponentState(jsonBytesDecode(this->newState["compState"]));
-            if (this->newState.contains("ctrlState") && vst->plugin)
-                vst->plugin->setControllerState(jsonBytesDecode(this->newState["ctrlState"]));
+            if (vst->plugin) {
+                if (vst->plugin->isEditorOpen()) vst->plugin->hideEditor();
+                vst->plugin->beginStateRestore();
+                if (this->newState.contains("compState"))
+                    vst->plugin->setComponentState(jsonBytesDecode(this->newState["compState"]));
+                if (this->newState.contains("ctrlState"))
+                    vst->plugin->setControllerState(jsonBytesDecode(this->newState["ctrlState"]));
+                vst->plugin->endStateRestore();
+            }
         }
         vst->vstStateBaselineDirty = true;
     };
@@ -107,13 +115,19 @@ VstLoadPluginAction::VstLoadPluginAction(Project* p, std::vector<int> managerPat
         if (!vst) return;
         if (vst->plugin) vst->plugin->hideEditor();
         std::string path = this->oldState.is_null() ? "" : this->oldState.value("path", "");
-        vst->loadPlugin(path);
+        size_t cls = this->oldState.is_null() ? 0 : this->oldState.value("classIndex", static_cast<size_t>(0));
+        vst->loadPlugin(path, false, cls);
         if (!this->oldState.is_null()) {
             vst->bypass.value = this->oldState.value("bypass", 0.0f);
-            if (this->oldState.contains("compState") && vst->plugin)
-                vst->plugin->setComponentState(jsonBytesDecode(this->oldState["compState"]));
-            if (this->oldState.contains("ctrlState") && vst->plugin)
-                vst->plugin->setControllerState(jsonBytesDecode(this->oldState["ctrlState"]));
+            if (vst->plugin) {
+                if (vst->plugin->isEditorOpen()) vst->plugin->hideEditor();
+                vst->plugin->beginStateRestore();
+                if (this->oldState.contains("compState"))
+                    vst->plugin->setComponentState(jsonBytesDecode(this->oldState["compState"]));
+                if (this->oldState.contains("ctrlState"))
+                    vst->plugin->setControllerState(jsonBytesDecode(this->oldState["ctrlState"]));
+                vst->plugin->endStateRestore();
+            }
         }
         vst->vstStateBaselineDirty = true;
     };
@@ -130,11 +144,15 @@ static void vstApplyStateJson(Project* p, const std::vector<int>& managerPath, i
     auto* vst = dynamic_cast<VstNode*>(node);
     if (!vst) throw std::runtime_error(std::string(ctx) + ": node not found or not VstNode");
     if (!vst->plugin) throw std::runtime_error(std::string(ctx) + ": plugin is null");
+    // Apply state while deactivated (Ardour's VST3PI::load_state sequence).
+    if (vst->plugin->isEditorOpen()) vst->plugin->hideEditor();
     vst->restoringState = true;
+    vst->plugin->beginStateRestore();
     if (state.contains("compState"))
         vst->plugin->setComponentState(jsonBytesDecode(state["compState"]));
     if (state.contains("ctrlState"))
         vst->plugin->setControllerState(jsonBytesDecode(state["ctrlState"]));
+    vst->plugin->endStateRestore();
     vst->restoringState = false;
     vst->vstStateBaselineDirty = true;
     vst->requestStatePollSoon();

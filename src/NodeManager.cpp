@@ -149,8 +149,30 @@ Node* NodeManager::getNode(uint16_t id) {
     if (id == 0) return outNode;
     if (id == 1) return inNode;
     auto it = ids.find(id);
-    if (it == ids.end()) return nullptr;
-    return nodes[it->second];
+    if (it != ids.end()) return nodes[it->second];
+    auto extra = extraNodes.find(id);
+    return extra == extraNodes.end() ? nullptr : extra->second;
+}
+
+void NodeManager::registerExtraNode(Node* n) {
+    if (n) extraNodes[n->id] = n;
+}
+
+void NodeManager::unregisterExtraNode(Node* n) {
+    if (!n) return;
+    auto it = extraNodes.find(n->id);
+    if (it != extraNodes.end() && it->second == n) extraNodes.erase(it);
+}
+
+uint16_t NodeManager::allocateNodeID() {
+    for (;;) {
+        const uint16_t id = id_pool.newID();
+        if (id > 1 && !getNode(id)) return id;
+    }
+}
+
+void NodeManager::reserveNodeID(uint16_t id) {
+    id_pool.reserveID(id);
 }
 
 NodeManager::~NodeManager() {

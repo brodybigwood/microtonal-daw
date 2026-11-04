@@ -24,6 +24,14 @@ class NodeManager {
 
         Node* getNode(uint16_t);
 
+        // Nodes that live outside the processed node list but belong to this manager's
+        // id namespace (mixer chain inserts), so actions can address them normally.
+        void registerExtraNode(Node* n);
+        void unregisterExtraNode(Node* n);
+        /** Allocates an id not used by any node or extra node in this manager. */
+        uint16_t allocateNodeID();
+        void reserveNodeID(uint16_t id);
+
         void removeNode(Node*);
         void addNode(NodeType, float x, float y);
 
@@ -65,6 +73,7 @@ class NodeManager {
 
     private:
         std::unordered_map<uint16_t, uint16_t> ids;
+        std::unordered_map<uint16_t, Node*> extraNodes;
         idManager id_pool;
 
         std::vector<Node*> nodes;

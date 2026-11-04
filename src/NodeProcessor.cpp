@@ -2,6 +2,9 @@
 #include "NodeManager.h"
 #include "NodeEditor.h"
 #include "WindowManager.h"
+#ifndef __EMSCRIPTEN__
+#include "nodes/vst/vstplugin.h"
+#endif
 #include <chrono>
 #include <cstring>
 
@@ -106,6 +109,11 @@ void NodeProcessor::deSerialize(const json& j) {
 
 void NodeProcessor::render() {
     flushProcessorActions();
+#ifndef __EMSCRIPTEN__
+    // Plugins (LSP) drive their native editor event loop through the host run-loop
+    // timers. That must run every frame, not only when an SDL event arrives.
+    VstPlugin::tickAllEditors();
+#endif
     if (editor) editor->tick(project->renderer);
 }
 

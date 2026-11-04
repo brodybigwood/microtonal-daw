@@ -42,6 +42,56 @@ pulls inputs (guarded by `isProcessed`/`resetProcessTree`).
 Connections (`Bus.h`) carry either a `Waveform` (multi-channel float buffer) or
 `Events` (MIDI-like note on/off with microtonal pitch, MPE-style per-note).
 
+Channel widths propagate forward: an input port reports its source's width,
+`widthFollowsInput()` nodes push it to their outputs, and `syncWidthsFromInputs()`
+handles per-port mappings (the arranger's per-track ports). Downstream demand can
+make an output wider than its source; processors must zero the channels the
+source does not carry (see `GainNode`).
+
+### Arranger, inputs, recording
+
+`ArrangerNode` holds tracks (`TrackManager`) and timeline elements
+(`ElementManager`). Each track owns one **output** port on the arranger (Events
+for Notes tracks, Waveform for Audio tracks) and one **input** port, created in
+track order. Track rows carry solo/mute/record-arm/monitor controls; monitoring
+sums the input into the output, mute/solo zero the output after monitoring.
+
+Recording is DSP-side: `TrackManager::captureTakes` reads each armed track's
+input every block while the transport plays and the project's global record flag
+is on. Finished takes go through a mutex queue to the GUI thread, which writes a
+float WAV under `<project>/recordings/` and creates one `RecordTakeAction`: it
+trims/splits overlapping positions on that track and inserts a new
+AudioClip/Region position. The undo action is replayed on both graphs.
+
+### Mixer chains
+
+`MixerNode` has one multichannel input port per chain. Each chain is a serial
+insert list: **the list is processed bottom → top, so the bottom row is the first
+processor and the top row is last.** The chain's input feeds the bottom node; each
+node's first waveform output feeds the node above; the top output is the chain
+output. Nodes are not run through the graph's connection system — the mixer calls
+each node's `process()` directly with the signal buffer, and latency-aligns the
+chains when summing (widest chain output sets the mixer width).
+
+Insert nodes are `Node`s owned by the mixer's `Chain`, not members of the
+`NodeManager` node list. They still share the owning manager's **id namespace**:
+created via `NodeManager::allocateNodeID`, registered with
+`registerExtraNode`, resolved by the normal `getNode(id)`, and unregistered on
+removal. This is what lets every undo action address chain inserts with plain
+`managerPath + nodeID` — do not introduce a separate per-chain id pool or a
+second addressing form. Old saves with chain-local ids are renumbered on load if
+they collide. Chain insert parameter edits are undoable as
+`MixerChainNodeParamAction` (mixer + chain + insert id) for the mixer preview.
+
+Nested graphs (the Delay's feedback patcher) extend the path as
+`[mixerID, chainID, insertID]`; `requireManager` descends mixer → chain → insert
+→ its nested manager.
+
+`DelayNode` runs an inner feedback graph: its `Input` receives
+`input + previous*feedback`; the graph's `Output` is what is written back to the
+delay line; the wet tap is the delay-line read. An unconnected feedback graph has
+no wet signal. 100% feedback is unity. 100% mix is purely the delayed signal.
+
 ## Microtonal pitch & rhythm model
 
 Time and pitch are exact rationals, not floats:
@@ -75,9 +125,23 @@ Implementation is split by domain:
 - `UndoRegistry.cpp` — string-keyed action registry (scripted invocation).
 - `UndoTreeView.cpp` — tree-view rendering/hit-testing.
 
+Chain inserts are extra nodes (`NodeManager::extraNodes`, see Mixer above):
+created with the manager's id allocator, found by `getNode`, never processed by
+the graph pass. Nested graph paths are `[mixerID, chainID, insertID]`.
+
+Actions are serialized and deserialized **iteratively** (explicit stack), not
+recursively: the tree is a chain hundreds of actions deep, and recursion both
+copied subtrees (quadratic save time) and overflowed the stack.
+
 **Save format**: a project folder's `save.json` is the serialized undo tree;
 the current action holds the graph snapshot (`savedMainManager`). Loading
-rebuilds the graph then replays to the saved tree position.
+resolves the saved version path and rebuilds both graphs from that snapshot.
+Writes are atomic (`save.json.tmp` + rename) on a joinable worker thread.
+Every save also writes a never-overwritten
+`versions/save_vNNNN_<UTC stamp>/` containing its own `save.json`, VST state
+sidecars (`vst/N.bin`), and a copy of the project folder's files (recorded
+WAVs etc.); `filepath` values inside that archived JSON are rewritten to the
+copies so versions are self-contained.
 
 ## UI: one canvas, two window tiers
 
@@ -99,26 +163,55 @@ routing (`NodeEditorWindows.cpp`).
 
 Node implementations live in `src/nodes/<type>/`; each overrides `process()`
 (DSP) and optionally `renderContent`/`handleCustomInput` (UI). `nodetype.h`
-enumerates the types. `PatcherNode` contains a nested `NodeManager` (sub-graph);
-`MultiplexerNode` holds N parallel patchers, and undo actions targeting one
-sibling are replicated to the others (`UndoManager::newAction`).
+enumerates the types; `NodeTypeStr`/`byType` (`nodetypes.h`) are the registry —
+add the enum value, the name, and the factory case. `PatcherNode` contains a
+nested `NodeManager` (sub-graph); `MultiplexerNode` holds N parallel patchers,
+and undo actions targeting one sibling are replicated to the others
+(`UndoManager::newAction`).
+
+`DuplicatorNode` (nodeType 18) copies its whole input to each of eight outputs.
+`FilterNode` keeps independent filter state per channel and follows input width.
+`MixerNode`'s chain window shows a node-sized live preview of the selected
+insert; param textures are renderer-bound SDL objects and are cleared whenever
+the window renderer changes.
+
+Nodes cannot be hidden: there is no close box hit-test and no visibility
+toggle. `EmbeddedWindow::visible` remains only for utility windows and the
+multiplexer's inactive patchers. Port clicks are dispatched to cable dragging
+(polygon test on the node body), never to the node's custom content handler;
+`handleCustomInput` sees button presses only inside the body.
 
 The VST node (`nodes/vst/`) hosts VST3 plugins natively (X11 editor window,
 yabridge-aware, microtonal notes → MPE); it compiles to a stub under WASM.
-Plugin undo is two-tier: exposed parameter edits arrive via
-`IComponentHandler::performEdit` (`VstParameterChangeAction`, drag-coalesced),
-and everything else (mod routing, internal toggles, preset browsing) is caught
-by a state-diff poller (`VstNode::pollVstStateForUndo`, driven from
-`tickEditor` on the GUI thread) that snapshots component+controller state
-while the editor is open and records differences as `VstStateChangeAction`
-blobs. Host-initiated state writes mark `vstStateBaselineDirty` (plus a forced
-next-tick poll) so the poller re-baselines instead of echoing them; polling
-waits out open beginEdit/endEdit gestures and held pointer buttons (a drag
-commits as one action on release), and a mapped parameter connection only
-causes a silent re-baseline when its driven value actually moved since the
-last snapshot. Undo-tree navigation calls
-`VstPlugin::commitPendingStateEdits()` first so not-yet-polled plugin edits
-become actions instead of being absorbed.
+A bundle can expose many classes: `PlugLib` enumerates every `Audio Module
+Class` paired with its controller, and `VstNode` stores a `classIndex` that is
+selectable from the plugin menu, serialized, and passed through load/undo. The
+host context handed to `initialize()` must implement `IHostApplication` —
+plugins such as LSP dereference it and crash with a bare `FUnknown`.
+`VstPluginCache` is shared by both graph copies and is keyed by
+node + managerPath; a class change recreates the instance.
+Plugin undo follows Ardour's VST3 model. Exposed parameter edits arrive via
+`IComponentHandler::performEdit` and become `VstParameterChangeAction`s.
+`VstPlugin` keeps a per-parameter shadow of the last known normalized value
+(Ardour's `VST3PI::_shadow_data`): it is updated by every host-side
+`setParameterValue()` — including undo/redo replay — and refreshed from the
+controller after any state restore, so an edit the plugin makes without a
+host-issued value still has a true previous value. `performEdit` reports that
+shadow value and a gesture id; `beginEdit` opens a gesture and `endEdit`
+closes it. Actions carry the gesture id and only coalesce with edits of the
+same gesture, so a knob drag is one undo step and separate gestures on the
+same parameter are separate steps. An edit with no open gesture gets a fresh
+id and is its own step. State blobs are used only for save/load (applied while
+the plugin is deactivated, per Ardour's `VST3PI::load_state`), never to derive
+undo entries.
+
+## Control API
+
+`ControlServer` speaks one JSON object per line on a Unix socket (enabled from
+settings.json); `ControlApi.cpp` dispatches ops/queries/actions, and
+`assets/control_docs.json` is the source for `help`/`describe_*`. Actions mutate
+through `UndoManager`, so control-API edits are undoable like UI edits. Keep the
+docs file in sync when adding an action, query, or op.
 
 ## Build
 

@@ -270,6 +270,19 @@ json handleQuery(Project* p, const json& req) {
             {"tempoCurve", tempoCurveJson(p->tempoCurve)},
         };
     }
+    if (q == "vst_classes") {
+        const std::string path = args.contains("path") ? args["path"].get<std::string>() : "";
+        if (path.empty()) throw std::runtime_error("vst_classes needs a 'path'");
+        PlugLib* lib = VstPluginCache::instance().load(path);
+        if (!lib) throw std::runtime_error("cannot load VST3 bundle: " + path);
+        json out = json::array();
+        for (size_t i = 0; i < lib->classCount(); ++i) {
+            const PlugLib::ClassInfo* cls = lib->getClass(i);
+            if (!cls) continue;
+            out.push_back(json{{"index", i}, {"name", cls->name}, {"hasController", cls->hasController}});
+        }
+        return out;
+    }
     if (q == "managers") {
         json out = json::array();
         if (p->processor && p->processor->guiGraph)
@@ -632,6 +645,26 @@ json dispatch(const json& req) {
         if (req.contains("seekBeat")) p->seekBeat(req["seekBeat"].get<double>());
         return ok(id, json{{"isPlaying", p->isPlaying}, {"beatPosition", p->beatPosition},
                            {"timeSeconds", p->timeSeconds}});
+    }
+
+    if (op == "vst_validate") {
+        const std::string path = req.value("path", "");
+        if (path.empty()) return err(id, "bad_request", "vst_validate needs a bundle 'path'");
+        PlugLib* lib = VstPluginCache::instance().load(path);
+        if (!lib) return err(id, "not_found", "cannot load VST3 bundle: " + path);
+        json results = json::array();
+        int okCount = 0, failCount = 0;
+        for (size_t i = 0; i < lib->classCount(); ++i) {
+            const PlugLib::ClassInfo* cls = lib->getClass(i);
+            auto plugin = std::make_shared<VstPlugin>(path, i);
+            const bool ok = plugin && plugin->isValid();
+            if (ok) ++okCount; else ++failCount;
+            results.push_back(json{{"index", i}, {"name", cls ? cls->name : std::string()}, {"ok", ok}});
+            std::cout << "[vst_validate] " << (ok ? "OK  " : "FAIL") << " " << i
+                      << " " << (cls ? cls->name : "") << std::endl;
+        }
+        return ok(id, json{{"path", path}, {"classes", lib->classCount()},
+                           {"ok", okCount}, {"failed", failCount}, {"results", results}});
     }
 
     if (op == "record") {

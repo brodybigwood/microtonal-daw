@@ -423,7 +423,9 @@ std::string UndoManager::actionSchema(const std::string& actionName) {
     if (actionName == "vst_state_change")
         return R"({"managerPath":[int,...],"nodeID":int,"compState":bytes?,"ctrlState":bytes?})";
     if (actionName == "vst_load_plugin")
-        return R"({"managerPath":[int,...],"nodeID":int,"path":string})";
+        return R"({"managerPath":[int,...],"nodeID":int,"path":string,"classIndex":int?})";
+    if (actionName == "mixer_chain_add_node")
+        return R"({"managerPath":[int,...],"nodeID":int,"chainIndex":int,"nodeType":int})";
     if (actionName == "toggle_piano_roll_window")
         return R"({"managerPath":[int,...],"nodeID":int,"regionID":int,"open":bool?})";
     // Replaces whatever is on the two ports; the replaced cables are read live.
@@ -920,8 +922,9 @@ bool UndoManager::runRegisteredAction(const std::string& actionName, const json&
     try {
         // A few operations are only reachable through the node/song-roll method the
         // UI itself calls, because they build and run their own action internally.
-        if (actionName == "vst_load_plugin" || actionName == "toggle_piano_roll_window") {
-            return runDelegatedAction(actionName, params, error);
+        if (actionName == "vst_load_plugin" || actionName == "toggle_piano_roll_window" ||
+            actionName == "mixer_chain_add_node") {
+            return runDelegatedAction(actionName, params, error, result);
         }
 
         ProjectAction* pa = buildRegisteredAction(actionName, params);
@@ -962,7 +965,8 @@ bool UndoManager::runRegisteredAction(const std::string& actionName, const json&
     }
 }
 
-bool UndoManager::runDelegatedAction(const std::string& actionName, const json& params, std::string& error) {
+bool UndoManager::runDelegatedAction(const std::string& actionName, const json& params, std::string& error,
+                                     json* result) {
     try {
         const auto managerPath = params.at("managerPath").get<std::vector<int>>();
         NodeManager& nm = requireManager(head->p, managerPath);
@@ -973,7 +977,23 @@ bool UndoManager::runDelegatedAction(const std::string& actionName, const json& 
         if (actionName == "vst_load_plugin") {
             auto* vst = dynamic_cast<VstNode*>(node);
             if (!vst) { error = "vst_load_plugin: node is not a VST node"; return false; }
-            vst->loadPlugin(params.at("path").get<std::string>(), /*createUndo=*/true);
+            const size_t cls = params.value("classIndex", static_cast<size_t>(-1));
+            vst->loadPlugin(params.at("path").get<std::string>(), /*createUndo=*/true, cls);
+            return true;
+        }
+
+        if (actionName == "mixer_chain_add_node") {
+            auto* mixer = dynamic_cast<MixerNode*>(node);
+            if (!mixer) { error = "mixer_chain_add_node: node is not a Mixer node"; return false; }
+            const int chainIndex = params.at("chainIndex").get<int>();
+            const int typeInt = params.at("nodeType").get<int>();
+            if (typeInt < 0 || typeInt >= static_cast<int>(NodeType::Count)) {
+                error = "mixer_chain_add_node: bad nodeType";
+                return false;
+            }
+            const int addedID = mixer->addNodeToChain(chainIndex, static_cast<NodeType>(typeInt));
+            if (addedID < 0) { error = "mixer_chain_add_node: could not add (bad chain index or node type)"; return false; }
+            if (result) *result = json{{"nodeID", addedID}, {"chainIndex", chainIndex}};
             return true;
         }
 

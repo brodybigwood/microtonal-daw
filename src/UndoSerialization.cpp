@@ -92,6 +92,13 @@ static ProjectAction* deSerializeOne(const json& j, Project* p) {
                 j.value("chainData", json::object()), j.value("name", std::string("Mixer Edit")));
             break;
         }
+        case MixerChainInsertNode: {
+            pa = new MixerChainInsertNodeAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("mixerNodeID").get<int>(), j.at("chainID").get<int>(),
+                j.value("nodeSnapshot", json::object()), j.value("removeOnDo", false),
+                j.value("name", std::string("Mixer Insert Node")));
+            break;
+        }
         case MixerChainNodeParam: {
             pa = new MixerChainNodeParamAction(p, j.at("managerPath").get<std::vector<int>>(),
                 j.at("mixerNodeID").get<int>(), j.at("chainID").get<int>(),
@@ -565,6 +572,15 @@ static json serializeOne(ProjectAction* pa) {
             j["portID"] = mx->portID;
             j["order"] = mx->order;
             j["chainData"] = mx->chainData;
+            break;
+        }
+        case MixerChainInsertNode: {
+            auto mi = static_cast<MixerChainInsertNodeAction*>(pa);
+            j["managerPath"] = mi->managerPath;
+            j["mixerNodeID"] = mi->mixerNodeID;
+            j["chainID"] = mi->chainID;
+            j["nodeSnapshot"] = mi->nodeSnapshot;
+            j["removeOnDo"] = mi->removeOnDo;
             break;
         }
         case MixerChainNodeParam: {
