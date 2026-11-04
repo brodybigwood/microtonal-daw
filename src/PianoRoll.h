@@ -48,6 +48,8 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         float adjustTransportSeekSec(float rawSec) override;
 
         SDL_Texture* backgroundTexture = nullptr;
+        /** Settings path the background layer was baked from (rebake on change). */
+        std::string bakedBgPath_;
         SDL_Texture* PianoTexture = nullptr;
         SDL_Texture* NotesTexture = nullptr;
         SDL_Texture* KeyTexture = nullptr;

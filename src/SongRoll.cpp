@@ -6,6 +6,7 @@
 #include <iomanip>
 #include "GridElement.h"
 #include "GridView.h"
+#include "Settings.h"
 #include "PianoRollWindow.h"
 #include "WindowManager.h"
 #include "NodeProcessor.h"
@@ -233,8 +234,14 @@ bool SongRoll::customTick(SDL_Renderer* renderer) {
 
 
     SDL_SetRenderTarget(renderer,texture);
-    SDL_SetRenderDrawColor(renderer, colors.background[0], colors.background[1], colors.background[2], colors.background[3]);
-    SDL_RenderClear(renderer);
+    {
+        float tw = 0, th = 0;
+        SDL_GetTextureSize(texture, &tw, &th);
+        SDL_FRect local{0.f, 0.f, tw, th};
+        background::drawBackground(renderer, bgImage,
+                                   Settings::instance().getString("gridBackground", ""),
+                                   local, colors.background);
+    }
     SDL_SetRenderTarget(renderer, target);
 
     SDL_RenderTexture(renderer, texture, nullptr, dstRect);

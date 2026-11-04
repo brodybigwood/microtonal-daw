@@ -13,6 +13,7 @@
 #include <string>
 #include <SDL3/SDL.h>
 #include "styles.h"
+#include "Settings.h"
 #include "GridView.h"
 #include "Region.h"
 #include "Note.h"
@@ -313,6 +314,19 @@ bool PianoRoll::customTick(SDL_Renderer* renderer) {
         initWindow(renderer);
     }
 
+    // Background image setting changed while the roll is open: rebake the layer.
+    const std::string wantBg = Settings::instance().getString("gridBackground", "");
+    if (backgroundTexture && wantBg != bakedBgPath_) {
+        auto prevTarget = SDL_GetRenderTarget(renderer);
+        SDL_SetRenderTarget(renderer, backgroundTexture);
+        float tw = 0, th = 0;
+        SDL_GetTextureSize(backgroundTexture, &tw, &th);
+        SDL_FRect local{0.f, 0.f, tw, th};
+        background::drawBackground(renderer, bgImage, wantBg, local, colors.background);
+        SDL_SetRenderTarget(renderer, prevTarget);
+        bakedBgPath_ = wantBg;
+    }
+
     updateRhythmLines();
     updateTransportLines();
 
@@ -546,9 +560,9 @@ void PianoRoll::initWindow(SDL_Renderer* renderer) {
 
     auto target = SDL_GetRenderTarget(renderer);
     SDL_SetRenderTarget(renderer, backgroundTexture);
-    setRenderColor(renderer, colors.background);
-
-    SDL_RenderClear(renderer); // Clear backgroundTexture with the background color
+    bakedBgPath_ = Settings::instance().getString("gridBackground", "");
+    SDL_FRect bgLocal{0.f, 0.f, static_cast<float>(width), static_cast<float>(height)};
+    background::drawBackground(renderer, bgImage, bakedBgPath_, bgLocal, colors.background);
 
     SDL_SetRenderTarget(renderer, target);
 

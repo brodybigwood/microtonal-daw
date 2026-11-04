@@ -9,5 +9,7 @@
   "audioTripleBuffer": false,
   "audioEngine": 0,
   "controlEnabled": false,
-  "controlSocketPath": "/tmp/microtonal-daw.sock"
+  "controlSocketPath": "/tmp/microtonal-daw.sock",
+  "nodeGraphBackground": "",
+  "gridBackground": ""
 }

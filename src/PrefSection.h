@@ -104,4 +104,9 @@ public:
     void renderContent(SDL_Renderer* r, const SDL_FRect& b, float s) override;
     bool handleContentInput(SDL_Event& e, float mx, float my,
                             const SDL_FRect& innerBounds) override;
+
+private:
+    enum class BgPicker { None, NodeGraph, Grid };
+    BgPicker bgPicker_ = BgPicker::None;
+    float bgScroll_ = 0.f;
 };

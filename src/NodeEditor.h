@@ -10,6 +10,7 @@
 #include "Bus.h"
 #include <unordered_map>
 #include "EmbeddedWindow.h"
+#include "BackgroundImage.h"
 
 #define SINE_SIZE 2000
 
@@ -21,6 +22,9 @@ class NodeEditor {
         ~NodeEditor();
 
         NodeManager* nm;
+
+        /** Patcher/node-canvas background art (settings: nodeGraphBackground). */
+        background::Texture bgImage_;
 
         void tick(SDL_Renderer* r);
         void handleInput(SDL_Event&);

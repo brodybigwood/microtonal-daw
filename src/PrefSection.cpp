@@ -2,6 +2,7 @@
 #include "WindowHandler.h"
 #include "ContextMenu.h"
 #include "Settings.h"
+#include "BackgroundImage.h"
 #include "AudioManager.h"
 #include "styles.h"
 #include <cmath>
@@ -1049,76 +1050,181 @@ void GeneralSection::drawSymbol(SDL_Renderer* r, float cx, float cy, float sz) c
                    tipY + arrLen * std::sin(arrAngle + static_cast<float>(M_PI) * 0.5f));
 }
 
+// Shared geometry for the General section's rows. Must match
+// renderSectionTitle's return value so drawing and hit testing agree.
+static float generalRowsTop(const SDL_FRect& b, float s) {
+    int th = 0;
+    TTF_GetStringSize(fonts.mainFont, "General", 0, nullptr, &th);
+    return b.y + (16.f + static_cast<float>(th) + 8.f) * s;
+}
+
+// The largest axis-aligned square inside the round section: every row drawn
+// here is guaranteed to stay inside the circle.
+static SDL_FRect generalContentBounds(const SDL_FRect& b) {
+    const float inset = b.w * 0.14645f; // (1 - 1/sqrt(2)) / 2
+    return {b.x + inset, b.y + inset, b.w - 2.f * inset, b.h - 2.f * inset};
+}
+
+static SDL_FRect generalRowRect(const SDL_FRect& b, int index, float s) {
+    const SDL_FRect cb = generalContentBounds(b);
+    const float y = cb.y + static_cast<float>(index) * (kRowH * s + 3.f * s);
+    const float w = std::min(cb.w - 6.f * s, 320.f * s);
+    return {cb.x + (cb.w - w) * 0.5f, y, w, kRowH * s - 2.f * s};
+}
+
+// Cut text down to fit maxW with a trailing "...".
+static std::string fitText(const std::string& text, float maxW, float s) {
+    int tw = 0, th = 0;
+    TTF_GetStringSize(fonts.mainFont, text.c_str(), 0, &tw, &th);
+    if (static_cast<float>(tw) * s <= maxW) return text;
+    std::string out = text;
+    while (!out.empty()) {
+        out.pop_back();
+        const std::string probe = out + "...";
+        TTF_GetStringSize(fonts.mainFont, probe.c_str(), 0, &tw, &th);
+        if (static_cast<float>(tw) * s <= maxW) return probe;
+    }
+    return std::string();
+}
+
+static std::string bgSettingValue(const char* key) {
+    const std::string path = Settings::instance().getString(key, "");
+    return path.empty() ? std::string("Solid color") : background::labelFor(path);
+}
+
 void GeneralSection::renderContent(SDL_Renderer* r, const SDL_FRect& b, float s) {
-    float afterTitle = renderSectionTitle(r, "General", b, s);
-
-    size_t numRows = 1 + (Settings::instance().hasBackup() ? 1 : 0);
-    float y = settingsStartY(afterTitle, b, s, numRows, kRowH);
+    renderSectionTitle(r, "General", b, s);
     const SDL_Color col{180, 180, 195, 255};
-
-    const float cx = b.x + b.w * 0.5f;
     const float pad = 10.f * s;
-    const float btnH = kRowH * s - 2.f * s;
 
-    auto renderBtn = [&](const char* label, float by) {
-        int tw = 0, th2 = 0;
-        TTF_GetStringSize(fonts.mainFont, label, 0, &tw, &th2);
-        const float btnW = static_cast<float>(tw) * s + pad * 2.f;
-        const float btnX = cx - btnW * 0.5f;
-        SDL_FRect rect{btnX, by, btnW, btnH};
+    auto renderBtn = [&](const std::string& label, const SDL_FRect& rect) {
         SDL_SetRenderDrawColor(r, 50, 50, 58, 255);
         SDL_RenderFillRect(r, &rect);
         SDL_SetRenderDrawColor(r, col.r, col.g, col.b, col.a);
         SDL_RenderRect(r, &rect);
-        renderTextCentered(r, label, cx, by + (btnH - static_cast<float>(th2) * s) * 0.5f, s, col);
-        return rect;
+        const std::string shown = fitText(label, rect.w - pad * 2.f, s);
+        int th2 = 0;
+        TTF_GetStringSize(fonts.mainFont, shown.c_str(), 0, nullptr, &th2);
+        renderTextCentered(r, shown.c_str(), rect.x + rect.w * 0.5f,
+                           rect.y + (rect.h - static_cast<float>(th2) * s) * 0.5f, s, col);
     };
 
-    renderBtn("Load Defaults", y);
-    y += btnH + 4.f * s;
+    if (bgPicker_ != BgPicker::None) {
+        // Scrolling option list: Solid color + every bundled wallpaper.
+        const bool node = bgPicker_ == BgPicker::NodeGraph;
+        const char* key = node ? "nodeGraphBackground" : "gridBackground";
+        std::vector<std::string> items{"Solid color"};
+        for (const auto& p : background::listWallpapers())
+            items.push_back(background::labelFor(p));
+        const std::string current = bgSettingValue(key);
 
+        const SDL_FRect cb = generalContentBounds(b);
+        const float rowH = kRowH * s;
+        const int visible = std::max(2, static_cast<int>(cb.h / rowH) - 1);
+        const int itemRows = visible - 1; // one row is the Back button
+        const int first = std::clamp(static_cast<int>(bgScroll_), 0,
+                                     std::max(0, static_cast<int>(items.size()) - itemRows));
+        const float w = std::min(cb.w - 6.f * s, 320.f * s);
+        const float x = cb.x + (cb.w - w) * 0.5f;
+
+        renderTextLeft(r, fitText(node ? "Patcher background" : "Grid background",
+                                  w - pad * 2.f, s).c_str(),
+                       x + pad, cb.y + 2.f * s, s, col);
+
+        // Back row: always the first entry, so the list can never trap the user.
+        SDL_FRect back{x, cb.y + rowH, w, rowH - 1.f};
+        SDL_SetRenderDrawColor(r, 72, 60, 60, 255);
+        SDL_RenderFillRect(r, &back);
+        renderTextLeft(r, "< Back", x + pad, back.y + 2.f * s, s,
+                       SDL_Color{235, 225, 225, 255});
+
+        for (int i = 0; i < itemRows && first + i < static_cast<int>(items.size()); ++i) {
+            const int idx = first + i;
+            SDL_FRect rr{x, cb.y + rowH * static_cast<float>(i + 2), w, rowH - 1.f};
+            const bool sel = items[static_cast<size_t>(idx)] == current;
+            SDL_SetRenderDrawColor(r, sel ? 60 : ((idx % 2) ? 44 : 48),
+                                   sel ? 78 : ((idx % 2) ? 44 : 48),
+                                   sel ? 110 : ((idx % 2) ? 49 : 53), 255);
+            SDL_RenderFillRect(r, &rr);
+            renderTextLeft(r, fitText(items[static_cast<size_t>(idx)], w - pad * 2.f, s).c_str(),
+                           x + pad, rr.y + 2.f * s, s, sel ? SDL_Color{235, 240, 255, 255} : col);
+        }
+        return;
+    }
+
+    renderBtn("Patcher background: " + bgSettingValue("nodeGraphBackground"),
+              generalRowRect(b, 0, s));
+    renderBtn("Grid background: " + bgSettingValue("gridBackground"),
+              generalRowRect(b, 1, s));
+    renderBtn("Load Defaults", generalRowRect(b, 2, s));
     if (Settings::instance().hasBackup())
-        renderBtn("Restore Previous", y);
+        renderBtn("Restore Previous", generalRowRect(b, 3, s));
 }
 
 bool GeneralSection::handleContentInput(SDL_Event& e, float mx, float my,
                                         const SDL_FRect& b) {
+    // Same scale the section was rendered with, or hit rects shift off the rows.
+    const float s = contentScale_ > 0.f ? contentScale_ : 1.f;
+
+    if (bgPicker_ != BgPicker::None) {
+        const bool node = bgPicker_ == BgPicker::NodeGraph;
+        const char* key = node ? "nodeGraphBackground" : "gridBackground";
+        std::vector<std::string> items{"Solid color"};
+        for (const auto& p : background::listWallpapers())
+            items.push_back(background::labelFor(p));
+        const SDL_FRect cb = generalContentBounds(b);
+        const float rowH = kRowH * s;
+        const int visible = std::max(2, static_cast<int>(cb.h / rowH) - 1);
+        const int itemRows = visible - 1;
+        const float w = std::min(cb.w - 6.f * s, 320.f * s);
+        const float x = cb.x + (cb.w - w) * 0.5f;
+
+        if (e.type == SDL_EVENT_MOUSE_WHEEL) {
+            bgScroll_ -= e.wheel.y;
+            bgScroll_ = std::clamp(bgScroll_, 0.f,
+                                   static_cast<float>(std::max(0, static_cast<int>(items.size()) - itemRows)));
+            return true;
+        }
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+            // Anything outside the panel closes it.
+            const float listBottom = cb.y + rowH * static_cast<float>(visible);
+            if (mx < x || mx > x + w || my < cb.y || my > listBottom) {
+                bgPicker_ = BgPicker::None;
+                return true;
+            }
+            const int row = static_cast<int>((my - cb.y) / rowH);
+            if (row <= 1) { // header or the Back button
+                bgPicker_ = BgPicker::None;
+                return true;
+            }
+            const int first = std::clamp(static_cast<int>(bgScroll_), 0,
+                                         std::max(0, static_cast<int>(items.size()) - itemRows));
+            const int idx = first + (row - 2);
+            if (idx >= 0 && idx < static_cast<int>(items.size())) {
+                const std::vector<std::string> paths = background::listWallpapers();
+                // Stay open so several wallpapers can be tried in a row; the
+                // highlight follows the new setting on the next frame.
+                Settings::instance().setString(key, idx == 0 ? std::string() :
+                                                     paths[static_cast<size_t>(idx - 1)]);
+            }
+            return true;
+        }
+        return false;
+    }
+
     if (e.type != SDL_EVENT_MOUSE_BUTTON_DOWN || e.button.button != SDL_BUTTON_LEFT)
         return false;
 
-    const float s = 1.f;
-    int th = 0;
-    TTF_GetStringSize(fonts.mainFont, "General", 0, nullptr, &th);
-    float titleBottom = b.y + 16.f + static_cast<float>(th) + 8.f;
-
-    size_t numRows = 1 + (Settings::instance().hasBackup() ? 1 : 0);
-    float y = settingsStartY(titleBottom, b, s, numRows, kRowH);
-
-    const float cx = b.x + b.w * 0.5f;
-    const float pad = 10.f * s;
-    const float btnH = kRowH * s - 2.f * s;
-
-    auto hitBtn = [&](const char* label, float by) -> SDL_FRect {
-        int tw = 0, th2 = 0;
-        TTF_GetStringSize(fonts.mainFont, label, 0, &tw, &th2);
-        const float bw = static_cast<float>(tw) * s + pad * 2.f;
-        const float bx = cx - bw * 0.5f;
-        return {bx, by, bw, btnH};
+    auto hit = [&](const SDL_FRect& r) {
+        return mx >= r.x && mx < r.x + r.w && my >= r.y && my < r.y + r.h;
     };
 
-    SDL_FRect ldRect = hitBtn("Load Defaults", y);
-    if (mx >= ldRect.x && mx < ldRect.x + ldRect.w && my >= ldRect.y && my < ldRect.y + ldRect.h) {
-        Settings::instance().loadDefaults();
+    if (hit(generalRowRect(b, 0, s))) { bgPicker_ = BgPicker::NodeGraph; bgScroll_ = 0.f; return true; }
+    if (hit(generalRowRect(b, 1, s))) { bgPicker_ = BgPicker::Grid; bgScroll_ = 0.f; return true; }
+    if (hit(generalRowRect(b, 2, s))) { Settings::instance().loadDefaults(); return true; }
+    if (Settings::instance().hasBackup() && hit(generalRowRect(b, 3, s))) {
+        Settings::instance().restoreBackup();
         return true;
-    }
-    y += btnH + 4.f * s;
-
-    if (Settings::instance().hasBackup()) {
-        SDL_FRect rpRect = hitBtn("Restore Previous", y);
-        if (mx >= rpRect.x && mx < rpRect.x + rpRect.w && my >= rpRect.y && my < rpRect.y + rpRect.h) {
-            Settings::instance().restoreBackup();
-            return true;
-        }
     }
     return false;
 }

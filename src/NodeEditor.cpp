@@ -1,4 +1,5 @@
 #include "NodeEditor.h"
+#include "Settings.h"
 #include "NodeManager.h"
 #include "Node.h"
 #include "ContextMenu.h"
@@ -297,8 +298,9 @@ void NodeEditor::render(SDL_Renderer* renderer, SDL_FRect* surfaceRect) {
     if (topMargin > 0.f)
         renderRootMenuBarSkeleton(renderer, surfaceRect);
 
-    SDL_SetRenderDrawColor(renderer, colors.nodeGraphBg[0], colors.nodeGraphBg[1], colors.nodeGraphBg[2], colors.nodeGraphBg[3]);
-    SDL_RenderFillRect(renderer, &nodeRect);
+    background::drawBackground(renderer, bgImage_,
+                               Settings::instance().getString("nodeGraphBackground", ""),
+                               nodeRect, colors.nodeGraphBg);
 
     SDL_Rect clip{
         static_cast<int>(std::floor(nodeRect.x)),

@@ -4,6 +4,7 @@
 #include <SDL_ttf.h>
 #include "Window.h"
 #include "PianoRollInternal.h"
+#include "BackgroundImage.h"
 
 class Playhead;
 class Project;
@@ -19,6 +20,9 @@ class GridView : public Window {
         float yMin = 0;
 
         SDL_Texture* gridTexture = nullptr;
+
+        /** Grid background art (settings: gridBackground). */
+        background::Texture bgImage;
 
         virtual void clearTextures() {}
         virtual void generateTextures(SDL_Renderer* renderer) {}

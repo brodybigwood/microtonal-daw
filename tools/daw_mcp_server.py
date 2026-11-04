@@ -22,6 +22,7 @@ import json
 import os
 import socket
 import sys
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 SERVER_NAME = "daw"
 SERVER_VERSION = "1.0.0"
@@ -432,7 +433,85 @@ def handle(msg):
     raise ValueError(f"unknown method: {method}")
 
 
-def main():
+# ------------------------------------------------------------ HTTP transport
+# Claude Code can connect to a running HTTP MCP server instead of spawning a
+# per-session stdio child. That makes one shared bridge for every session.
+
+
+class McpHttpHandler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, fmt, *args):
+        pass
+
+    def _json(self, code, obj):
+        body = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _empty(self, code):
+        self.send_response(code)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def do_POST(self):
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = 0
+        raw = self.rfile.read(length) if length > 0 else b""
+        try:
+            msg = json.loads(raw.decode() or "{}")
+        except ValueError:
+            self._json(400, {"jsonrpc": "2.0", "id": None,
+                             "error": {"code": -32700, "message": "parse error"}})
+            return
+        if isinstance(msg, list):
+            replies = []
+            for m in msg:
+                r = handle(m)
+                if m.get("id") is not None and r is not None:
+                    replies.append({"jsonrpc": "2.0", "id": m["id"], "result": r})
+            self._json(200, replies) if replies else self._empty(202)
+            return
+        msg_id = msg.get("id")
+        try:
+            result = handle(msg)
+        except Exception as e:
+            if msg_id is not None:
+                self._json(200, {"jsonrpc": "2.0", "id": msg_id,
+                                 "error": {"code": -32603, "message": str(e)}})
+            else:
+                self._empty(202)
+            return
+        if msg_id is None or result is None:
+            self._empty(202)
+            return
+        self._json(200, {"jsonrpc": "2.0", "id": msg_id, "result": result})
+
+    def do_GET(self):
+        # No server-initiated SSE stream; clients fall back to plain POSTs.
+        self._empty(405)
+
+
+def serve_http(host_port):
+    host, _, port = host_port.rpartition(":")
+    host = host or "127.0.0.1"
+    srv = ThreadingHTTPServer((host, int(port)), McpHttpHandler)
+    print(f"[daw-mcp] HTTP on http://{host}:{port}/mcp", flush=True)
+    srv.serve_forever()
+
+
+def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if "--http" in argv:
+        i = argv.index("--http")
+        target = argv[i + 1] if i + 1 < len(argv) else "127.0.0.1:8765"
+        serve_http(target)
+        return
     for line in sys.stdin:
         line = line.strip()
         if not line:
