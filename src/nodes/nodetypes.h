@@ -39,7 +39,8 @@ inline std::string NodeTypeStr[] = {
     "Sampler",
     "Bus",
     "Mixer",
-    "Duplicator"
+    "Duplicator",
+    "MPE Rack"
 };
 
 inline Node* byType(NodeType t, int id, NodeManager* nm) {
@@ -70,6 +71,8 @@ inline Node* byType(NodeType t, int id, NodeManager* nm) {
             return new GainNode(id, nm);
         case NodeType::Vst:
             return new VstNode(id, nm);
+        case NodeType::MpeRack:
+            return new VstNode(id, nm, true);
         case NodeType::SurroundToStereo:
             return new SurroundToStereoNode(id, nm);
         case NodeType::Param:

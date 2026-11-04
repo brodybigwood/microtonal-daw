@@ -146,7 +146,7 @@ TOOLS = [
     {
         "name": "daw",
         "description": ("Escape hatch: send a raw control request to the DAW. "
-                        "ops: action, query, undo, redo, goto, save, save_as, load, "
+                        "ops: action, query, undo, redo, goto, new, save, save_as, load, "
                         "load_recent, settings_set, record, list_actions, "
                         "describe_action, transport, window, capture, shutdown."),
         "inputSchema": {

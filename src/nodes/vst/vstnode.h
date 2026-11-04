@@ -2,13 +2,14 @@
 
 #include "Node.h"
 #include "vstplugin.h"
+#include <array>
 #include <memory>
 #include <vector>
 #include <unordered_map>
 
 class VstNode : public Node {
 public:
-    VstNode(uint16_t, NodeManager*);
+    VstNode(uint16_t, NodeManager*, bool mpeRack = false);
     ~VstNode() override;
 
     void process() override;
@@ -61,6 +62,17 @@ public:
 
     std::shared_ptr<VstPlugin> plugin; // shared across copies via VstPluginCache
 
+    /** MPE Rack: master instance `plugin` plus 15 shadows, one per member
+        channel (channel c -> rackShadows_[c-1]). The master holds the editor,
+        parameters and state; shadows mirror it and only play their channel,
+        so a non-MPE instrument can be retuned per note. */
+    bool isMpeRack() const { return mpeRack_; }
+    void markRackDirty();
+    /** GUI thread: push the master's state into every shadow instance. */
+    void syncRackState();
+    /** GUI thread: sync racks whose master state changed and is idle. */
+    static void tickAllRacks();
+
     Knob bypass = Knob(0.0f, 20.0f, NODE_H * 0.3f, 10.0f, "assets/knobs/1.png",
                        -135.0f, 135.0f, "Bypass", SDL_Color{220, 220, 220, 255});
 
@@ -72,6 +84,8 @@ private:
     void applyPendingVstState();
     /** Record the post-load state as the undo baseline (GUI copy, editor closed). */
     void captureStateBaseline();
+    /** Create the 15 shadow instances of an MPE rack from the master's class. */
+    void createRackShadows();
 
     // Audio bus connections — one per bus, each with numChannels = bus channel count
     std::vector<Connection*> audioInConns;
@@ -83,6 +97,13 @@ private:
     // Layout rects (updated each frame in renderContent).
     SDL_FRect dropdownRect_{8, 8, NODE_W - 16, 24};
     SDL_FRect editorBtnRect_{8, 38, NODE_W - 16, 24};
+
+    bool mpeRack_ = false;
+    std::vector<std::shared_ptr<VstPlugin>> rackShadows_; // channels 1..15
+    bool rackDirty_ = false;
+    uint64_t rackLastSyncMs_ = 0;
+    uint64_t rackLastEditMs_ = 0;
+    std::array<uint64_t, 16> rackChannelLastMs_{};
 
     std::string loadedPath; // currently loaded plugin path
     size_t classIndex_ = 0; // class inside the bundle
@@ -97,7 +118,8 @@ private:
     int nextMpeChannel = 1;
     bool mpeRangeSet = false;
     bool wasBypassed_ = false;
-    int allocMpeChannel(int noteId, void* eventList); // HostEventList*
+    int allocMpeChannel(int noteId, HostEventList* plain,
+                        std::array<HostEventList, 16>* rack);
     void freeMpeChannel(int noteId);
     void sendMpePitchBendRange(void* eventList); // HostEventList*
 

@@ -171,6 +171,10 @@ std::shared_ptr<TreeEntry> NodeEditor::buildMenuTree(int menuIndex) {
                 root->addChild(item);
             };
 
+            add("New Project", [this]() {
+                Project* p = (nm) ? nm->project : nullptr;
+                if (p && promptSaveBeforeLoad(p)) p->newProject();
+            });
             add("Save", [this]() {
                 Project* p = (nm) ? nm->project : nullptr;
                 if (!p) return;

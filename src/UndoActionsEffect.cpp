@@ -52,6 +52,7 @@ VstParameterChangeAction::VstParameterChangeAction(Project* p, std::vector<int> 
         vst->restoringState = true;
         vst->plugin->setParameterValue(static_cast<int>(this->paramID), this->newValue);
         vst->restoringState = false;
+        vst->markRackDirty();
         vst->vstStateBaselineDirty = true;
         vst->requestStatePollSoon();
     };
@@ -65,6 +66,7 @@ VstParameterChangeAction::VstParameterChangeAction(Project* p, std::vector<int> 
         vst->restoringState = true;
         vst->plugin->setParameterValue(static_cast<int>(this->paramID), this->oldValue);
         vst->restoringState = false;
+        vst->markRackDirty();
         vst->vstStateBaselineDirty = true;
         vst->requestStatePollSoon();
     };
@@ -105,6 +107,7 @@ VstLoadPluginAction::VstLoadPluginAction(Project* p, std::vector<int> managerPat
                 vst->plugin->endStateRestore();
             }
         }
+        vst->markRackDirty();
         vst->vstStateBaselineDirty = true;
     };
 
@@ -129,6 +132,7 @@ VstLoadPluginAction::VstLoadPluginAction(Project* p, std::vector<int> managerPat
                 vst->plugin->endStateRestore();
             }
         }
+        vst->markRackDirty();
         vst->vstStateBaselineDirty = true;
     };
 }
@@ -154,6 +158,7 @@ static void vstApplyStateJson(Project* p, const std::vector<int>& managerPath, i
         vst->plugin->setControllerState(jsonBytesDecode(state["ctrlState"]));
     vst->plugin->endStateRestore();
     vst->restoringState = false;
+    vst->markRackDirty();
     vst->vstStateBaselineDirty = true;
     vst->requestStatePollSoon();
 }

@@ -35,6 +35,8 @@ public:
 
     json serialize() const;
     void deSerialize(const json&);
+    /** Replace both graph copies with empty ones (new project). GUI thread. */
+    void reset();
 
     void process(float* in, float* out, int numIn, int numOut, int bufferSize, int sampleRate);
     void render();

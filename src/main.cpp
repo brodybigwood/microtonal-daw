@@ -20,12 +20,26 @@
 #include <string>
 #include <atomic>
 #include <csignal>
+#ifndef _WIN32
+#include <sys/resource.h>
+#endif
 
 static std::atomic<bool> quit{false};
 
 int main(int argc, char* argv[]) {
     std::signal(SIGINT, [](int){ quit.store(true); });
     std::signal(SIGTERM, [](int){ quit.store(true); });
+
+#ifndef _WIN32
+    // yabridge closes every fd below RLIMIT_NOFILE when it spawns its Wine
+    // host; with the default limit of ~1M that turns into a runaway realloc
+    // under AddressSanitizer and wedges the GUI thread on the first load.
+    struct rlimit rl {};
+    if (getrlimit(RLIMIT_NOFILE, &rl) == 0 && rl.rlim_cur > 4096) {
+        rl.rlim_cur = 4096;
+        setrlimit(RLIMIT_NOFILE, &rl);
+    }
+#endif
 
 #ifndef __EMSCRIPTEN__
     initVstX11Threads();   // before SDL_Init touches Xlib

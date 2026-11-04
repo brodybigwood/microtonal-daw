@@ -4,6 +4,7 @@
 #include "WindowManager.h"
 #ifndef __EMSCRIPTEN__
 #include "nodes/vst/vstplugin.h"
+#include "nodes/vst/vstnode.h"
 #endif
 #include <chrono>
 #include <cstring>
@@ -56,6 +57,24 @@ NodeProcessor::~NodeProcessor() {
 json NodeProcessor::serialize() const {
     if (!guiGraph) return json::object();
     return guiGraph->serialize();
+}
+
+void NodeProcessor::reset() {
+    if (guiGraph) {
+        guiGraph->resetNE();
+        delete guiGraph;
+        guiGraph = nullptr;
+    }
+    guiGraph = new NodeManager(project);
+    guiGraph->setNE(editor);
+    setThreadActiveRoot(guiGraph);
+
+    if (dspGraph) {
+        dspGraph->resetNE();
+        delete dspGraph;
+        dspGraph = nullptr;
+    }
+    dspGraph = new NodeManager(project);
 }
 
 void NodeProcessor::deSerialize(const json& j) {
@@ -123,6 +142,7 @@ void NodeProcessor::render() {
     // Plugins (LSP) drive their native editor event loop through the host run-loop
     // timers. That must run every frame, not only when an SDL event arrives.
     VstPlugin::tickAllEditors();
+    VstNode::tickAllRacks();
 #endif
     if (editor) editor->tick(project->renderer);
 }

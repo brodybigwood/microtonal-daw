@@ -55,6 +55,7 @@ static std::string typeName(const Node* n) {
 
 // Insert list label: a VST shows the plugin (class) it has loaded, not "VST".
 static std::string insertLabel(const Node* n) {
+    if (n->nodeType == NodeType::MpeRack && !n->name.empty()) return n->name + " (MPE)";
     if (n->nodeType == NodeType::Vst && !n->name.empty()) return n->name;
     return typeName(n);
 }

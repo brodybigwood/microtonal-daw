@@ -11,8 +11,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 
-# Enable AddressSanitizer (native builds only)
-if(NOT EMSCRIPTEN)
+# Enable AddressSanitizer (native builds only). Windows VST3s wrapped with
+# yabridge cannot spawn their Wine host correctly under ASan's allocator
+# interceptors, so a non-ASan build is kept for plugin testing.
+option(DAW_ASAN "Build with AddressSanitizer" ON)
+if(NOT EMSCRIPTEN AND DAW_ASAN)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fno-omit-frame-pointer")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
 endif()

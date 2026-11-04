@@ -9,6 +9,7 @@
 #include "AudioManager.h"
 #include "nodes/mixer/mixer.h"
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -37,17 +38,79 @@ static std::string openFileDialog() {
 // VstNode constructor
 // ============================================================================
 
-VstNode::VstNode(uint16_t id, NodeManager* nm)
-    : Node(id, nm, NodeType::Vst) {
+// GUI-copy rack nodes, ticked once per frame to mirror master state.
+static std::vector<VstNode*> g_rackNodes;
 
-    name = "VST Plugin";
+static uint64_t nowMsSteady() {
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count());
+}
+
+VstNode::VstNode(uint16_t id, NodeManager* nm, bool mpeRack)
+    : Node(id, nm, mpeRack ? NodeType::MpeRack : NodeType::Vst), mpeRack_(mpeRack) {
+
+    name = mpeRack ? "MPE Rack" : "VST Plugin";
     params.push_back(&bypass);
 
     // Create default stereo I/O — will be rebuilt when a plugin is loaded.
     rebuildConnections();
+    if (mpeRack_) g_rackNodes.push_back(this);
+}
+
+void VstNode::markRackDirty() {
+    rackDirty_ = true;
+    rackLastEditMs_ = nowMsSteady();
+}
+
+void VstNode::tickAllRacks() {
+    for (auto* n : g_rackNodes) {
+        if (!n || !n->ne) continue; // GUI copy only
+        if (!n->rackDirty_ || n->restoringState || !n->plugin || !n->plugin->isValid()) continue;
+        auto* frame = n->plugin->getHostFrame();
+        if (frame && frame->activeGestureCount > 0) continue;
+        const uint64_t now = nowMsSteady();
+        // Debounce: wait until edits settle, so a drag doesn't push 15 state
+        // blobs per frame, then at most every 50 ms.
+        if (now - n->rackLastEditMs_ < 150) continue;
+        if (now - n->rackLastSyncMs_ < 50) continue;
+        n->rackLastSyncMs_ = now;
+        n->syncRackState();
+    }
+}
+
+void VstNode::syncRackState() {
+    rackDirty_ = false;
+    if (!mpeRack_ || !plugin || !plugin->isValid() || rackShadows_.empty()) return;
+    const auto comp = plugin->getComponentState();
+    const auto ctrl = plugin->getControllerState();
+    if (comp.empty() && ctrl.empty()) return;
+    for (auto& shadow : rackShadows_) {
+        if (!shadow || !shadow->isValid()) continue;
+        shadow->beginStateRestore();
+        if (!comp.empty()) shadow->setComponentState(comp);
+        if (!ctrl.empty()) shadow->setControllerState(ctrl);
+        shadow->endStateRestore();
+    }
+}
+
+void VstNode::createRackShadows() {
+    rackShadows_.clear();
+    if (!mpeRack_ || !plugin || !plugin->isValid()) return;
+    const std::vector<int> path = nm ? nm->managerPath : std::vector<int>{};
+    for (int i = 1; i <= 15; ++i) {
+        auto sp = VstPluginCache::instance().getOrCreatePlugin(
+            static_cast<int>(id), path, loadedPath, classIndex_, i);
+        if (sp && sp->isValid()) rackShadows_.push_back(sp);
+    }
+    if (std::getenv("DAW_VST_DEBUG")) {
+        std::cout << "[vst-rack] node=" << id << " " << rackShadows_.size()
+                  << " shadow instances of " << loadedPath << std::endl;
+    }
+    markRackDirty();
 }
 
 VstNode::~VstNode() {
+    g_rackNodes.erase(std::remove(g_rackNodes.begin(), g_rackNodes.end(), this), g_rackNodes.end());
     if (plugin) {
         // The shared plugin (and its host frame) can outlive this copy — drop
         // the callbacks bound to `this` before they can fire again.
@@ -56,6 +119,7 @@ VstNode::~VstNode() {
             frame->onPerformEdit = nullptr;
             frame->onStatePoll = nullptr;
             frame->onStateReset = nullptr;
+            frame->onGestureEnd = nullptr;
         }
         plugin->hideEditor();
     }
@@ -163,6 +227,8 @@ void VstNode::invalidateOwnerChain() {
 void VstNode::setup() {
     if (plugin && plugin->isValid()) {
         plugin->setup(sampleRate, bufferSize);
+        for (auto& shadow : rackShadows_)
+            if (shadow) shadow->setup(sampleRate, bufferSize);
         applyPendingVstState();
         captureStateBaseline();
         // Latency is often only known after setupProcessing/setActive. If it
@@ -188,6 +254,7 @@ void VstNode::applyPendingVstState() {
     pendingCompState_.clear();
     pendingCtrlState_.clear();
     plugin->refreshParameterShadow();
+    if (mpeRack_) markRackDirty();
     vstStateBaselineDirty = true;
     requestStatePollSoon();
 }
@@ -236,7 +303,12 @@ void VstNode::process() {
         bool bypassed = bypass.value > 0.5f;
         if (bypassed && !wasBypassed_ && !noteChannels.empty()) {
             // Deliver releases once before bypass stops normal event processing.
+            std::array<HostEventList, 16> rackReleases;
             HostEventList releases;
+            auto releaseList = [&](int ch) -> HostEventList& {
+                if (!mpeRack_) return releases;
+                return rackReleases[static_cast<size_t>(std::clamp(ch, 0, 15))];
+            };
             for (const auto& [noteId, channel] : noteChannels) {
                 Steinberg::Vst::Event off{};
                 off.busIndex = 0;
@@ -248,7 +320,7 @@ void VstNode::process() {
                 off.noteOff.tuning = 0;
                 off.noteOff.velocity = 0.0f;
                 off.noteOff.noteId = noteId;
-                releases.addEvent(off);
+                releaseList(channel).addEvent(off);
             }
             localPlugin->setBypassed(false);
             double beat = project ? project->activeBeatPosition() : 0.0;
@@ -257,48 +329,86 @@ void VstNode::process() {
                 ? static_cast<double>(project->activeTempoCurve().evaluateAtX(static_cast<float>(beat)))
                 : 120.0;
             double sr = AudioManager::instance()->sampleRate;
-            localPlugin->processAudio(bufferSize, &releases, bpm, beat, seconds * sr,
-                                      project ? project->dspIsPlaying : true);
+            if (mpeRack_) {
+                for (size_t i = 0; i < rackShadows_.size() && i < 15; ++i) {
+                    auto& sh = rackShadows_[i];
+                    if (!sh || !sh->isValid()) continue;
+                    HostEventList& evs = rackReleases[i + 1];
+                    sh->processAudio(bufferSize, evs.events.empty() ? nullptr : &evs,
+                                     bpm, beat, seconds * sr,
+                                     project ? project->dspIsPlaying : true);
+                }
+            } else {
+                localPlugin->processAudio(bufferSize, &releases, bpm, beat, seconds * sr,
+                                          project ? project->dspIsPlaying : true);
+            }
             noteChannels.clear();
             evictedNoteChannels.clear();
         }
         wasBypassed_ = bypassed;
         localPlugin->setBypassed(bypassed);
         if (!bypassed) {
-            // Deliver mapped VST parameter values from input connections.
-            for (auto& [paramID, conn] : mappedVstParams) {
-                if (conn && conn->is_connected && conn->buffer) {
-                    auto v = static_cast<float>(std::clamp(conn->buffer[0] * 0.5f + 0.5f, 0.0f, 1.0f));
-                    // Same path as host writes: controller + processor + shadow.
-                    localPlugin->setParameterValue(paramID, v);
+            auto applyMapped = [&](VstPlugin* p) {
+                for (auto& [paramID, conn] : mappedVstParams) {
+                    if (conn && conn->is_connected && conn->buffer) {
+                        auto v = static_cast<float>(std::clamp(conn->buffer[0] * 0.5f + 0.5f, 0.0f, 1.0f));
+                        p->setParameterValue(paramID, v);
+                    }
                 }
-            }
-
-            // Route audio input buses directly (both sides already planar)
-            for (size_t bi = 0; bi < audioInConns.size(); ++bi) {
-                auto* c = audioInConns[bi];
-                if (bi < localPlugin->inputBusData.size() &&
-                    (!c || !c->is_connected || !c->buffer)) {
-                    // Unfed bus (sidechain, or a bus the chain doesn't wire): no
-                    // stale samples from an earlier block.
-                    std::fill(localPlugin->inputBusData[bi].begin(),
-                              localPlugin->inputBusData[bi].end(), 0.0f);
-                    continue;
+            };
+            auto copyInputs = [&](VstPlugin* p) {
+                for (size_t bi = 0; bi < audioInConns.size(); ++bi) {
+                    auto* c = audioInConns[bi];
+                    if (bi < p->inputBusData.size() &&
+                        (!c || !c->is_connected || !c->buffer)) {
+                        // Unfed bus: no stale samples from an earlier block.
+                        std::fill(p->inputBusData[bi].begin(), p->inputBusData[bi].end(), 0.0f);
+                        continue;
+                    }
+                    if (!c || !c->is_connected || !c->buffer) continue;
+                    if (bi >= p->inputBusData.size()) continue;
+                    auto& data = p->inputBusData[bi];
+                    const size_t busCh = data.size() / static_cast<size_t>(bufferSize);
+                    const size_t copyCh = std::min(static_cast<size_t>(c->numChannels), busCh);
+                    std::memcpy(data.data(), c->buffer,
+                                static_cast<size_t>(bufferSize) * copyCh * sizeof(float));
                 }
-                if (!c || !c->is_connected || !c->buffer) continue;
-                if (bi >= localPlugin->inputBusData.size()) continue;
-                auto& data = localPlugin->inputBusData[bi];
-                // The chain may hand us a wider signal than this bus supports; copy only
-                // the channels the bus data actually holds.
-                const size_t busCh = data.size() / static_cast<size_t>(bufferSize);
-                const size_t copyCh = std::min(static_cast<size_t>(c->numChannels), busCh);
-                std::memcpy(data.data(), c->buffer,
-                            static_cast<size_t>(bufferSize) * copyCh * sizeof(float));
-            }
+            };
 
-            // Convert DAW Events to VST3 EventList with MPE
+            applyMapped(localPlugin.get());
+            copyInputs(localPlugin.get());
+
+            // Convert DAW Events to VST3 EventList with MPE. In rack mode each
+            // member channel gets its own list fed to its own instance.
+            std::array<HostEventList, 16> channelEvents;
             HostEventList vstEvents;
-            sendMpePitchBendRange(&vstEvents);
+            auto eventList = [&](int ch) -> HostEventList& {
+                if (!mpeRack_) return vstEvents;
+                return channelEvents[static_cast<size_t>(std::clamp(ch, 0, 15))];
+            };
+            if (mpeRack_) {
+                if (!mpeRangeSet) {
+                    mpeRangeSet = true;
+                    auto rpn = [](HostEventList& out, int ch, int cc, int val) {
+                        Steinberg::Vst::Event ev{};
+                        ev.busIndex = 0;
+                        ev.type = Steinberg::Vst::Event::kLegacyMIDICCOutEvent;
+                        ev.midiCCOut.controlNumber = static_cast<Steinberg::uint8>(cc);
+                        ev.midiCCOut.channel = static_cast<Steinberg::int8>(ch);
+                        ev.midiCCOut.value = static_cast<Steinberg::int8>(val);
+                        ev.midiCCOut.value2 = 0;
+                        out.addEvent(ev);
+                    };
+                    for (int ch = 1; ch <= 15; ++ch) {
+                        HostEventList& out = channelEvents[static_cast<size_t>(ch)];
+                        rpn(out, ch, 101, 0); rpn(out, ch, 100, 0);
+                        rpn(out, ch, 6, 48);  rpn(out, ch, 38, 0);
+                        rpn(out, ch, 101, 127); rpn(out, ch, 100, 127);
+                    }
+                }
+            } else {
+                sendMpePitchBendRange(&vstEvents);
+            }
             const bool midiConnected = midiIn && midiIn->is_connected && midiIn->events;
             if (!midiConnected && !noteChannels.empty()) {
                 // The upstream event connection disappeared while voices were
@@ -314,7 +424,7 @@ void VstNode::process() {
                     off.noteOff.tuning = 0;
                     off.noteOff.velocity = 0.0f;
                     off.noteOff.noteId = noteId;
-                    vstEvents.addEvent(off);
+                    eventList(channel).addEvent(off);
                 }
                 noteChannels.clear();
                 evictedNoteChannels.clear();
@@ -325,7 +435,7 @@ void VstNode::process() {
                     float frac = ev.num - base;
 
                     if (ev.type == noteOn) {
-                        int mpeCh = allocMpeChannel(ev.id, &vstEvents);
+                        int mpeCh = allocMpeChannel(ev.id, &vstEvents, mpeRack_ ? &channelEvents : nullptr);
                         if (mpeCh > 0) {
                             // MPE standard pitch-bend range is ±48 semitones. Bend by
                             // `frac` semitones in that range (the RPN below tells the
@@ -344,7 +454,7 @@ void VstNode::process() {
                             pb.midiCCOut.channel = static_cast<Steinberg::int8>(mpeCh);
                             pb.midiCCOut.value = static_cast<Steinberg::int8>(pb14 & 0x7F);
                             pb.midiCCOut.value2 = static_cast<Steinberg::int8>((pb14 >> 7) & 0x7F);
-                            vstEvents.addEvent(pb);
+                            eventList(mpeCh).addEvent(pb);
                         }
 
                         Steinberg::Vst::Event e{};
@@ -357,7 +467,7 @@ void VstNode::process() {
                         e.noteOn.tuning = 0;
                         e.noteOn.velocity = 1.0f;
                         e.noteOn.noteId = ev.id;
-                        vstEvents.addEvent(e);
+                        eventList(mpeCh).addEvent(e);
                     } else if (ev.type == noteOff) {
                         int mpeCh = -1;
                         auto it = noteChannels.find(ev.id);
@@ -383,7 +493,7 @@ void VstNode::process() {
                         e.noteOff.tuning = 0;
                         e.noteOff.velocity = 0.0f;
                         e.noteOff.noteId = ev.id;
-                        vstEvents.addEvent(e);
+                        eventList(mpeCh).addEvent(e);
                     }
                 }
             }
@@ -403,40 +513,104 @@ void VstNode::process() {
                 }
             }
             bool playing = project ? project->dspIsPlaying : true;
-            const auto procStart = std::chrono::steady_clock::now();
-            localPlugin->processAudio(bufferSize, &vstEvents, bpm, beatPos, samplePos, playing);
-            const auto procEnd = std::chrono::steady_clock::now();
-            const long long procUs = std::chrono::duration_cast<std::chrono::microseconds>(
-                procEnd - procStart).count();
-            const int lat = localPlugin->latencySamples();
-            if (lat != lastReportedLatency_) {
-                // Plugins may only report latency after their first block.
-                lastReportedLatency_ = lat;
-                if (nm) nm->markTopologyDirty();
-            }
-            if (std::getenv("DAW_VST_DEBUG")) {
-                const uint64_t nowMs = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
-                    procEnd.time_since_epoch()).count());
-                if (nowMs - lastProcessLogMs_ >= 1000) {
+            if (!mpeRack_) {
+                const auto procStart = std::chrono::steady_clock::now();
+                localPlugin->processAudio(bufferSize, &vstEvents, bpm, beatPos, samplePos, playing);
+                const auto procEnd = std::chrono::steady_clock::now();
+                const long long procUs = std::chrono::duration_cast<std::chrono::microseconds>(
+                    procEnd - procStart).count();
+                const int lat = localPlugin->latencySamples();
+                if (lat != lastReportedLatency_) {
+                    lastReportedLatency_ = lat;
+                    if (nm) nm->markTopologyDirty();
+                }
+                if (std::getenv("DAW_VST_DEBUG")) {
+                    const uint64_t nowMs = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                        procEnd.time_since_epoch()).count());
+                    if (nowMs - lastProcessLogMs_ >= 1000) {
+                        lastProcessLogMs_ = nowMs;
+                        const long long deadlineUs = static_cast<long long>(bufferSize) * 1000000LL /
+                                                     (sampleRate > 0 ? sampleRate : 48000);
+                        if (procUs > deadlineUs / 2) {
+                            std::cout << "[vst-time] node=" << id << " " << localPlugin->getName()
+                                      << " process=" << procUs << "us deadline=" << deadlineUs
+                                      << "us ch=" << localPlugin->outputBusData.size() << std::endl;
+                        }
+                    }
+                }
+
+                // Route audio output buses directly (both sides planar)
+                for (size_t bi = 0; bi < audioOutConns.size(); ++bi) {
+                    auto* c = audioOutConns[bi];
+                    if (!c || !c->buffer) continue;
+                    if (bi >= localPlugin->outputBusData.size()) continue;
+                    auto& data = localPlugin->outputBusData[bi];
+                    size_t ch = std::min(static_cast<size_t>(c->numChannels), data.size() / static_cast<size_t>(bufferSize));
+                    std::memcpy(c->buffer, data.data(), static_cast<size_t>(bufferSize) * ch * sizeof(float));
+                }
+            } else {
+                // MPE rack: one instance per member channel, summed into the
+                // node's outputs. Instances with no notes (and no recent tail)
+                // are skipped so sixteen copies don't cost sixteen times the CPU.
+                const uint64_t nowMs = SDL_GetTicks();
+                long long worstUs = 0;
+                for (size_t i = 0; i < rackShadows_.size() && i < 15; ++i) {
+                    auto& sh = rackShadows_[i];
+                    if (!sh || !sh->isValid()) continue;
+                    const int ch = static_cast<int>(i) + 1;
+                    HostEventList& evs = channelEvents[static_cast<size_t>(ch)];
+                    bool channelHasNotes = false;
+                    for (auto& [noteId, noteCh] : noteChannels)
+                        if (noteCh == ch) { channelHasNotes = true; break; }
+                    if (channelHasNotes || !evs.events.empty())
+                        rackChannelLastMs_[static_cast<size_t>(ch)] = nowMs;
+                    const bool live = channelHasNotes || !evs.events.empty() ||
+                                      (nowMs - rackChannelLastMs_[static_cast<size_t>(ch)] < 5000);
+                    if (!live) continue;
+
+                    applyMapped(sh.get());
+                    copyInputs(sh.get());
+                    const auto t0 = std::chrono::steady_clock::now();
+                    sh->processAudio(bufferSize, evs.events.empty() ? nullptr : &evs,
+                                     bpm, beatPos, samplePos, playing);
+                    worstUs = std::max<long long>(worstUs, std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::steady_clock::now() - t0).count());
+
+                    for (size_t bi = 0; bi < audioOutConns.size(); ++bi) {
+                        auto* c = audioOutConns[bi];
+                        if (!c || !c->buffer) continue;
+                        if (bi >= sh->outputBusData.size()) continue;
+                        auto& data = sh->outputBusData[bi];
+                        const size_t chn = std::min(static_cast<size_t>(c->numChannels),
+                                                    data.size() / static_cast<size_t>(bufferSize));
+                        const size_t n = static_cast<size_t>(bufferSize) * chn;
+                        for (size_t k = 0; k < n; ++k) c->buffer[k] += data[k];
+                    }
+                }
+                const int lat = localPlugin->latencySamples();
+                if (lat != lastReportedLatency_) {
+                    lastReportedLatency_ = lat;
+                    if (nm) nm->markTopologyDirty();
+                }
+                if (std::getenv("DAW_VST_DEBUG") && nowMs - lastProcessLogMs_ >= 1000) {
                     lastProcessLogMs_ = nowMs;
                     const long long deadlineUs = static_cast<long long>(bufferSize) * 1000000LL /
                                                  (sampleRate > 0 ? sampleRate : 48000);
-                    if (procUs > deadlineUs / 2) {
-                        std::cout << "[vst-time] node=" << id << " " << localPlugin->getName()
-                                  << " process=" << procUs << "us deadline=" << deadlineUs
-                                  << "us ch=" << localPlugin->outputBusData.size() << std::endl;
+                    float outPeak = 0.0f;
+                    for (auto* c : audioOutConns)
+                        if (c && c->buffer)
+                            for (int i = 0; i < bufferSize * std::max(1, c->numChannels); ++i)
+                                outPeak = std::max(outPeak, std::fabs(c->buffer[i]));
+                    int eventCount = 0;
+                    for (int ch = 1; ch <= 15; ++ch)
+                        eventCount += static_cast<int>(channelEvents[static_cast<size_t>(ch)].events.size());
+                    if (worstUs > deadlineUs / 2 || outPeak > 0.0f || eventCount > 0) {
+                        std::cout << "[vst-rack] node=" << id << " playing=" << playing
+                                  << " notes=" << noteChannels.size() << " events=" << eventCount
+                                  << " outPeak=" << outPeak << " worst=" << worstUs
+                                  << "us deadline=" << deadlineUs << "us" << std::endl;
                     }
                 }
-            }
-
-            // Route audio output buses directly (both sides planar)
-            for (size_t bi = 0; bi < audioOutConns.size(); ++bi) {
-                auto* c = audioOutConns[bi];
-                if (!c || !c->buffer) continue;
-                if (bi >= localPlugin->outputBusData.size()) continue;
-                auto& data = localPlugin->outputBusData[bi];
-                size_t ch = std::min(static_cast<size_t>(c->numChannels), data.size() / static_cast<size_t>(bufferSize));
-                std::memcpy(c->buffer, data.data(), static_cast<size_t>(bufferSize) * ch * sizeof(float));
             }
         } else {
             // Bypass: passthrough per bus
@@ -500,9 +674,15 @@ void VstNode::renderContent(SDL_Renderer* renderer) {
         vy[0] = 0; vy[1] = 0; vy[2] = NODE_H; vy[3] = NODE_H;
     }
 
-    SDL_SetRenderDrawColor(renderer, 24, 24, 28, 255);
+    SDL_SetRenderDrawColor(renderer, mpeRack_ ? 20 : 24, mpeRack_ ? 34 : 24, mpeRack_ ? 28 : 28, 255);
     SDL_FRect full{0, 0, NODE_W, NODE_H};
     SDL_RenderFillRect(renderer, &full);
+    if (mpeRack_) {
+        // Accent strip + badge so an MPE rack is never mistaken for a plain VST.
+        SDL_SetRenderDrawColor(renderer, 70, 190, 120, 255);
+        SDL_FRect strip{0, 0, NODE_W, 3};
+        SDL_RenderFillRect(renderer, &strip);
+    }
 
     if (!fonts.mainFont) return;
 
@@ -549,6 +729,11 @@ void VstNode::renderContent(SDL_Renderer* renderer) {
         SDL_RenderRect(renderer, &editorBtnRect_);
         const char* label = plugin->isEditorOpen() ? "Hide Editor" : "Show Editor";
         renderText(label, editorBtnRect_.x + 6, editorBtnRect_.y + 4, white);
+    }
+
+    if (mpeRack_) {
+        const std::string tag = "MPE RACK x" + std::to_string(rackShadows_.size() + 1);
+        renderText(tag, 8, 66, SDL_Color{120, 225, 150, 255});
     }
 
     // Editor run-loop ticking happens globally once per frame
@@ -677,6 +862,7 @@ void VstNode::loadPlugin(const std::string& path, bool createUndo, size_t classI
             wirePluginCallbacks();
             plugin->refreshParameterShadow();
             rebuildConnections();
+            if (mpeRack_) createRackShadows();
             invalidateOwnerChain();
             nm->markTopologyDirty(); // force setup() via update() on next audio cycle
             Settings::instance().addVstToHistory(path);
@@ -684,6 +870,7 @@ void VstNode::loadPlugin(const std::string& path, bool createUndo, size_t classI
         } else {
             name = "VST Plugin";
             plugin = nullptr;
+            rackShadows_.clear();
             rebuildConnections();
             invalidateOwnerChain();
             nm->markTopologyDirty();
@@ -718,6 +905,7 @@ void VstNode::loadPlugin(const std::string& path, bool createUndo, size_t classI
             wirePluginCallbacks();
             plugin->refreshParameterShadow();
             rebuildConnections();
+            if (mpeRack_) createRackShadows();
             invalidateOwnerChain();
             // rebuildConnections reallocated this node's output buffers. Downstream
             // connections (including a mixer's chain inflow) still point at the old
@@ -730,6 +918,7 @@ void VstNode::loadPlugin(const std::string& path, bool createUndo, size_t classI
         } else {
             name = "VST Plugin";
             plugin = nullptr;
+            rackShadows_.clear();
             rebuildConnections();
             invalidateOwnerChain();
             nm->markTopologyDirty();
@@ -767,6 +956,7 @@ void VstNode::unloadPlugin() {
         plugin = nullptr;
     }
     VstPluginCache::instance().removePlugin(static_cast<int>(id), nm ? nm->managerPath : std::vector<int>{});
+    rackShadows_.clear();
     loadedPath.clear();
     classIndex_ = 0;
     className_.clear();
@@ -777,6 +967,7 @@ void VstNode::unloadPlugin() {
 void VstNode::onPluginParameterChange(int paramID, float oldValue, float newValue, uint64_t gestureID) {
     if (!project || !project->um || !plugin) return;
     if (restoringState) return;
+    if (mpeRack_) markRackDirty();
     // Suppress undo when a mapped connection owns the parameter.
     auto it = mappedVstParams.find(paramID);
     if (it != mappedVstParams.end() && it->second && it->second->is_connected)
@@ -835,7 +1026,11 @@ void VstNode::wirePluginCallbacks() {
     frame->onStatePoll = [this](bool force) { pollVstStateForUndo(force); };
     frame->onStateReset = [this]() {
         stateResetPending_ = true;
+        if (mpeRack_) markRackDirty();
         pollVstStateForUndo(true);
+    };
+    frame->onGestureEnd = [this]() {
+        if (mpeRack_) markRackDirty();
     };
     plugin->refreshParameterShadow();
     frame->activeGestureCount = 0;
@@ -1002,12 +1197,16 @@ void VstNode::extraDeSerialize(const json& j) {
             if (j.contains("ctrlStateFile") || j.contains("ctrlState"))
                 pendingCtrlState_ = readBlob("ctrlStateFile", "ctrlState");
             rebuildConnections();
+            if (mpeRack_) createRackShadows();
             invalidateOwnerChain();
             int sr = sampleRate > 0 ? sampleRate : 48000;
             int bs = bufferSize > 0 ? bufferSize : 1024;
             plugin->setup(sr, bs);
+            for (auto& shadow : rackShadows_)
+                if (shadow) shadow->setup(sr, bs);
             applyPendingVstState();
             plugin->refreshParameterShadow();
+            if (mpeRack_) markRackDirty();
             captureStateBaseline();
         } else {
             plugin = nullptr;
@@ -1048,7 +1247,8 @@ void VstNode::extraDeSerialize(const json& j) {
 // MPE channel allocator
 // ============================================================================
 
-int VstNode::allocMpeChannel(int noteId, void* eventList) {
+int VstNode::allocMpeChannel(int noteId, HostEventList* plain,
+                             std::array<HostEventList, 16>* rack) {
     auto it = noteChannels.find(noteId);
     if (it != noteChannels.end()) return it->second;
     bool used[16] = {};
@@ -1070,7 +1270,7 @@ int VstNode::allocMpeChannel(int noteId, void* eventList) {
             evictedNoteChannels[evictedId] = ch;
 
             // Send note-off for the evicted note so it doesn't ring forever
-            auto& out = *static_cast<HostEventList*>(eventList);
+            HostEventList& out = rack ? (*rack)[static_cast<size_t>(ch)] : *plain;
             Steinberg::Vst::Event off{};
             off.busIndex = 0;
             off.sampleOffset = 0;

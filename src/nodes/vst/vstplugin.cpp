@@ -359,6 +359,7 @@ Steinberg::tresult PLUGIN_API EditorHostFrame::endEdit(Steinberg::Vst::ParamID i
     // isn't absorbed into the post-drag baseline.
     statePollRequested = true;
     paramGestures.erase(id);
+    if (activeGestureCount == 0 && onGestureEnd) onGestureEnd();
     return Steinberg::kResultTrue;
 }
 
@@ -1182,8 +1183,9 @@ bool VstPlugin::tickEditor() {
 
 // Per-node instance cache — a single VstPlugin shared across GUI + audio copies.
 std::shared_ptr<VstPlugin> VstPluginCache::getOrCreatePlugin(int nodeID, const std::vector<int>& managerPath,
-                                                            const std::string& path, size_t classIndex) {
-    CacheKey key{nodeID, managerPath};
+                                                            const std::string& path, size_t classIndex,
+                                                            int instance) {
+    CacheKey key{nodeID, managerPath, instance};
     auto it = instances.find(key);
     if (it != instances.end()) {
         if (it->second->getPluginPath() == path && it->second->getClassIndex() == classIndex)
@@ -1198,7 +1200,12 @@ std::shared_ptr<VstPlugin> VstPluginCache::getOrCreatePlugin(int nodeID, const s
 }
 
 void VstPluginCache::removePlugin(int nodeID, const std::vector<int>& managerPath) {
-    instances.erase({nodeID, managerPath});
+    for (auto it = instances.begin(); it != instances.end();) {
+        if (std::get<0>(it->first) == nodeID && std::get<1>(it->first) == managerPath)
+            it = instances.erase(it);
+        else
+            ++it;
+    }
 }
 
 // Static editor tick — call from main event loop. Plugins can be destroyed on

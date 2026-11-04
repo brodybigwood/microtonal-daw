@@ -212,6 +212,58 @@ void Project::startAsyncLoad(const std::string& path) {
     });
 }
 
+void Project::newProject() {
+    waitForLoadThread();
+
+    // Stop the audio graph before its copy is replaced.
+    if (um) {
+        auto stopped = std::make_shared<std::atomic<bool>>(false);
+        um->enqueueAudioSync([this, stopped]() {
+            dspLoading = true;
+            dspIsPlaying = false;
+            stopped->store(true);
+        });
+        for (int i = 0; i < 250 && !stopped->load(); ++i) SDL_Delay(2);
+    }
+
+    if (processor) {
+        if (auto* wm = processor->getWindowManager()) {
+            while (!wm->windows().empty())
+                wm->removeWindow(wm->windows().back().get());
+        }
+        processor->reset();
+    }
+
+    delete um;
+    um = new UndoManager(this);
+
+    filepath.clear();
+    tempoCurve.valueRangeMin = 0.001f;
+    tempoCurve.valueRangeMax = 999.f;
+    tempoCurve.points.clear();
+    tempoCurve.addPoint({}, 120.f, CurveShape::Single);
+    beatPosition = 0.0;
+    timeSeconds = 0.0;
+    effectiveBeatPosition = 0.0;
+    effectiveTime = 0.0;
+    playHeadBeat = 0.0;
+    playHeadStart = 0.0;
+    setRecording(false);
+    loading = false;
+    dirty.store(false);
+    loadProgressValue.store(1.0f);
+    loadStatusText.store("Ready");
+
+    const auto points = tempoCurve.points;
+    um->enqueueAudioSync([this, points]() {
+        dspTempoCurve.valueRangeMin = 0.001f;
+        dspTempoCurve.valueRangeMax = 999.f;
+        dspTempoCurve.points = points;
+        dspLoading = false;
+        dspIsPlaying = false;
+    });
+}
+
 void Project::waitForLoadThread() {
     std::lock_guard<std::mutex> lock(loadThreadMutex);
     if (loadThread.joinable()) loadThread.join();

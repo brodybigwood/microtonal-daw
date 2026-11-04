@@ -180,15 +180,18 @@ public:
     bool isLoaded(const std::string& path) const;
 
     // Per-node VstPlugin instance cache (one shared across GUI+audio copies).
-    // classIndex picks the class inside a multi-class bundle.
+    // classIndex picks the class inside a multi-class bundle; instance
+    // distinguishes the copies of an MPE rack node.
     std::shared_ptr<VstPlugin> getOrCreatePlugin(int nodeID, const std::vector<int>& managerPath,
-                                                 const std::string& path, size_t classIndex = 0);
+                                                 const std::string& path, size_t classIndex = 0,
+                                                 int instance = 0);
+    /** Remove every instance belonging to this node. */
     void removePlugin(int nodeID, const std::vector<int>& managerPath);
 
 private:
     std::unordered_map<std::string, std::unique_ptr<PlugLib>> loaded;
 
-    using CacheKey = std::pair<int, std::vector<int>>;
+    using CacheKey = std::tuple<int, std::vector<int>, int>;
     std::map<CacheKey, std::shared_ptr<VstPlugin>> instances;
 };
 
@@ -233,6 +236,8 @@ public:
         between beginEdit and endEdit, and unique per edit when the plugin skips
         beginEdit — matches Ardour's BeginGesture/ValueChange/EndGesture. */
     std::function<void(Steinberg::Vst::ParamID, Steinberg::Vst::ParamValue, uint64_t)> onPerformEdit;
+    /** beginEdit..endEdit gesture finished (MPE rack: safe point to mirror state). */
+    std::function<void()> onGestureEnd;
 
     /** State-diff undo driver, invoked from tickEditor on the GUI thread only.
         `force` skips the poll interval (window closing, restartComponent). */

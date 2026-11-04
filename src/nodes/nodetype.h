@@ -18,5 +18,6 @@ enum NodeType {
     Bus,
     Mixer,
     Duplicator,
+    MpeRack,
     Count // for iteration
 };

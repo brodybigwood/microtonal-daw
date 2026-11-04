@@ -666,6 +666,18 @@ json dispatch(const json& req) {
         return ok(id, json{{"loading", path}});
     };
 
+    if (op == "new") {
+        if (p->asyncLoadRunning())
+            return err(id, "busy", "a project load is already running");
+        bool force = req.value("force", false);
+        if (req.contains("args") && req["args"].is_object())
+            force = req["args"].value("force", force);
+        if (p->dirty.load() && !force)
+            return err(id, "dirty", "project has unsaved changes; save first or pass force=true");
+        p->newProject();
+        return ok(id, json{{"new", true}});
+    }
+
     if (op == "load") {
         const std::string path = req.value("path", "");
         if (path.empty()) return err(id, "bad_request", "load needs a 'path'");

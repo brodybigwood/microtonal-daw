@@ -65,6 +65,8 @@ class Project : public Window {
         int allocateDspVoiceId();
 
         void load(std::string path = "");
+        /** Reset to an empty project (no filepath, fresh graphs and history). */
+        void newProject();
 
         // Background project load with the animated loading screen. The GUI
         // thread renders while a worker rebuilds the graphs.

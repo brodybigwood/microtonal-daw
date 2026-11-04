@@ -278,11 +278,32 @@ bool AudioManager::startRtAudio() {
     options.flags |= RTAUDIO_JACK_DONT_CONNECT;
     std::cout << "[Audio:RtAudio] JACK outCh=" << outputChannels << " inCh=" << inputChannels << std::endl;
 
-    // Adopt JACK server rate before opening stream
+    // The DAW's buffer setting drives the JACK period: ask the server for it
+    // before opening the stream, then use whatever it actually granted. The
+    // callback receives the server's frame count, so the graph must be sized
+    // from that and never from an unconfirmed settings value.
     {
         jack_client_t* jc = jack_client_open("DAW-probe", JackNoStartServer, nullptr);
         if (jc) {
+            const unsigned int wanted = bufferSize;
+            jack_set_buffer_size(jc, wanted);
+            // PipeWire's JACK server ignores jack_set_buffer_size for the
+            // graph quantum; its metadata is the only way to set it. When
+            // jackd is the server this is a harmless no-op.
+            if (std::system("command -v pw-metadata >/dev/null 2>&1") == 0) {
+                const std::string cmd =
+                    "pw-metadata -n settings 0 clock.force-quantum " +
+                    std::to_string(wanted) + " >/dev/null 2>&1";
+                std::system(cmd.c_str());
+                for (int i = 0; i < 30; ++i) {
+                    if (jack_get_buffer_size(jc) == wanted) break;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                }
+            }
             sampleRate = jack_get_sample_rate(jc);
+            bufferSize = jack_get_buffer_size(jc);
+            std::cout << "[Audio:RtAudio] JACK server sr=" << sampleRate
+                      << " bs=" << bufferSize << " (requested " << wanted << ")" << std::endl;
             jack_client_close(jc);
         }
     }
@@ -338,28 +359,61 @@ streamReady:
     latency = rtaudio->getStreamLatency();
     std::cout << "[Audio:RtAudio] stream started, latency=" << latency << std::endl;
 
-    // Auto-connect all DAW outputs to system playback ports
+    // Auto-connect the first DAW channels to the hardware device's ports.
+    // Only *physical* ports are candidates: connecting to every system input
+    // also wired DAW outputs back into its own inputs (and HDMI), creating
+    // feedback loops and inflated graph latency. An interface whose name
+    // matches the one the user picked in settings is preferred.
     if (rtaudio->getCurrentApi() == RtAudio::UNIX_JACK) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         jack_client_t* jc = jack_client_open("DAW-autowire", JackNoStartServer, nullptr);
         if (jc) {
-            // DAW outputs -> system playback
-            const char** sysPlay = jack_get_ports(jc, nullptr, JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput);
-            const char** dawOut = jack_get_ports(jc, "DAW", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput);
-            if (sysPlay && dawOut)
-                for (int i = 0; sysPlay[i] && dawOut[i]; i++)
-                    jack_connect(jc, dawOut[i], sysPlay[i]);
-            if (sysPlay) jack_free(sysPlay);
-            if (dawOut) jack_free(dawOut);
+            auto preferred = [](const char** ports) {
+                std::vector<std::string> out;
+                if (ports)
+                    for (int i = 0; ports[i]; ++i) out.emplace_back(ports[i]);
+                std::stable_sort(out.begin(), out.end(), [](const std::string& a, const std::string& b) {
+                    const bool fa = a.find("Focusrite") != std::string::npos;
+                    const bool fb = b.find("Focusrite") != std::string::npos;
+                    return fa && !fb;
+                });
+                // Only use ports of the device the first port belongs to, so
+                // the remaining channels don't spill onto HDMI/other devices.
+                if (!out.empty()) {
+                    const std::string client = out.front().substr(0, out.front().find(':'));
+                    size_t keep = 0;
+                    while (keep < out.size() &&
+                           out[keep].compare(0, client.size(), client) == 0 &&
+                           out[keep].size() > client.size() && out[keep][client.size()] == ':')
+                        ++keep;
+                    out.resize(keep);
+                }
+                return out;
+            };
 
-            // system capture -> DAW inputs
-            const char** sysCap = jack_get_ports(jc, nullptr, JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput);
-            const char** dawIn = jack_get_ports(jc, "DAW", JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput);
-            if (sysCap && dawIn)
-                for (int i = 0; sysCap[i] && dawIn[i]; i++)
-                    jack_connect(jc, sysCap[i], dawIn[i]);
-            if (sysCap) jack_free(sysCap);
-            if (dawIn) jack_free(dawIn);
+            const char** physPlay = jack_get_ports(jc, nullptr, JACK_DEFAULT_AUDIO_TYPE,
+                                                   JackPortIsPhysical | JackPortIsInput);
+            const char** dawOut = jack_get_ports(jc, "DAW", JACK_DEFAULT_AUDIO_TYPE,
+                                                 JackPortIsOutput);
+            const auto plays = preferred(physPlay);
+            if (dawOut) {
+                for (size_t i = 0; dawOut[i] && i < plays.size(); ++i)
+                    jack_connect(jc, dawOut[i], plays[i].c_str());
+                jack_free(dawOut);
+            }
+            if (physPlay) jack_free(physPlay);
+
+            const char** physCap = jack_get_ports(jc, nullptr, JACK_DEFAULT_AUDIO_TYPE,
+                                                  JackPortIsPhysical | JackPortIsOutput);
+            const char** dawIn = jack_get_ports(jc, "DAW", JACK_DEFAULT_AUDIO_TYPE,
+                                                JackPortIsInput);
+            const auto caps = preferred(physCap);
+            if (dawIn) {
+                for (size_t i = 0; dawIn[i] && i < caps.size(); ++i)
+                    jack_connect(jc, caps[i].c_str(), dawIn[i]);
+                jack_free(dawIn);
+            }
+            if (physCap) jack_free(physCap);
             jack_client_close(jc);
         }
     }
