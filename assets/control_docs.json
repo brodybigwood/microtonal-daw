@@ -199,12 +199,12 @@
       "example": "{\"op\":\"action\",\"action\":\"move_element_position\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"elementID\":0,\"positionID\":0,\"before\":{\"startOffsetPairs\":[],\"rhythmVector\":[],\"rhythmEndVector\":[[3,1]],\"trackID\":0},\"after\":{\"startOffsetPairs\":[],\"rhythmVector\":[[1,1]],\"rhythmEndVector\":[[4,1]],\"trackID\":0}}}"
     },
     "set_arranger_track_control": {
-      "summary": "Toggle or set an arranger track control after the fact. control 0 = solo, 1 = mute, 2 = record-arm, 3 = monitor. Omit value to toggle.",
+      "summary": "Toggle or set an arranger track control after the fact. control 0 = solo, 1 = mute, 2 = record-arm, 3 = monitor, 4 = stereoize mono. Omit value to toggle.",
       "params": {
         "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
         "nodeID": {"type": "int", "meaning": "Arranger node", "required": true},
         "trackID": {"type": "int", "meaning": "track id from the tracks query", "required": true},
-        "control": {"type": "int", "meaning": "0 solo, 1 mute, 2 record-arm, 3 monitor", "required": true},
+        "control": {"type": "int", "meaning": "0 solo, 1 mute, 2 record-arm, 3 monitor, 4 stereoize mono", "required": true},
         "value": {"type": "bool", "meaning": "explicit state; omit to toggle", "required": false}
       },
       "example": "{\"op\":\"action\",\"action\":\"set_arranger_track_control\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"trackID\":3,\"control\":2,\"value\":true}}"

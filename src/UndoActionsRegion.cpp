@@ -640,6 +640,7 @@ bool arrangerTrackControlValue(TrackManager* tm, uint16_t trackID, int control) 
         case 1: return tm->isMuted(trackID);
         case 2: { Track* t = tm->getTrack(trackID); return t && t->recordArmed; }
         case 3: { Track* t = tm->getTrack(trackID); return t && t->monitor; }
+        case 4: { Track* t = tm->getTrack(trackID); return t && t->stereoMono; }
         default: return false;
     }
 }
@@ -651,6 +652,7 @@ void setArrangerTrackControlValue(TrackManager* tm, uint16_t trackID, int contro
         case 1: tm->setMuteState(trackID, on); break;
         case 2: tm->setRecordArmedState(trackID, on); break;
         case 3: tm->setMonitorState(trackID, on); break;
+        case 4: tm->setStereoState(trackID, on); break;
         default: break;
     }
 }
@@ -678,6 +680,7 @@ const char* controlName(int control) {
         case 1: return "Mute Track ";
         case 2: return "Arm Track ";
         case 3: return "Monitor Track ";
+        case 4: return "Stereoize Track ";
         default: return "Track ";
     }
 }
@@ -736,7 +739,6 @@ std::vector<std::pair<int, int>> recordPairsFromJson(const json& j) {
 // log2(2^(num/den)) = num/den, so no grid snapping is needed.
 std::vector<std::pair<int, int>> recordPairsFromBeat(double t) {
     if (std::fabs(t) < 1e-9) return {};
-    if (t < 0.0) t = 0.0;
     long long den = 1000000;
     while (den > 1 && std::llround(t * static_cast<double>(den)) > std::numeric_limits<int>::max() / 2)
         den /= 10;

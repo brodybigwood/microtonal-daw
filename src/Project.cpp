@@ -32,6 +32,50 @@
 #include <atomic>
 using json = nlohmann::json;
 
+// Worker stack size: the undo tree serializes as nested JSON whose depth is the
+// history length; nlohmann's copy/dump recurse once per level.
+static constexpr size_t kWorkerStackBytes = 64u * 1024u * 1024u;
+
+BigStackThread::~BigStackThread() {
+    join();
+}
+
+void BigStackThread::join() {
+    if (!active) return;
+#ifdef __EMSCRIPTEN__
+    if (thread.joinable()) thread.join();
+#else
+    pthread_join(handle, nullptr);
+#endif
+    active = false;
+}
+
+void BigStackThread::start(std::function<void()> fn) {
+    join();
+#ifdef __EMSCRIPTEN__
+    thread = std::thread(std::move(fn));
+    active = true;
+#else
+    struct Ctx { std::function<void()> fn; };
+    auto* ctx = new Ctx{std::move(fn)};
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setstacksize(&attr, kWorkerStackBytes);
+    const int rc = pthread_create(&handle, &attr, [](void* p) -> void* {
+        std::unique_ptr<Ctx> c(static_cast<Ctx*>(p));
+        c->fn();
+        return nullptr;
+    }, ctx);
+    pthread_attr_destroy(&attr);
+    if (rc != 0) {
+        delete ctx;
+        std::cerr << "[thread] failed to start worker (pthread_create " << rc << ")" << std::endl;
+        return;
+    }
+    active = true;
+#endif
+}
+
 void Project::process(float* input, float* output, int& bufferSize, int& numChannelsIn, int& numChannelsOut, int& sampleRate) {
     if (processor) processor->process(input, output, numChannelsIn, numChannelsOut, bufferSize, sampleRate);
 };
@@ -200,14 +244,10 @@ void Project::startAsyncLoad(const std::string& path) {
     loadStatusText.store("Opening project");
     loadStartMs.store(SDL_GetTicks());
     loadInProgress.store(true);
-    loadThread = std::thread([this, path] {
+    loadThread.start([this, path] {
         // Undo deserialization resolves graphs through the thread-local manager.
         if (processor) NodeProcessor::setThreadActiveRoot(processor->guiGraph);
-        try {
-            load(path);
-        } catch (const std::exception& e) {
-            std::cerr << "[load] failed: " << e.what() << std::endl;
-        }
+        load(path);
         loadFinished.store(true);
     });
 }
@@ -266,7 +306,7 @@ void Project::newProject() {
 
 void Project::waitForLoadThread() {
     std::lock_guard<std::mutex> lock(loadThreadMutex);
-    if (loadThread.joinable()) loadThread.join();
+    loadThread.join();
 }
 
 void Project::completeAsyncLoad() {
@@ -279,7 +319,7 @@ void Project::completeAsyncLoad() {
 
 void Project::waitForSave() {
     std::lock_guard<std::mutex> lock(saveThreadMutex);
-    if (saveThread.joinable()) saveThread.join();
+    saveThread.join();
 }
 
 void Project::load(std::string path) {
@@ -446,8 +486,8 @@ void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {
         // large project is written. The thread is joinable, not detached: waitForSave()
         // joins it at shutdown, otherwise exit() kills it mid-write.
         std::lock_guard<std::mutex> threadLock(saveThreadMutex);
-        if (saveThread.joinable()) saveThread.join();
-        saveThread = std::thread([j = std::move(j), folder]() mutable {
+        saveThread.join();
+        saveThread.start([j = std::move(j), folder]() mutable {
             // Self-contained snapshot (VST states still inline) kept as a version file.
             // save.json references shared sidecars that later saves rewrite, so it is not
             // a durable copy; this one is.
@@ -761,26 +801,14 @@ int Project::allocateDspVoiceId() {
 
 void Project::togglePlaying() {
     if (!isPlaying) {
-        const double epsilon = static_cast<double>(AudioManager::instance()->latency) / AudioManager::instance()->sampleRate;
-        const double exactTime = static_cast<double>(tempoCurve.secondsForBeats(0.f, static_cast<float>(playHeadBeat)));
-        const double pulledBackTime = exactTime - epsilon;
-
-        // Binary search for the beat at the pulled-back time
-        const double maxBeatsPerSec = 999.0 / 60.0;
-        double lo = std::min(0.0, playHeadBeat);
-        if (pulledBackTime < 0.0)
-            lo = std::min(lo, pulledBackTime * maxBeatsPerSec);
-        double hi = std::max(0.0, playHeadBeat);
-        for (int iter = 0; iter < 20; iter++) {
-            double mid = (lo + hi) * 0.5;
-            float t = tempoCurve.secondsForBeats(0.f, static_cast<float>(mid));
-            if (static_cast<double>(t) < pulledBackTime) lo = mid;
-            else hi = mid;
-        }
-        beatPosition = hi;
-        timeSeconds = pulledBackTime;
+        // Start exactly at the playhead. The DSP dispatches a block at its start
+        // position before advancing (and chases notes already sounding), so notes
+        // on the start beat do not need the transport pulled back.
+        const double sec = static_cast<double>(tempoCurve.secondsForBeats(0.f, static_cast<float>(playHeadBeat)));
+        beatPosition = playHeadBeat;
+        timeSeconds = sec;
         isPlaying = true;
-        syncTransportToAudio(true, hi, pulledBackTime);
+        syncTransportToAudio(true, playHeadBeat, sec);
     } else {
         isPlaying = false;
         beatPosition = playHeadBeat;

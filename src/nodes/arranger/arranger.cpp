@@ -66,7 +66,9 @@ void ArrangerNode::syncWidthsFromInputs() {
         int inCh = 0;
         if (t->inputConnection && t->inputConnection->is_connected)
             inCh = std::max(1, t->inputConnection->numChannels);
-        const int need = std::max(clipCh, inCh);
+        int need = std::max(clipCh, inCh);
+        t->naturalChannels = need;
+        if (t->stereoMono && need < 2) need = 2;
         if (t->connection->minChannels != need) {
             t->connection->minChannels = need;
             t->connection->updateNumChannels();

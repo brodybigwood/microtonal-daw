@@ -107,6 +107,33 @@ static ProjectAction* deSerializeOne(const json& j, Project* p) {
                 j.value("name", std::string("Knob Change")));
             break;
         }
+        case InstrumentRackInsertNode: {
+            pa = new InstrumentRackInsertNodeAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("rackNodeID").get<int>(),
+                j.value("trackIndex", j.value("trackID", 0)),
+                j.value("nodeSnapshot", json::object()), j.value("removeOnDo", false),
+                j.value("name", std::string("Add Instrument")));
+            break;
+        }
+        case InstrumentRackEdit: {
+            std::vector<int> order;
+            if (j.contains("order") && j["order"].is_array())
+                for (const auto& el : j["order"]) order.push_back(el.get<int>());
+            pa = new InstrumentRackEditUndoAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(), j.value("op", 0), j.value("trackID", 0),
+                static_cast<uint16_t>(j.value("portID", 0)),
+                static_cast<uint16_t>(j.value("outPortID", 0)),
+                std::move(order), j.value("trackData", json::object()),
+                j.value("name", std::string("Rack Edit")));
+            break;
+        }
+        case InstrumentRackNodeParam: {
+            pa = new InstrumentRackNodeParamAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("rackNodeID").get<int>(), j.at("trackID").get<int>(), j.at("nodeID").get<int>(),
+                j.at("paramIndex").get<size_t>(), j.at("oldValue").get<float>(),
+                j.at("newValue").get<float>(), j.value("name", std::string("Knob Change")));
+            break;
+        }
         case AddArrangerTrack: {
             auto at = new AddArrangerTrackAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(), j.at("trackType").get<int>());
             at->trackID = j.at("trackID").get<int>();
@@ -592,6 +619,38 @@ static json serializeOne(ProjectAction* pa) {
             j["paramIndex"] = mp->paramIndex;
             j["oldValue"] = mp->oldValue;
             j["newValue"] = mp->newValue;
+            break;
+        }
+        case InstrumentRackInsertNode: {
+            auto ri = static_cast<InstrumentRackInsertNodeAction*>(pa);
+            j["managerPath"] = ri->managerPath;
+            j["rackNodeID"] = ri->rackNodeID;
+            j["trackIndex"] = ri->trackID;
+            j["nodeSnapshot"] = ri->nodeSnapshot;
+            j["removeOnDo"] = ri->removeOnDo;
+            break;
+        }
+        case InstrumentRackEdit: {
+            auto rx = static_cast<InstrumentRackEditUndoAction*>(pa);
+            j["managerPath"] = rx->managerPath;
+            j["nodeID"] = rx->nodeID;
+            j["op"] = rx->op;
+            j["trackID"] = rx->trackID;
+            j["portID"] = rx->portID;
+            j["outPortID"] = rx->outPortID;
+            j["order"] = rx->order;
+            j["trackData"] = rx->trackData;
+            break;
+        }
+        case InstrumentRackNodeParam: {
+            auto rp = static_cast<InstrumentRackNodeParamAction*>(pa);
+            j["managerPath"] = rp->managerPath;
+            j["rackNodeID"] = rp->rackNodeID;
+            j["trackID"] = rp->trackID;
+            j["nodeID"] = rp->nodeID;
+            j["paramIndex"] = rp->paramIndex;
+            j["oldValue"] = rp->oldValue;
+            j["newValue"] = rp->newValue;
             break;
         }
         case AddArrangerTrack: {

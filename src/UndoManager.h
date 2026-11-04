@@ -72,6 +72,9 @@ enum ActionType {
     RecordTake = 55,
     MixerChainNodeParam = 56,
     MixerChainInsertNode = 57,
+    InstrumentRackInsertNode = 58,
+    InstrumentRackEdit = 59,
+    InstrumentRackNodeParam = 60,
 };
 
 
@@ -185,9 +188,13 @@ struct UndoManager {
     }
 
     void deSerialize(const json& j, Project* p) {
+        // Parse the replacement tree before dropping the old one: if the save carries
+        // an action type this build cannot read, the throw must not leave `head`
+        // dangling for the next load.
+        ProjectAction* newHead = ProjectAction::deSerialize(j["head"], p);
         if (head) delete head;
         undoTreeViewRoot = nullptr;
-        head = ProjectAction::deSerialize(j["head"], p);
+        head = newHead;
         current = head;
         if (j.contains("version")) {
             const std::vector<int> version = j.at("version").get<std::vector<int>>();
@@ -322,6 +329,56 @@ struct MixerChainNodeParamAction : ProjectAction {
     MixerChainNodeParamAction(Project* p, std::vector<int> managerPath, int mixerNodeID, int chainID,
                               int chainNodeID, size_t paramIndex, float oldValue, float newValue,
                               std::string actionName = "Knob Change");
+
+    bool coalesceWith(ProjectAction* newer) override;
+};
+
+/** Insert or remove one instrument inside an instrument-rack track. */
+struct InstrumentRackInsertNodeAction : ProjectAction {
+    std::vector<int> managerPath;
+    int rackNodeID = 0;
+    int trackID = 0;
+    json nodeSnapshot = json::object();
+    bool removeOnDo = false;  // false = insert, true = remove
+
+    InstrumentRackInsertNodeAction(Project* p, std::vector<int> managerPath, int rackNodeID, int trackID,
+                                   json nodeSnapshot, bool removeOnDo = false,
+                                   std::string actionName = "Add Instrument");
+};
+
+// Structural edit of one Instrument Rack node's tracks. The action performs the
+// specific operation on whichever graph it runs (GUI or audio), so both copies
+// stay in sync and undo works on both.
+struct InstrumentRackEditUndoAction : ProjectAction {
+    enum Op { Add = 0, Remove = 1, Reorder = 2, Solo = 3, Mute = 4, TrackNodes = 5 };
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    int op = Add;
+    int trackID = 0;
+    uint16_t portID = 0;    // Add: event input port id to create
+    uint16_t outPortID = 0; // Add: audio output port id to create
+    std::vector<int> order; // Reorder: track ids in the new order
+    json trackData;         // Remove: full track snapshot to restore on undo
+
+    InstrumentRackEditUndoAction(Project* p, std::vector<int> managerPath, int nodeID, int op,
+                                 int trackID, uint16_t portID, uint16_t outPortID,
+                                 std::vector<int> order, json trackData, std::string actionName);
+};
+
+/** Parameter edit on an instrument inside an instrument-rack track (not in the
+    graph's node list), so the usual managerPath+nodeID lookup cannot find it. */
+struct InstrumentRackNodeParamAction : ProjectAction {
+    std::vector<int> managerPath;
+    int rackNodeID = 0;
+    int trackID = 0;
+    int nodeID = 0;
+    size_t paramIndex = 0;
+    float oldValue = 0.0f;
+    float newValue = 0.0f;
+
+    InstrumentRackNodeParamAction(Project* p, std::vector<int> managerPath, int rackNodeID, int trackID,
+                                  int nodeID, size_t paramIndex, float oldValue, float newValue,
+                                  std::string actionName = "Knob Change");
 
     bool coalesceWith(ProjectAction* newer) override;
 };

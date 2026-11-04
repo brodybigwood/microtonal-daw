@@ -13,7 +13,7 @@
 
 namespace {
 struct TrackButtons {
-    SDL_FRect solo, mute, arm, monitor;
+    SDL_FRect solo, mute, arm, monitor, stereo;
 };
 
 TrackButtons trackButtonsFor(const SDL_FRect& row) {
@@ -26,7 +26,8 @@ TrackButtons trackButtonsFor(const SDL_FRect& row) {
         SDL_FRect{x, y, bw, bh},
         SDL_FRect{x + bw + gap, y, bw, bh},
         SDL_FRect{x + 2.f * (bw + gap), y, bw, bh},
-        SDL_FRect{x + 3.f * (bw + gap), y, bw, bh}
+        SDL_FRect{x + 3.f * (bw + gap), y, bw, bh},
+        SDL_FRect{x + 4.f * (bw + gap), y, bw, bh}
     };
 }
 
@@ -289,6 +290,16 @@ void TrackManager::setMonitorState(uint16_t id, bool on) {
     if (t) t->monitor = on;
 }
 
+void TrackManager::setStereoState(uint16_t id, bool on) {
+    Track* t = getTrack(id);
+    if (!t || t->type != TrackType::Audio) return;
+    t->stereoMono = on;
+    if (parentNode) {
+        parentNode->syncWidthsFromInputs();
+        if (parentNode->nm) parentNode->nm->markTopologyDirty();
+    }
+}
+
 void TrackManager::processAfterElements(int bufferSize) {
     for (auto* t : tracks) {
         if (!t || !t->connection) continue;
@@ -321,6 +332,16 @@ void TrackManager::processAfterElements(int bufferSize) {
             } else if (t->type == TrackType::Notes && t->events && *t->events) {
                 (*t->events)->clear();
             }
+        }
+
+        // Mono content on a stereoized track is duplicated onto channel 1.
+        if (t->type == TrackType::Audio && t->stereoMono && t->naturalChannels <= 1 &&
+            t->buffer && *t->buffer && t->connection->allocChannels >= 2) {
+            const int stride = t->connection->bufferSize > 0 ? t->connection->bufferSize : bufferSize;
+            float* dst = *t->buffer;
+            for (int i = 0; i < bufferSize; ++i)
+                dst[static_cast<size_t>(stride) + static_cast<size_t>(i)] =
+                    dst[static_cast<size_t>(i)];
         }
     }
 }
@@ -591,6 +612,7 @@ bool TrackManager::handleTrackInput(Track* track, int y, SDL_Event& e) {
     else if (hit(buttons.mute)) control = 1;
     else if (hit(buttons.arm)) control = 2;
     else if (hit(buttons.monitor)) control = 3;
+    else if (hit(buttons.stereo)) control = 4;
     if (control < 0) return false;
 
     Project* p = parentNode ? parentNode->project : nullptr;
@@ -753,6 +775,10 @@ void TrackManager::renderTrack(SDL_Renderer* renderer, Track* track, SDL_FRect* 
         track->recordArmed ? SDL_Color{210, 30, 30, 255} : SDL_Color{70, 70, 75, 255});
     renderSmallButton(renderer, buttons.monitor, "I",
         track->monitor ? SDL_Color{70, 190, 120, 255} : SDL_Color{70, 70, 75, 255});
+    if (track->type == TrackType::Audio) {
+        renderSmallButton(renderer, buttons.stereo, track->stereoMono ? "2" : "1",
+            track->stereoMono ? SDL_Color{80, 150, 220, 255} : SDL_Color{70, 70, 75, 255});
+    }
 
     //borders
     SDL_SetRenderDrawColor(renderer, colors.trackBorder[0], colors.trackBorder[1], colors.trackBorder[2], colors.trackBorder[3]);

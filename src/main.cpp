@@ -70,15 +70,12 @@ int main(int argc, char* argv[]) {
         // Load on a worker so the window can show the animated loading screen;
         // the main thread only draws until the project is ready.
         std::atomic<bool> loadDone{false};
-        std::thread loadThread([&] {
+        BigStackThread loadThread;
+        loadThread.start([&] {
             // Undo deserialization resolves graphs through the thread-local
             // active manager; it is per-thread, so set it for the loader too.
             NodeProcessor::setThreadActiveRoot(project->processor->guiGraph);
-            try {
-                project->load(argv[1]);
-            } catch (const std::exception& e) {
-                std::cerr << "[load] failed: " << e.what() << std::endl;
-            }
+            project->load(argv[1]);
             loadDone.store(true);
         });
         const Uint64 startTicks = SDL_GetTicks();

@@ -28,6 +28,7 @@ void Track::fromJSON(json j) {
     id = j["id"].get<uint16_t>();
     recordArmed = j.value("recordArmed", false);
     monitor = j.value("monitor", false);
+    stereoMono = j.value("stereoMono", false);
 }
 
 json Track::toJSON() {
@@ -37,6 +38,7 @@ json Track::toJSON() {
     j["id"] = id;
     j["recordArmed"] = recordArmed;
     j["monitor"] = monitor;
+    j["stereoMono"] = stereoMono;
 
     return j;
 }

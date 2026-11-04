@@ -19,5 +19,6 @@ enum NodeType {
     Mixer,
     Duplicator,
     MpeRack,
+    InstrumentRack,
     Count // for iteration
 };

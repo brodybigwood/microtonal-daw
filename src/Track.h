@@ -28,6 +28,10 @@ class Track {
 
         bool recordArmed = false;
         bool monitor = false;
+        // Duplicate a mono track output onto both channels.
+        bool stereoMono = false;
+        // Width the track's content naturally produces (clips/input), before stereoize.
+        int naturalChannels = 1;
 
         // DSP-only capture state for the take currently being recorded; never serialized.
         struct TakeCapture {

@@ -5,8 +5,12 @@
 #include <vector>
 #include <iostream>
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <thread>
+#ifndef __EMSCRIPTEN__
+#include <pthread.h>
+#endif
 #include "UndoManager.h"
 #include "Window.h"
 #include "AutomationCurve.h"
@@ -22,6 +26,31 @@ namespace DAW {
 class TrackManager;
 class ElementManager;
 class NodeProcessor;
+
+// Worker thread with a large stack. Project load/save recurse over the undo-tree
+// JSON, whose depth equals the undo history length (thousands of actions). The
+// default 8 MB thread stack overflows in nlohmann's recursive copy/dump well
+// before the tree is unreasonably large.
+class BigStackThread {
+public:
+    BigStackThread() = default;
+    ~BigStackThread();
+    BigStackThread(const BigStackThread&) = delete;
+    BigStackThread& operator=(const BigStackThread&) = delete;
+
+    void start(std::function<void()> fn);
+    void join();
+    bool joinable() const { return active; }
+
+private:
+    bool active = false;
+#ifdef __EMSCRIPTEN__
+    std::thread thread;
+#else
+    pthread_t handle{};
+#endif
+};
+
 class Project : public Window {
     public:
     Project();
@@ -82,9 +111,9 @@ class Project : public Window {
         /** Block until the background save worker has finished. Call before process exit. */
         void waitForSave();
 
-        std::thread saveThread;
+        BigStackThread saveThread;
         std::mutex saveThreadMutex;
-        std::thread loadThread;
+        BigStackThread loadThread;
         std::mutex loadThreadMutex;
         std::atomic<bool> loadInProgress{false};
         std::atomic<bool> loadFinished{false};

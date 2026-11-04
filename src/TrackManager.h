@@ -42,6 +42,7 @@ class TrackManager {
         void setMuteState(uint16_t id, bool on);
         void setRecordArmedState(uint16_t id, bool on);
         void setMonitorState(uint16_t id, bool on);
+        void setStereoState(uint16_t id, bool on);
 
         std::vector<Track*>& getTracks() { return tracks; }
         const std::vector<Track*>& getTracks() const { return tracks; }
