@@ -93,6 +93,62 @@ std::string Project::projectFolder() const {
     return folder.string();
 }
 
+std::string Project::vstStateFolder() const {
+    const std::string projectF = projectFolder();
+    if (!projectF.empty()) return projectF;
+    // Unsaved project: keep state blobs in a persistent default folder.
+    const char* home = std::getenv("HOME");
+    std::filesystem::path base = home ? std::filesystem::path(home)
+                                      : std::filesystem::path(startupCWD);
+    return (base / ".local/share/microtonal-daw/vst-state").string();
+}
+
+json Project::externalizeVstState(json state) {
+    if (!state.is_object()) return state;
+    std::error_code ec;
+    const std::filesystem::path dir = std::filesystem::path(vstStateFolder()) / "vst" / "state";
+    std::filesystem::create_directories(dir, ec);
+    if (ec) return state;
+    static std::atomic<uint64_t> seq{0};
+    for (const char* key : {"compState", "ctrlState"}) {
+        auto it = state.find(key);
+        if (it == state.end() || !it->is_string()) continue;
+        const auto bytes = jsonBytesDecode(*it);
+        const uint64_t stamp = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count());
+        const std::string name = std::to_string(stamp) + "_" +
+                                 std::to_string(seq.fetch_add(1)) + "_" + key + ".bin";
+        const std::filesystem::path path = dir / name;
+        std::ofstream f(path, std::ios::binary | std::ios::trunc);
+        if (!f.is_open()) continue;
+        f.write(reinterpret_cast<const char*>(bytes.data()),
+                static_cast<std::streamsize>(bytes.size()));
+        f.close();
+        if (f.fail()) continue;
+        state[std::string(key) + "File"] = path.string();
+        state.erase(it);
+    }
+    return state;
+}
+
+bool Project::readVstStateBlob(const json& state, const char* inlineKey, const char* fileKey,
+                               std::vector<uint8_t>& out) const {
+    out.clear();
+    if (state.contains(fileKey) && state[fileKey].is_string()) {
+        std::filesystem::path p(state[fileKey].get<std::string>());
+        if (p.is_relative()) p = std::filesystem::path(vstStateFolder()) / p;
+        std::ifstream f(p, std::ios::binary);
+        if (f.is_open()) {
+            out.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+            return true;
+        }
+    }
+    if (state.contains(inlineKey))
+        out = jsonBytesDecode(state[inlineKey]);
+    return !out.empty();
+}
+
 void Project::pushRecordedTake(RecordedTake&& take) {
     std::lock_guard<std::mutex> lock(takeQueueMutex);
     pendingTakes.push_back(std::move(take));
@@ -501,9 +557,29 @@ void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {
                 [&](json& o, const std::filesystem::path& base, int& counter) {
                 if (o.is_object()) {
                     for (const char* key : {"compState", "ctrlState"}) {
-                        auto it = o.find(key);
-                        if (it == o.end() || !it->is_string()) continue;
-                        const auto bytes = jsonBytesDecode(*it);
+                        const std::string fileKey = std::string(key) + "File";
+                        std::vector<uint8_t> bytes;
+                        bool have = false;
+                        auto inlineIt = o.find(key);
+                        if (inlineIt != o.end() && inlineIt->is_string()) {
+                            bytes = jsonBytesDecode(*inlineIt);
+                            have = true;
+                        } else {
+                            // State is already out-of-line; copy the referenced file
+                            // so version archives stay self-contained.
+                            auto fileIt = o.find(fileKey);
+                            if (fileIt != o.end() && fileIt->is_string()) {
+                                std::filesystem::path p(fileIt->get<std::string>());
+                                if (p.is_relative()) p = folder / p;
+                                std::ifstream in(p, std::ios::binary);
+                                if (in.is_open()) {
+                                    bytes.assign(std::istreambuf_iterator<char>(in),
+                                                 std::istreambuf_iterator<char>());
+                                    have = true;
+                                }
+                            }
+                        }
+                        if (!have) continue;
                         const std::string rel = "vst/" + std::to_string(counter++) + ".bin";
                         // Write to a temp file and rename, so an interrupted save can
                         // never leave a truncated sidecar behind.
@@ -518,8 +594,8 @@ void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {
                             std::error_code rec;
                             std::filesystem::rename(tmpPath, base / relPath, rec);
                         }
-                        o[std::string(key) + "File"] = rel;
-                        o.erase(it);
+                        o[fileKey] = rel;
+                        if (inlineIt != o.end()) o.erase(inlineIt);
                     }
                     for (auto& el : o.items())
                         externalizeInto(el.value(), base, counter);

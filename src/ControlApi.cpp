@@ -590,6 +590,7 @@ json dispatch(const json& req) {
                 std::string title = "Arranger##" + std::to_string(arr->id);
                 if (auto* ew = reuse(title)) return opened(ew, title);
                 auto w = std::make_unique<ArrangerExpandedWindow>(arr, p);
+                w->ownerNode = arr;
                 return opened(wm->addWindow(std::move(w), 1200, 800, title.c_str()), title);
             }
             auto* pat = dynamic_cast<PatcherNode*>(n);
@@ -597,6 +598,7 @@ json dispatch(const json& req) {
             std::string title = "Patcher##" + std::to_string(pat->id);
             if (auto* ew = reuse(title)) return opened(ew, title);
             auto w = std::make_unique<PatcherExpandedWindow>(pat, p);
+            w->ownerNode = pat;
             return opened(wm->addWindow(std::move(w), 1200, 800, title.c_str()), title);
         }
         if (kind == "mixer_chain") {

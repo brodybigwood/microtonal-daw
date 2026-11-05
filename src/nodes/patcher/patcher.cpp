@@ -432,6 +432,7 @@ bool PatcherNode::handleCustomInput(SDL_Event& e) {
                         SDL_RaiseWindow(existing->window);
                     } else {
                         auto pw = std::make_unique<PatcherExpandedWindow>(this, project);
+                        pw->ownerNode = this;
                         ExpandedWindow* ew = wm->addWindow(std::move(pw), 1200, 800, title.c_str());
                         if (ew) ew->show();
                     }

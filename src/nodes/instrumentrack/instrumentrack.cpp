@@ -186,7 +186,13 @@ void InstrumentRackNode::removeOutputPort(Connection* c) {
 }
 
 void InstrumentRackNode::addTrack(uint16_t inputPortID) {
-    const int cid = static_cast<int>(trackIdPool_.newID());
+    // Keep track numbers compact: reuse the lowest free id so a track added
+    // after a deletion takes the next number in order instead of the pool's
+    // ever-increasing counter.
+    int cid = 0;
+    while (std::any_of(tracks.begin(), tracks.end(),
+                       [cid](const std::unique_ptr<Track>& t) { return t && t->id == cid; }))
+        ++cid;
     if (!project || !project->um || !nm) {
         addTrackOnGraph(cid, inputPortID, 0);
         return;
@@ -299,6 +305,16 @@ bool InstrumentRackNode::removeTrackNodeByID(int trackID, int nodeID) {
 
 void InstrumentRackNode::destroyNode(Node* n) {
     if (!n) return;
+    // Expanded windows owned by the insert (e.g. the Delay feedback patcher)
+    // hold pointers to it; close them before deleting.
+    if (project && project->processor) {
+        if (auto* wm = project->processor->getWindowManager()) {
+            std::vector<ExpandedWindow*> owned;
+            for (auto& w : wm->windows())
+                if (w && w->ownerNode == n) owned.push_back(w.get());
+            for (auto* w : owned) wm->removeWindow(w);
+        }
+    }
     if (nm) nm->unregisterExtraNode(n);
     delete n;
 }

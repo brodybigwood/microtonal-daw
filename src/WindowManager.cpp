@@ -1,4 +1,5 @@
 #include "WindowManager.h"
+#include "ContextMenu.h"
 #include <iostream>
 
 // --- ExpandedWindow ---
@@ -65,9 +66,16 @@ ExpandedWindow* WindowManager::addWindow(std::unique_ptr<ExpandedWindow> w, int 
     w->title = title;
     w->id = nextID_++;
 
-    // Auto-close callback: hide the window when WM close button is pressed.
-    w->onRequestClose = [wptr = w.get()]() {
-        wptr->hide();
+    // Auto-close callback: destroy the window when the WM close button is
+    // pressed. There is no hidden-window state; a closed window is gone.
+    // A context menu opened on this window holds tickers bound to it, so it
+    // must not outlive the window.
+    w->onRequestClose = [this, wptr = w.get()]() {
+        auto* ctx = ContextMenu::get();
+        if (ctx->active && wptr->window &&
+            ctx->window_id == SDL_GetWindowID(wptr->window))
+            ctx->cancel();
+        removeWindow(wptr);
     };
 
     w->onCreated();

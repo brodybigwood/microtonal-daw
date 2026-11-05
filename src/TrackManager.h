@@ -86,6 +86,8 @@ class TrackManager {
         Track* movingTrack = nullptr;
         float last_lmb_y;
         void moveTrack();
+        /** Reorder tracks (and their output/input ports) to the given id order. */
+        void applyTrackOrder(const std::vector<uint16_t>& order);
 
         int getIndex(uint16_t);
         int getID(int);

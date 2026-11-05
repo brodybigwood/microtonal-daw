@@ -125,6 +125,15 @@ class Project : public Window {
         std::vector<RecordedTake> pendingTakes;
         /** Resolved project folder, or empty when the project has never been saved. */
         std::string projectFolder() const;
+        /** Folder that holds out-of-line VST state blobs: the project folder,
+            or a default folder when the project has never been saved. */
+        std::string vstStateFolder() const;
+        /** Replace inline compState/ctrlState base64 blobs with compStateFile/
+            ctrlStateFile paths. VST state is never kept inside JSON. */
+        json externalizeVstState(json state);
+        /** Load one state blob, from the sidecar file or (legacy) inline base64. */
+        bool readVstStateBlob(const json& state, const char* inlineKey, const char* fileKey,
+                              std::vector<uint8_t>& out) const;
 
         void createNote(int, std::vector<std::pair<int,int>>, std::vector<std::pair<int,int>>, int, std::vector<int> managerPath = {},
                         std::vector<std::pair<int, int>> pitchVector = {});

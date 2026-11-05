@@ -259,6 +259,16 @@ bool MixerNode::removeChainNodeByID(int chainID, int nodeID) {
 
 void MixerNode::destroyNode(Node* n) {
     if (!n) return;
+    // Expanded windows owned by the insert (e.g. the Delay feedback patcher)
+    // hold pointers to it; close them before deleting.
+    if (project && project->processor) {
+        if (auto* wm = project->processor->getWindowManager()) {
+            std::vector<ExpandedWindow*> owned;
+            for (auto& w : wm->windows())
+                if (w && w->ownerNode == n) owned.push_back(w.get());
+            for (auto* w : owned) wm->removeWindow(w);
+        }
+    }
     if (nm) nm->unregisterExtraNode(n);
     delete n;
 }

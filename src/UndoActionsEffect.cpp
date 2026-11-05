@@ -100,10 +100,11 @@ VstLoadPluginAction::VstLoadPluginAction(Project* p, std::vector<int> managerPat
             if (vst->plugin) {
                 if (vst->plugin->isEditorOpen()) vst->plugin->hideEditor();
                 vst->plugin->beginStateRestore();
-                if (this->newState.contains("compState"))
-                    vst->plugin->setComponentState(jsonBytesDecode(this->newState["compState"]));
-                if (this->newState.contains("ctrlState"))
-                    vst->plugin->setControllerState(jsonBytesDecode(this->newState["ctrlState"]));
+                std::vector<uint8_t> comp, ctrl;
+                if (this->p->readVstStateBlob(this->newState, "compState", "compStateFile", comp))
+                    vst->plugin->setComponentState(comp);
+                if (this->p->readVstStateBlob(this->newState, "ctrlState", "ctrlStateFile", ctrl))
+                    vst->plugin->setControllerState(ctrl);
                 vst->plugin->endStateRestore();
             }
         }
@@ -125,10 +126,11 @@ VstLoadPluginAction::VstLoadPluginAction(Project* p, std::vector<int> managerPat
             if (vst->plugin) {
                 if (vst->plugin->isEditorOpen()) vst->plugin->hideEditor();
                 vst->plugin->beginStateRestore();
-                if (this->oldState.contains("compState"))
-                    vst->plugin->setComponentState(jsonBytesDecode(this->oldState["compState"]));
-                if (this->oldState.contains("ctrlState"))
-                    vst->plugin->setControllerState(jsonBytesDecode(this->oldState["ctrlState"]));
+                std::vector<uint8_t> comp, ctrl;
+                if (this->p->readVstStateBlob(this->oldState, "compState", "compStateFile", comp))
+                    vst->plugin->setComponentState(comp);
+                if (this->p->readVstStateBlob(this->oldState, "ctrlState", "ctrlStateFile", ctrl))
+                    vst->plugin->setControllerState(ctrl);
                 vst->plugin->endStateRestore();
             }
         }
@@ -152,10 +154,11 @@ static void vstApplyStateJson(Project* p, const std::vector<int>& managerPath, i
     if (vst->plugin->isEditorOpen()) vst->plugin->hideEditor();
     vst->restoringState = true;
     vst->plugin->beginStateRestore();
-    if (state.contains("compState"))
-        vst->plugin->setComponentState(jsonBytesDecode(state["compState"]));
-    if (state.contains("ctrlState"))
-        vst->plugin->setControllerState(jsonBytesDecode(state["ctrlState"]));
+    std::vector<uint8_t> comp, ctrl;
+    if (p->readVstStateBlob(state, "compState", "compStateFile", comp))
+        vst->plugin->setComponentState(comp);
+    if (p->readVstStateBlob(state, "ctrlState", "ctrlStateFile", ctrl))
+        vst->plugin->setControllerState(ctrl);
     vst->plugin->endStateRestore();
     vst->restoringState = false;
     vst->markRackDirty();

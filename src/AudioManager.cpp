@@ -4,6 +4,8 @@
 #include <jack/jack.h>
 #include <thread>
 #include <chrono>
+#include <cmath>
+#include <cstdlib>
 
 AudioManager::AudioManager() {
 #ifndef __EMSCRIPTEN__
@@ -143,6 +145,14 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
     if (project->dspLoading) {
         unsigned int numChannels = audioManager->outputChannels;
         memset(outputBuffer, 0, bufferSize * numChannels * sizeof(float));
+        if (std::getenv("DAW_AUDIO_DEBUG")) {
+            static uint64_t lastMs = 0;
+            const uint64_t now = SDL_GetTicks();
+            if (now - lastMs >= 1000) {
+                lastMs = now;
+                std::cout << "[audio] SILENCED dspLoading=1 playing=" << project->dspIsPlaying << std::endl;
+            }
+        }
         return 0;
     }
 
@@ -173,7 +183,17 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
         project->advanceBeatPosition(dt);
     }
 
+    const auto processStart = std::chrono::steady_clock::now();
     project->process(inBuffer, outBuffer, bs, ic, oc, sr);
+    if (std::getenv("DAW_AUDIO_DEBUG")) {
+        const long long us = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - processStart).count();
+        const long long deadline = static_cast<long long>(bufferSize) * 1000000LL /
+                                   (audioManager->sampleRate > 0 ? audioManager->sampleRate : 48000);
+        if (us > deadline * 3 / 4)
+            std::cout << "[audio] slow=" << us << "us deadline=" << deadline
+                      << "us playing=" << project->dspIsPlaying << std::endl;
+    }
 
     // Advance AFTER processing: the block [t, t+dt) must be processed at
     // time t, or notes starting exactly at the play position are skipped.
@@ -200,6 +220,22 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
             project->effectiveTime = effTime;
             project->effectiveBeatPosition = effBeat;
         });
+    }
+
+    if (std::getenv("DAW_AUDIO_DEBUG")) {
+        static uint64_t lastMs = 0;
+        const uint64_t now = SDL_GetTicks();
+        if (now - lastMs >= 1000) {
+            lastMs = now;
+            float peak = 0.0f;
+            const size_t n = static_cast<size_t>(bufferSize) * static_cast<size_t>(numChannels);
+            for (size_t i = 0; i < n; ++i)
+                peak = std::max(peak, std::fabs(outBuffer[i]));
+            std::cout << "[audio] playing=" << project->dspIsPlaying
+                      << " loading=" << project->dspLoading
+                      << " peak=" << peak
+                      << " beat=" << project->activeBeatPosition() << std::endl;
+        }
     }
 
     return 0;

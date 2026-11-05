@@ -81,8 +81,11 @@ Knob::Knob(Knob&& other) noexcept
       label(std::move(other.label)), displayLabel(std::move(other.displayLabel)),
       labelColor(other.labelColor), filepath(std::move(other.filepath)),
       knobRect(other.knobRect), texture(other.texture),
+      textureRenderer(other.textureRenderer),
+      valueMin(other.valueMin), valueMax(other.valueMax), wheelStep(other.wheelStep),
       wheelVelocity(other.wheelVelocity) {
     other.texture = nullptr;
+    other.textureRenderer = nullptr;
     other.textures.clear();
     textures.clear();
     if (texture) textures.push_back(&texture);
@@ -99,7 +102,12 @@ Knob& Knob::operator=(Knob&& other) noexcept {
     filepath = std::move(other.filepath);
     knobRect = other.knobRect;
     texture = other.texture;
+    textureRenderer = other.textureRenderer;
+    valueMin = other.valueMin;
+    valueMax = other.valueMax;
+    wheelStep = other.wheelStep;
     other.texture = nullptr;
+    other.textureRenderer = nullptr;
     other.textures.clear();
     textures.clear();
     if (texture) textures.push_back(&texture);
@@ -163,6 +171,11 @@ Parameter::~Parameter() {
 }
 
 void Knob::render(SDL_Renderer* renderer) {
+    if (texture && textureRenderer != renderer) {
+        SDL_DestroyTexture(texture);
+        texture = nullptr;
+        textures.clear();
+    }
     if (!texture) {
         SDL_Surface* surface = IMG_Load(filepath.c_str());
         if (!surface) {
@@ -170,12 +183,15 @@ void Knob::render(SDL_Renderer* renderer) {
         } else {
             texture = SDL_CreateTextureFromSurface(renderer, surface);
             textures.push_back(&texture);
+            textureRenderer = renderer;
             SDL_DestroySurface(surface);
         }
     }
 
+    const float span = valueMax - valueMin;
+    const float norm = span > 0.0f ? std::clamp((value - valueMin) / span, 0.0f, 1.0f) : 0.0f;
     auto range = thetaMax - thetaMin;
-    auto angle = thetaMin + value * range;
+    auto angle = thetaMin + norm * range;
     SDL_FPoint center = { knobRect.w/2, knobRect.h/2 };
 
     SDL_RenderTextureRotated(renderer, texture, NULL, &knobRect, angle, &center, SDL_FLIP_NONE);
@@ -247,7 +263,8 @@ void Knob::handleInput(SDL_Event& e) {
         case SDL_EVENT_MOUSE_WHEEL:
             // Smooth raw SDL wheel motion so rapid scrolling is less jumpy.
             wheelVelocity = 0.75f * wheelVelocity + 0.25f * e.wheel.y;
-            value = std::clamp(value + wheelVelocity * 0.05f, 0.0f, 1.0f);
+            const float step = wheelStep > 0.0f ? wheelStep : 0.05f * (valueMax - valueMin);
+            value = std::clamp(value + wheelVelocity * step, valueMin, valueMax);
         break;
     }
 }

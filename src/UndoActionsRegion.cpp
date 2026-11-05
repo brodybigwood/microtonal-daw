@@ -686,6 +686,29 @@ const char* controlName(int control) {
 }
 } // namespace
 
+// ---------------------------------------------------------------------------
+// ArrangerTrackReorderAction
+// ---------------------------------------------------------------------------
+ArrangerTrackReorderAction::ArrangerTrackReorderAction(Project* p, std::vector<int> managerPath,
+                                                       int nodeID, std::vector<uint16_t> beforeOrder,
+                                                       std::vector<uint16_t> afterOrder)
+    : ProjectAction(p, ArrangerTrackReorder),
+      managerPath(std::move(managerPath)),
+      nodeID(nodeID),
+      beforeOrder(std::move(beforeOrder)),
+      afterOrder(std::move(afterOrder)) {
+    name = "Reorder Tracks";
+    auto apply = [this](const std::vector<uint16_t>& order) {
+        NodeManager& nm = requireManager(this->p, this->managerPath);
+        auto* node = dynamic_cast<ArrangerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
+        if (!node || !node->tracks)
+            throw std::runtime_error("ArrangerTrackReorderAction: arranger missing");
+        node->tracks->applyTrackOrder(order);
+    };
+    doAction = [this, apply]() { apply(this->afterOrder); };
+    undoAction = [this, apply]() { apply(this->beforeOrder); };
+}
+
 ArrangerTrackControlAction::ArrangerTrackControlAction(Project* p, std::vector<int> managerPath, int nodeID,
                                                      uint16_t trackID, int control) :
         ProjectAction(p, ArrangerTrackControl),

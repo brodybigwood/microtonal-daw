@@ -7,6 +7,8 @@
 #include <string>
 #include <functional>
 
+class Node;
+
 /// Base class for a window that gets its own top-level SDL3 window.
 class ExpandedWindow {
 public:
@@ -18,6 +20,10 @@ public:
     int id = -1;
     std::string title;
     bool visible = true;
+    /// The node this window edits, when it belongs to one. Owners close their
+    /// windows before the node is deleted; matching by title/id is not safe
+    /// across nested graphs, where ids repeat.
+    Node* ownerNode = nullptr;
 
     virtual void render() = 0;
     virtual bool handleInput(SDL_Event& e) = 0;

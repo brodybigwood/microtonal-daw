@@ -46,8 +46,7 @@ void applyNoteIntent(json& note, const json& intent) {
     static const char* const kFields[] = {
         "channel", "tuningMode", "tuningAnchorHarmonic", "tuningEdoSubdivisionSteps",
         "tuningEdoLowerVector", "tuningEdoUpperVector", "pitchVector",
-        "rhythmVector", "rhythmEndVector", "rhythmEdoSubdivisionSteps",
-        "rhythmEdoLowerVector", "rhythmEdoUpperVector",
+        "rhythmVector", "rhythmEndVector", "gridSpans",
     };
     applyFields(note, intent, kFields, sizeof(kFields) / sizeof(kFields[0]));
 }
@@ -231,17 +230,10 @@ void stampNoteTuning(Region* region, int noteID, const json& intent, json& outSn
     n.tuningEdoSubdivisionSteps = region->tuningEdoSubdivisionSteps;
     n.tuningEdoLowerVector = region->tuningEdoLowerVector;
     n.tuningEdoUpperVector = region->tuningEdoUpperVector;
-    // The rhythm anchor records the grid this note was placed on, exactly as the
-    // piano roll stamps it (PianoRollInput.cpp:902-904). Without it the note
-    // carries the default grid and "recall note rhythm" recalls nothing.
-    n.rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
-    n.rhythmEdoLowerVector = region->rhythmEdoLowerVector;
-    n.rhythmEdoUpperVector = region->rhythmEdoUpperVector;
+    // The rhythm anchor records the full grid this note was placed on, exactly as
+    // the piano roll stamps it. Without it "recall note rhythm" recalls nothing.
     n.gridSpans = region->gridSpans;
 
-    if (intent.contains("rhythmEdoSubdivisionSteps")) n.rhythmEdoSubdivisionSteps = intent["rhythmEdoSubdivisionSteps"].get<int>();
-    if (intent.contains("rhythmEdoLowerVector")) n.rhythmEdoLowerVector = readPairs(intent["rhythmEdoLowerVector"]);
-    if (intent.contains("rhythmEdoUpperVector")) n.rhythmEdoUpperVector = readPairs(intent["rhythmEdoUpperVector"]);
     if (intent.contains("tuningMode")) n.tuningMode = intent["tuningMode"].get<int>();
     if (intent.contains("tuningAnchorHarmonic")) n.tuningAnchorHarmonic = intent["tuningAnchorHarmonic"].get<int>();
     if (intent.contains("tuningEdoSubdivisionSteps")) n.tuningEdoSubdivisionSteps = intent["tuningEdoSubdivisionSteps"].get<int>();

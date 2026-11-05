@@ -28,6 +28,15 @@
 // Mouse/keyboard note editing: click handling, custom input, note creation,
 // deletion, dragging and stretching (split from PianoRoll.cpp).
 
+// True when the grid has a line exactly at the given start time (exact
+// prime-exponent vector equality — no float comparison).
+static bool gridHasLineAt(const std::vector<RhythmGridLine>& lines,
+                          const std::vector<std::pair<int, int>>& startVec) {
+    for (const auto& line : lines)
+        if (line.integerPairs == startVec) return true;
+    return false;
+}
+
 // Session-wide note clipboard (shared between piano rolls).
 namespace {
 struct NoteClipboard {
@@ -321,11 +330,9 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                         if (note && region) {
                             auto before = captureRegionTuning(region);
                             auto after = before;
-                            after.rhythmEdoSubdivisionSteps = note->rhythmEdoSubdivisionSteps;
-                            after.rhythmEdoLowerVector = note->rhythmEdoLowerVector;
-                            after.rhythmEdoUpperVector = note->rhythmEdoUpperVector;
-                            // Notes saved before gridSpans existed carry none; fall
-                            // back to the region's grid they were drawn on.
+                            // Restore the note's full rhythm definition. Notes saved
+                            // before gridSpans existed carry none; fall back to the
+                            // region's grid they were drawn on.
                             after.gridSpans = note->gridSpans.empty() ? region->gridSpans : note->gridSpans;
                             project->um->newAction(new PianoRollRegionTuningUndoAction(project, region->parentNode->nm->managerPath,
                                 region->parentNode->id, region->id, regionTuningSnapshotToUndoJson(before),
@@ -464,11 +471,6 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                                 auto& sn = region->notes[idx];
                                 sn->rhythmVector = addVec(sn->rhythmVector, startDelta);
                                 sn->rhythmEndVector = addVec(sn->rhythmEndVector, startDelta);
-                                if (region) {
-                                    sn->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
-                                    sn->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
-                                    sn->rhythmEdoUpperVector = region->rhythmEdoUpperVector;
-                                }
                             }
                         }
                         movingNoteRhythmPreviewLineIdx.reset();
@@ -513,11 +515,6 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                                 movingNote->rhythmEndVector = rhythmLines[erli].integerPairs;
                             else
                                 movingNote->rhythmEndVector = std::move(newEndPairs);
-                            if (region) {
-                                movingNote->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
-                                movingNote->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
-                                movingNote->rhythmEdoUpperVector = region->rhythmEdoUpperVector;
-                            }
                         }
                         movingNoteRhythmPreviewLineIdx.reset();
                     }
@@ -571,9 +568,8 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     if (sameNoteClick) {
                         auto before = captureRegionTuning(region);
                         auto after = before;
-                        after.rhythmEdoSubdivisionSteps = rhythmIntervalStartNote->rhythmEdoSubdivisionSteps;
-                        after.rhythmEdoLowerVector = rhythmIntervalStartNote->rhythmEdoLowerVector;
-                        after.rhythmEdoUpperVector = rhythmIntervalStartNote->rhythmEdoUpperVector;
+                        after.gridSpans = rhythmIntervalStartNote->gridSpans.empty()
+                            ? region->gridSpans : rhythmIntervalStartNote->gridSpans;
                         project->um->newAction(new PianoRollRegionTuningUndoAction(project, region->parentNode->nm->managerPath,
                             region->parentNode->id, region->id, regionTuningSnapshotToUndoJson(before),
                             regionTuningSnapshotToUndoJson(after), "Apply Note Rhythm View"));
@@ -882,9 +878,8 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                                 if (!selectedNoteIds.count(sn->id)) continue;
                                 sn->rhythmVector = addVec(sn->rhythmVector, startDelta);
                                 sn->rhythmEndVector = addVec(sn->rhythmEndVector, endDelta);
-                                sn->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
-                                sn->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
-                                sn->rhythmEdoUpperVector = region->rhythmEdoUpperVector;
+                                if (gridHasLineAt(rhythmLines, sn->rhythmVector))
+                                    sn->gridSpans = region->gridSpans;
                             }
                         }
                     }
@@ -1001,9 +996,6 @@ void PianoRoll::createElement() {
         const size_t rli = hoveredRhythmLineIndex;
         if (rli != SIZE_MAX && rli < rhythmLines.size())
             note->rhythmVector = rhythmLines[rli].integerPairs;
-        note->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
-        note->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
-        note->rhythmEdoUpperVector = region->rhythmEdoUpperVector;
         note->gridSpans = region->gridSpans; // whole rhythm view the note was created with
         lastRhythmDurationPairs = subVec(note->rhythmEndVector, note->rhythmVector);
         stampNoteTuning(note);
@@ -1107,18 +1099,15 @@ void PianoRoll::stretchElement(int amount) {
         const float lineSec = rhythmLines[hoveredRhythmLineIndex].seconds;
         if (resizeDir == -1 && lineSec < stretchingNote->endBeats() - 0.001f) {
             stretchingNote->rhythmVector = rhythmLines[hoveredRhythmLineIndex].integerPairs;
-            // Re-anchor the note onto this line: adopt the grid's rhythm temperament.
-            if (region) {
-                stretchingNote->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
-                stretchingNote->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
-                stretchingNote->rhythmEdoUpperVector = region->rhythmEdoUpperVector;
+            // Re-anchor the note onto this line: adopt the grid's rhythm
+            // temperament only if that grid has a line at the note's start.
+            if (region && gridHasLineAt(rhythmLines, stretchingNote->rhythmVector)) {
+                stretchingNote->gridSpans = region->gridSpans;
             }
         } else if (resizeDir == 1 && lineSec > stretchingNote->startBeats() + 0.001f) {
             stretchingNote->rhythmEndVector = rhythmLines[hoveredRhythmLineIndex].integerPairs;
-            if (region) {
-                stretchingNote->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
-                stretchingNote->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
-                stretchingNote->rhythmEdoUpperVector = region->rhythmEdoUpperVector;
+            if (region && gridHasLineAt(rhythmLines, stretchingNote->rhythmVector)) {
+                stretchingNote->gridSpans = region->gridSpans;
             }
         }
     }
@@ -1171,12 +1160,8 @@ void PianoRoll::commitNotePitchSnap(std::shared_ptr<Note> note, float targetLine
 void PianoRoll::snapNoteRhythm(const std::shared_ptr<Note>& note) {
     if (!note || !region || rhythmLines.empty()) return;
     const size_t rli = closestRhythmLineIndexForSeconds(note->startBeats());
-    if (rli != SIZE_MAX && rli < rhythmLines.size()) {
+    if (rli != SIZE_MAX && rli < rhythmLines.size())
         note->rhythmVector = rhythmLines[rli].integerPairs;
-        note->rhythmEdoSubdivisionSteps = region->rhythmEdoSubdivisionSteps;
-        note->rhythmEdoLowerVector = region->rhythmEdoLowerVector;
-        note->rhythmEdoUpperVector = region->rhythmEdoUpperVector;
-    }
 }
 
 bool PianoRoll::hasNoteClipboard() const { return g_noteClip.valid; }

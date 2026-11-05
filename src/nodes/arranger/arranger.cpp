@@ -99,6 +99,7 @@ bool ArrangerNode::handleCustomInput(SDL_Event& e) {
                         SDL_RaiseWindow(existing->window);
                     } else {
                         auto aw = std::make_unique<ArrangerExpandedWindow>(this, project);
+                        aw->ownerNode = this;
                         ExpandedWindow* ew = wm->addWindow(std::move(aw), 1200, 800, title.c_str());
                         if (ew) ew->show();
                     }

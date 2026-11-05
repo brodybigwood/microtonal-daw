@@ -501,6 +501,10 @@ public:
 
     ~LinuxEditorWindowHost() override {
         if (display && window) {
+            // Plugins (e.g. LSP) open their own top-level dialogs as transients
+            // of the editor/view instead of children of it. Destroy those too,
+            // or closing the editor leaves them on screen.
+            closeTransientWindows();
             XUngrabKey(display, AnyKey, AnyModifier, window);
             XDestroyWindow(display, window);
             window = 0;
@@ -509,6 +513,36 @@ public:
             XCloseDisplay(display);
             display = nullptr;
         }
+    }
+
+    void closeTransientWindows() {
+        Window rootRet = 0, parentRet = 0;
+        Window* children = nullptr;
+        unsigned int n = 0;
+        if (!XQueryTree(display, DefaultRootWindow(display), &rootRet, &parentRet, &children, &n))
+            return;
+        for (unsigned int i = 0; i < n; ++i) {
+            Window w = children[i];
+            if (!w || w == window) continue;
+            Window transientFor = 0;
+            if (!XGetTransientForHint(display, w, &transientFor) || !transientFor) continue;
+            // Related if the transient points at our editor or at any window in
+            // our subtree (the plugin's view lives inside it).
+            bool related = (transientFor == window);
+            Window t = transientFor;
+            while (!related && t) {
+                Window rr = 0, pr = 0;
+                Window* cc = nullptr;
+                unsigned int cn = 0;
+                if (!XQueryTree(display, t, &rr, &pr, &cc, &cn)) break;
+                if (cc) XFree(cc);
+                related = (pr == window);
+                t = pr;
+            }
+            if (related) XDestroyWindow(display, w);
+        }
+        if (children) XFree(children);
+        XSync(display, False);
     }
 
     void grabKey(KeySym keysym, unsigned int modifiers) {
@@ -657,6 +691,42 @@ public:
         int pushed = SDL_PushEvent(&sdle);
         std::cout << "[VST keygrab] pushed " << (pushed == 1 ? "ok" : "FAIL") << " sym=" << sym
                   << " ctrl=" << ctrl << " shift=" << shift << std::endl;
+    }
+
+    void move(int x, int y) override {
+        if (display && window) {
+            XMoveWindow(display, window, x, y);
+            XRaiseWindow(display, window);
+            XSync(display, False);
+        }
+    }
+
+    void fitPluginWindow(int w, int h) override {
+        if (!display || !window) return;
+        fitDescendant(window, w, h);
+        XSync(display, False);
+    }
+
+    void fitDescendant(Window parent, int w, int h) {
+        Window rootRet = 0, parentRet = 0;
+        Window* children = nullptr;
+        unsigned int n = 0;
+        if (!XQueryTree(display, parent, &rootRet, &parentRet, &children, &n)) return;
+        for (unsigned int i = 0; i < n; ++i) {
+            Window child = children[i];
+            char* name = nullptr;
+            if (XFetchName(display, child, &name) && name) {
+                const bool isPluginWindow = std::string(name).find("yabridge plugin") != std::string::npos;
+                XFree(name);
+                if (isPluginWindow) {
+                    XResizeWindow(display, child, static_cast<unsigned int>(w),
+                                  static_cast<unsigned int>(h));
+                    continue;
+                }
+            }
+            fitDescendant(child, w, h);
+        }
+        if (children) XFree(children);
     }
 
     void resize(int w, int h) override {
@@ -921,7 +991,7 @@ bool VstPlugin::activateComponent() {
     return true;
 }
 
-void VstPlugin::setup(int sampleRate, int bufferSize) {
+void VstPlugin::setup(int sampleRate, int bufferSize, const std::function<void()>& beforeActivate) {
     if (!valid || !audioProcessor) return;
 
     // Both graph copies (and the mixer's per-chain setup) call setup repeatedly. The
@@ -947,10 +1017,15 @@ void VstPlugin::setup(int sampleRate, int bufferSize) {
     processSetup.processMode = Steinberg::Vst::kRealtime;
     processSetup.symbolicSampleSize = Steinberg::Vst::kSample32;
 
+    const bool setupDebug = vstDebug();
+    if (setupDebug)
+        std::cerr << "[setup] setupProcessing sr=" << sampleRate << " bs=" << bufferSize << std::endl;
     if (audioProcessor->setupProcessing(processSetup) != Steinberg::kResultTrue) {
         std::cerr << "[VstPlugin] setupProcessing failed" << std::endl;
         return;
     }
+    if (setupDebug)
+        std::cerr << "[setup] setupProcessing done" << std::endl;
 
     // Free old channel pointer arrays
     for (auto& bus : inputBuses) {
@@ -985,10 +1060,19 @@ void VstPlugin::setup(int sampleRate, int bufferSize) {
         }
     }
 
+    // Restore saved state while the component is still inactive: state loaded
+    // after activation leaves sample-rate/tempo-derived values stale until the
+    // user touches the control (LSP tempo-synced delays).
+    if (setupDebug)
+        std::cerr << "[setup] beforeActivate hook=" << (beforeActivate ? "yes" : "no") << std::endl;
+    if (beforeActivate) beforeActivate();
+
     // setActive/setProcessing results are advisory. Some plugins (LSP) answer
     // kResultFalse/kNotImplemented and process audio anyway; treating that as a
     // failure silences the plugin entirely.
+    if (setupDebug) std::cerr << "[setup] setActive" << std::endl;
     component->setActive(true);
+    if (setupDebug) std::cerr << "[setup] setProcessing" << std::endl;
     const auto procResult = audioProcessor->setProcessing(true);
     if (procResult != Steinberg::kResultTrue && vstDebug())
         std::cout << "[vst] setProcessing returned " << procResult << " (continuing)" << std::endl;
@@ -1081,6 +1165,14 @@ void VstPlugin::showEditor() {
             view->setFrame(frame);
             std::cerr << "[showEditor] yabridge bg: attached..." << std::endl;
             view->attached(nativeHandle, platformType);
+            // The plugin creates its own (often large) child window; fit the
+            // host to the view and put it somewhere visible.
+            Steinberg::ViewRect vr{};
+            if (view->getSize(&vr) == Steinberg::kResultTrue && vr.getWidth() > 0 && vr.getHeight() > 0) {
+                eh->resize(vr.getWidth(), vr.getHeight());
+                view->onSize(&vr);
+                eh->fitPluginWindow(vr.getWidth(), vr.getHeight());
+            }
             std::cerr << "[showEditor] yabridge bg: done" << std::endl;
         }).detach();
         std::cout << "[VstPlugin::showEditor] yabridge spawned on bg" << std::endl;

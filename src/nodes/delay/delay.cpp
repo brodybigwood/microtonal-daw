@@ -215,6 +215,7 @@ bool DelayNode::handleCustomInput(SDL_Event& e) {
                     SDL_RaiseWindow(existing->window);
                 } else {
                     auto pw = std::make_unique<PatcherExpandedWindow>(chainEditor, project);
+                    pw->ownerNode = this;
                     if (ExpandedWindow* ew = wm->addWindow(std::move(pw), 1000, 700, title.c_str()))
                         ew->show();
                 }

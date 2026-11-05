@@ -209,6 +209,9 @@ public:
     virtual const char* getPlatformType() = 0;
     virtual bool tick() = 0;
     virtual void resize(int w, int h) = 0;
+    virtual void move(int x, int y) {}
+    /** Resize the plugin's own (yabridge/Wine) window to fit the host. */
+    virtual void fitPluginWindow(int w, int h) {}
     virtual bool setName(const char* name) = 0;
     /** True while any pointer button is held — state-diff polling waits for
         release so a continuous drag inside the plugin commits as one action. */
@@ -218,6 +221,12 @@ public:
 
     Steinberg::IPlugView* view = nullptr;
     bool windowOpen = false;
+
+    // resizeView() may be called by the plug-in from any thread. Stash the
+    // requested size; the GUI tick applies it to the host window.
+    std::atomic<bool> resizeRequestPending{false};
+    std::atomic<int> resizeRequestW{0};
+    std::atomic<int> resizeRequestH{0};
 
     static std::unique_ptr<EditorWindowHost> create();
 };
@@ -338,7 +347,9 @@ public:
     const std::string& getVendor() const { return vendor; }
     const std::string& getPluginPath() const { return pluginPath; }
 
-    void setup(int sampleRate, int bufferSize);
+    /** `beforeActivate` runs after setupProcessing/buffers and before the
+        component is activated — the correct point to restore saved state. */
+    void setup(int sampleRate, int bufferSize, const std::function<void()>& beforeActivate = {});
     void processAudio(int bufferSize, Steinberg::Vst::IEventList* inputEvents = nullptr,
                        double tempo = 120.0, double projectTimeMusic = 0.0, double projectTimeSamples = 0.0,
                        bool isPlaying = true);
@@ -422,6 +433,8 @@ public:
     int latencySamples() const {
         return audioProcessor ? static_cast<int>(audioProcessor->getLatencySamples()) : 0;
     }
+
+    bool isYabridge() const { return is_yabridge_; }
 
 private:
     bool valid = false;

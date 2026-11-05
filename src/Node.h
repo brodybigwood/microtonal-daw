@@ -100,8 +100,8 @@ class Node : public EmbeddedWindow {
         std::vector<Parameter*> params;
         void renderParams(SDL_Renderer*);
 
-        int bufferSize;
-        int sampleRate;
+        int bufferSize = 0;
+        int sampleRate = 0;
 
         virtual void setup();
         void relinkInputs();

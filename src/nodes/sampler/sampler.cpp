@@ -27,7 +27,10 @@ SampleSlab::SampleSlab()
       attack(0.f, 0.f, 0.f, 8.f, "assets/knobs/1.png", -135.f, 135.f, ""),
       decay(0.f, 0.f, 0.f, 8.f, "assets/knobs/1.png", -135.f, 135.f, ""),
       sustain(1.f, 0.f, 0.f, 8.f, "assets/knobs/1.png", -135.f, 135.f, ""),
-      release(0.f, 0.f, 0.f, 8.f, "assets/knobs/1.png", -135.f, 135.f, "") {}
+      release(0.f, 0.f, 0.f, 8.f, "assets/knobs/1.png", -135.f, 135.f, "") {
+    // Pitch is a MIDI note (69 = native rate), not a 0..1 parameter.
+    pitch.setValueRange(0.0f, 127.0f, 1.0f);
+}
 
 SampleSlab::~SampleSlab() {
     if (buffer) delete[] buffer;
@@ -677,6 +680,7 @@ void SamplerNode::openSampleEditor(size_t index) {
     if (!wm) return;
 
     auto win = std::make_unique<SampleEditorWindow>(this, index);
+    win->ownerNode = this;
     SampleEditorWindow* ptr = win.get();
     ExpandedWindow* ew = wm->addWindow(std::move(win), 300, 400, "Sample Editor");
     if (!ew) return;
@@ -689,6 +693,14 @@ void SamplerNode::closeSampleEditor() {
         editorWindow_->onRequestClose();
         editorWindow_ = nullptr;
     }
+}
+
+void SamplerNode::detachSampleEditor(SampleEditorWindow* w) {
+    if (editorWindow_ == w) editorWindow_ = nullptr;
+}
+
+SampleEditorWindow::~SampleEditorWindow() {
+    if (samplerNode) samplerNode->detachSampleEditor(this);
 }
 
 void SamplerNode::render(SDL_Renderer* R) {

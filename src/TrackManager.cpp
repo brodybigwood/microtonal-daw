@@ -622,41 +622,73 @@ bool TrackManager::handleTrackInput(Track* track, int y, SDL_Event& e) {
     return true;
 }
 
-void TrackManager::moveTrack() {
-    if (!movingTrack) return;
+void TrackManager::applyTrackOrder(const std::vector<uint16_t>& order) {
+    if (order.size() != tracks.size()) return;
 
-    auto connection = movingTrack->connection;
+    std::unordered_map<uint16_t, Track*> byId;
+    for (Track* t : tracks)
+        if (t) byId[t->id] = t;
+    std::vector<Track*> reordered;
+    reordered.reserve(tracks.size());
+    for (uint16_t trackID : order) {
+        auto it = byId.find(trackID);
+        if (it == byId.end()) return; // incomplete order: leave the graph untouched
+        reordered.push_back(it->second);
+    }
+    tracks = std::move(reordered);
 
-    auto it = std::find(tracks.begin(), tracks.end(), movingTrack);
-    size_t idx = std::distance(tracks.begin(), it);
-
-    tracks.erase(it);
-
-    int raw_new_idx = static_cast<int>(idx) + moveAmount;
-    size_t new_idx = std::max(0, std::min(raw_new_idx, static_cast<int>(tracks.size())));
-    tracks.insert(tracks.begin() + new_idx, movingTrack);
-
-    // that messed up the id map so rebuild it
     ids.clear();
-    for (size_t i = 0; i < tracks.size(); ++i) ids[tracks[i]->id] = i;       
+    for (size_t i = 0; i < tracks.size(); ++i) ids[tracks[i]->id] = i;
 
-    movingTrack = nullptr;
-
+    // Track output ports follow the same order; any other outputs stay after.
     auto& connections = parentNode->outputs.connections;
-    auto it1 = std::find(connections.begin(), connections.end(), connection);
-    idx = std::distance(connections.begin(), it1);
-    connections.erase(it1);
-
-    raw_new_idx = static_cast<int>(idx) + moveAmount;
-    new_idx = std::max(0, std::min(raw_new_idx, static_cast<int>(connections.size())));
-    connections.insert(connections.begin() + new_idx, connection);
-
-    // that messed up the id map so rebuild it
+    std::vector<Connection*> newConnections;
+    newConnections.reserve(connections.size());
+    for (Track* t : tracks)
+        if (t && t->connection) newConnections.push_back(t->connection);
+    for (Connection* c : connections) {
+        if (std::find(newConnections.begin(), newConnections.end(), c) != newConnections.end()) continue;
+        newConnections.push_back(c);
+    }
+    connections = std::move(newConnections);
     parentNode->outputs.ids.clear();
-    for (size_t i = 0; i < connections.size(); ++i) parentNode->outputs.ids[connections[i]->id] = i;
+    for (size_t i = 0; i < connections.size(); ++i)
+        parentNode->outputs.ids[connections[i]->id] = static_cast<uint16_t>(i);
 
     syncInputPortOrder();
     parentNode->makeConnectionRects();
+    if (parentNode->nm) parentNode->nm->markTopologyDirty();
+}
+
+void TrackManager::moveTrack() {
+    if (!movingTrack) return;
+
+    auto it = std::find(tracks.begin(), tracks.end(), movingTrack);
+    if (it == tracks.end()) { movingTrack = nullptr; return; }
+    const size_t idx = static_cast<size_t>(std::distance(tracks.begin(), it));
+
+    std::vector<uint16_t> beforeOrder;
+    beforeOrder.reserve(tracks.size());
+    for (Track* t : tracks) beforeOrder.push_back(t->id);
+
+    // Index into the remaining (N-1) tracks, exactly as the old in-place move did.
+    const int raw_new_idx = static_cast<int>(idx) + moveAmount;
+    const size_t new_idx = static_cast<size_t>(std::max(
+        0, std::min(raw_new_idx, static_cast<int>(tracks.size()) - 1)));
+
+    std::vector<uint16_t> afterOrder = beforeOrder;
+    afterOrder.erase(afterOrder.begin() + static_cast<ptrdiff_t>(idx));
+    afterOrder.insert(afterOrder.begin() + static_cast<ptrdiff_t>(new_idx), movingTrack->id);
+
+    movingTrack = nullptr;
+
+    Project* p = parentNode ? parentNode->project : nullptr;
+    if (p && p->um && parentNode->nm) {
+        p->um->newAction(new ArrangerTrackReorderAction(p, parentNode->nm->managerPath,
+            static_cast<int>(parentNode->id), std::move(beforeOrder), std::move(afterOrder)));
+    } else {
+        applyTrackOrder(afterOrder);
+    }
 }
 
 void TrackManager::handleInput(SDL_Event& e) {

@@ -65,6 +65,7 @@ class SamplerNode;
 class SampleEditorWindow : public ExpandedWindow {
 public:
     SampleEditorWindow(SamplerNode* node, size_t sampleIndex);
+    ~SampleEditorWindow() override;
     void render() override;
     bool handleInput(SDL_Event& e) override;
     void setSample(size_t idx);
@@ -85,6 +86,8 @@ public:
     /// Open/close the detached per-sample editor window.
     void openSampleEditor(size_t index);
     void closeSampleEditor();
+    /** Called from ~SampleEditorWindow so the dangling back-pointer is cleared. */
+    void detachSampleEditor(SampleEditorWindow* w);
 
     void process() override;
     void setup() override;

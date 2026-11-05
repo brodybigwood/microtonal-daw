@@ -80,6 +80,18 @@ struct Knob : Parameter {
     std::string filepath;
     SDL_FRect knobRect;
     SDL_Texture* texture = nullptr;
+    // Cached textures belong to the renderer that created them; a re-opened
+    // window has a new renderer, so the cache must be rebuilt.
+    SDL_Renderer* textureRenderer = nullptr;
+    // Values are not always normalized (e.g. sampler pitch is a MIDI note).
+    float valueMin = 0.0f;
+    float valueMax = 1.0f;
+    float wheelStep = 0.0f; // 0 = 5% of the range
+    void setValueRange(float lo, float hi, float step = 0.0f) {
+        valueMin = lo;
+        valueMax = hi;
+        wheelStep = step;
+    }
     float wheelVelocity = 0.0f;
     void render(SDL_Renderer*) override;
     void reposition(float newX, float newY, float newR);

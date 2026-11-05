@@ -506,6 +506,19 @@ static ProjectAction* deSerializeOne(const json& j, Project* p) {
                 j.at("nodeID").get<int>(),
                 j.at("sampleIndex").get<size_t>());
             break;
+        case ArrangerTrackReorder: {
+            auto readOrder = [](const json& a) {
+                std::vector<uint16_t> order;
+                if (a.is_array())
+                    for (const auto& el : a)
+                        order.push_back(static_cast<uint16_t>(el.get<int>()));
+                return order;
+            };
+            pa = new ArrangerTrackReorderAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(), readOrder(j.at("beforeOrder")),
+                readOrder(j.at("afterOrder")));
+            break;
+        }
         default:
             throw std::runtime_error("invalid undo action type in save");
     }
@@ -1170,6 +1183,16 @@ static json serializeOne(ProjectAction* pa) {
             j["managerPath"] = tm->managerPath;
             j["nodeID"] = tm->nodeID;
             j["sampleIndex"] = tm->sampleIndex;
+            break;
+        }
+        case ArrangerTrackReorder: {
+            auto* tr = static_cast<ArrangerTrackReorderAction*>(pa);
+            j["managerPath"] = tr->managerPath;
+            j["nodeID"] = tr->nodeID;
+            j["beforeOrder"] = json::array();
+            for (uint16_t id : tr->beforeOrder) j["beforeOrder"].push_back(static_cast<int>(id));
+            j["afterOrder"] = json::array();
+            for (uint16_t id : tr->afterOrder) j["afterOrder"].push_back(static_cast<int>(id));
             break;
         }
         default:

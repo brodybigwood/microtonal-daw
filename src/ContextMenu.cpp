@@ -29,6 +29,7 @@ void ContextMenu::activate() {
     }
     SDL_GetMouseState(&locX, &locY);
     active = true;
+    dynamicTick = nullptr; // see activate(renderer, windowID)
     // Enable text input on this window for text fields.
     if (focused) SDL_StartTextInput(focused);
 }
@@ -39,9 +40,21 @@ void ContextMenu::activate(SDL_Renderer* r, uint32_t wid) {
     window_id = wid;
     SDL_GetMouseState(&locX, &locY);
     active = true;
+    // A ticker belongs to the menu that installed it; never inherit a stale one
+    // from a previous menu (it may capture a window that has since been closed).
+    dynamicTick = nullptr;
     // Enable text input on this window for text fields.
     SDL_Window* w = SDL_GetWindowFromID(wid);
     if (w) SDL_StartTextInput(w);
+}
+
+void ContextMenu::cancel() {
+    active = false;
+    dynamicTick = nullptr;
+    renderer = nullptr;
+    window_id = 0;
+    keepOpenOnNextTreeLeafClick = false;
+    skipNextEvent = false;
 }
 
 void ContextMenu::tick(SDL_Event& e) {
@@ -57,6 +70,8 @@ void ContextMenu::tick(SDL_Event& e) {
         skipNextEvent = false;
         return;
     }
+
+    if (!dynamicTick) return;
 
     if (!dynamicTick(e)) {
         active = false;

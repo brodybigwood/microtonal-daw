@@ -2,6 +2,9 @@
 #include "NodeManager.h"
 #include "SDL_Events.h"
 #include "ContextMenu.h"
+#include "Project.h"
+#include "NodeProcessor.h"
+#include "WindowManager.h"
 #include <iostream>
 #include "NodeEditor.h"
 #include "WindowHandler.h"
@@ -31,6 +34,16 @@ Node::Node(uint16_t id, NodeManager* nm, NodeType nt) :
 }
 
 Node::~Node() {
+    // Expanded windows owned by this node hold pointers to it; close them
+    // before the node goes away, wherever the node is deleted from.
+    if (project && project->processor) {
+        if (auto* wm = project->processor->getWindowManager()) {
+            std::vector<ExpandedWindow*> owned;
+            for (auto& w : wm->windows())
+                if (w && w->ownerNode == this) owned.push_back(w.get());
+            for (auto* w : owned) wm->removeWindow(w);
+        }
+    }
     if (ne) {
         ne->unregisterEmbeddedWindow(this);
         ne->clearPointersToEmbeddedWindow(this);

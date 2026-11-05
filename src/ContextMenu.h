@@ -19,6 +19,8 @@ class ContextMenu {
 
         void activate();
         void activate(SDL_Renderer* r, uint32_t wid);
+        /** Close the menu and drop any pending ticker (window being destroyed). */
+        void cancel();
 
         SDL_Renderer* renderer = nullptr;
 

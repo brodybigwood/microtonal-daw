@@ -26,9 +26,6 @@ class Note {
         // Rhythm: start and end time from t=0 as product of primes^(num/den) seconds.
         std::vector<std::pair<int, int>> rhythmVector;
         std::vector<std::pair<int, int>> rhythmEndVector;
-        int rhythmEdoSubdivisionSteps = 1;
-        std::vector<std::pair<int, int>> rhythmEdoLowerVector;
-        std::vector<std::pair<int, int>> rhythmEdoUpperVector;
         // The region's whole grid span set when this note was created, so Ctrl+Shift+click
         // can restore the exact rhythm view the note was made with.
         std::vector<RhythmLatticeSpan> gridSpans;

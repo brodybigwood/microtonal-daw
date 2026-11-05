@@ -226,10 +226,18 @@ void VstNode::invalidateOwnerChain() {
 
 void VstNode::setup() {
     if (plugin && plugin->isValid()) {
-        plugin->setup(sampleRate, bufferSize);
+        auto applyPending = [this]() {
+            if (!pendingCompState_.empty() || !pendingCtrlState_.empty())
+                applyPendingVstState();
+        };
+        // A bridged (Wine) component cannot service state restore while it is
+        // inactive; native plugins get it before activation so derived values
+        // are recomputed with the right sample rate/tempo.
+        plugin->setup(sampleRate, bufferSize,
+                      plugin->isYabridge() ? std::function<void()>{} : applyPending);
         for (auto& shadow : rackShadows_)
             if (shadow) shadow->setup(sampleRate, bufferSize);
-        applyPendingVstState();
+        applyPending(); // setup() early-returns when already active with these sizes
         captureStateBaseline();
         // Latency is often only known after setupProcessing/setActive. If it
         // changed, recompute the graph's compensation delays.
@@ -498,20 +506,12 @@ void VstNode::process() {
                 }
             }
 
-            double bpm = 120.0;
-            double beatPos = project ? project->activeBeatPosition() : 0.0;
-            double samplePos = (project && AudioManager::instance())
-                ? project->activeTimeSeconds() * AudioManager::instance()->sampleRate : 0.0;
-            if (project) {
-                if (project->dspIsPlaying) {
-                    double db = project->deltaBeats;
-                    double dt = static_cast<double>(bufferSize) / AudioManager::instance()->sampleRate;
-                    bpm = (dt > 0.0) ? db * 60.0 / dt : 120.0;
-                } else {
-                    bpm = static_cast<double>(project->activeTempoCurve().evaluateAtX(
-                        static_cast<float>(project->activeBeatPosition())));
-                }
-            }
+            const double beatPos = project->activeBeatPosition();
+            const double samplePos = project->activeTimeSeconds() * AudioManager::instance()->sampleRate;
+            // The plugin context tempo always comes from the tempo curve at the
+            // current beat, whether playing or stopped.
+            const double bpm = static_cast<double>(
+                project->activeTempoCurve().evaluateAtX(static_cast<float>(beatPos)));
             bool playing = project ? project->dspIsPlaying : true;
             if (!mpeRack_) {
                 const auto procStart = std::chrono::steady_clock::now();
@@ -886,6 +886,8 @@ void VstNode::loadPlugin(const std::string& path, bool createUndo, size_t classI
                 newState["compState"] = jsonBytesEncode(plugin->getComponentState());
                 newState["ctrlState"] = jsonBytesEncode(plugin->getControllerState());
             }
+            oldState = project->externalizeVstState(std::move(oldState));
+            newState = project->externalizeVstState(std::move(newState));
             auto* pa = new VstLoadPluginAction(project, std::move(mgrPath), static_cast<int>(id),
                                                 std::move(oldState), std::move(newState));
             project->um->newAction(pa);
@@ -1115,6 +1117,8 @@ void VstNode::pollVstStateForUndo(bool force) {
     json oldState = json::object();
     oldState["compState"] = jsonBytesEncode(stateBaselineComp_);
     oldState["ctrlState"] = jsonBytesEncode(stateBaselineCtrl_);
+    oldState = project->externalizeVstState(std::move(oldState));
+    newState = project->externalizeVstState(std::move(newState));
     auto* pa = new VstStateChangeAction(project, std::move(mgrPath), static_cast<int>(id),
                                         std::move(oldState), std::move(newState), true);
     project->um->newAction(pa);
@@ -1141,8 +1145,11 @@ json VstNode::extraSerialize() {
     if (!className_.empty()) j["className"] = className_;
     if (plugin && plugin->isValid()) {
         j["pluginPath"] = loadedPath;
-        j["compState"] = jsonBytesEncode(plugin->getComponentState());
-        j["ctrlState"] = jsonBytesEncode(plugin->getControllerState());
+        json state;
+        state["compState"] = jsonBytesEncode(plugin->getComponentState());
+        state["ctrlState"] = jsonBytesEncode(plugin->getControllerState());
+        if (project) state = project->externalizeVstState(std::move(state));
+        for (auto& [key, value] : state.items()) j[key] = std::move(value);
     }
     if (!mappedVstParams.empty()) {
         j["mappedVstParams"] = json::object();
@@ -1192,19 +1199,29 @@ void VstNode::extraDeSerialize(const json& j) {
             // (LSP) fault if state I/O happens before setupProcessing.
             pendingCompState_.clear();
             pendingCtrlState_.clear();
-            if (j.contains("compStateFile") || j.contains("compState"))
-                pendingCompState_ = readBlob("compStateFile", "compState");
-            if (j.contains("ctrlStateFile") || j.contains("ctrlState"))
-                pendingCtrlState_ = readBlob("ctrlStateFile", "ctrlState");
+            if (project) {
+                project->readVstStateBlob(j, "compState", "compStateFile", pendingCompState_);
+                project->readVstStateBlob(j, "ctrlState", "ctrlStateFile", pendingCtrlState_);
+            } else {
+                if (j.contains("compStateFile") || j.contains("compState"))
+                    pendingCompState_ = readBlob("compStateFile", "compState");
+                if (j.contains("ctrlStateFile") || j.contains("ctrlState"))
+                    pendingCtrlState_ = readBlob("ctrlStateFile", "ctrlState");
+            }
             rebuildConnections();
             if (mpeRack_) createRackShadows();
             invalidateOwnerChain();
             int sr = sampleRate > 0 ? sampleRate : 48000;
             int bs = bufferSize > 0 ? bufferSize : 1024;
-            plugin->setup(sr, bs);
+            auto applyPending = [this]() {
+                if (!pendingCompState_.empty() || !pendingCtrlState_.empty())
+                    applyPendingVstState();
+            };
+            plugin->setup(sr, bs,
+                          plugin->isYabridge() ? std::function<void()>{} : applyPending);
             for (auto& shadow : rackShadows_)
                 if (shadow) shadow->setup(sr, bs);
-            applyPendingVstState();
+            applyPending();
             plugin->refreshParameterShadow();
             if (mpeRack_) markRackDirty();
             captureStateBaseline();

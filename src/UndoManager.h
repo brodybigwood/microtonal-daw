@@ -75,6 +75,7 @@ enum ActionType {
     InstrumentRackInsertNode = 58,
     InstrumentRackEdit = 59,
     InstrumentRackNodeParam = 60,
+    ArrangerTrackReorder = 61,
 };
 
 
@@ -381,6 +382,17 @@ struct InstrumentRackNodeParamAction : ProjectAction {
                                   std::string actionName = "Knob Change");
 
     bool coalesceWith(ProjectAction* newer) override;
+};
+
+// Reorder an Arranger's tracks. Ids, not pointers, so both graph copies can replay it.
+struct ArrangerTrackReorderAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    std::vector<uint16_t> beforeOrder;
+    std::vector<uint16_t> afterOrder;
+
+    ArrangerTrackReorderAction(Project* p, std::vector<int> managerPath, int nodeID,
+                               std::vector<uint16_t> beforeOrder, std::vector<uint16_t> afterOrder);
 };
 
 struct SetParamValueUndoAction : ProjectAction {

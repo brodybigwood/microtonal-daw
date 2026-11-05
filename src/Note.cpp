@@ -93,13 +93,6 @@ json Note::toJSON() {
     j["rhythmEndVector"] = json::array();
     for (const auto& pr : rhythmEndVector)
         j["rhythmEndVector"].push_back(json::array({pr.first, pr.second}));
-    j["rhythmEdoSubdivisionSteps"] = rhythmEdoSubdivisionSteps;
-    j["rhythmEdoLowerVector"] = json::array();
-    for (const auto& pr : rhythmEdoLowerVector)
-        j["rhythmEdoLowerVector"].push_back(json::array({pr.first, pr.second}));
-    j["rhythmEdoUpperVector"] = json::array();
-    for (const auto& pr : rhythmEdoUpperVector)
-        j["rhythmEdoUpperVector"].push_back(json::array({pr.first, pr.second}));
     j["gridSpans"] = latticeSpansToJSON(gridSpans);
     return j;
 }
@@ -146,22 +139,11 @@ std::shared_ptr<Note> Note::fromJSON(json& input) {
                 n->pitchVector.push_back({el[0].get<int>(), el[1].get<int>()});
         }
     }
-    n->rhythmEdoSubdivisionSteps = input.value("rhythmEdoSubdivisionSteps", 1);
     if (input.contains("rhythmVector") && input["rhythmVector"].is_array()) {
         n->rhythmVector.clear();
         for (const auto& el : input["rhythmVector"])
             if (el.is_array() && el.size() >= 2)
                 n->rhythmVector.push_back({el[0].get<int>(), el[1].get<int>()});
-    }
-    if (input.contains("rhythmEdoLowerVector") && input["rhythmEdoLowerVector"].is_array()) {
-        for (const auto& el : input["rhythmEdoLowerVector"])
-            if (el.is_array() && el.size() >= 2)
-                n->rhythmEdoLowerVector.push_back({el[0].get<int>(), el[1].get<int>()});
-    }
-    if (input.contains("rhythmEdoUpperVector") && input["rhythmEdoUpperVector"].is_array()) {
-        for (const auto& el : input["rhythmEdoUpperVector"])
-            if (el.is_array() && el.size() >= 2)
-                n->rhythmEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
     }
     n->gridSpans = latticeSpansFromJSON(input, "gridSpans");
     n->syncNumFromPitchVector();
@@ -192,7 +174,6 @@ void Note::applyUndoSnapshot(const json& j) {
                 pitchVector.push_back({el[0].get<int>(), el[1].get<int>()});
         }
     }
-    rhythmEdoSubdivisionSteps = j.value("rhythmEdoSubdivisionSteps", 1);
     rhythmVector.clear();
     if (j.contains("rhythmVector") && j["rhythmVector"].is_array()) {
         for (const auto& el : j["rhythmVector"])
@@ -204,18 +185,6 @@ void Note::applyUndoSnapshot(const json& j) {
         for (const auto& el : j["rhythmEndVector"])
             if (el.is_array() && el.size() >= 2)
                 rhythmEndVector.push_back({el[0].get<int>(), el[1].get<int>()});
-    }
-    rhythmEdoLowerVector.clear();
-    if (j.contains("rhythmEdoLowerVector") && j["rhythmEdoLowerVector"].is_array()) {
-        for (const auto& el : j["rhythmEdoLowerVector"])
-            if (el.is_array() && el.size() >= 2)
-                rhythmEdoLowerVector.push_back({el[0].get<int>(), el[1].get<int>()});
-    }
-    rhythmEdoUpperVector.clear();
-    if (j.contains("rhythmEdoUpperVector") && j["rhythmEdoUpperVector"].is_array()) {
-        for (const auto& el : j["rhythmEdoUpperVector"])
-            if (el.is_array() && el.size() >= 2)
-                rhythmEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
     }
     gridSpans = latticeSpansFromJSON(j, "gridSpans");
     syncNumFromPitchVector();
@@ -235,13 +204,6 @@ json Note::tuningFieldsUndoToJSON() const {
     j["rhythmVector"] = json::array();
     for (const auto& pr : rhythmVector)
         j["rhythmVector"].push_back(json::array({pr.first, pr.second}));
-    j["rhythmEdoSubdivisionSteps"] = rhythmEdoSubdivisionSteps;
-    j["rhythmEdoLowerVector"] = json::array();
-    for (const auto& pr : rhythmEdoLowerVector)
-        j["rhythmEdoLowerVector"].push_back(json::array({pr.first, pr.second}));
-    j["rhythmEdoUpperVector"] = json::array();
-    for (const auto& pr : rhythmEdoUpperVector)
-        j["rhythmEdoUpperVector"].push_back(json::array({pr.first, pr.second}));
     j["gridSpans"] = latticeSpansToJSON(gridSpans);
     return j;
 }
@@ -262,10 +224,7 @@ void Note::applyTuningFieldsUndoFromJSON(const json& j) {
     tuningEdoSubdivisionSteps = j.value("tuningEdoSubdivisionSteps", tuningEdoSubdivisionSteps);
     applyPairVector("tuningEdoLowerVector", tuningEdoLowerVector);
     applyPairVector("tuningEdoUpperVector", tuningEdoUpperVector);
-    rhythmEdoSubdivisionSteps = j.value("rhythmEdoSubdivisionSteps", rhythmEdoSubdivisionSteps);
     applyPairVector("rhythmVector", rhythmVector);
-    applyPairVector("rhythmEdoLowerVector", rhythmEdoLowerVector);
-    applyPairVector("rhythmEdoUpperVector", rhythmEdoUpperVector);
     if (j.contains("gridSpans")) gridSpans = latticeSpansFromJSON(j, "gridSpans");
     syncNumFromPitchVector();
 }
