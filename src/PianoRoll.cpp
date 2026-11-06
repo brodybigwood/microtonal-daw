@@ -327,6 +327,18 @@ bool PianoRoll::customTick(SDL_Renderer* renderer) {
         bakedBgPath_ = wantBg;
     }
 
+    // The tuning grid is project-wide: follow it even when the change was made
+    // through another view/action that could not reach this roll directly.
+    if (project) {
+        const std::string central =
+            regionTuningSnapshotToUndoJson(captureCentralTuning()).dump();
+        if (central != lastCentralTuningJson) {
+            lastCentralTuningJson = central;
+            updateLines();
+            refreshGrid = true;
+        }
+    }
+
     updateRhythmLines();
     updateTransportLines();
 
@@ -699,23 +711,17 @@ bool PianoRoll::getExistingNote() {
 
 
 float PianoRoll::getNotePosX(std::shared_ptr<Note> note) {
-    if (movingNote && (selectedNoteIds.count(note->id) || movingNote.get() == note.get()) && movingNoteRhythmPreviewLineIdx) {
-        const size_t rli = *movingNoteRhythmPreviewLineIdx;
-        if (rli < rhythmLines.size()) {
-            const auto startDelta = subVec(rhythmLines[rli].integerPairs, rhythmDragStartPairs);
-            return getX(Note::beatsFromVector(addVec(note->rhythmVector, startDelta)));
-        }
+    if (movingNote && (selectedNoteIds.count(note->id) || movingNote.get() == note.get()) && movingNoteRhythmPreviewPairs) {
+        const auto startDelta = subVec(*movingNoteRhythmPreviewPairs, rhythmDragStartPairs);
+        return getX(Note::beatsFromVector(addVec(note->rhythmVector, startDelta)));
     }
     return getX(note->startBeats());
 }
 
 float PianoRoll::getNoteEnd(std::shared_ptr<Note> note) {
-    if (movingNote && (selectedNoteIds.count(note->id) || movingNote.get() == note.get()) && movingNoteRhythmPreviewLineIdx) {
-        const size_t rli = *movingNoteRhythmPreviewLineIdx;
-        if (rli < rhythmLines.size()) {
-            const auto startDelta = subVec(rhythmLines[rli].integerPairs, rhythmDragStartPairs);
-            return getX(Note::beatsFromVector(addVec(note->rhythmEndVector, startDelta)));
-        }
+    if (movingNote && (selectedNoteIds.count(note->id) || movingNote.get() == note.get()) && movingNoteRhythmPreviewPairs) {
+        const auto startDelta = subVec(*movingNoteRhythmPreviewPairs, rhythmDragStartPairs);
+        return getX(Note::beatsFromVector(addVec(note->rhythmEndVector, startDelta)));
     }
     return getX(note->endBeats());
 }

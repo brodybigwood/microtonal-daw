@@ -1,4 +1,5 @@
 #include "Parameter.h"
+#include "Assets.h"
 #include "Node.h"
 #include "NodeManager.h"
 #include "UndoManager.h"
@@ -177,7 +178,7 @@ void Knob::render(SDL_Renderer* renderer) {
         textures.clear();
     }
     if (!texture) {
-        SDL_Surface* surface = IMG_Load(filepath.c_str());
+        SDL_Surface* surface = IMG_Load(resolveAssetPath(filepath).c_str());
         if (!surface) {
             SDL_Log("Failed to load image: %s", SDL_GetError());
         } else {

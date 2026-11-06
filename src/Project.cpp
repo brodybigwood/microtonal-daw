@@ -149,6 +149,42 @@ bool Project::readVstStateBlob(const json& state, const char* inlineKey, const c
     return !out.empty();
 }
 
+json Project::pianoRollToJson() const {
+    json j;
+    j["tuningMode"] = pianoRoll.tuningMode;
+    j["tuningAnchorHarmonic"] = pianoRoll.tuningAnchorHarmonic;
+    j["tuningHarmonicAnchorVector"] = pairsToJSON(pianoRoll.tuningHarmonicAnchorVector);
+    j["tuningEdoSubdivisionSteps"] = pianoRoll.tuningEdoSubdivisionSteps;
+    j["tuningEdoLowerVector"] = pairsToJSON(pianoRoll.tuningEdoLowerVector);
+    j["tuningEdoUpperVector"] = pairsToJSON(pianoRoll.tuningEdoUpperVector);
+    j["rhythmEdoSubdivisionSteps"] = pianoRoll.rhythmEdoSubdivisionSteps;
+    j["rhythmEdoLowerVector"] = pairsToJSON(pianoRoll.rhythmEdoLowerVector);
+    j["rhythmEdoUpperVector"] = pairsToJSON(pianoRoll.rhythmEdoUpperVector);
+    j["transportLines"] = latticeSpansToJSON(pianoRoll.transportLines);
+    j["gridSpans"] = latticeSpansToJSON(pianoRoll.gridSpans);
+    return j;
+}
+
+void Project::pianoRollFromJson(const json& j) {
+    pianoRoll = PianoRollSettings{};
+    if (!j.is_object()) {
+        pianoRoll.gridSpans.push_back(RhythmLatticeSpan{});
+        return;
+    }
+    pianoRoll.tuningMode = j.value("tuningMode", 0);
+    pianoRoll.tuningAnchorHarmonic = j.value("tuningAnchorHarmonic", 1);
+    pianoRoll.tuningHarmonicAnchorVector = pairsFromJSON(j.value("tuningHarmonicAnchorVector", json::array()));
+    pianoRoll.tuningEdoSubdivisionSteps = std::max(1, j.value("tuningEdoSubdivisionSteps", 12));
+    pianoRoll.tuningEdoLowerVector = pairsFromJSON(j.value("tuningEdoLowerVector", json::array()));
+    pianoRoll.tuningEdoUpperVector = pairsFromJSON(j.value("tuningEdoUpperVector", json::array()));
+    pianoRoll.rhythmEdoSubdivisionSteps = std::max(1, j.value("rhythmEdoSubdivisionSteps", 1));
+    pianoRoll.rhythmEdoLowerVector = pairsFromJSON(j.value("rhythmEdoLowerVector", json::array()));
+    pianoRoll.rhythmEdoUpperVector = pairsFromJSON(j.value("rhythmEdoUpperVector", json::array()));
+    pianoRoll.transportLines = latticeSpansFromJSON(j, "transportLines");
+    pianoRoll.gridSpans = latticeSpansFromJSON(j, "gridSpans");
+    if (pianoRoll.gridSpans.empty()) pianoRoll.gridSpans.push_back(RhythmLatticeSpan{});
+}
+
 void Project::pushRecordedTake(RecordedTake&& take) {
     std::lock_guard<std::mutex> lock(takeQueueMutex);
     pendingTakes.push_back(std::move(take));
@@ -240,6 +276,8 @@ void Project::renderPresent() {
 }
 
 Project::Project() : tempoCurve(this, nullptr), dspTempoCurve(this, nullptr) {
+    pianoRoll = PianoRollSettings{};
+    pianoRoll.gridSpans.push_back(RhythmLatticeSpan{});
     tempoCurve.valueRangeMin = 0.001f;
     tempoCurve.valueRangeMax = 999.f;
     tempoCurve.addPoint({}, 120.f, CurveShape::Single);
@@ -418,6 +456,9 @@ void Project::load(std::string path) {
     std::cout << "[load] parse: " << loadMs(lt) << " ms" << std::endl;
     stage(0.10f, "Parsing project");
 
+    // Central piano-roll lines (missing in older saves: default grid).
+    pianoRollFromJson(j.contains("pianoRoll") ? j["pianoRoll"] : json::object());
+
     // Restore tempo curve from JSON (or fall back to legacy float, or default)
     if (j.contains("tempoCurve") && j["tempoCurve"].is_object()) {
         auto& tcj = j["tempoCurve"];
@@ -522,6 +563,7 @@ void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {
             tcj["points"].push_back(jpt);
         }
         j["tempoCurve"] = std::move(tcj);
+        j["pianoRoll"] = pianoRollToJson();
 
         auto msSince = [](auto t0) {
             return std::chrono::duration_cast<std::chrono::milliseconds>(

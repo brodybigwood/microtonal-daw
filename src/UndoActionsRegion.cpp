@@ -21,6 +21,7 @@
 #include "Note.h"
 #include "PianoRoll.h"
 #include <stdexcept>
+#include <algorithm>
 #include <unordered_map>
 #include <map>
 #include <set>
@@ -338,16 +339,12 @@ CreatePositionAction::CreatePositionAction(Project* p, std::vector<int> managerP
         endPairs(std::move(endPairs)),
         trackID(trackID),
         startOffsetPairs(std::move(startOffsetPairs)) {
-    // The arranger may not exist yet: Project::load deserializes the undo tree
-    // before restoring the graph. Missing it just means "keep the defaults";
-    // the constructor must not throw or the project cannot be loaded.
-    NodeManager& nm = requireManager(p, this->managerPath);
-    ArrangerNode* arr = dynamic_cast<ArrangerNode*>(nm.getNode(static_cast<uint16_t>(nodeID)));
-    if (arr) {
-        rhythmEdoSteps = arr->rhythmEdoSubdivisionSteps;
-        rhythmEdoLower = arr->rhythmEdoLowerVector;
-        rhythmEdoUpper = arr->rhythmEdoUpperVector;
-    }
+    // Positions are stamped with the project-wide rhythm grid (shared with the piano
+    // rolls). Project::load may deserialize the undo tree before the graph; the grid
+    // itself always exists, and the constructor must not throw.
+    rhythmEdoSteps = p->pianoRoll.rhythmEdoSubdivisionSteps;
+    rhythmEdoLower = p->pianoRoll.rhythmEdoLowerVector;
+    rhythmEdoUpper = p->pianoRoll.rhythmEdoUpperVector;
     doAction = [this]() {
         GridElement* ge = undoResolveGridElement(this->p, this->managerPath, this->nodeID, this->elementID);
         ge->createPos(this->startPairs, this->endPairs, this->trackID,
@@ -375,42 +372,35 @@ SongRollRhythmEdoAction::SongRollRhythmEdoAction(Project* p, std::vector<int> ma
         after(std::move(after)) {
     skipInitialDo = true;
     name = "SongRoll Rhythm EDO";
-    doAction = [this]() {
+    // The rhythm grid is project-wide (shared by every piano roll and arranger); the
+    // transport strip stays per-arranger on the node.
+    auto applyRhythm = [this](const json& state) -> ArrangerNode* {
         NodeManager& nm = requireManager(this->p, this->managerPath);
         auto* node = dynamic_cast<ArrangerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
-        if (!node) return;
-        node->rhythmEdoSubdivisionSteps = this->after["steps"].get<int>();
-        node->rhythmEdoLowerVector.clear();
-        for (const auto& el : this->after["lower"])
+        if (!node) return nullptr;
+        this->p->pianoRoll.rhythmEdoSubdivisionSteps = state["steps"].get<int>();
+        this->p->pianoRoll.rhythmEdoLowerVector.clear();
+        for (const auto& el : state["lower"])
             if (el.is_array() && el.size() >= 2)
-                node->rhythmEdoLowerVector.push_back({el[0].get<int>(), el[1].get<int>()});
-        node->rhythmEdoUpperVector.clear();
-        for (const auto& el : this->after["upper"])
+                this->p->pianoRoll.rhythmEdoLowerVector.push_back({el[0].get<int>(), el[1].get<int>()});
+        this->p->pianoRoll.rhythmEdoUpperVector.clear();
+        for (const auto& el : state["upper"])
             if (el.is_array() && el.size() >= 2)
-                node->rhythmEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
-        node->transportLines = latticeSpansFromJSON(this->after, "transportLines");
-        node->gridSpans = latticeSpansFromJSON(this->after, "gridSpans");
-        if (node->gridSpans.empty()) node->gridSpans.push_back(defaultLatticeSpan(1));
-        if (node->sl) node->sl->updateRhythmLines();
+                this->p->pianoRoll.rhythmEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
+        node->transportLines = latticeSpansFromJSON(state, "transportLines");
+        this->p->pianoRoll.gridSpans = latticeSpansFromJSON(state, "gridSpans");
+        if (this->p->pianoRoll.gridSpans.empty()) this->p->pianoRoll.gridSpans.push_back(defaultLatticeSpan(1));
+        if (node->sl) {
+            node->sl->updateRhythmLines();
+            for (PianoRoll* pr : node->sl->pianoRolls)
+                if (pr && pr->region)
+                    PianoRoll::notifyTuningUndoApplied(this->p, this->managerPath, this->nodeID,
+                                                       static_cast<int>(pr->region->id), -1);
+        }
+        return node;
     };
-    undoAction = [this]() {
-        NodeManager& nm = requireManager(this->p, this->managerPath);
-        auto* node = dynamic_cast<ArrangerNode*>(nm.getNode(static_cast<uint16_t>(this->nodeID)));
-        if (!node) return;
-        node->rhythmEdoSubdivisionSteps = this->before["steps"].get<int>();
-        node->rhythmEdoLowerVector.clear();
-        for (const auto& el : this->before["lower"])
-            if (el.is_array() && el.size() >= 2)
-                node->rhythmEdoLowerVector.push_back({el[0].get<int>(), el[1].get<int>()});
-        node->rhythmEdoUpperVector.clear();
-        for (const auto& el : this->before["upper"])
-            if (el.is_array() && el.size() >= 2)
-                node->rhythmEdoUpperVector.push_back({el[0].get<int>(), el[1].get<int>()});
-        node->transportLines = latticeSpansFromJSON(this->before, "transportLines");
-        node->gridSpans = latticeSpansFromJSON(this->before, "gridSpans");
-        if (node->gridSpans.empty()) node->gridSpans.push_back(defaultLatticeSpan(1));
-        if (node->sl) node->sl->updateRhythmLines();
-    };
+    doAction = [applyRhythm, this]() { applyRhythm(this->after); };
+    undoAction = [applyRhythm, this]() { applyRhythm(this->before); };
 }
 
 void DeletePositionAction::wireLambdas() {
@@ -498,6 +488,151 @@ MoveElementPositionAction::MoveElementPositionAction(Project* p, std::vector<int
             if (oldTid != newTid) recalcTrackChannels(em, newTid);
             recalcTrackChannels(em, oldTid);
         }
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Bulk position editing (arranger clipboard). Reverse-order removal in the create
+// action keeps the LIFO position id pool reassigning the same ids on redo.
+// ---------------------------------------------------------------------------
+
+CreatePositionsAction::CreatePositionsAction(Project* p, std::vector<int> managerPath, int nodeID,
+                                             std::vector<CreatePositionSpec> specs) :
+        ProjectAction(p, CreatePositions),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        specs(std::move(specs)) {
+    name = "Paste Positions";
+    doAction = [this]() {
+        ElementManager* em = undoResolveArrangerElementManager(this->p, this->managerPath, this->nodeID);
+        std::vector<uint16_t> tracks;
+        for (auto& spec : this->specs) {
+            GridElement* ge = undoResolveGridElement(this->p, this->managerPath, this->nodeID, spec.elementID);
+            ge->createPos(spec.rhythmVector, spec.rhythmEndVector, spec.trackID,
+                          spec.rhythmEdoSteps, spec.rhythmEdoLower, spec.rhythmEdoUpper,
+                          spec.startOffsetPairs);
+            spec.positionID = ge->positions.back()->id;
+            tracks.push_back(spec.trackID);
+        }
+        if (em)
+            for (uint16_t tid : tracks) recalcTrackChannels(em, tid);
+        this->name = "Paste " + std::to_string(this->specs.size()) + " Positions";
+    };
+    undoAction = [this]() {
+        ElementManager* em = undoResolveArrangerElementManager(this->p, this->managerPath, this->nodeID);
+        std::vector<uint16_t> tracks;
+        for (auto it = this->specs.rbegin(); it != this->specs.rend(); ++it) {
+            if (it->positionID < 0) continue;
+            GridElement* ge = undoResolveGridElement(this->p, this->managerPath, this->nodeID, it->elementID);
+            if (!ge->removePositionById(it->positionID))
+                throw std::runtime_error("CreatePositionsAction::undoAction: position id missing");
+            tracks.push_back(it->trackID);
+        }
+        if (em)
+            for (uint16_t tid : tracks) recalcTrackChannels(em, tid);
+    };
+}
+
+static void wireDeletePositionsLambdas(DeletePositionsAction* action) {
+    action->name = "Delete " + std::to_string(action->specs.size()) + " Positions";
+    action->doAction = [action]() {
+        ElementManager* em = undoResolveArrangerElementManager(action->p, action->managerPath, action->nodeID);
+        std::vector<uint16_t> tracks;
+        for (auto& spec : action->specs) {
+            GridElement* ge = undoResolveGridElement(action->p, action->managerPath, action->nodeID, spec.elementID);
+            if (!ge->removePositionById(spec.positionID))
+                throw std::runtime_error("DeletePositionsAction::doAction: position id missing");
+            tracks.push_back(static_cast<uint16_t>(spec.positionSnapshot.value("trackID", 0)));
+        }
+        if (em)
+            for (uint16_t tid : tracks) recalcTrackChannels(em, tid);
+    };
+    action->undoAction = [action]() {
+        ElementManager* em = undoResolveArrangerElementManager(action->p, action->managerPath, action->nodeID);
+        // Ascending original index keeps same-element ordering exact.
+        std::vector<const DeletePositionSpec*> ordered;
+        for (const auto& spec : action->specs) ordered.push_back(&spec);
+        std::sort(ordered.begin(), ordered.end(), [](const DeletePositionSpec* a, const DeletePositionSpec* b) {
+            return a->insertIndex < b->insertIndex;
+        });
+        std::vector<uint16_t> tracks;
+        for (const DeletePositionSpec* spec : ordered) {
+            GridElement* ge = undoResolveGridElement(action->p, action->managerPath, action->nodeID, spec->elementID);
+            ge->insertPositionAt(spec->insertIndex, spec->positionSnapshot);
+            tracks.push_back(static_cast<uint16_t>(spec->positionSnapshot.value("trackID", 0)));
+        }
+        if (em)
+            for (uint16_t tid : tracks) recalcTrackChannels(em, tid);
+    };
+}
+
+DeletePositionsAction::DeletePositionsAction(Project* p, std::vector<int> managerPath, int nodeID,
+                                             std::vector<std::pair<int, int>> elementAndPositionIDs) :
+        ProjectAction(p, DeletePositions),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID) {
+    for (const auto& [elementID, pid] : elementAndPositionIDs) {
+        GridElement* ge = undoResolveGridElement(p, this->managerPath, nodeID, elementID);
+        bool found = false;
+        for (size_t i = 0; i < ge->positions.size(); ++i) {
+            if (ge->positions[i]->id == pid) {
+                DeletePositionSpec spec;
+                spec.elementID = elementID;
+                spec.positionID = pid;
+                spec.insertIndex = i;
+                spec.positionSnapshot = GridElement::positionToJson(*ge->positions[i]);
+                specs.push_back(std::move(spec));
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            throw std::runtime_error("DeletePositionsAction: position id not found on element");
+    }
+    wireDeletePositionsLambdas(this);
+}
+
+DeletePositionsAction::DeletePositionsAction(Project* p, std::vector<int> managerPath, int nodeID,
+                                             std::vector<DeletePositionSpec> specs) :
+        ProjectAction(p, DeletePositions),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        specs(std::move(specs)) {
+    skipInitialDo = true;
+    wireDeletePositionsLambdas(this);
+}
+
+MoveElementPositionsAction::MoveElementPositionsAction(Project* p, std::vector<int> managerPath, int nodeID,
+                                                       std::vector<MovePositionSpec> specs) :
+        ProjectAction(p, MoveElementPositions),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        specs(std::move(specs)) {
+    skipInitialDo = true;
+    name = "Move " + std::to_string(this->specs.size()) + " Positions";
+    doAction = [this]() {
+        ElementManager* em = undoResolveArrangerElementManager(this->p, this->managerPath, this->nodeID);
+        std::vector<uint16_t> tracks;
+        for (auto& spec : this->specs) {
+            GridElement::Position* pos = undoResolveElementPosition(this->p, this->managerPath, this->nodeID,
+                                                                    spec.elementID, spec.positionID);
+            GridElement::applyPositionFromJson(pos, spec.after);
+            tracks.push_back(static_cast<uint16_t>(spec.after.value("trackID", 0)));
+        }
+        if (em)
+            for (uint16_t tid : tracks) recalcTrackChannels(em, tid);
+    };
+    undoAction = [this]() {
+        ElementManager* em = undoResolveArrangerElementManager(this->p, this->managerPath, this->nodeID);
+        std::vector<uint16_t> tracks;
+        for (auto& spec : this->specs) {
+            GridElement::Position* pos = undoResolveElementPosition(this->p, this->managerPath, this->nodeID,
+                                                                    spec.elementID, spec.positionID);
+            GridElement::applyPositionFromJson(pos, spec.before);
+            tracks.push_back(static_cast<uint16_t>(spec.before.value("trackID", 0)));
+        }
+        if (em)
+            for (uint16_t tid : tracks) recalcTrackChannels(em, tid);
     };
 }
 
@@ -974,16 +1109,18 @@ void RecordTakeAction::wireLambdas() {
                 if (!clip)
                     throw std::runtime_error("RecordTakeAction::doAction: failed to load recorded WAV");
                 clip->createPos(this->takeStartPairs, this->takeEndPairs, this->trackID,
-                                arr->rhythmEdoSubdivisionSteps, arr->rhythmEdoLowerVector,
-                                arr->rhythmEdoUpperVector);
+                                this->p->pianoRoll.rhythmEdoSubdivisionSteps,
+                                this->p->pianoRoll.rhythmEdoLowerVector,
+                                this->p->pianoRoll.rhythmEdoUpperVector);
                 this->elementID = static_cast<int>(clip->id);
                 this->elementSnapshot = clip->toJSON();
             } else {
                 Region* region = em->newRegion();
                 addTakeNotesToRegion(region, this->takeNotes);
                 region->createPos(this->takeStartPairs, this->takeEndPairs, this->trackID,
-                                  arr->rhythmEdoSubdivisionSteps, arr->rhythmEdoLowerVector,
-                                  arr->rhythmEdoUpperVector);
+                                  this->p->pianoRoll.rhythmEdoSubdivisionSteps,
+                                  this->p->pianoRoll.rhythmEdoLowerVector,
+                                  this->p->pianoRoll.rhythmEdoUpperVector);
                 this->elementID = static_cast<int>(region->id);
                 this->elementSnapshot = region->toJSON();
             }

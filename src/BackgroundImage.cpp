@@ -1,4 +1,5 @@
 #include "BackgroundImage.h"
+#include "Assets.h"
 
 #include <SDL3_image/SDL_image.h>
 
@@ -22,7 +23,7 @@ std::vector<std::string> listWallpapers() {
     namespace fs = std::filesystem;
     std::vector<std::string> out;
     std::error_code ec;
-    for (auto it = fs::directory_iterator(kDir, ec);
+    for (auto it = fs::directory_iterator(resolveAssetPath(kDir), ec);
          !ec && it != fs::directory_iterator(); it.increment(ec)) {
         if (!it->is_regular_file() || !isImage(it->path())) continue;
         out.push_back(it->path().string());
@@ -43,7 +44,7 @@ SDL_Texture* Texture::get(SDL_Renderer* r, const std::string& p) {
     reset();
     renderer = r;
     path = p;
-    tex = IMG_LoadTexture(r, p.c_str());
+    tex = IMG_LoadTexture(r, resolveAssetPath(p).c_str());
     if (!tex)
         std::cerr << "[bg] cannot load " << p << ": " << SDL_GetError() << std::endl;
     return tex;

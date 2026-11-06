@@ -54,6 +54,10 @@ class OutputNode : public Node {
         Quad evRemoveQuad{};
         size_t countLocalEventInputs() const;
 
+        /** Master volume for everything summed into the output. 0.5 = unity. */
+        Knob volume = Knob(0.5f, NODE_W * 0.5f, NODE_H * 0.76f, 16.0f,
+                           "assets/knobs/1.png", -135.0f, 135.0f, "Volume");
+
         PatcherNode* coupledPatcher = nullptr;
         bool shouldAutoPlaceFromWindow = true;
 };

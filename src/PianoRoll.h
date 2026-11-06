@@ -78,7 +78,9 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         bool movingNoteHasUndoSnapshot = false;
         bool movingNoteDragDirty = false;
         std::optional<float> movingNotePitchPreviewLineMidi;
-        std::optional<size_t> movingNoteRhythmPreviewLineIdx;
+        // Rhythm snap target while dragging notes. A vector (not a grid index) so the
+        // transport strip lines can be snap targets too.
+        std::optional<std::vector<std::pair<int,int>>> movingNoteRhythmPreviewPairs;
         json stretchingNoteUndoBefore;
         bool stretchingNoteHasUndoSnapshot = false;
         bool stretchingNoteDragDirty = false;
@@ -237,9 +239,14 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         size_t hoveredPitchLineIndex = SIZE_MAX;
 
         std::vector<PianoRollPitchLine> pitchLines;
+        /** Serialized central tuning last used to build pitchLines; polled each tick. */
+        std::string lastCentralTuningJson;
         std::vector<std::string> rhythmLineLabels;
         size_t hoveredRhythmLineIndex = SIZE_MAX;
         void updateRhythmLines();
+        /** Central piano-roll tuning/rhythm (Project-level, shared by all rolls). */
+        RegionTuningSnapshot captureCentralTuning() const;
+        void applyCentralTuning(const RegionTuningSnapshot& s);
         void refreshHoveredRhythmLineIndex();
         size_t closestRhythmLineIndexForSeconds(float seconds);
         void renderPianoRollGridTexture(SDL_Renderer* renderer);

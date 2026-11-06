@@ -83,6 +83,14 @@ struct Connection{
     // For input connections: how many channels the connected source actually carries.
     int sourceChannels = 1;
 
+    // Cached port-label texture. Re-rasterizing and destroying one every frame
+    // churns the GL command queue and can stall the driver.
+    SDL_Texture* labelTexture = nullptr;
+    SDL_Renderer* labelRenderer = nullptr;
+    std::string labelTextureText;
+    int labelTexW = 0;
+    int labelTexH = 0;
+
     void setPdcDelay(int samples) {
         if (samples <= 0) {
             pdcDelay = 0;

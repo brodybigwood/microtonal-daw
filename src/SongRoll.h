@@ -4,6 +4,7 @@
 #include <vector>
 #include <utility>
 #include <unordered_map>
+#include <set>
 #include "GridElement.h"
 #include "GridView.h"
 #include "styles.h"
@@ -34,6 +35,8 @@ class SongRoll : public GridView{
         ArrangerNode* parentNode;
         TrackManager* tracks;
         ElementManager* em;
+        /** Re-point at the node's current managers (they are replaced on project load). */
+        void bindNode(ArrangerNode* n);
         SDL_FRect leftRect;
 
         WindowHandler* windowHandler;
@@ -70,6 +73,30 @@ class SongRoll : public GridView{
         void getHoveredPosition();
 
         void clickMouse(SDL_Event& e) override;
+        bool handleKeyboard(SDL_Event& e);
+
+        // Position selection (arranger-level clipboard works like the piano roll's notes).
+        std::set<int> selectedPositionIds;
+        bool positionSelected(int id) const { return selectedPositionIds.count(id) > 0; }
+        bool selectingPositionBand = false;
+        float bandStartX = 0, bandStartY = 0, bandEndX = 0, bandEndY = 0;
+
+        struct PositionDragSnapshot {
+            int elementID = 0;
+            int positionID = 0;
+            uint16_t trackID = 0;
+            std::vector<std::pair<int,int>> rhythmVector;
+            std::vector<std::pair<int,int>> rhythmEndVector;
+            std::vector<std::pair<int,int>> startOffsetPairs;
+            json before;
+        };
+        bool movingMultiplePositions = false;
+        std::vector<PositionDragSnapshot> multiMoveSnapshots;
+
+        GridElement::Position* findPosition(int elementID, int positionID, GridElement** elementOut = nullptr);
+        void copySelectedPositions();
+        void pastePositionClipboard(float firstBeat, bool exactDuplicate = false);
+        void deleteSelectedPositions();
 
         enum class PositionDragKind { None = 0, Move, ResizeLeft, ResizeRight };
         PositionDragKind positionDragKind = PositionDragKind::None;
@@ -133,6 +160,8 @@ class SongRoll : public GridView{
         void applyTransportToGrid() override;
         json arrangerRhythmEdoJson() const;
         void commitArrangerRhythmEdo(const json& before, const std::string& label);
+        /** Copy a position's stored rhythm-Edo span into the arranger grid (undoable). */
+        void recallPositionRhythm(const GridElement::Position* pos);
 
         // Drag state for position snapping
         std::vector<std::pair<int, int>> positionDragStartPairs;

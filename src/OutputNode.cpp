@@ -79,6 +79,15 @@ void drawThickSegmentInward(SDL_Renderer* renderer, float x1, float y1, float x2
         SDL_RenderLine(renderer, x1 + nx * sign * i, y1 + ny * sign * i, x2 + nx * sign * i, y2 + ny * sign * i);
     }
 }
+
+// Knob 0..1 -> linear gain. Centre stays unity; below half tapers linearly to 0,
+// above half is a dB curve reaching +48 dB at full. Same curve as the Gain node.
+float outputGain(float v) {
+    v = std::clamp(v, 0.0f, 1.0f);
+    if (v <= 0.0f) return 0.0f;
+    if (v <= 0.5f) return v * 2.0f;
+    return std::exp2((v - 0.5f) * (96.0f / 6.020599913f));
+}
 }
 
 void OutputNode::setCoupledPatcher(PatcherNode* p) {
@@ -162,6 +171,7 @@ OutputNode::OutputNode(NodeManager* nm) : Node(0, nm, NodeType::Count) {
     }
 
     move(0.0f, 0.0f);
+    params.push_back(&volume);
 }
 
 void OutputNode::process() {
@@ -184,6 +194,15 @@ void OutputNode::process() {
         }
         ++k;
     }
+
+    // Master volume (0.5 = unity, same taper as the Gain node).
+    const float gain = outputGain(volume[0]);
+    if (gain != 1.0f)
+        for (int ch = 0; ch < numChannels; ++ch) {
+            float* dst = output + static_cast<size_t>(ch) * bufferSize;
+            for (int i = 0; i < bufferSize; ++i)
+                dst[i] *= gain;
+        }
 }
 
 void OutputNode::renderContent(SDL_Renderer* renderer) {
@@ -286,6 +305,11 @@ json OutputNode::serialize() {
         }
     }
 
+    j["params"] = json::array();
+    for (auto* p : params) {
+        j["params"].push_back(p ? p->value : 0.0f);
+    }
+
     return j;
 }
 
@@ -354,6 +378,13 @@ void OutputNode::deSerialize(json j) {
         inputs.id_pool.reserveID(c->id);
     }
     makeConnectionRects();
+
+    if (j.contains("params")) {
+        const auto& jp = j["params"];
+        for (size_t i = 0; i < params.size() && i < jp.size(); ++i) {
+            if (params[i]) params[i]->value = jp[i].get<float>();
+        }
+    }
 
     move(j["x"], j["y"]);
     shouldAutoPlaceFromWindow = false;

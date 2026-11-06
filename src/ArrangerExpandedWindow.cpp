@@ -33,6 +33,7 @@ void ArrangerExpandedWindow::render() {
     arrangerNode_->ensureSongRoll();
     sl_ = arrangerNode_->sl;
     if (!sl_) return;
+    sl_->bindNode(arrangerNode_);
 
     // Update the ArrangerNode's slRect to match the window size.
     if (arrangerNode_->slRect) {
@@ -62,5 +63,6 @@ bool ArrangerExpandedWindow::handleInput(SDL_Event& e) {
 }
 
 bool ArrangerExpandedWindow::handleKeyboard(SDL_Event& e) {
-    return false;
+    if (!arrangerNode_ || !sl_) return false;
+    return sl_->handleKeyboard(e);
 }

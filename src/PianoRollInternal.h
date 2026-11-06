@@ -557,3 +557,21 @@ inline size_t closestRhythmLineIndexForSeconds(const std::vector<RhythmGridLine>
     return best;
 }
 
+/// Nearest line across the grid rhythm set and the transport-strip set.
+/// Grid lines win ties; the transport set only replaces one when strictly closer.
+inline const RhythmGridLine* closestRhythmOrTransportLine(const std::vector<RhythmGridLine>& rhythm,
+                                                          const std::vector<RhythmGridLine>& transport,
+                                                          float seconds) {
+    const RhythmGridLine* best = nullptr;
+    float bd = FLT_MAX;
+    for (const auto& line : rhythm) {
+        const float d = std::fabs(line.seconds - seconds);
+        if (d < bd) { bd = d; best = &line; }
+    }
+    for (const auto& line : transport) {
+        const float d = std::fabs(line.seconds - seconds);
+        if (d < bd) { bd = d; best = &line; }
+    }
+    return best;
+}
+

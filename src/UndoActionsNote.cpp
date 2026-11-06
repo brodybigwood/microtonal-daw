@@ -18,6 +18,7 @@
 #include "Note.h"
 #include "PianoRoll.h"
 #include <stdexcept>
+#include <algorithm>
 #include <unordered_map>
 #include <vector>
 #include "UndoInternal.h"
@@ -194,6 +195,68 @@ DeleteNoteAction::DeleteNoteAction(Project* p, std::vector<int> managerPath, int
     wireDeleteLambdas();
 }
 
+static void wireDeleteNotesLambdas(DeleteNotesAction* action) {
+    action->name = "Delete " + std::to_string(action->notes.size()) + " Notes";
+    action->doAction = [action]() {
+        Region& r = *undoResolveArrangerRegion(action->p, action->managerPath, action->nodeID, action->regionID);
+        // Delete from the highest index down so the stored indices stay valid.
+        std::vector<const DeleteNoteSpec*> ordered;
+        for (const auto& spec : action->notes) ordered.push_back(&spec);
+        std::sort(ordered.begin(), ordered.end(), [](const DeleteNoteSpec* a, const DeleteNoteSpec* b) {
+            return a->insertIndex > b->insertIndex;
+        });
+        for (const DeleteNoteSpec* spec : ordered)
+            r.deleteNote(spec->noteID);
+    };
+    action->undoAction = [action]() {
+        Region& r = *undoResolveArrangerRegion(action->p, action->managerPath, action->nodeID, action->regionID);
+        // Ascending original index puts every note back where it was.
+        std::vector<const DeleteNoteSpec*> ordered;
+        for (const auto& spec : action->notes) ordered.push_back(&spec);
+        std::sort(ordered.begin(), ordered.end(), [](const DeleteNoteSpec* a, const DeleteNoteSpec* b) {
+            return a->insertIndex < b->insertIndex;
+        });
+        for (const DeleteNoteSpec* spec : ordered) {
+            json snap = spec->noteSnapshot;
+            r.restoreNoteAt(Note::fromJSON(snap), spec->insertIndex);
+        }
+    };
+}
+
+DeleteNotesAction::DeleteNotesAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID,
+                                     std::vector<int> noteIDs) :
+        ProjectAction(p, DeleteNotes),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        regionID(regionID) {
+    Region& r = *undoResolveArrangerRegion(p, this->managerPath, nodeID, regionID);
+    for (int nid : noteIDs) {
+        auto it = r.id_to_index.find(nid);
+        if (it == r.id_to_index.end())
+            throw std::runtime_error("DeleteNotesAction: note id not in region");
+        const size_t idx = static_cast<size_t>(it->second);
+        if (idx >= r.notes.size() || !r.notes[idx] || r.notes[idx]->id != nid)
+            throw std::runtime_error("DeleteNotesAction: note index or id mismatch");
+        DeleteNoteSpec spec;
+        spec.noteID = nid;
+        spec.insertIndex = idx;
+        spec.noteSnapshot = r.notes[idx]->toJSON();
+        notes.push_back(std::move(spec));
+    }
+    wireDeleteNotesLambdas(this);
+}
+
+DeleteNotesAction::DeleteNotesAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID,
+                                     std::vector<DeleteNoteSpec> notes) :
+        ProjectAction(p, DeleteNotes),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        regionID(regionID),
+        notes(std::move(notes)) {
+    skipInitialDo = true;
+    wireDeleteNotesLambdas(this);
+}
+
 PianoRollRegionTuningUndoAction::PianoRollRegionTuningUndoAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID,
                                                                  json beforeRegion, json afterRegion, std::string actionName) :
         ProjectAction(p, PianoRollRegionTuning),
@@ -206,13 +269,12 @@ PianoRollRegionTuningUndoAction::PianoRollRegionTuningUndoAction(Project* p, std
         throw std::runtime_error("PianoRollRegionTuningUndoAction: actionName must be non-empty");
     name = std::move(actionName);
     doAction = [this]() {
-        Region& r = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
-        r.applyTuningUndoFromJSON(this->afterRegion);
+        // Central piano-roll lines, shared by every roll (not per region).
+        this->p->pianoRollFromJson(this->afterRegion);
         PianoRoll::notifyTuningUndoApplied(this->p, this->managerPath, this->nodeID, this->regionID, -1);
     };
     undoAction = [this]() {
-        Region& r = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
-        r.applyTuningUndoFromJSON(this->beforeRegion);
+        this->p->pianoRollFromJson(this->beforeRegion);
         PianoRoll::notifyTuningUndoApplied(this->p, this->managerPath, this->nodeID, this->regionID, -1);
     };
 }
@@ -231,8 +293,9 @@ AssignNoteHarmonicUndoAction::AssignNoteHarmonicUndoAction(Project* p, std::vect
         afterNote(std::move(afterNote)) {
     name = "Assign Note Harmonic";
     doAction = [this]() {
+        // Tuning lives on the project (shared by every piano roll), not the region.
+        this->p->pianoRollFromJson(this->afterRegion);
         Region& r = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
-        r.applyTuningUndoFromJSON(this->afterRegion);
         auto it = r.id_to_index.find(this->noteID);
         if (it == r.id_to_index.end())
             throw std::runtime_error("AssignNoteHarmonicUndoAction::doAction: note id not in region");
@@ -246,8 +309,8 @@ AssignNoteHarmonicUndoAction::AssignNoteHarmonicUndoAction(Project* p, std::vect
         PianoRoll::notifyTuningUndoApplied(this->p, this->managerPath, this->nodeID, this->regionID, this->noteID);
     };
     undoAction = [this]() {
+        this->p->pianoRollFromJson(this->beforeRegion);
         Region& r = *undoResolveArrangerRegion(this->p, this->managerPath, this->nodeID, this->regionID);
-        r.applyTuningUndoFromJSON(this->beforeRegion);
         auto it = r.id_to_index.find(this->noteID);
         if (it == r.id_to_index.end())
             throw std::runtime_error("AssignNoteHarmonicUndoAction::undoAction: note id not in region");

@@ -358,6 +358,73 @@ static ProjectAction* deSerializeOne(const json& j, Project* p) {
             pa = new MoveElementPositionAction(p, j.at("managerPath").get<std::vector<int>>(), j.at("nodeID").get<int>(), j.at("elementID").get<int>(),
                 j.at("positionID").get<int>(), j.at("before"), j.at("after"));
             break;
+        case DeleteNotes: {
+            std::vector<DeleteNoteSpec> specs;
+            for (const auto& e : j.at("notes")) {
+                DeleteNoteSpec s;
+                s.noteID = e.at("noteID").get<int>();
+                s.insertIndex = e.at("insertIndex").get<size_t>();
+                s.noteSnapshot = e.at("snapshot");
+                specs.push_back(std::move(s));
+            }
+            pa = new DeleteNotesAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(), j.at("regionID").get<int>(), std::move(specs));
+            break;
+        }
+        case CreatePositions: {
+            auto readPairs = [](const json& j) {
+                std::vector<std::pair<int,int>> out;
+                for (const auto& el : j)
+                    if (el.is_array() && el.size() >= 2)
+                        out.push_back({el[0].get<int>(), el[1].get<int>()});
+                return out;
+            };
+            std::vector<CreatePositionSpec> specs;
+            for (const auto& e : j.at("positions")) {
+                CreatePositionSpec s;
+                s.elementID = e.at("elementID").get<int>();
+                s.rhythmVector = readPairs(e.at("startPairs"));
+                s.rhythmEndVector = readPairs(e.at("endPairs"));
+                s.startOffsetPairs = readPairs(e.value("startOffsetPairs", json::array()));
+                s.trackID = static_cast<uint16_t>(e.at("trackID").get<int>());
+                s.rhythmEdoSteps = e.value("rhythmEdoSteps", 1);
+                s.rhythmEdoLower = readPairs(e.value("rhythmEdoLower", json::array()));
+                s.rhythmEdoUpper = readPairs(e.value("rhythmEdoUpper", json::array()));
+                s.positionID = e.value("positionID", -1);
+                specs.push_back(std::move(s));
+            }
+            pa = new CreatePositionsAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(), std::move(specs));
+            break;
+        }
+        case DeletePositions: {
+            std::vector<DeletePositionSpec> specs;
+            for (const auto& e : j.at("entries")) {
+                DeletePositionSpec s;
+                s.elementID = e.at("elementID").get<int>();
+                s.positionID = e.at("positionID").get<int>();
+                s.insertIndex = e.at("insertIndex").get<size_t>();
+                s.positionSnapshot = e.at("snapshot");
+                specs.push_back(std::move(s));
+            }
+            pa = new DeletePositionsAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(), std::move(specs));
+            break;
+        }
+        case MoveElementPositions: {
+            std::vector<MovePositionSpec> specs;
+            for (const auto& e : j.at("entries")) {
+                MovePositionSpec s;
+                s.elementID = e.at("elementID").get<int>();
+                s.positionID = e.at("positionID").get<int>();
+                s.before = e.at("before");
+                s.after = e.at("after");
+                specs.push_back(std::move(s));
+            }
+            pa = new MoveElementPositionsAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(), std::move(specs));
+            break;
+        }
         case IoPortChannel: {
             auto* io = new IoPortChannelAction(p, j.at("op").get<int>(), j.at("managerPath").get<std::vector<int>>(),
                 static_cast<uint16_t>(j.at("connectionId").get<int>()), j.at("connectionIndex").get<size_t>());
@@ -976,6 +1043,76 @@ static json serializeOne(ProjectAction* pa) {
             j["positionID"] = mp->positionID;
             j["before"] = mp->before;
             j["after"] = mp->after;
+            break;
+        }
+        case CreatePositions: {
+            auto cp = static_cast<CreatePositionsAction*>(pa);
+            j["managerPath"] = cp->managerPath;
+            j["nodeID"] = cp->nodeID;
+            j["positions"] = json::array();
+            for (const auto& s : cp->specs) {
+                json e;
+                e["elementID"] = s.elementID;
+                e["startPairs"] = json::array();
+                for (const auto& pr : s.rhythmVector) e["startPairs"].push_back(json::array({pr.first, pr.second}));
+                e["endPairs"] = json::array();
+                for (const auto& pr : s.rhythmEndVector) e["endPairs"].push_back(json::array({pr.first, pr.second}));
+                e["startOffsetPairs"] = json::array();
+                for (const auto& pr : s.startOffsetPairs) e["startOffsetPairs"].push_back(json::array({pr.first, pr.second}));
+                e["trackID"] = static_cast<int>(s.trackID);
+                e["rhythmEdoSteps"] = s.rhythmEdoSteps;
+                e["rhythmEdoLower"] = json::array();
+                for (const auto& pr : s.rhythmEdoLower) e["rhythmEdoLower"].push_back(json::array({pr.first, pr.second}));
+                e["rhythmEdoUpper"] = json::array();
+                for (const auto& pr : s.rhythmEdoUpper) e["rhythmEdoUpper"].push_back(json::array({pr.first, pr.second}));
+                e["positionID"] = s.positionID;
+                j["positions"].push_back(std::move(e));
+            }
+            break;
+        }
+        case DeletePositions: {
+            auto dp = static_cast<DeletePositionsAction*>(pa);
+            j["managerPath"] = dp->managerPath;
+            j["nodeID"] = dp->nodeID;
+            j["entries"] = json::array();
+            for (const auto& s : dp->specs) {
+                json e;
+                e["elementID"] = s.elementID;
+                e["positionID"] = s.positionID;
+                e["insertIndex"] = s.insertIndex;
+                e["snapshot"] = s.positionSnapshot;
+                j["entries"].push_back(std::move(e));
+            }
+            break;
+        }
+        case MoveElementPositions: {
+            auto mp = static_cast<MoveElementPositionsAction*>(pa);
+            j["managerPath"] = mp->managerPath;
+            j["nodeID"] = mp->nodeID;
+            j["entries"] = json::array();
+            for (const auto& s : mp->specs) {
+                json e;
+                e["elementID"] = s.elementID;
+                e["positionID"] = s.positionID;
+                e["before"] = s.before;
+                e["after"] = s.after;
+                j["entries"].push_back(std::move(e));
+            }
+            break;
+        }
+        case DeleteNotes: {
+            auto dn = static_cast<DeleteNotesAction*>(pa);
+            j["managerPath"] = dn->managerPath;
+            j["nodeID"] = dn->nodeID;
+            j["regionID"] = dn->regionID;
+            j["notes"] = json::array();
+            for (const auto& s : dn->notes) {
+                json e;
+                e["noteID"] = s.noteID;
+                e["insertIndex"] = s.insertIndex;
+                e["snapshot"] = s.noteSnapshot;
+                j["notes"].push_back(std::move(e));
+            }
             break;
         }
         case IoPortChannel: {

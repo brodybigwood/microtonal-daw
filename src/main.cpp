@@ -5,6 +5,7 @@
 #include "ControlServer.h"
 #include "Settings.h"
 #include "LoadingScreen.h"
+#include "Assets.h"
 #include "styles.h"
 
 #ifndef __EMSCRIPTEN__
@@ -15,6 +16,7 @@
 #include <emscripten.h>
 #endif
 #include <thread>
+#include <filesystem>
 #include <iostream>
 #include <cstdlib>
 #include <string>
@@ -27,6 +29,8 @@
 static std::atomic<bool> quit{false};
 
 int main(int argc, char* argv[]) {
+    // Capture the launch directory before any VST can chdir() the process.
+    g_launchDir = std::filesystem::current_path();
     std::signal(SIGINT, [](int){ quit.store(true); });
     std::signal(SIGTERM, [](int){ quit.store(true); });
 

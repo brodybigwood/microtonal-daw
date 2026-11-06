@@ -49,6 +49,31 @@ std::vector<std::pair<int, int>> pairsForSeconds(const std::vector<RhythmGridLin
         return lines[idx].integerPairs;
     return {};
 }
+
+// Session-wide arranger position clipboard. Entries reference the shared element by id
+// (shared placements), exactly like the piano roll's note clipboard is session-wide.
+struct PositionClipEntry {
+    int elementID = 0;
+    uint16_t trackID = 0;
+    std::vector<std::pair<int, int>> rhythmVector;
+    std::vector<std::pair<int, int>> rhythmEndVector;
+    std::vector<std::pair<int, int>> startOffsetPairs;
+    int rhythmEdoSteps = 1;
+    std::vector<std::pair<int, int>> rhythmEdoLower;
+    std::vector<std::pair<int, int>> rhythmEdoUpper;
+};
+
+struct PositionClipboard {
+    bool valid = false;
+    std::vector<int> managerPath;
+    int nodeID = -1;
+    std::vector<PositionClipEntry> entries;
+    std::vector<std::pair<int, int>> firstStartPairs;
+    float firstStartSec = 0.f;
+    float lastEndSec = 0.f;
+};
+
+PositionClipboard g_positionClip;
 } // namespace
 
 void SongRoll::clearPianoRoll(int regionId, bool createUndo) {
@@ -105,6 +130,17 @@ void SongRoll::closePianoRollWindow(PianoRollWindow* prw, bool createUndo) {
 }
 
 void SongRoll::validateTimelinePointers() {
+    // Drop selected ids whose positions no longer exist (deleted/undone elements).
+    if (!selectedPositionIds.empty()) {
+        std::set<int> live;
+        for (auto* e : em->elements)
+            for (auto* p : e->positions) live.insert(p->id);
+        for (auto it = selectedPositionIds.begin(); it != selectedPositionIds.end(); ) {
+            if (live.count(*it)) ++it;
+            else it = selectedPositionIds.erase(it);
+        }
+    }
+
     for (size_t i = 0; i < pianoRolls.size(); ) {
         PianoRoll* pr = pianoRolls[i];
         if (!pr->region || !em->ids.count(pr->region->id)) {
@@ -219,6 +255,27 @@ SongRoll::SongRoll(SDL_FRect* rect, Window* w, Project* p, ArrangerNode* n) : Gr
     tracks->scrollY = &scrollY;
 }
 
+void SongRoll::bindNode(ArrangerNode* n) {
+    if (!n) return;
+    parentNode = n;
+    // Project loads replace the node's TrackManager/ElementManager; a SongRoll kept
+    // alive across window opens must follow them instead of drawing a stale copy.
+    if (tracks != n->tracks) {
+        tracks = n->tracks;
+        if (tracks) {
+            tracks->songRoll = this;
+            tracks->parentNode = n;
+            tracks->mouseX = &mouseX;
+            tracks->mouseY = &mouseY;
+            tracks->divHeight = &divHeight;
+            tracks->scrollY = &scrollY;
+            tracks->setGeometry(&leftRect, renderer);
+        }
+    }
+    em = n->elements;
+    if (em) em->dstRect = &rightRect;
+}
+
 bool SongRoll::customTick(SDL_Renderer* renderer) {
     if (!texture) generateTextures(renderer);
 
@@ -271,6 +328,20 @@ bool SongRoll::customTick(SDL_Renderer* renderer) {
         SDL_RenderFillRect(renderer, &band);
         SDL_SetRenderDrawColor(renderer, 70, 150, 235, 200);
         SDL_RenderRect(renderer, &band);
+    }
+
+    if (selectingPositionBand) {
+        const float x1 = dstRect->x + std::min(bandStartX, bandEndX);
+        const float y1 = dstRect->y + std::min(bandStartY, bandEndY);
+        const float w = std::fabs(bandEndX - bandStartX);
+        const float h = std::fabs(bandEndY - bandStartY);
+        SDL_FRect band{x1, y1, w, h};
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer, 100, 150, 255, 40);
+        SDL_RenderFillRect(renderer, &band);
+        SDL_SetRenderDrawColor(renderer, 100, 150, 255, 180);
+        SDL_RenderRect(renderer, &band);
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     }
 
     playHead->render(renderer, dW, scrollX);
@@ -384,15 +455,18 @@ std::vector<std::pair<int, int>> SongRoll::pairsAtMouseX() {
 }
 
 void SongRoll::updateRhythmLines() {
-    const int steps = parentNode ? parentNode->rhythmEdoSubdivisionSteps : 1;
+    // The rhythm grid is the project-wide piano-roll grid (shared by every piano roll
+    // and every arranger), not per-arranger state.
+    const int steps = project ? project->pianoRoll.rhythmEdoSubdivisionSteps : 1;
     static const std::vector<std::pair<int, int>> kOneSec{{1,1}};
-    const auto& lower = parentNode ? parentNode->rhythmEdoLowerVector : std::vector<std::pair<int,int>>{};
-    const auto& upper = (parentNode && !parentNode->rhythmEdoUpperVector.empty())
-        ? parentNode->rhythmEdoUpperVector : kOneSec;
+    const auto& lower = project ? project->pianoRoll.rhythmEdoLowerVector
+                                : std::vector<std::pair<int,int>>{};
+    const auto& upper = (project && !project->pianoRoll.rhythmEdoUpperVector.empty())
+        ? project->pianoRoll.rhythmEdoUpperVector : kOneSec;
     const float minSec = (static_cast<float>(scrollX) - leftMargin) / static_cast<float>(dW);
     const float maxSec = (static_cast<float>(scrollX) + width - leftMargin) / static_cast<float>(dW);
-    if (parentNode && !parentNode->gridSpans.empty())
-        generateTransportLines(rhythmLines, rhythmLineLabels, parentNode->gridSpans, minSec, maxSec);
+    if (project && !project->pianoRoll.gridSpans.empty())
+        generateTransportLines(rhythmLines, rhythmLineLabels, project->pianoRoll.gridSpans, minSec, maxSec);
     else
         generateRhythmLines(rhythmLines, rhythmLineLabels, steps, lower, upper, minSec, maxSec);
     updateTransportLines();
@@ -441,48 +515,46 @@ void SongRoll::movePosition() {
 
     switch (positionDragKind) {
         case PositionDragKind::ResizeLeft: {
-            size_t li = closestRhythmLineIndexForSeconds(rhythmLines, secondsFromMouseX());
-            if (li != SIZE_MAX && li < rhythmLines.size())
-                movingPosition->rhythmVector = rhythmLines[li].integerPairs;
+            if (const RhythmGridLine* line = closestRhythmOrTransportLine(
+                    rhythmLines, transportLineCache, secondsFromMouseX()))
+                movingPosition->rhythmVector = line->integerPairs;
             auto startDelta = subVec(movingPosition->rhythmVector, lastPosition.rhythmVector);
             movingPosition->startOffsetPairs = addVec(lastPosition.startOffsetPairs, startDelta);
             if (parentNode) {
-                movingPosition->rhythmEdoSubdivisionSteps = parentNode->rhythmEdoSubdivisionSteps;
-                movingPosition->rhythmEdoLowerVector = parentNode->rhythmEdoLowerVector;
-                movingPosition->rhythmEdoUpperVector = parentNode->rhythmEdoUpperVector;
+                movingPosition->rhythmEdoSubdivisionSteps = project->pianoRoll.rhythmEdoSubdivisionSteps;
+                movingPosition->rhythmEdoLowerVector = project->pianoRoll.rhythmEdoLowerVector;
+                movingPosition->rhythmEdoUpperVector = project->pianoRoll.rhythmEdoUpperVector;
             }
             break;
         }
         case PositionDragKind::ResizeRight: {
             float startSec = Note::beatsFromVector(lastPosition.rhythmVector);
             float newEndSec = Note::beatsFromVector(lastPosition.rhythmEndVector) + deltaSec;
-            const float minLenSec = 1.0f / static_cast<float>(std::max(1, parentNode ? parentNode->rhythmEdoSubdivisionSteps : 1));
+            const float minLenSec = 1.0f / static_cast<float>(std::max(1, project ? project->pianoRoll.rhythmEdoSubdivisionSteps : 1));
             if (newEndSec - startSec < minLenSec)
                 newEndSec = startSec + minLenSec;
-            size_t li = closestRhythmLineIndexForSeconds(rhythmLines, newEndSec);
-            if (li != SIZE_MAX && li < rhythmLines.size())
-                movingPosition->rhythmEndVector = rhythmLines[li].integerPairs;
+            if (const RhythmGridLine* line = closestRhythmOrTransportLine(rhythmLines, transportLineCache, newEndSec))
+                movingPosition->rhythmEndVector = line->integerPairs;
             movingPosition->rhythmVector = lastPosition.rhythmVector;
             if (parentNode) {
-                movingPosition->rhythmEdoSubdivisionSteps = parentNode->rhythmEdoSubdivisionSteps;
-                movingPosition->rhythmEdoLowerVector = parentNode->rhythmEdoLowerVector;
-                movingPosition->rhythmEdoUpperVector = parentNode->rhythmEdoUpperVector;
+                movingPosition->rhythmEdoSubdivisionSteps = project->pianoRoll.rhythmEdoSubdivisionSteps;
+                movingPosition->rhythmEdoLowerVector = project->pianoRoll.rhythmEdoLowerVector;
+                movingPosition->rhythmEdoUpperVector = project->pianoRoll.rhythmEdoUpperVector;
             }
             break;
         }
         case PositionDragKind::Move:
         default: {
             float startSec = Note::beatsFromVector(lastPosition.rhythmVector) + deltaSec;
-            size_t sli = closestRhythmLineIndexForSeconds(rhythmLines, startSec);
-            if (sli != SIZE_MAX && sli < rhythmLines.size()) {
-                auto startDelta = subVec(rhythmLines[sli].integerPairs, lastPosition.rhythmVector);
-                movingPosition->rhythmVector = rhythmLines[sli].integerPairs;
+            if (const RhythmGridLine* line = closestRhythmOrTransportLine(rhythmLines, transportLineCache, startSec)) {
+                auto startDelta = subVec(line->integerPairs, lastPosition.rhythmVector);
+                movingPosition->rhythmVector = line->integerPairs;
                 movingPosition->rhythmEndVector = addVec(lastPosition.rhythmEndVector, startDelta);
             }
             if (parentNode) {
-                movingPosition->rhythmEdoSubdivisionSteps = parentNode->rhythmEdoSubdivisionSteps;
-                movingPosition->rhythmEdoLowerVector = parentNode->rhythmEdoLowerVector;
-                movingPosition->rhythmEdoUpperVector = parentNode->rhythmEdoUpperVector;
+                movingPosition->rhythmEdoSubdivisionSteps = project->pianoRoll.rhythmEdoSubdivisionSteps;
+                movingPosition->rhythmEdoLowerVector = project->pianoRoll.rhythmEdoLowerVector;
+                movingPosition->rhythmEdoUpperVector = project->pianoRoll.rhythmEdoUpperVector;
             }
             break;
         }
@@ -495,6 +567,59 @@ void SongRoll::movePosition() {
         if (track && oldTrack && track->type == oldTrack->type)
             movingPosition->trackID = trackID;
     }
+
+    // Apply the grabbed position's exact rational edit delta to the rest of the
+    // selection. Both time and vertical track movement move every selected position
+    // by the grabbed one's delta. Snapshots prevent per-frame drift.
+    if (movingMultiplePositions) {
+        const int grabbedOldIdx = tracks->getIndex(lastPosition.trackID);
+        const int grabbedNewIdx = tracks->getIndex(movingPosition->trackID);
+        const int trackDelta = grabbedNewIdx - grabbedOldIdx;
+
+        for (const auto& snap : multiMoveSnapshots) {
+            if (snap.positionID == movingPosition->id) continue;
+            auto* pos = findPosition(snap.elementID, snap.positionID);
+            if (!pos) continue;
+            if (positionDragKind == PositionDragKind::Move && trackDelta != 0) {
+                const int srcIdx = tracks->getIndex(snap.trackID);
+                if (srcIdx >= 0) {
+                    const int dstIdx = srcIdx + trackDelta;
+                    if (dstIdx >= 0 && dstIdx < static_cast<int>(tracks->getTracks().size())) {
+                        const int dstID = tracks->getID(dstIdx);
+                        auto* srcTrack = tracks->getTrack(snap.trackID);
+                        auto* dstTrack = tracks->getTrack(dstID);
+                        if (srcTrack && dstTrack && dstTrack->type == srcTrack->type)
+                            pos->trackID = static_cast<uint16_t>(dstID);
+                    }
+                }
+            }
+            switch (positionDragKind) {
+                case PositionDragKind::ResizeLeft: {
+                    const auto startDelta = subVec(movingPosition->rhythmVector, lastPosition.rhythmVector);
+                    const auto newStart = addVec(snap.rhythmVector, startDelta);
+                    if (Note::beatsFromVector(newStart) < Note::beatsFromVector(snap.rhythmEndVector)) {
+                        pos->rhythmVector = newStart;
+                        pos->startOffsetPairs = addVec(snap.startOffsetPairs, startDelta);
+                    }
+                    break;
+                }
+                case PositionDragKind::ResizeRight: {
+                    const auto endDelta = subVec(movingPosition->rhythmEndVector, lastPosition.rhythmEndVector);
+                    const auto newEnd = addVec(snap.rhythmEndVector, endDelta);
+                    if (Note::beatsFromVector(newEnd) > Note::beatsFromVector(snap.rhythmVector))
+                        pos->rhythmEndVector = newEnd;
+                    break;
+                }
+                case PositionDragKind::Move:
+                default: {
+                    const auto delta = subVec(movingPosition->rhythmVector, lastPosition.rhythmVector);
+                    pos->rhythmVector = addVec(snap.rhythmVector, delta);
+                    pos->rhythmEndVector = addVec(snap.rhythmEndVector, delta);
+                    break;
+                }
+            }
+        }
+    }
 }
 
 void SongRoll::handleCustomInput(SDL_Event& e) {
@@ -506,6 +631,13 @@ void SongRoll::handleCustomInput(SDL_Event& e) {
         case SDL_EVENT_MOUSE_MOTION:
             getHoveredPosition();
             refreshHoveredRhythmLineIndex();
+
+            if (selectingPositionBand) {
+                bandEndX = mouseX;
+                bandEndY = mouseY;
+                refreshGrid = true;
+                break;
+            }
 
             // Curve point hover (only when not dragging)
             if (draggingCurvePointIdx < 0 && draggingTensionSeg < 0) {
@@ -547,8 +679,10 @@ void SongRoll::handleCustomInput(SDL_Event& e) {
 
             if (selectingTransportLines) {
                 refreshHoveredTransportLineIndex();
-                if (hoveredTransportLineIndex != SIZE_MAX && hoveredTransportLineIndex < transportLineCache.size()) {
-                    transportLineDragEndPairs = transportLineCache[hoveredTransportLineIndex].integerPairs;
+                // End snaps to the nearest line of either set (grid rhythm or transport).
+                if (const RhythmGridLine* line = closestRhythmOrTransportLine(
+                        rhythmLines, transportLineCache, secondsFromMouseX())) {
+                    transportLineDragEndPairs = line->integerPairs;
                     if (transportLineDragEndPairs != transportLineDragStartPairs)
                         transportLineDragMoved = true;
                 }
@@ -558,9 +692,10 @@ void SongRoll::handleCustomInput(SDL_Event& e) {
 
             if (selectingRhythmInterval) {
                 refreshHoveredRhythmLineIndex();
-                if (hoveredRhythmLineIndex != SIZE_MAX && hoveredRhythmLineIndex < rhythmLines.size()) {
-                    rhythmIntervalEndSec = rhythmLines[hoveredRhythmLineIndex].seconds;
-                    rhythmDragEndVertexPairs = rhythmLines[hoveredRhythmLineIndex].integerPairs;
+                if (const RhythmGridLine* line = closestRhythmOrTransportLine(
+                        rhythmLines, transportLineCache, secondsFromMouseX())) {
+                    rhythmIntervalEndSec = line->seconds;
+                    rhythmDragEndVertexPairs = line->integerPairs;
                     if (std::fabs(rhythmIntervalEndSec - rhythmIntervalStartSec) > 0.001f)
                         rhythmIntervalDragMoved = true;
                 }
@@ -586,8 +721,9 @@ void SongRoll::handleCustomInput(SDL_Event& e) {
                         }
                         auto& pt = ac->points[draggingCurvePointIdx];
                         refreshHoveredRhythmLineIndex();
-                        if (hoveredRhythmLineIndex != SIZE_MAX && hoveredRhythmLineIndex < rhythmLines.size()) {
-                            auto newVec = addVec(subVec(rhythmLines[hoveredRhythmLineIndex].integerPairs, *ce->startVec()), *ce->offsetVec());
+                        if (const RhythmGridLine* line = closestRhythmOrTransportLine(
+                                rhythmLines, transportLineCache, secondsFromMouseX())) {
+                            auto newVec = addVec(subVec(line->integerPairs, *ce->startVec()), *ce->offsetVec());
                             float newSec = Note::beatsFromVector(newVec);
                             // Don't cross adjacent points
                             if (draggingCurvePointIdx > 0) {
@@ -670,7 +806,10 @@ void SongRoll::renderElement(SDL_Renderer* renderer, GridElement* element) {
     SDL_SetRenderTarget(renderer, regionTexture);
     for(auto position : element->positions) {
         auto& pos = *position;
-        if(hoveredPosition == &pos) {
+        const bool selected = selectedPositionIds.count(pos.id) > 0;
+        if (selected) {
+            SDL_SetRenderDrawColor(renderer, 60,110,200,160);
+        } else if(hoveredPosition == &pos) {
             SDL_SetRenderDrawColor(renderer, 90,90,100,127);
         } else {
             SDL_SetRenderDrawColor(renderer, 20,20,100,127);
@@ -705,6 +844,11 @@ void SongRoll::renderElement(SDL_Renderer* renderer, GridElement* element) {
         SDL_SetRenderClipRect(renderer, &sdlClip);
         SDL_RenderTexture(renderer, element->texture, &srcRect, &fullDst);
         SDL_SetRenderClipRect(renderer, nullptr);
+        if (selected) {
+            SDL_SetRenderDrawColor(renderer, 150, 200, 255, 230);
+            SDL_FRect selOutline{visRect.x, visRect.y, visRect.w, visRect.h};
+            SDL_RenderRect(renderer, &selOutline);
+        }
 
         float topLeftCornerX = visRect.x;
         float wPx = visRect.w;
@@ -780,6 +924,194 @@ float SongRoll::getHoveredLine() {
 int SongRoll::getHoveredTrack() {
     auto trackIndex = getHoveredLine();
     return tracks->getID(trackIndex);
+}
+
+GridElement::Position* SongRoll::findPosition(int elementID, int positionID, GridElement** elementOut) {
+    if (!em) return nullptr;
+    auto it = em->ids.find(static_cast<uint16_t>(elementID));
+    if (it == em->ids.end()) return nullptr;
+    GridElement* ge = em->elements[it->second];
+    if (elementOut) *elementOut = ge;
+    for (auto* p : ge->positions)
+        if (p->id == positionID) return p;
+    return nullptr;
+}
+
+void SongRoll::copySelectedPositions() {
+    if (!em || !parentNode) return;
+    struct Src { GridElement* element; GridElement::Position* position; };
+    std::vector<Src> src;
+    for (auto* e : em->elements)
+        for (auto* p : e->positions)
+            if (selectedPositionIds.count(p->id)) src.push_back({e, p});
+    if (src.empty() && hoveredPosition)
+        src.push_back({hoveredPosition->element, hoveredPosition});
+    if (src.empty()) return;
+
+    std::sort(src.begin(), src.end(), [](const Src& a, const Src& b) {
+        const float sa = Note::beatsFromVector(a.position->rhythmVector);
+        const float sb = Note::beatsFromVector(b.position->rhythmVector);
+        if (sa != sb) return sa < sb;
+        return a.position->trackID < b.position->trackID;
+    });
+
+    PositionClipboard clip;
+    clip.valid = true;
+    clip.managerPath = parentNode->nm->managerPath;
+    clip.nodeID = static_cast<int>(parentNode->id);
+    bool first = true;
+    for (const auto& s : src) {
+        PositionClipEntry e;
+        e.elementID = static_cast<int>(s.element->id);
+        e.trackID = s.position->trackID;
+        e.rhythmVector = s.position->rhythmVector;
+        e.rhythmEndVector = s.position->rhythmEndVector;
+        e.startOffsetPairs = s.position->startOffsetPairs;
+        e.rhythmEdoSteps = s.position->rhythmEdoSubdivisionSteps;
+        e.rhythmEdoLower = s.position->rhythmEdoLowerVector;
+        e.rhythmEdoUpper = s.position->rhythmEdoUpperVector;
+        const float startSec = Note::beatsFromVector(e.rhythmVector);
+        const float endSec = Note::beatsFromVector(e.rhythmEndVector);
+        if (first) {
+            clip.firstStartSec = startSec;
+            clip.firstStartPairs = e.rhythmVector;
+            clip.lastEndSec = endSec;
+            first = false;
+        } else {
+            if (startSec < clip.firstStartSec) {
+                clip.firstStartSec = startSec;
+                clip.firstStartPairs = e.rhythmVector;
+            }
+            clip.lastEndSec = std::max(clip.lastEndSec, endSec);
+        }
+        clip.entries.push_back(std::move(e));
+    }
+    g_positionClip = std::move(clip);
+}
+
+void SongRoll::pastePositionClipboard(float firstBeat, bool exactDuplicate) {
+    if (!em || !parentNode || !project || !project->um) return;
+    if (!g_positionClip.valid || g_positionClip.entries.empty()) return;
+    if (g_positionClip.managerPath != parentNode->nm->managerPath ||
+        g_positionClip.nodeID != static_cast<int>(parentNode->id))
+        return;
+
+    std::vector<std::pair<int, int>> shift;
+    if (!exactDuplicate) {
+        // Exact when the target lands on a rhythm/transport line; otherwise the note
+        // paste's rational 1/48-beat quantization.
+        constexpr float kLineEpsilon = 1e-4f;
+        const auto tryLines = [&](const std::vector<RhythmGridLine>& lines) {
+            for (const auto& line : lines)
+                if (std::fabs(line.seconds - firstBeat) < kLineEpsilon) {
+                    shift = subVec(line.integerPairs, g_positionClip.firstStartPairs);
+                    return true;
+                }
+            return false;
+        };
+        if (!tryLines(rhythmLines) && !tryLines(transportLineCache)) {
+            const float shiftBeats = firstBeat - g_positionClip.firstStartSec;
+            if (std::fabs(shiftBeats) > 1e-6f) {
+                int den = 48;
+                int num = static_cast<int>(std::lround(shiftBeats * static_cast<float>(den)));
+                const int g = std::gcd(std::abs(num), den);
+                num /= g;
+                den /= g;
+                if (num != 0) shift = {{num, den}};
+            }
+        }
+    }
+
+    std::vector<CreatePositionSpec> specs;
+    for (const auto& e : g_positionClip.entries) {
+        auto it = em->ids.find(static_cast<uint16_t>(e.elementID));
+        if (it == em->ids.end()) continue;   // element deleted since the copy
+        GridElement* ge = em->elements[it->second];
+        auto* track = tracks->getTrack(e.trackID);
+        if (!track) continue;                // track removed since the copy
+        const bool notesTrack = track->getType() == TrackType::Notes;
+        if (notesTrack != (ge->type == ElementType::region)) continue;
+        CreatePositionSpec s;
+        s.elementID = e.elementID;
+        s.trackID = e.trackID;
+        s.rhythmEdoSteps = e.rhythmEdoSteps;
+        s.rhythmEdoLower = e.rhythmEdoLower;
+        s.rhythmEdoUpper = e.rhythmEdoUpper;
+        s.startOffsetPairs = e.startOffsetPairs;
+        s.rhythmVector = shift.empty() ? e.rhythmVector : addVec(e.rhythmVector, shift);
+        s.rhythmEndVector = shift.empty() ? e.rhythmEndVector : addVec(e.rhythmEndVector, shift);
+        specs.push_back(std::move(s));
+    }
+    if (specs.empty()) return;
+
+    auto* action = new CreatePositionsAction(project, parentNode->nm->managerPath,
+        static_cast<int>(parentNode->id), std::move(specs));
+    project->um->newAction(action);
+    selectedPositionIds.clear();
+    for (const auto& s : action->specs)
+        if (s.positionID >= 0) selectedPositionIds.insert(s.positionID);
+    refreshGrid = true;
+}
+
+void SongRoll::deleteSelectedPositions() {
+    if (!em || !parentNode || !project || !project->um) return;
+    std::vector<std::pair<int, int>> targets;   // (elementID, positionID)
+    std::set<int> clearedRegions;               // regions that lose every position
+    for (auto* e : em->elements) {
+        size_t selectedHere = 0;
+        for (auto* p : e->positions)
+            if (selectedPositionIds.count(p->id)) ++selectedHere;
+        if (selectedHere == 0) continue;
+        if (e->type == ElementType::region && selectedHere == e->positions.size())
+            clearedRegions.insert(e->id);
+        for (auto* p : e->positions)
+            if (selectedPositionIds.count(p->id))
+                targets.push_back({e->id, p->id});
+    }
+    if (targets.empty() && hoveredPosition) {
+        targets.push_back({hoveredPosition->element->id, hoveredPosition->id});
+        if (hoveredPosition->element->type == ElementType::region &&
+            hoveredPosition->element->positions.size() == 1)
+            clearedRegions.insert(hoveredPosition->element->id);
+    }
+    if (targets.empty()) return;
+
+    for (int rid : clearedRegions) clearPianoRoll(rid, false);
+    project->um->newAction(new DeletePositionsAction(project, parentNode->nm->managerPath,
+        static_cast<int>(parentNode->id), std::move(targets)));
+    selectedPositionIds.clear();
+    refreshGrid = true;
+}
+
+bool SongRoll::handleKeyboard(SDL_Event& e) {
+    if (e.type != SDL_EVENT_KEY_DOWN || e.key.repeat) return false;
+    switch (e.key.scancode) {
+        case SDL_SCANCODE_C:
+            if (isCtrlPressed) copySelectedPositions();
+            break;
+        case SDL_SCANCODE_V:
+            if (isCtrlPressed) pastePositionClipboard(static_cast<float>(project->beatPosition));
+            break;
+        case SDL_SCANCODE_B:
+            if (isCtrlPressed) {
+                copySelectedPositions();
+                if (g_positionClip.valid) pastePositionClipboard(g_positionClip.lastEndSec);
+            }
+            break;
+        case SDL_SCANCODE_D:
+            if (isCtrlPressed) {
+                copySelectedPositions();
+                if (g_positionClip.valid) pastePositionClipboard(g_positionClip.firstStartSec, true);
+            }
+            break;
+        case SDL_SCANCODE_DELETE:
+        case SDL_SCANCODE_BACKSPACE:
+            deleteSelectedPositions();
+            break;
+        default:
+            return false;
+    }
+    return true;
 }
 
 void SongRoll::createElement() {
@@ -858,6 +1190,9 @@ void SongRoll::clickMouse(SDL_Event& e) {
                 lmb = true;
                 last_lmb_x = mouseX;
                 last_lmb_y = mouseY;
+                // Hover is normally refreshed on motion; a click after a scroll would
+                // otherwise act on a stale position.
+                getHoveredPosition();
 
                 if (mouseY < topMargin && mouseX < leftMargin) {
                     if (recordButtonHit(mouseX, mouseY)) {
@@ -881,8 +1216,10 @@ void SongRoll::clickMouse(SDL_Event& e) {
                         selectingTransportLines = true;
                         transportLineDragExtend = isShiftPressed;
                         transportLineDragMoved = false;
-                        if (hoveredTransportLineIndex != SIZE_MAX && hoveredTransportLineIndex < transportLineCache.size())
-                            transportLineDragStartPairs = transportLineCache[hoveredTransportLineIndex].integerPairs;
+                        // Start may sit on either the transport strip or the grid rhythm.
+                        if (const RhythmGridLine* line = closestRhythmOrTransportLine(
+                                rhythmLines, transportLineCache, secondsFromMouseX()))
+                            transportLineDragStartPairs = line->integerPairs;
                         else
                             transportLineDragStartPairs.clear();
                         transportLineDragEndPairs = transportLineDragStartPairs;
@@ -895,9 +1232,10 @@ void SongRoll::clickMouse(SDL_Event& e) {
                     rhythmEdoDefineDialogOpen = false;
                     selectingRhythmInterval = true;
                     refreshHoveredRhythmLineIndex();
-                    if (hoveredRhythmLineIndex != SIZE_MAX && hoveredRhythmLineIndex < rhythmLines.size()) {
-                        rhythmIntervalStartSec = rhythmLines[hoveredRhythmLineIndex].seconds;
-                        rhythmDragStartVertexPairs = rhythmLines[hoveredRhythmLineIndex].integerPairs;
+                    if (const RhythmGridLine* line = closestRhythmOrTransportLine(
+                            rhythmLines, transportLineCache, secondsFromMouseX())) {
+                        rhythmIntervalStartSec = line->seconds;
+                        rhythmDragStartVertexPairs = line->integerPairs;
                     } else {
                         rhythmIntervalStartSec = 0.0f;
                         rhythmDragStartVertexPairs.clear();
@@ -905,6 +1243,24 @@ void SongRoll::clickMouse(SDL_Event& e) {
                     rhythmIntervalEndSec = rhythmIntervalStartSec;
                     rhythmDragEndVertexPairs.clear();
                     rhythmIntervalDragMoved = false;
+                    return;
+                }
+
+                // Ctrl (without Shift): toggle a position in the selection, or start a
+                // rubber band on empty grid (mirrors the piano roll's Ctrl+click notes).
+                if (isCtrlPressed && !isShiftPressed && mouseX > gridRect.x &&
+                    mouseX < gridRect.x + gridRect.w && mouseY > gridRect.y &&
+                    mouseY < gridRect.y + gridRect.h) {
+                    if (hoveredPosition) {
+                        const int pid = hoveredPosition->id;
+                        if (!selectedPositionIds.insert(pid).second)
+                            selectedPositionIds.erase(pid);
+                    } else {
+                        selectingPositionBand = true;
+                        bandStartX = bandEndX = mouseX;
+                        bandStartY = bandEndY = mouseY;
+                    }
+                    refreshGrid = true;
                     return;
                 }
 
@@ -980,8 +1336,21 @@ void SongRoll::clickMouse(SDL_Event& e) {
                     }
                 }
 
+                // Plain click: select the clicked position (keep a multi-selection it is
+                // already part of), or clear the selection on empty grid.
+                if (hoveredPosition) {
+                    if (!selectedPositionIds.count(hoveredPosition->id)) {
+                        selectedPositionIds.clear();
+                        selectedPositionIds.insert(hoveredPosition->id);
+                    }
+                } else if (!isCtrlPressed) {
+                    selectedPositionIds.clear();
+                }
+
                 positionDragKind = PositionDragKind::None;
                 movingPosition = hoveredPosition;
+                movingMultiplePositions = false;
+                multiMoveSnapshots.clear();
                 timelineDragElementId = -1;
                 timelineDragPositionId = -1;
                 if (movingPosition) {
@@ -1008,6 +1377,28 @@ void SongRoll::clickMouse(SDL_Event& e) {
                     lastPositionStartOffsetPairs = movingPosition->startOffsetPairs;
                     timelineDragElementId = static_cast<int>(movingPosition->element->id);
                     timelineDragPositionId = movingPosition->id;
+
+                    // Dragging a member of a multi-selection applies the same edit to the
+                    // whole selection (move, or the grabbed edge's resize delta). The
+                    // grabbed position alone may also change track.
+                    if (positionDragKind != PositionDragKind::None &&
+                        selectedPositionIds.size() > 1 &&
+                        selectedPositionIds.count(movingPosition->id)) {
+                        movingMultiplePositions = true;
+                        for (auto* el : em->elements)
+                            for (auto* p : el->positions) {
+                                if (!selectedPositionIds.count(p->id)) continue;
+                                PositionDragSnapshot snap;
+                                snap.elementID = static_cast<int>(el->id);
+                                snap.positionID = p->id;
+                                snap.trackID = p->trackID;
+                                snap.rhythmVector = p->rhythmVector;
+                                snap.rhythmEndVector = p->rhythmEndVector;
+                                snap.startOffsetPairs = p->startOffsetPairs;
+                                snap.before = GridElement::positionToJson(*p);
+                                multiMoveSnapshots.push_back(std::move(snap));
+                            }
+                    }
                 }
 
                 if (SDL_GetTicks() - lastLmbTime < DCT) doubleClick();
@@ -1021,6 +1412,13 @@ void SongRoll::clickMouse(SDL_Event& e) {
             }
             if (e.button.button == SDL_BUTTON_RIGHT) {
                 rmb = true;
+                // Ctrl+Shift+right-click a position: recall its rhythm (mirrors the piano
+                // roll's Ctrl+Shift+right-click on a note).
+                if (isCtrlPressed && isShiftPressed && hoveredPosition && mouseX < rightRect.x) {
+                    recallPositionRhythm(hoveredPosition);
+                    rmb = false;
+                    return;
+                }
                 // Curve point deletion
                 if (hoveredCurvePointIdx >= 0 && hoveredPosition &&
                     hoveredPosition->element->type == ElementType::automationCurve) {
@@ -1039,6 +1437,11 @@ void SongRoll::clickMouse(SDL_Event& e) {
                     return;
                 }
                 if (hoveredPosition && mouseX < rightRect.x) {
+                    // A right-click on a selected position deletes the whole selection.
+                    if (selectedPositionIds.count(hoveredPosition->id)) {
+                        deleteSelectedPositions();
+                        return;
+                    }
                     GridElement* el = hoveredPosition->element;
                     const int elemId = static_cast<int>(el->id);
                     const int posId = hoveredPosition->id;
@@ -1074,6 +1477,29 @@ void SongRoll::clickMouse(SDL_Event& e) {
             break;
         case SDL_EVENT_MOUSE_BUTTON_UP:
             if (e.button.button == SDL_BUTTON_LEFT) {
+                // Rubber-band selection: add every intersecting position.
+                if (selectingPositionBand) {
+                    selectingPositionBand = false;
+                    const float bx1 = std::min(bandStartX, bandEndX);
+                    const float bx2 = std::max(bandStartX, bandEndX);
+                    const float by1 = std::min(bandStartY, bandEndY);
+                    const float by2 = std::max(bandStartY, bandEndY);
+                    for (auto* el : em->elements)
+                        for (auto* p : el->positions) {
+                            const int idx = tracks->getIndex(p->trackID);
+                            if (idx < 0) continue;
+                            const float x1 = getX(Note::beatsFromVector(p->rhythmVector));
+                            const float x2 = getX(Note::beatsFromVector(p->rhythmEndVector));
+                            const float y1 = getY(idx);
+                            const float y2 = getY(idx + 1);
+                            if (x2 >= bx1 && x1 <= bx2 && y2 >= by1 && y1 <= by2)
+                                selectedPositionIds.insert(p->id);
+                        }
+                    lmb = false;
+                    refreshGrid = true;
+                    break;
+                }
+
                 // Ctrl+drag on the strip: commit or prompt.
                 if (selectingTransportLines) {
                     selectingTransportLines = false;
@@ -1104,40 +1530,8 @@ void SongRoll::clickMouse(SDL_Event& e) {
                     selectingRhythmInterval = false;
                     rhythmEdoDefineDialogOpen = false;
                     if (std::fabs(rhythmIntervalEndSec - rhythmIntervalStartSec) < 0.001f) {
-                        // Ctrl+Shift+click on a position without dragging: copy its rhythm EDO to arranger
-                        if (hoveredPosition && parentNode) {
-                            json before;
-                            before["steps"] = parentNode->rhythmEdoSubdivisionSteps;
-                            before["lower"] = json::array();
-                            for (const auto& pr : parentNode->rhythmEdoLowerVector)
-                                before["lower"].push_back(json::array({pr.first, pr.second}));
-                            before["upper"] = json::array();
-                            for (const auto& pr : parentNode->rhythmEdoUpperVector)
-                                before["upper"].push_back(json::array({pr.first, pr.second}));
-                            before["transportLines"] = latticeSpansToJSON(parentNode->transportLines);
-                            parentNode->rhythmEdoSubdivisionSteps = hoveredPosition->rhythmEdoSubdivisionSteps;
-                            parentNode->rhythmEdoLowerVector = hoveredPosition->rhythmEdoLowerVector;
-                            parentNode->rhythmEdoUpperVector = hoveredPosition->rhythmEdoUpperVector;
-                            RhythmLatticeSpan gridSpan;
-                            gridSpan.steps = hoveredPosition->rhythmEdoSubdivisionSteps;
-                            gridSpan.lower = hoveredPosition->rhythmEdoLowerVector;
-                            gridSpan.upper = hoveredPosition->rhythmEdoUpperVector;
-                            parentNode->gridSpans.assign(1, gridSpan);
-                            updateRhythmLines();
-                            json after;
-                            after["steps"] = hoveredPosition->rhythmEdoSubdivisionSteps;
-                            after["lower"] = json::array();
-                            for (const auto& pr : hoveredPosition->rhythmEdoLowerVector)
-                                after["lower"].push_back(json::array({pr.first, pr.second}));
-                            after["upper"] = json::array();
-                            for (const auto& pr : hoveredPosition->rhythmEdoUpperVector)
-                                after["upper"].push_back(json::array({pr.first, pr.second}));
-                            after["transportLines"] = latticeSpansToJSON(parentNode->transportLines);
-                            project->um->newAction(new SongRollRhythmEdoAction(project,
-                                parentNode->nm->managerPath, static_cast<int>(parentNode->id),
-                                before, after));
-                        }
-                        refreshGrid = true;
+                        // Ctrl+Shift+click on a position without dragging: recall its rhythm.
+                        recallPositionRhythm(hoveredPosition);
                     } else {
                         rhythmDialogFrozenStartSec = rhythmIntervalStartSec;
                         rhythmDialogFrozenEndSec = rhythmIntervalEndSec;
@@ -1178,37 +1572,17 @@ void SongRoll::clickMouse(SDL_Event& e) {
                                 const auto& lowerPairs = (fixedSec <= otherSec) ? capStartPairs : otherPairs;
                                 const auto& upperPairs = (fixedSec <= otherSec) ? otherPairs : capStartPairs;
                                 int steps = num;
-                                json before;
-                                before["steps"] = parentNode->rhythmEdoSubdivisionSteps;
-                                before["lower"] = json::array();
-                                for (const auto& pr : parentNode->rhythmEdoLowerVector)
-                                    before["lower"].push_back(json::array({pr.first, pr.second}));
-                                before["upper"] = json::array();
-                                for (const auto& pr : parentNode->rhythmEdoUpperVector)
-                                    before["upper"].push_back(json::array({pr.first, pr.second}));
-                                before["transportLines"] = latticeSpansToJSON(parentNode->transportLines);
-                                parentNode->rhythmEdoSubdivisionSteps = steps;
-                                parentNode->rhythmEdoLowerVector = lowerPairs;
-                                parentNode->rhythmEdoUpperVector = upperPairs;
+                                const json before = arrangerRhythmEdoJson();
+                                project->pianoRoll.rhythmEdoSubdivisionSteps = steps;
+                                project->pianoRoll.rhythmEdoLowerVector = lowerPairs;
+                                project->pianoRoll.rhythmEdoUpperVector = upperPairs;
                                 RhythmLatticeSpan gridSpan;
                                 gridSpan.steps = steps;
                                 gridSpan.lower = lowerPairs;
                                 gridSpan.upper = upperPairs;
-                                parentNode->gridSpans.assign(1, gridSpan);
-                                updateRhythmLines();
+                                project->pianoRoll.gridSpans.assign(1, gridSpan);
+                                commitArrangerRhythmEdo(before, "Define Rhythm");
                                 refreshGrid = true;
-                                json after;
-                                after["steps"] = steps;
-                                after["lower"] = json::array();
-                                for (const auto& pr : lowerPairs)
-                                    after["lower"].push_back(json::array({pr.first, pr.second}));
-                                after["upper"] = json::array();
-                                for (const auto& pr : upperPairs)
-                                    after["upper"].push_back(json::array({pr.first, pr.second}));
-                                after["transportLines"] = latticeSpansToJSON(parentNode->transportLines);
-                                project->um->newAction(new SongRollRhythmEdoAction(project,
-                                    parentNode->nm->managerPath, static_cast<int>(parentNode->id),
-                                    before, after));
                             } catch (...) {}
                         },
                             [this]() { rhythmEdoDefineDialogOpen = false; });
@@ -1227,22 +1601,47 @@ void SongRoll::clickMouse(SDL_Event& e) {
                 activeCurveEditorPosId = -1;
 
                 if (movingPosition) {
-                    json after = GridElement::positionToJson(*movingPosition);
-                    json before = GridElement::positionToJson(lastPosition);
-                    if (before != after) {
-                        GridElement* el = movingPosition->element;
-                        project->um->newAction(new MoveElementPositionAction(project, parentNode->nm->managerPath,
-                            static_cast<int>(parentNode->id), static_cast<int>(el->id), movingPosition->id, std::move(before),
-                            std::move(after)));
-                        lastPositionDurationPairs = subVec(movingPosition->rhythmEndVector, movingPosition->rhythmVector);
-                        lastPositionStartOffsetPairs = movingPosition->startOffsetPairs;
-                        if (el)
-                            em->currentElement = static_cast<int>(el->id);
-                        refreshGrid = true;
+                    if (movingMultiplePositions) {
+                        // One undo step for the whole group.
+                        std::vector<MovePositionSpec> specs;
+                        for (const auto& snap : multiMoveSnapshots) {
+                            auto* pos = findPosition(snap.elementID, snap.positionID);
+                            if (!pos) continue;
+                            json after = GridElement::positionToJson(*pos);
+                            if (after == snap.before) continue;
+                            MovePositionSpec spec;
+                            spec.elementID = snap.elementID;
+                            spec.positionID = snap.positionID;
+                            spec.before = snap.before;
+                            spec.after = std::move(after);
+                            specs.push_back(std::move(spec));
+                        }
+                        if (!specs.empty()) {
+                            auto* act = new MoveElementPositionsAction(project, parentNode->nm->managerPath,
+                                static_cast<int>(parentNode->id), std::move(specs));
+                            project->um->newAction(act);
+                            refreshGrid = true;
+                        }
+                    } else {
+                        json after = GridElement::positionToJson(*movingPosition);
+                        json before = GridElement::positionToJson(lastPosition);
+                        if (before != after) {
+                            GridElement* el = movingPosition->element;
+                            project->um->newAction(new MoveElementPositionAction(project, parentNode->nm->managerPath,
+                                static_cast<int>(parentNode->id), static_cast<int>(el->id), movingPosition->id, std::move(before),
+                                std::move(after)));
+                            if (el)
+                                em->currentElement = static_cast<int>(el->id);
+                            refreshGrid = true;
+                        }
                     }
+                    lastPositionDurationPairs = subVec(movingPosition->rhythmEndVector, movingPosition->rhythmVector);
+                    lastPositionStartOffsetPairs = movingPosition->startOffsetPairs;
                 }
                 lmb = false;
                 movingPosition = nullptr;
+                movingMultiplePositions = false;
+                multiMoveSnapshots.clear();
                 positionDragKind = PositionDragKind::None;
                 timelineDragElementId = -1;
                 timelineDragPositionId = -1;
@@ -1372,19 +1771,20 @@ void SongRoll::createPianoRoll(Region* region, bool createUndo, int forceEwID) {
 
 json SongRoll::arrangerRhythmEdoJson() const {
     json j;
-    j["steps"] = parentNode ? parentNode->rhythmEdoSubdivisionSteps : 1;
+    j["steps"] = project ? project->pianoRoll.rhythmEdoSubdivisionSteps : 1;
     j["lower"] = json::array();
-    if (parentNode)
-        for (const auto& pr : parentNode->rhythmEdoLowerVector)
+    if (project)
+        for (const auto& pr : project->pianoRoll.rhythmEdoLowerVector)
             j["lower"].push_back(json::array({pr.first, pr.second}));
     j["upper"] = json::array();
-    if (parentNode)
-        for (const auto& pr : parentNode->rhythmEdoUpperVector)
+    if (project)
+        for (const auto& pr : project->pianoRoll.rhythmEdoUpperVector)
             j["upper"].push_back(json::array({pr.first, pr.second}));
+    // The transport strip is per-arranger; only the grid itself is project-wide.
     j["transportLines"] = latticeSpansToJSON(parentNode ? parentNode->transportLines
                                                         : std::vector<RhythmLatticeSpan>{});
-    j["gridSpans"] = latticeSpansToJSON(parentNode ? parentNode->gridSpans
-                                                  : std::vector<RhythmLatticeSpan>{});
+    j["gridSpans"] = latticeSpansToJSON(project ? project->pianoRoll.gridSpans
+                                                : std::vector<RhythmLatticeSpan>{});
     return j;
 }
 
@@ -1395,6 +1795,23 @@ void SongRoll::commitArrangerRhythmEdo(const json& before, const std::string& la
         static_cast<int>(parentNode->id), before, arrangerRhythmEdoJson());
     action->name = label;
     project->um->newAction(action);
+}
+
+void SongRoll::recallPositionRhythm(const GridElement::Position* pos) {
+    if (!pos || !parentNode || !project || !project->um) return;
+    // Snapshot through the canonical JSON so gridSpans (not just the EDO triple)
+    // round-trips through the undo action.
+    const json before = arrangerRhythmEdoJson();
+    project->pianoRoll.rhythmEdoSubdivisionSteps = pos->rhythmEdoSubdivisionSteps;
+    project->pianoRoll.rhythmEdoLowerVector = pos->rhythmEdoLowerVector;
+    project->pianoRoll.rhythmEdoUpperVector = pos->rhythmEdoUpperVector;
+    RhythmLatticeSpan span;
+    span.steps = pos->rhythmEdoSubdivisionSteps;
+    span.lower = pos->rhythmEdoLowerVector;
+    span.upper = pos->rhythmEdoUpperVector;
+    project->pianoRoll.gridSpans.assign(1, span);
+    commitArrangerRhythmEdo(before, "Recall Position Rhythm");
+    refreshGrid = true;
 }
 
 void SongRoll::updateTransportLines() {
@@ -1422,17 +1839,19 @@ void SongRoll::refreshHoveredTransportLineIndex() {
 }
 
 void SongRoll::applyTransportToGrid() {
-    if (!parentNode || parentNode->transportLines.empty()) return;
-    if (parentNode->transportLines == parentNode->gridSpans) return;
+    if (!project || !parentNode || parentNode->transportLines.empty()) return;
+    if (parentNode->transportLines == project->pianoRoll.gridSpans) return;
     const json before = arrangerRhythmEdoJson();
-    parentNode->gridSpans = parentNode->transportLines;
+    // Copy this arranger's transport strip into the shared grid; the strip itself stays
+    // per-arranger.
+    project->pianoRoll.gridSpans = parentNode->transportLines;
     commitArrangerRhythmEdo(before, "Grid From Transport");
 }
 
 void SongRoll::subdivideBetweenRhythmLines(const std::vector<std::pair<int, int>>& aPairs,
                                            const std::vector<std::pair<int, int>>& bPairs,
                                            int parts) {
-    if (!parentNode || parts < 2) return;
+    if (!project || !parentNode || parts < 2) return;
 
     const bool aFirst = Note::beatsFromVector(aPairs) <= Note::beatsFromVector(bPairs);
     RhythmLatticeSpan span;
@@ -1448,11 +1867,11 @@ void SongRoll::subdivideBetweenRhythmLines(const std::vector<std::pair<int, int>
 }
 
 void SongRoll::extendTransportLines(const std::vector<std::pair<int, int>>& cursorPairs) {
-    if (!parentNode) return;
+    if (!project || !parentNode) return;
     const float cursorSec = Note::beatsFromVector(cursorPairs);
 
     // Spacing comes from the span the cursor sits in.
-    int sourceSteps = std::max(1, parentNode->rhythmEdoSubdivisionSteps);
+    int sourceSteps = std::max(1, project->pianoRoll.rhythmEdoSubdivisionSteps);
     for (const auto& s : parentNode->transportLines) {
         if (Note::beatsFromVector(s.lower) <= cursorSec && cursorSec <= Note::beatsFromVector(s.upper)) {
             sourceSteps = s.steps;

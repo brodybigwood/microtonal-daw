@@ -76,6 +76,10 @@ enum ActionType {
     InstrumentRackEdit = 59,
     InstrumentRackNodeParam = 60,
     ArrangerTrackReorder = 61,
+    CreatePositions = 62,
+    DeletePositions = 63,
+    MoveElementPositions = 64,
+    DeleteNotes = 65,
 };
 
 
@@ -485,6 +489,27 @@ struct CreateNotesAction : ProjectAction {
                       std::vector<CreateNoteSpec> notes);
 };
 
+/// One note inside a DeleteNotesAction (bulk delete, one undo step).
+struct DeleteNoteSpec {
+    int noteID = 0;
+    size_t insertIndex = 0;
+    json noteSnapshot;
+};
+
+struct DeleteNotesAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    int regionID = -1;
+    std::vector<DeleteNoteSpec> notes;
+
+    /** Captures each note's index and snapshot live. */
+    DeleteNotesAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID,
+                      std::vector<int> noteIDs);
+    /** Restored from project / undo JSON (graph already matches "after"). */
+    DeleteNotesAction(Project* p, std::vector<int> managerPath, int nodeID, int regionID,
+                      std::vector<DeleteNoteSpec> notes);
+};
+
 struct CreateRegionAction : ProjectAction {
     std::vector<int> managerPath;
     int nodeID = 0;
@@ -552,6 +577,68 @@ struct CreatePositionAction : ProjectAction {
     std::vector<std::pair<int, int>> rhythmEdoUpper;
 
     CreatePositionAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID, std::vector<std::pair<int, int>> startPairs, std::vector<std::pair<int, int>> endPairs, uint16_t trackID, std::vector<std::pair<int, int>> startOffsetPairs = {});
+};
+
+/// One position inside a CreatePositionsAction (bulk placement, one undo step).
+/// Used by the arranger clipboard: entries keep the source position's stored
+/// rhythm-Edo span, so a pasted placement does not adopt the current grid.
+struct CreatePositionSpec {
+    int elementID = 0;
+    std::vector<std::pair<int, int>> rhythmVector;
+    std::vector<std::pair<int, int>> rhythmEndVector;
+    std::vector<std::pair<int, int>> startOffsetPairs;
+    uint16_t trackID = 0;
+    int rhythmEdoSteps = 1;
+    std::vector<std::pair<int, int>> rhythmEdoLower;
+    std::vector<std::pair<int, int>> rhythmEdoUpper;
+    int positionID = -1;
+};
+
+struct CreatePositionsAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    std::vector<CreatePositionSpec> specs;
+
+    CreatePositionsAction(Project* p, std::vector<int> managerPath, int nodeID,
+                          std::vector<CreatePositionSpec> specs);
+};
+
+/// One position inside a DeletePositionsAction (bulk delete, one undo step).
+struct DeletePositionSpec {
+    int elementID = 0;
+    int positionID = 0;
+    size_t insertIndex = 0;
+    json positionSnapshot;
+};
+
+struct DeletePositionsAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    std::vector<DeletePositionSpec> specs;
+
+    /** Captures each position's index and snapshot live. Entries are (elementID, positionID). */
+    DeletePositionsAction(Project* p, std::vector<int> managerPath, int nodeID,
+                          std::vector<std::pair<int, int>> elementAndPositionIDs);
+    /** Restored from project / undo JSON (graph already matches "after"). */
+    DeletePositionsAction(Project* p, std::vector<int> managerPath, int nodeID,
+                          std::vector<DeletePositionSpec> specs);
+};
+
+/// One position inside a MoveElementPositionsAction (bulk move, one undo step).
+struct MovePositionSpec {
+    int elementID = 0;
+    int positionID = 0;
+    json before;
+    json after;
+};
+
+struct MoveElementPositionsAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    std::vector<MovePositionSpec> specs;
+
+    MoveElementPositionsAction(Project* p, std::vector<int> managerPath, int nodeID,
+                               std::vector<MovePositionSpec> specs);
 };
 
 struct SongRollRhythmEdoAction : ProjectAction {

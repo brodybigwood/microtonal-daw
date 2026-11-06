@@ -196,35 +196,47 @@ void Connection::render(SDL_Renderer* renderer, bool hover) {
             }
         }
         if (!text.empty()) {
-            SDL_Color textColor{10, 10, 10, 255};
-            SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, text.c_str(), 0, textColor);
-            if (surf) {
-                SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
-                if (tex) {
-                    const float maxW = rect.w * 0.86f;
-                    const float maxH = rect.h * 0.86f;
-                    const float baseScale = std::min(
-                        1.0f,
-                        std::min(maxW / static_cast<float>(surf->w),
-                                 maxH / static_cast<float>(surf->h))
-                    );
-                    const float scale = (mode == PortDisplayMode::SquareIDs)
-                        ? std::max(0.1f, baseScale)
-                        : std::max(0.1f, baseScale * labelScale);
-                    const float drawW = static_cast<float>(surf->w) * scale;
-                    const float drawH = static_cast<float>(surf->h) * scale;
-                    const float cx = rect.x + rect.w * 0.5f;
-                    const float cy = rect.y + rect.h * 0.5f;
-                    SDL_FRect textRect{cx - drawW * 0.5f, cy - drawH * 0.5f, drawW, drawH};
-                    if (mode == PortDisplayMode::RectLabels) {
-                        SDL_FPoint center{drawW * 0.5f, drawH * 0.5f};
-                        SDL_RenderTextureRotated(renderer, tex, nullptr, &textRect, -90.0, &center, SDL_FLIP_NONE);
-                    } else {
-                        SDL_RenderTexture(renderer, tex, nullptr, &textRect);
-                    }
-                    SDL_DestroyTexture(tex);
+            if (labelTexture && (labelRenderer != renderer || labelTextureText != text)) {
+                if (labelRenderer == renderer) SDL_DestroyTexture(labelTexture);
+                labelTexture = nullptr;
+                labelRenderer = nullptr;
+                labelTextureText.clear();
+                labelTexW = labelTexH = 0;
+            }
+            if (!labelTexture) {
+                SDL_Color textColor{10, 10, 10, 255};
+                SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, text.c_str(), 0, textColor);
+                if (surf) {
+                    labelTexture = SDL_CreateTextureFromSurface(renderer, surf);
+                    labelTexW = surf->w;
+                    labelTexH = surf->h;
+                    labelRenderer = renderer;
+                    labelTextureText = text;
+                    SDL_DestroySurface(surf);
                 }
-                SDL_DestroySurface(surf);
+            }
+            if (labelTexture) {
+                const float maxW = rect.w * 0.86f;
+                const float maxH = rect.h * 0.86f;
+                const float baseScale = std::min(
+                    1.0f,
+                    std::min(maxW / static_cast<float>(labelTexW),
+                             maxH / static_cast<float>(labelTexH))
+                );
+                const float scale = (mode == PortDisplayMode::SquareIDs)
+                    ? std::max(0.1f, baseScale)
+                    : std::max(0.1f, baseScale * labelScale);
+                const float drawW = static_cast<float>(labelTexW) * scale;
+                const float drawH = static_cast<float>(labelTexH) * scale;
+                const float cx = rect.x + rect.w * 0.5f;
+                const float cy = rect.y + rect.h * 0.5f;
+                SDL_FRect textRect{cx - drawW * 0.5f, cy - drawH * 0.5f, drawW, drawH};
+                if (mode == PortDisplayMode::RectLabels) {
+                    SDL_FPoint center{drawW * 0.5f, drawH * 0.5f};
+                    SDL_RenderTextureRotated(renderer, labelTexture, nullptr, &textRect, -90.0, &center, SDL_FLIP_NONE);
+                } else {
+                    SDL_RenderTexture(renderer, labelTexture, nullptr, &textRect);
+                }
             }
         }
     }

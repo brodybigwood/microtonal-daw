@@ -8,6 +8,7 @@
 #include "nodes/nodetypes.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <numeric>
 
@@ -590,6 +591,29 @@ void InstrumentRackNode::process() {
 
     const int bs = bufferSize;
     const int sr = sampleRate > 0 ? sampleRate : 48000;
+
+    if (std::getenv("DAW_VST_DEBUG")) {
+        static uint64_t lastDbg = 0;
+        const uint64_t nowDbg = SDL_GetTicks();
+        if (nowDbg - lastDbg >= 1000) {
+            lastDbg = nowDbg;
+            std::cout << "[rack] node=" << id << " tracks=" << tracks.size();
+            for (auto& cp : tracks) {
+                const size_t evs = (cp->inflow && cp->inflow->events)
+                    ? cp->inflow->events->size() : static_cast<size_t>(-1);
+                std::cout << " t" << cp->id << " nodes=" << cp->nodes.size()
+                          << " evs=" << evs
+                          << " out=" << (cp->outflow && cp->outflow->buffer ? "buf" : "null");
+                for (Node* n : cp->nodes) {
+                    if (!n) continue;
+                    Connection* dout = firstWaveOut(n);
+                    std::cout << " [" << n->name << " out="
+                              << (dout && dout->buffer ? "buf" : "null") << "]";
+                }
+            }
+            std::cout << std::endl;
+        }
+    }
 
     int maxCh = 1;
     int maxLat = 0;

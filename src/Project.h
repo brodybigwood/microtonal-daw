@@ -1,4 +1,5 @@
 #include "Note.h"
+#include "RhythmLattice.h"
 #include "RecordedTake.h"
 #include <atomic>
 #include <utility>
@@ -26,6 +27,22 @@ namespace DAW {
 class TrackManager;
 class ElementManager;
 class NodeProcessor;
+
+// Central rhythm/harmony lines shared by every piano roll. Deliberately separate
+// from the SongRoll/Arranger grid, which positions are drawn against.
+struct PianoRollSettings {
+    int tuningMode = 0; // 0 = harmonic, 1 = EDO
+    int tuningAnchorHarmonic = 1;
+    std::vector<std::pair<int, int>> tuningHarmonicAnchorVector;
+    int tuningEdoSubdivisionSteps = 12;
+    std::vector<std::pair<int, int>> tuningEdoLowerVector;
+    std::vector<std::pair<int, int>> tuningEdoUpperVector;
+    int rhythmEdoSubdivisionSteps = 1;
+    std::vector<std::pair<int, int>> rhythmEdoLowerVector;
+    std::vector<std::pair<int, int>> rhythmEdoUpperVector;
+    std::vector<RhythmLatticeSpan> transportLines;
+    std::vector<RhythmLatticeSpan> gridSpans;
+};
 
 // Worker thread with a large stack. Project load/save recurse over the undo-tree
 // JSON, whose depth equals the undo history length (thousands of actions). The
@@ -69,6 +86,11 @@ class Project : public Window {
 
         std::string filepath = "";
         std::string startupCWD = "";  // captured before VST plugins can chdir()
+
+        // Central piano-roll rhythm/harmony lines, shared by all piano rolls.
+        PianoRollSettings pianoRoll;
+        json pianoRollToJson() const;
+        void pianoRollFromJson(const json& j);
 
         // Tempo automation: beat -> BPM curve (GUI and DSP copies)
         AutomationCurve tempoCurve;

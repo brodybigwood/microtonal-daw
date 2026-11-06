@@ -1,4 +1,6 @@
 build/
+build-release/
+build-wasm/
 old-html/
 submodules/tracktion_engine/*
 !submodules/tracktion_engine/.git
@@ -6,3 +8,4 @@ assets/settings.json
 .clangd
 compile_commands.json
 cc.sh
+*.log

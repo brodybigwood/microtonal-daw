@@ -4,6 +4,7 @@
 #include "nodes/paramnode/paramnode.h"
 #include "nodes/sampler/sampler.h"
 #include "nodes/vst/vstnode.h"
+#include "nodes/instrumentrack/instrumentrack.h"
 #include "nodes/arranger/arranger.h"
 #include "SongRoll.h"
 #include "PianoRollWindow.h"
@@ -217,7 +218,7 @@ std::vector<std::pair<int, int>> parsePitch(const json& j) {
 /// PianoRoll::stampNoteTuning does on the mouse path, and persists the result on
 /// the action so redo re-applies it. Per-note tuning fields in `params` override
 /// the region's.
-void stampNoteTuning(Region* region, int noteID, const json& intent, json& outSnapshot) {
+void stampNoteTuning(Project* proj, Region* region, int noteID, const json& intent, json& outSnapshot) {
     if (!region) return;
     auto it = region->id_to_index.find(noteID);
     if (it == region->id_to_index.end()) return;
@@ -225,14 +226,15 @@ void stampNoteTuning(Region* region, int noteID, const json& intent, json& outSn
     if (idx >= region->notes.size() || !region->notes[idx]) return;
 
     Note& n = *region->notes[idx];
-    n.tuningMode = region->tuningMode;
-    n.tuningAnchorHarmonic = region->tuningAnchorHarmonic;
-    n.tuningEdoSubdivisionSteps = region->tuningEdoSubdivisionSteps;
-    n.tuningEdoLowerVector = region->tuningEdoLowerVector;
-    n.tuningEdoUpperVector = region->tuningEdoUpperVector;
-    // The rhythm anchor records the full grid this note was placed on, exactly as
-    // the piano roll stamps it. Without it "recall note rhythm" recalls nothing.
-    n.gridSpans = region->gridSpans;
+    if (proj) {
+        const PianoRollSettings& pr = proj->pianoRoll;
+        n.tuningMode = pr.tuningMode;
+        n.tuningAnchorHarmonic = pr.tuningAnchorHarmonic;
+        n.tuningEdoSubdivisionSteps = pr.tuningEdoSubdivisionSteps;
+        n.tuningEdoLowerVector = pr.tuningEdoLowerVector;
+        n.tuningEdoUpperVector = pr.tuningEdoUpperVector;
+        n.gridSpans = pr.gridSpans;
+    }
 
     if (intent.contains("tuningMode")) n.tuningMode = intent["tuningMode"].get<int>();
     if (intent.contains("tuningAnchorHarmonic")) n.tuningAnchorHarmonic = intent["tuningAnchorHarmonic"].get<int>();
@@ -295,6 +297,7 @@ const std::unordered_map<std::string, ActionType>& UndoManager::actionRegistry()
         {"sampler_load_sample_file", SamplerLoadSampleFile},
         {"sampler_toggle_sample_solo", SamplerToggleSampleSolo},
         {"sampler_toggle_sample_mute", SamplerToggleSampleMute},
+        {"instrument_rack_add_node", InstrumentRackInsertNode},
     };
     return reg;
 }
@@ -418,6 +421,8 @@ std::string UndoManager::actionSchema(const std::string& actionName) {
         return R"({"managerPath":[int,...],"nodeID":int,"path":string,"classIndex":int?})";
     if (actionName == "mixer_chain_add_node")
         return R"({"managerPath":[int,...],"nodeID":int,"chainIndex":int,"nodeType":int})";
+    if (actionName == "instrument_rack_add_node")
+        return R"({"managerPath":[int,...],"nodeID":int,"trackIndex":int,"nodeType":int})";
     if (actionName == "toggle_piano_roll_window")
         return R"({"managerPath":[int,...],"nodeID":int,"regionID":int,"open":bool?})";
     // Replaces whatever is on the two ports; the replaced cables are read live.
@@ -915,7 +920,7 @@ bool UndoManager::runRegisteredAction(const std::string& actionName, const json&
         // A few operations are only reachable through the node/song-roll method the
         // UI itself calls, because they build and run their own action internally.
         if (actionName == "vst_load_plugin" || actionName == "toggle_piano_roll_window" ||
-            actionName == "mixer_chain_add_node") {
+            actionName == "mixer_chain_add_node" || actionName == "instrument_rack_add_node") {
             return runDelegatedAction(actionName, params, error, result);
         }
 
@@ -938,13 +943,13 @@ bool UndoManager::runRegisteredAction(const std::string& actionName, const json&
             if (pa->type == CreateNote) {
                 auto* cn = static_cast<CreateNoteAction*>(pa);
                 const json& intent = params.contains("intent") ? params["intent"] : params;
-                stampNoteTuning(undoResolveArrangerRegion(head->p, cn->managerPath, cn->nodeID, cn->regionID),
+                stampNoteTuning(head->p, undoResolveArrangerRegion(head->p, cn->managerPath, cn->nodeID, cn->regionID),
                                 cn->noteID, intent, cn->noteStampedSnapshot);
             } else if (pa->type == CreateNotes) {
                 auto* cn = static_cast<CreateNotesAction*>(pa);
                 Region* region = undoResolveArrangerRegion(head->p, cn->managerPath, cn->nodeID, cn->regionID);
                 for (auto& spec : cn->notes)
-                    stampNoteTuning(region, spec.noteID, spec.intent, spec.noteStampedSnapshot);
+                    stampNoteTuning(head->p, region, spec.noteID, spec.intent, spec.noteStampedSnapshot);
             }
         }
         return true;
@@ -986,6 +991,21 @@ bool UndoManager::runDelegatedAction(const std::string& actionName, const json& 
             const int addedID = mixer->addNodeToChain(chainIndex, static_cast<NodeType>(typeInt));
             if (addedID < 0) { error = "mixer_chain_add_node: could not add (bad chain index or node type)"; return false; }
             if (result) *result = json{{"nodeID", addedID}, {"chainIndex", chainIndex}};
+            return true;
+        }
+
+        if (actionName == "instrument_rack_add_node") {
+            auto* rack = dynamic_cast<InstrumentRackNode*>(node);
+            if (!rack) { error = "instrument_rack_add_node: node is not an Instrument Rack"; return false; }
+            const int trackIndex = params.at("trackIndex").get<int>();
+            const int typeInt = params.at("nodeType").get<int>();
+            if (typeInt < 0 || typeInt >= static_cast<int>(NodeType::Count)) {
+                error = "instrument_rack_add_node: bad nodeType";
+                return false;
+            }
+            const int addedID = rack->addNodeToTrack(trackIndex, static_cast<NodeType>(typeInt));
+            if (addedID < 0) { error = "instrument_rack_add_node: could not add (bad track index or node type)"; return false; }
+            if (result) *result = json{{"nodeID", addedID}, {"trackIndex", trackIndex}};
             return true;
         }
 

@@ -58,18 +58,54 @@ void PianoRoll::renderPitchFactorsHoverTooltip() {
 
 
 
+RegionTuningSnapshot PianoRoll::captureCentralTuning() const {
+    RegionTuningSnapshot s;
+    if (!project) return s;
+    const PianoRollSettings& pr = project->pianoRoll;
+    s.mode = pr.tuningMode;
+    s.harmonicAnchorNumber = pr.tuningAnchorHarmonic;
+    s.edoSubdivisionSteps = pr.tuningEdoSubdivisionSteps;
+    s.edoLowerVector = pr.tuningEdoLowerVector;
+    s.edoUpperVector = pr.tuningEdoUpperVector;
+    s.harmonicAnchorVector = pr.tuningHarmonicAnchorVector;
+    s.rhythmEdoSubdivisionSteps = pr.rhythmEdoSubdivisionSteps;
+    s.rhythmEdoLowerVector = pr.rhythmEdoLowerVector;
+    s.rhythmEdoUpperVector = pr.rhythmEdoUpperVector;
+    s.transportLines = pr.transportLines;
+    s.gridSpans = pr.gridSpans;
+    return s;
+}
+
+void PianoRoll::applyCentralTuning(const RegionTuningSnapshot& s) {
+    if (!project) return;
+    PianoRollSettings& pr = project->pianoRoll;
+    pr.tuningMode = s.mode;
+    pr.tuningAnchorHarmonic = s.harmonicAnchorNumber;
+    pr.tuningEdoSubdivisionSteps = std::max(1, s.edoSubdivisionSteps);
+    pr.tuningEdoLowerVector = s.edoLowerVector;
+    pr.tuningEdoUpperVector = s.edoUpperVector;
+    pr.tuningHarmonicAnchorVector = s.harmonicAnchorVector;
+    pr.rhythmEdoSubdivisionSteps = s.rhythmEdoSubdivisionSteps;
+    pr.rhythmEdoLowerVector = s.rhythmEdoLowerVector;
+    pr.rhythmEdoUpperVector = s.rhythmEdoUpperVector;
+    pr.transportLines = s.transportLines;
+    pr.gridSpans = s.gridSpans;
+    if (pr.gridSpans.empty()) pr.gridSpans.push_back(RhythmLatticeSpan{});
+}
+
 void PianoRoll::applyNoteTuning(const std::shared_ptr<Note>& note) {
     if (!note) return;
     tuningMode = (note->tuningMode == 1) ? TuningMode::EDO : TuningMode::Harmonic;
     harmonicAnchorNumber = std::max(1, note->tuningAnchorHarmonic);
-    if (region) {
+    if (project) {
+        PianoRollSettings& pr = project->pianoRoll;
         if (tuningMode == TuningMode::Harmonic) {
-            region->tuningHarmonicAnchorVector = note->pitchVector;
+            pr.tuningHarmonicAnchorVector = note->pitchVector;
         } else {
-            region->tuningHarmonicAnchorVector.clear();
-            region->tuningEdoSubdivisionSteps = note->tuningEdoSubdivisionSteps;
-            region->tuningEdoLowerVector = note->tuningEdoLowerVector;
-            region->tuningEdoUpperVector = note->tuningEdoUpperVector;
+            pr.tuningHarmonicAnchorVector.clear();
+            pr.tuningEdoSubdivisionSteps = note->tuningEdoSubdivisionSteps;
+            pr.tuningEdoLowerVector = note->tuningEdoLowerVector;
+            pr.tuningEdoUpperVector = note->tuningEdoUpperVector;
         }
     }
     syncTuningToRegion();
@@ -84,24 +120,24 @@ void PianoRoll::stampNoteTuning(const std::shared_ptr<Note>& note) {
 }
 
 void PianoRoll::syncTuningToRegion() {
-    if (!region) return;
-    region->tuningMode = static_cast<int>(tuningMode);
-    region->tuningAnchorHarmonic = harmonicAnchorNumber;
+    if (!project) return;
+    project->pianoRoll.tuningMode = static_cast<int>(tuningMode);
+    project->pianoRoll.tuningAnchorHarmonic = harmonicAnchorNumber;
 }
 
 void PianoRoll::loadTuningFromRegion() {
-    if (!region) return;
-    tuningMode = (region->tuningMode == 1) ? TuningMode::EDO : TuningMode::Harmonic;
-    harmonicAnchorNumber = std::max(1, region->tuningAnchorHarmonic);
+    if (!project) return;
+    tuningMode = (project->pianoRoll.tuningMode == 1) ? TuningMode::EDO : TuningMode::Harmonic;
+    harmonicAnchorNumber = std::max(1, project->pianoRoll.tuningAnchorHarmonic);
 }
 
 void PianoRoll::newTuning() {
     // Toggle harmonic/EDO view; keep both lattices (harmonic anchor vector + EDO span/vectors) across toggles.
-    auto before = captureRegionTuning(region);
+    auto before = captureCentralTuning();
     auto after = before;
     after.mode = (before.mode == 0) ? 1 : 0;
     project->um->newAction(new PianoRollRegionTuningUndoAction(project, region->parentNode->nm->managerPath, region->parentNode->id,
-        region->id, regionTuningSnapshotToUndoJson(before), regionTuningSnapshotToUndoJson(after), "Toggle Tuning Mode"));
+        region ? region->id : -1, regionTuningSnapshotToUndoJson(before), regionTuningSnapshotToUndoJson(after), "Toggle Tuning Mode"));
 }
 
 void PianoRoll::updateLines() {
@@ -113,7 +149,8 @@ void PianoRoll::updateLines() {
     lineStructural.clear();
 
     if (tuningMode == TuningMode::Harmonic) {
-        const auto& anchorVec = region->tuningHarmonicAnchorVector;
+        const auto& anchorVec = project ? project->pianoRoll.tuningHarmonicAnchorVector
+                                        : std::vector<std::pair<int, int>>{};
         const auto anchorBase = subVec(anchorVec, densePrimeExponentPairsForHarmonic(harmonicAnchorNumber));
         for (int h = 1; h <= 512; ++h) {
             auto pairs = addVec(anchorBase, densePrimeExponentPairsForHarmonic(h));
@@ -125,11 +162,12 @@ void PianoRoll::updateLines() {
             lineStructural.push_back(h);
         }
     } else {
-        const int subdiv = region ? region->tuningEdoSubdivisionSteps : 0;
-        if (region && subdiv > 0) {
+        const int subdiv = project ? project->pianoRoll.tuningEdoSubdivisionSteps : 0;
+        if (project && subdiv > 0) {
             for (int k = -1024; k <= 1024; ++k) {
                 std::vector<std::pair<int, int>> pairs =
-                    edoVectorForK(k, subdiv, region->tuningEdoLowerVector, region->tuningEdoUpperVector);
+                    edoVectorForK(k, subdiv, project->pianoRoll.tuningEdoLowerVector,
+                                  project->pianoRoll.tuningEdoUpperVector);
                 const float midi = Note::midiFromPitchVector(pairs);
                 if (midi < -24.0f || midi > 152.0f) continue;
                 pitchLines.emplace_back(midi);
@@ -145,15 +183,16 @@ void PianoRoll::updateLines() {
 }
 
 void PianoRoll::updateRhythmLines() {
-    const int steps = region ? region->rhythmEdoSubdivisionSteps : 1;
+    const int steps = project ? project->pianoRoll.rhythmEdoSubdivisionSteps : 1;
     static const std::vector<std::pair<int,int>> kOneSec{{1,1}};
-    const auto& lower = region ? region->rhythmEdoLowerVector : std::vector<std::pair<int,int>>{};
-    const auto& upper = (region && !region->rhythmEdoUpperVector.empty())
-        ? region->rhythmEdoUpperVector : kOneSec;
+    const auto& lower = project ? project->pianoRoll.rhythmEdoLowerVector
+                                : std::vector<std::pair<int,int>>{};
+    const auto& upper = (project && !project->pianoRoll.rhythmEdoUpperVector.empty())
+        ? project->pianoRoll.rhythmEdoUpperVector : kOneSec;
     const float minSec = (static_cast<float>(scrollX) - leftMargin) / static_cast<float>(dW);
     const float maxSec = (static_cast<float>(scrollX) + width - leftMargin) / static_cast<float>(dW);
-    if (region && !region->gridSpans.empty())
-        generateTransportLines(rhythmLines, rhythmLineLabels, region->gridSpans, minSec, maxSec);
+    if (project && !project->pianoRoll.gridSpans.empty())
+        generateTransportLines(rhythmLines, rhythmLineLabels, project->pianoRoll.gridSpans, minSec, maxSec);
     else
         generateRhythmLines(rhythmLines, rhythmLineLabels, steps, lower, upper, minSec, maxSec);
 }

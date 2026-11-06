@@ -19,12 +19,9 @@ constexpr float kBeatLineW = 2.f;
 static float snappedBeat(GridView* view, float mouseX) {
     float rawBeat = (mouseX + view->scrollX - view->leftMargin) / view->dW;
     rawBeat = view->adjustTransportSeekSec(rawBeat);
-    // Snapping follows the transport's own line set, falling back to the grid lattice only
-    // while the transport set is still empty.
-    const auto& lines = view->transportLineCache.empty() ? view->rhythmLines : view->transportLineCache;
-    size_t idx = closestRhythmLineIndexForSeconds(lines, rawBeat);
-    if (idx != SIZE_MAX && idx < lines.size())
-        return lines[idx].seconds;
+    // Snap to whichever line is nearest: the transport's own strip or the grid rhythm.
+    const RhythmGridLine* line = closestRhythmOrTransportLine(view->rhythmLines, view->transportLineCache, rawBeat);
+    if (line) return line->seconds;
     return rawBeat;
 }
 
@@ -115,9 +112,8 @@ void Transport::handleTempoMouseDown(float areaH) {
     float bpm = std::max(0.001f, normY * (curve.valueRangeMax - curve.valueRangeMin) + curve.valueRangeMin);
 
     std::vector<std::pair<int,int>> timeVec;
-    size_t idx = closestRhythmLineIndexForSeconds(view->rhythmLines, beat);
-    if (idx != SIZE_MAX && idx < view->rhythmLines.size())
-        timeVec = view->rhythmLines[idx].integerPairs;
+    if (const RhythmGridLine* line = closestRhythmOrTransportLine(view->rhythmLines, view->transportLineCache, beat))
+        timeVec = line->integerPairs;
 
     curve.addPoint(timeVec, bpm);
     for (size_t i = 0; i < curve.points.size(); ++i)
@@ -134,13 +130,13 @@ void Transport::handleTempoMouseMove(float areaH) {
 
         float beat = (mouseX + view->scrollX - view->leftMargin) / view->dW;
         beat = view->adjustTransportSeekSec(beat);
-        size_t idx = closestRhythmLineIndexForSeconds(view->rhythmLines, beat);
-        if (idx == SIZE_MAX || idx >= view->rhythmLines.size()) return;
+        const RhythmGridLine* line = closestRhythmOrTransportLine(view->rhythmLines, view->transportLineCache, beat);
+        if (!line) return;
         const std::vector<std::pair<int,int>>* neighborVec = nullptr;
-        if (tempoCurveEditor->clampBeatToNeighbors(di, view->rhythmLines[idx].seconds, &neighborVec))
+        if (tempoCurveEditor->clampBeatToNeighbors(di, line->seconds, &neighborVec))
             curve.points[di].timeVec = *neighborVec;
         else
-            curve.points[di].timeVec = view->rhythmLines[idx].integerPairs;
+            curve.points[di].timeVec = line->integerPairs;
 
         float normY = 1.f - (mouseY / areaH);
         normY = std::max(0.f, std::min(1.f, normY));
