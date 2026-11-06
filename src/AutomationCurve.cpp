@@ -6,11 +6,51 @@
 
 AutomationCurve::AutomationCurve(Project* p, ArrangerNode* n) : GridElement(p, n) {
     type = ElementType::automationCurve;
+    name = "Automation";
 }
 
 AutomationCurve::~AutomationCurve() {}
 
 void AutomationCurve::draw(SDL_Renderer*, float, int) {}
+
+uint64_t AutomationCurve::thumbnailSignature() const {
+    uint64_t sig = kElementHashSeed;
+    sig = elementHashMix(sig, points.size());
+    for (const auto& pt : points) {
+        for (const auto& pr : pt.timeVec)
+            sig = elementHashMix(sig, static_cast<uint64_t>(static_cast<uint32_t>(pr.first)) << 32 |
+                                      static_cast<uint32_t>(pr.second));
+        sig = elementHashMix(sig, static_cast<uint64_t>(std::llround(pt.v * 10000.0f)));
+        sig = elementHashMix(sig, static_cast<uint64_t>(pt.shape.type));
+        sig = elementHashMix(sig, static_cast<uint64_t>(std::llround(pt.shape.param * 10000.0f)));
+    }
+    sig = elementHashMix(sig, static_cast<uint64_t>(std::llround(valueRangeMin * 1000.0f)));
+    sig = elementHashMix(sig, static_cast<uint64_t>(std::llround(valueRangeMax * 1000.0f)));
+    return sig;
+}
+
+void AutomationCurve::drawThumbnail(SDL_Renderer* renderer, int w, int h) {
+    if (points.size() < 2 || w <= 0 || h <= 0) return;
+    const float t0 = Note::beatsFromVector(points.front().timeVec);
+    float t1 = Note::beatsFromVector(points.back().timeVec);
+    if (t1 <= t0) t1 = t0 + 1.0f;
+    float range = valueRangeMax - valueRangeMin;
+    if (range <= 0.0f) range = 1.0f;
+
+    SDL_SetRenderDrawColor(renderer, 255, 200, 100, 255);
+    float prevX = 0.0f, prevY = 0.0f;
+    bool havePrev = false;
+    for (const auto& pt : points) {
+        const float t = Note::beatsFromVector(pt.timeVec);
+        const float x = (t - t0) / (t1 - t0) * static_cast<float>(w);
+        const float norm = (pt.v - valueRangeMin) / range;
+        const float y = (1.0f - std::clamp(norm, 0.0f, 1.0f)) * static_cast<float>(h);
+        if (havePrev) SDL_RenderLine(renderer, prevX, prevY, x, y);
+        prevX = x;
+        prevY = y;
+        havePrev = true;
+    }
+}
 
 json AutomationCurve::toJSON() {
     json j;

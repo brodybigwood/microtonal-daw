@@ -330,6 +330,122 @@ DeleteRegionAction::DeleteRegionAction(Project* p, std::vector<int> managerPath,
     wireDeleteRegionLambdas();
 }
 
+// ---------------------------------------------------------------------------
+// Element-list operations shared by all element types.
+// ---------------------------------------------------------------------------
+
+static GridElement* resolveElement(Project* p, const std::vector<int>& managerPath, int nodeID, int elementID) {
+    ElementManager* em = undoResolveArrangerElementManager(p, managerPath, nodeID);
+    if (!em) throw std::runtime_error("element action: element manager missing");
+    GridElement* ge = em->getElement(static_cast<uint16_t>(elementID));
+    if (!ge) throw std::runtime_error("element action: element id not found");
+    return ge;
+}
+
+RenameElementAction::RenameElementAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID,
+                                         std::string afterName) :
+        ProjectAction(p, RenameElement),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        elementID(elementID),
+        afterName(std::move(afterName)) {
+    beforeName = resolveElement(p, this->managerPath, nodeID, elementID)->name;
+    name = "Rename Element";
+    doAction = [this]() { resolveElement(this->p, this->managerPath, this->nodeID, this->elementID)->name = this->afterName; };
+    undoAction = [this]() { resolveElement(this->p, this->managerPath, this->nodeID, this->elementID)->name = this->beforeName; };
+}
+
+RenameElementAction::RenameElementAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID,
+                                         std::string beforeName, std::string afterName) :
+        ProjectAction(p, RenameElement),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        elementID(elementID),
+        beforeName(std::move(beforeName)),
+        afterName(std::move(afterName)) {
+    skipInitialDo = true;
+    name = "Rename Element";
+    doAction = [this]() { resolveElement(this->p, this->managerPath, this->nodeID, this->elementID)->name = this->afterName; };
+    undoAction = [this]() { resolveElement(this->p, this->managerPath, this->nodeID, this->elementID)->name = this->beforeName; };
+}
+
+ElementReorderAction::ElementReorderAction(Project* p, std::vector<int> managerPath, int nodeID,
+                                           std::vector<uint16_t> beforeOrder, std::vector<uint16_t> afterOrder) :
+        ProjectAction(p, ReorderElements),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        beforeOrder(std::move(beforeOrder)),
+        afterOrder(std::move(afterOrder)) {
+    name = "Reorder Elements";
+    doAction = [this]() {
+        ElementManager* em = undoResolveArrangerElementManager(this->p, this->managerPath, this->nodeID);
+        if (!em) throw std::runtime_error("ElementReorderAction::doAction: element manager missing");
+        em->applyElementOrder(this->afterOrder);
+    };
+    undoAction = [this]() {
+        ElementManager* em = undoResolveArrangerElementManager(this->p, this->managerPath, this->nodeID);
+        if (!em) throw std::runtime_error("ElementReorderAction::undoAction: element manager missing");
+        em->applyElementOrder(this->beforeOrder);
+    };
+}
+
+static void wireDeleteElementLambdas(DeleteElementAction* action) {
+    action->doAction = [action]() {
+        ElementManager* em = undoResolveArrangerElementManager(action->p, action->managerPath, action->nodeID);
+        if (!em) throw std::runtime_error("DeleteElementAction::doAction: element manager missing");
+        ArrangerNode* arr = undoResolveArrangerNode(action->p, action->managerPath, action->nodeID);
+        const bool isRegion = action->elementSnapshot.value("type", -1) == ElementType::region;
+        const bool isAudio = action->elementSnapshot.value("type", -1) == ElementType::audioClip;
+        if (isRegion && arr && arr->sl)
+            arr->sl->clearPianoRoll(action->elementID, false);
+        em->removeElementById(static_cast<uint16_t>(action->elementID));
+        if (isAudio && arr) {
+            arr->syncWidthsFromInputs();
+            if (arr->nm) arr->nm->markTopologyDirty();
+        }
+    };
+    action->undoAction = [action]() {
+        ElementManager* em = undoResolveArrangerElementManager(action->p, action->managerPath, action->nodeID);
+        if (!em) throw std::runtime_error("DeleteElementAction::undoAction: element manager missing");
+        em->restoreElementFromSnapshotAt(action->insertIndex, action->elementSnapshot);
+        ArrangerNode* arr = undoResolveArrangerNode(action->p, action->managerPath, action->nodeID);
+        if (arr && action->elementSnapshot.value("type", -1) == ElementType::audioClip) {
+            arr->syncWidthsFromInputs();
+            if (arr->nm) arr->nm->markTopologyDirty();
+        }
+    };
+}
+
+DeleteElementAction::DeleteElementAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID) :
+        ProjectAction(p, DeleteElement),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        elementID(elementID) {
+    ElementManager* em = undoResolveArrangerElementManager(p, this->managerPath, nodeID);
+    if (!em) throw std::runtime_error("DeleteElementAction: element manager missing");
+    const auto it = em->ids.find(static_cast<uint16_t>(elementID));
+    if (it == em->ids.end()) throw std::runtime_error("DeleteElementAction: element id not in element manager");
+    insertIndex = static_cast<size_t>(it->second);
+    if (insertIndex >= em->elements.size() || em->elements[insertIndex]->id != static_cast<uint16_t>(elementID))
+        throw std::runtime_error("DeleteElementAction: element index mismatch");
+    elementSnapshot = em->elements[insertIndex]->toJSON();
+    name = "Delete Element " + std::to_string(elementID);
+    wireDeleteElementLambdas(this);
+}
+
+DeleteElementAction::DeleteElementAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID,
+                                         size_t insertIndex, json elementSnapshot) :
+        ProjectAction(p, DeleteElement),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        elementID(elementID),
+        insertIndex(insertIndex),
+        elementSnapshot(std::move(elementSnapshot)) {
+    skipInitialDo = true;
+    name = "Delete Element " + std::to_string(elementID);
+    wireDeleteElementLambdas(this);
+}
+
 CreatePositionAction::CreatePositionAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID, std::vector<std::pair<int, int>> startPairs, std::vector<std::pair<int, int>> endPairs, uint16_t trackID, std::vector<std::pair<int, int>> startOffsetPairs) :
         ProjectAction(p, CreatePosition),
         managerPath(std::move(managerPath)),

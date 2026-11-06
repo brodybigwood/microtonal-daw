@@ -1,5 +1,7 @@
 #include "Region.h"
 #include <iostream>
+#include <algorithm>
+#include <cmath>
 #include <climits>
 #include <set>
 #include <functional>
@@ -10,6 +12,7 @@
 
 Region::Region(Project* p, ArrangerNode* n) : GridElement(p, n) {
     type = ElementType::region;
+    name = "MIDI Region FX Rack";
     // Transport strip and the grid both start as one span: beat 0 to beat 1, one division.
     transportLines.push_back(defaultLatticeSpan(1));
     gridSpans.push_back(defaultLatticeSpan(1));
@@ -17,6 +20,34 @@ Region::Region(Project* p, ArrangerNode* n) : GridElement(p, n) {
 
 Region::~Region() {
 
+}
+
+uint64_t Region::thumbnailSignature() const {
+    uint64_t sig = kElementHashSeed;
+    sig = elementHashMix(sig, notes.size());
+    for (const auto& n : notes) {
+        if (!n) continue;
+        sig = elementHashMix(sig, static_cast<uint64_t>(std::llround(n->startBeats() * 1000.0f)));
+        sig = elementHashMix(sig, static_cast<uint64_t>(std::llround(n->endBeats() * 1000.0f)));
+        sig = elementHashMix(sig, static_cast<uint64_t>(std::llround(n->num * 1000.0f)));
+    }
+    return sig;
+}
+
+void Region::drawThumbnail(SDL_Renderer* renderer, int w, int h) {
+    if (notes.empty() || w <= 0 || h <= 0) return;
+    float span = 1.0f;
+    for (const auto& n : notes)
+        if (n) span = std::max(span, n->endBeats());
+    SDL_SetRenderDrawColor(renderer, colors.note[0], colors.note[1], colors.note[2], 255);
+    for (const auto& n : notes) {
+        if (!n) continue;
+        const float x1 = n->startBeats() / span * static_cast<float>(w);
+        const float x2 = std::max(x1 + 1.0f, n->endBeats() / span * static_cast<float>(w));
+        const float y = (128.0f - n->num) / 128.0f * static_cast<float>(h);
+        SDL_FRect rect{x1, y - 0.75f, x2 - x1, 1.5f};
+        SDL_RenderFillRect(renderer, &rect);
+    }
 }
 
 void Region::draw(SDL_Renderer* renderer, float pixelsPerSecond, int h) {

@@ -15,6 +15,53 @@
 #include "NodeManager.h"
 #include "nodes/arranger/arranger.h"
 #include <unordered_set>
+#include "ContextMenu.h"
+#include "TreeEntry.h"
+#include "SongRoll.h"
+
+static const char* elementTypeName(ElementType t) {
+    switch (t) {
+        case ElementType::region: return "MIDI";
+        case ElementType::audioClip: return "Audio";
+        case ElementType::automationCurve: return "Automation";
+    }
+    return "?";
+}
+
+// (Re)build an element's 64x36 list preview only when its content signature,
+// size, or renderer changed. The preview is drawn by the element itself, so the
+// list and the timeline share one rendering implementation.
+static void ensureThumbnail(SDL_Renderer* renderer, GridElement* e) {
+    if (!renderer || !e) return;
+    constexpr int kW = 64, kH = 36;
+    const uint64_t sig = e->thumbnailSignature();
+    if (e->thumbTexture && e->thumbW == kW && e->thumbH == kH &&
+        e->thumbRenderer == renderer && e->thumbSignature == sig)
+        return;
+
+    if (!e->thumbTexture || e->thumbW != kW || e->thumbH != kH || e->thumbRenderer != renderer) {
+        if (e->thumbTexture) SDL_DestroyTexture(e->thumbTexture);
+        e->thumbTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
+                                            SDL_TEXTUREACCESS_TARGET, kW, kH);
+        if (e->thumbTexture) SDL_SetTextureBlendMode(e->thumbTexture, SDL_BLENDMODE_BLEND);
+        e->thumbW = kW;
+        e->thumbH = kH;
+        e->thumbRenderer = renderer;
+    }
+    if (!e->thumbTexture) return;
+
+    SDL_Texture* prevTarget = SDL_GetRenderTarget(renderer);
+    if (!SDL_SetRenderTarget(renderer, e->thumbTexture)) {
+        SDL_SetRenderTarget(renderer, prevTarget);
+        return;
+    }
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 12, 12, 24, 255);
+    SDL_RenderClear(renderer);
+    e->drawThumbnail(renderer, kW, kH);
+    SDL_SetRenderTarget(renderer, prevTarget);
+    e->thumbSignature = sig;
+}
 
 ElementManager::~ElementManager() {
     for (auto e : elements) {
@@ -29,6 +76,7 @@ void ElementManager::clearTextures() {
             SDL_DestroyTexture(element->texture);
             element->texture = nullptr;
         }
+        element->clearCachedTextures();
     }
 }
 
@@ -363,6 +411,40 @@ void ElementManager::removeElementById(uint16_t elementId) {
         ids[elements[i]->id] = static_cast<uint16_t>(i);
 }
 
+void ElementManager::applyElementOrder(const std::vector<uint16_t>& order) {
+    if (order.size() != elements.size())
+        throw std::runtime_error("ElementManager::applyElementOrder: wrong element count");
+    std::vector<GridElement*> reordered;
+    reordered.reserve(order.size());
+    for (uint16_t id : order) {
+        auto it = ids.find(id);
+        if (it == ids.end())
+            throw std::runtime_error("ElementManager::applyElementOrder: unknown element id");
+        reordered.push_back(elements[static_cast<size_t>(it->second)]);
+    }
+    elements = std::move(reordered);
+    ids.clear();
+    for (size_t i = 0; i < elements.size(); ++i)
+        ids[elements[i]->id] = static_cast<uint16_t>(i);
+}
+
+void ElementManager::restoreElementFromSnapshotAt(size_t insertIndex, const json& snapshot) {
+    const int t = snapshot.at("type").get<int>();
+    switch (t) {
+        case ElementType::region:
+            restoreRegionFromSnapshotAt(insertIndex, snapshot);
+            break;
+        case ElementType::audioClip:
+            restoreAudioClipFromSnapshotAt(insertIndex, snapshot);
+            break;
+        case ElementType::automationCurve:
+            restoreAutomationCurveFromSnapshotAt(insertIndex, snapshot);
+            break;
+        default:
+            throw std::runtime_error("ElementManager::restoreElementFromSnapshotAt: bad element type");
+    }
+}
+
 void ElementManager::restoreRegionFromSnapshot(const json& regionJson) {
     restoreRegionFromSnapshotAt(elements.size(), regionJson);
 }
@@ -495,7 +577,7 @@ void ElementManager::render(SDL_Renderer* renderer) {
 
     hoveredElement = -1;
 
-    //regions
+    //elements
     for(auto e: elements) {
         SDL_FRect rect{dstRect->x + sideMargin, i, dstRect->w - 2*sideMargin, height};
 
@@ -520,29 +602,54 @@ void ElementManager::render(SDL_Renderer* renderer) {
         SDL_SetRenderDrawColor(renderer, 120, 120, 120, 255);
         SDL_RenderRect(renderer, &rect);
 
+        // Rendered preview of the element's content.
+        ensureThumbnail(renderer, e);
+        SDL_FRect thumb{rect.x + 4, rect.y + 7, 64, 36};
+        SDL_SetRenderDrawColor(renderer, 8, 8, 16, 255);
+        SDL_RenderFillRect(renderer, &thumb);
+        if (e->thumbTexture) SDL_RenderTexture(renderer, e->thumbTexture, nullptr, &thumb);
+        SDL_SetRenderDrawColor(renderer, 90, 90, 90, 255);
+        SDL_RenderRect(renderer, &thumb);
 
+        const float textX = rect.x + 74;
+        const float avail = std::max(10.0f, rect.w - 74.0f - 22.0f);
+        const auto drawLabel = [&](CachedText& cache, const std::string& str, SDL_Color color,
+                                   float y, float targetH) {
+            SDL_Texture* tex = cache.get(renderer, str, color);
+            if (!tex) return;
+            float tw = 0, th = 0;
+            SDL_GetTextureSize(tex, &tw, &th);
+            if (tw <= 0 || th <= 0) return;
+            const float ww = std::min(avail, tw * (targetH / th));
+            SDL_FRect dst{textX, y, ww, targetH};
+            SDL_RenderTexture(renderer, tex, nullptr, &dst);
+        };
+        drawLabel(e->nameLabel, e->name, SDL_Color{245, 245, 250, 255}, rect.y + 5, 18.0f);
+        drawLabel(e->metaLabel,
+                  std::string(elementTypeName(e->type)) + " \xC2\xB7 " +
+                      std::to_string(e->positions.size()) + " pos",
+                  SDL_Color{165, 170, 190, 255}, rect.y + 28, 14.0f);
 
-        std::string regionIdText = std::to_string(e->id);
-        SDL_Color textColor = {255, 255, 255, 255};
-
-        SDL_Surface* textSurface = TTF_RenderText_Blended(fonts.mainFont, regionIdText.c_str(), regionIdText.size(), textColor);
-        if (textSurface) {
-            SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
-            if (textTexture) {
-                SDL_FRect textRect;
-                textRect.w = static_cast<float>(textSurface->w);
-                textRect.h = static_cast<float>(textSurface->h);
-                textRect.x = rect.x + (rect.w - textRect.w) / 2.0f;
-                textRect.y = rect.y + (rect.h - textRect.h) / 2.0f;
-
-                SDL_RenderTexture(renderer, textTexture, nullptr, &textRect);
-                SDL_DestroyTexture(textTexture);
+        // Dim id at the right edge (menus/undo names refer to it).
+        if (SDL_Texture* idTex = e->idLabel.get(renderer, std::to_string(e->id), SDL_Color{140, 140, 165, 255})) {
+            float tw = 0, th = 0;
+            SDL_GetTextureSize(idTex, &tw, &th);
+            if (tw > 0 && th > 0) {
+                const float hh = 14.0f;
+                const float ww = tw * (hh / th);
+                SDL_FRect dst{rect.x + rect.w - 5 - ww, rect.y + 5, ww, hh};
+                SDL_RenderTexture(renderer, idTex, nullptr, &dst);
             }
-            SDL_DestroySurface(textSurface);
         }
 
-
         i += height + topMargin;
+    }
+
+    if (dragActive && dropIndex >= 0) {
+        const float lineY = dstRect->y + topMargin - scrollY + dropIndex * (height + topMargin) - topMargin * 0.5f;
+        SDL_FRect line{dstRect->x + sideMargin, lineY, dstRect->w - 2 * sideMargin, 2.0f};
+        SDL_SetRenderDrawColor(renderer, 120, 200, 255, 255);
+        SDL_RenderFillRect(renderer, &line);
     }
 
     //outline
@@ -579,26 +686,26 @@ void ElementManager::render(SDL_Renderer* renderer) {
         }
     }
 
-    // New Waveform button
-    SDL_FRect waveformBtn{ dstRect->x + btnHalfW, btnY, btnHalfW, bottomMargin };
-    hoverNewWaveform = false;
-    if (mouseX >= waveformBtn.x && mouseX < (waveformBtn.x + waveformBtn.w) &&
-        mouseY >= waveformBtn.y && mouseY < (waveformBtn.y + waveformBtn.h)) {
+    // New Automation button (creates an AutomationCurve element, not an audio clip)
+    SDL_FRect automationBtn{ dstRect->x + btnHalfW, btnY, btnHalfW, bottomMargin };
+    hoverNewAutomation = false;
+    if (mouseX >= automationBtn.x && mouseX < (automationBtn.x + automationBtn.w) &&
+        mouseY >= automationBtn.y && mouseY < (automationBtn.y + automationBtn.h)) {
         SDL_SetRenderDrawColor(renderer, colors.trackAudio[0], colors.trackAudio[1], colors.trackAudio[2], 220);
-        hoverNewWaveform = true;
+        hoverNewAutomation = true;
     } else {
         SDL_SetRenderDrawColor(renderer, colors.trackAudio[0], colors.trackAudio[1], colors.trackAudio[2], 180);
     }
-    SDL_RenderFillRect(renderer, &waveformBtn);
+    SDL_RenderFillRect(renderer, &automationBtn);
     SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
-    SDL_RenderRect(renderer, &waveformBtn);
+    SDL_RenderRect(renderer, &automationBtn);
     if (fonts.mainFont) {
-        SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, "+Wave", 0, {255, 255, 255, 255});
+        SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, "+Automation", 0, {255, 255, 255, 255});
         if (surf) {
             SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
             if (tex) {
-                SDL_FRect tr{ waveformBtn.x + (waveformBtn.w - surf->w) * 0.5f,
-                              waveformBtn.y + (waveformBtn.h - surf->h) * 0.5f,
+                SDL_FRect tr{ automationBtn.x + (automationBtn.w - surf->w) * 0.5f,
+                              automationBtn.y + (automationBtn.h - surf->h) * 0.5f,
                               (float)surf->w, (float)surf->h };
                 SDL_RenderTexture(renderer, tex, nullptr, &tr);
                 SDL_DestroyTexture(tex);
@@ -610,8 +717,71 @@ void ElementManager::render(SDL_Renderer* renderer) {
     SDL_SetRenderClipRect(renderer, NULL);
 }
 
+int ElementManager::rowIndexAt(float x, float y) {
+    if (!dstRect) return -1;
+    if (x < dstRect->x || x >= dstRect->x + dstRect->w) return -1;
+    constexpr float rowH = 50.0f, gap = 5.0f;
+    const float ry = y - (dstRect->y + gap - static_cast<float>(scrollY));
+    if (ry < 0) return -1;
+    const int idx = static_cast<int>(ry / (rowH + gap));
+    if (idx < 0 || idx >= static_cast<int>(elements.size())) return -1;
+    const float inRow = ry - idx * (rowH + gap);
+    return inRow <= rowH ? idx : -1;
+}
+
+static void openElementContextMenu(ElementManager* em) {
+    const int idx = em->rowIndexAt(em->mouseX, em->mouseY);
+    if (idx < 0 || idx >= static_cast<int>(em->elements.size())) return;
+    GridElement* el = em->elements[static_cast<size_t>(idx)];
+    em->currentElement = el->id;
+
+    auto ctxMenu = ContextMenu::get();
+    auto root = uTreeEntry();
+    root->label = el->name;
+
+    auto rename = uTreeEntry();
+    rename->label = "Rename Element...";
+    rename->click = [em, id = static_cast<int>(el->id)]() {
+        auto* ctx = ContextMenu::get();
+        ctx->skipNextEvent = true;
+        if (em->project && em->project->window) SDL_StartTextInput(em->project->window);
+        ctx->activate();
+        ctx->dynamicTick = getTextInputTicker(
+            [em, id](std::string text) {
+                if (text.empty()) return;
+                auto* element = em->getElement(static_cast<uint16_t>(id));
+                if (!element || text == element->name) return;
+                em->project->um->newAction(new RenameElementAction(em->project,
+                    em->parentNode->nm->managerPath, static_cast<int>(em->parentNode->id), id, text));
+            },
+            []() {});
+    };
+    root->addChild(rename);
+
+    if (el->type == ElementType::region) {
+        auto open = uTreeEntry();
+        open->label = "Open Piano Roll";
+        open->click = [em, id = static_cast<int>(el->id)]() {
+            if (!em->parentNode || !em->parentNode->sl) return;
+            em->parentNode->sl->createPianoRoll(static_cast<Region*>(em->getElement(static_cast<uint16_t>(id))), true);
+        };
+        root->addChild(open);
+    }
+
+    auto del = uTreeEntry();
+    del->label = "Delete Element";
+    del->click = [em, id = static_cast<int>(el->id)]() {
+        em->project->um->newAction(new DeleteElementAction(em->project,
+            em->parentNode->nm->managerPath, static_cast<int>(em->parentNode->id), id));
+    };
+    root->addChild(del);
+
+    ctxMenu->skipNextEvent = true;
+    ctxMenu->activate();
+    ctxMenu->dynamicTick = getTreeMenuTicker(root);
+}
+
 bool ElementManager::handleInput(SDL_Event& e) {
-    bool running = true;
     switch (e.type) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             if (e.button.button == SDL_BUTTON_LEFT) {
@@ -621,16 +791,64 @@ bool ElementManager::handleInput(SDL_Event& e) {
                     currentElement = cra->regionID;
                     break;
                 }
-                if(hoverNewWaveform) {
+                if(hoverNewAutomation) {
                     auto* cca = new CreateAutomationCurveAction(project, parentNode->nm->managerPath, static_cast<int>(parentNode->id));
                     project->um->newAction(cca);
                     currentElement = cca->curveID;
                     break;
                 }
-                if(hoveredElement != -1) {
-                    currentElement = hoveredElement;
-                    break;
+                const int idx = rowIndexAt(mouseX, mouseY);
+                if (idx >= 0 && idx < static_cast<int>(elements.size())) {
+                    currentElement = elements[static_cast<size_t>(idx)]->id;
+                    dragPending = true;
+                    dragActive = false;
+                    draggedElementID = elements[static_cast<size_t>(idx)]->id;
+                    dragStartY = mouseY;
+                    dropIndex = -1;
                 }
+            } else if (e.button.button == SDL_BUTTON_RIGHT) {
+                openElementContextMenu(this);
+            }
+            break;
+        case SDL_EVENT_MOUSE_MOTION:
+            if (dragPending) {
+                if (!dragActive && std::fabs(mouseY - dragStartY) > 4.0f) dragActive = true;
+                if (dragActive) {
+                    constexpr float rowH = 50.0f, gap = 5.0f;
+                    const float listTop = dstRect->y + gap - static_cast<float>(scrollY);
+                    const int idx = rowIndexAt(mouseX, mouseY);
+                    if (idx < 0)
+                        dropIndex = (mouseY < listTop) ? 0 : static_cast<int>(elements.size());
+                    else {
+                        const float rowTop = listTop + idx * (rowH + gap);
+                        dropIndex = idx + (mouseY > rowTop + rowH * 0.5f ? 1 : 0);
+                    }
+                }
+            }
+            break;
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+            if (e.button.button == SDL_BUTTON_LEFT) {
+                if (dragActive && dropIndex >= 0 && project && project->um) {
+                    std::vector<uint16_t> before, after;
+                    for (auto* el : elements) before.push_back(el->id);
+                    int src = -1;
+                    for (size_t i = 0; i < before.size(); ++i)
+                        if (before[i] == draggedElementID) { src = static_cast<int>(i); break; }
+                    if (src >= 0) {
+                        int slot = dropIndex;
+                        if (slot > src) --slot;
+                        after = before;
+                        after.erase(after.begin() + src);
+                        slot = std::max(0, std::min(static_cast<int>(after.size()), slot));
+                        after.insert(after.begin() + slot, draggedElementID);
+                        if (after != before)
+                            project->um->newAction(new ElementReorderAction(project, parentNode->nm->managerPath,
+                                static_cast<int>(parentNode->id), std::move(before), std::move(after)));
+                    }
+                }
+                dragPending = false;
+                dragActive = false;
+                dropIndex = -1;
             }
             break;
         case SDL_EVENT_MOUSE_WHEEL:
@@ -640,5 +858,5 @@ bool ElementManager::handleInput(SDL_Event& e) {
             }
             break;
     }
-    return running;
+    return true;
 }

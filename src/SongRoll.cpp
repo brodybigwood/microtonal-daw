@@ -383,7 +383,6 @@ void SongRoll::syncLayout() {
         dstRect->h - topMargin - bottomMargin
     };
 
-    em->scrollY = scrollY;
 }
 
 SongRoll::~SongRoll() {
@@ -777,8 +776,9 @@ void SongRoll::handleCustomInput(SDL_Event& e) {
         default:
             break;
     }
-    if (mouseX > rightRect.x && mouseX <= (rightRect.x + rightRect.w) &&
-        mouseY > rightRect.y && mouseY <= (rightRect.y + rightRect.h)) {
+    if ((mouseX > rightRect.x && mouseX <= (rightRect.x + rightRect.w) &&
+         mouseY > rightRect.y && mouseY <= (rightRect.y + rightRect.h)) ||
+        em->isDraggingElement()) {
         em->handleInput(e);
     }
 
@@ -871,6 +871,27 @@ void SongRoll::renderElement(SDL_Renderer* renderer, GridElement* element) {
         SDL_SetRenderDrawColor(renderer, 255, 190, 140, 180);
         SDL_FRect rszR{x0 + wPx - kDragBarResizeW, y0, kDragBarResizeW, kDragBarH};
         SDL_RenderFillRect(renderer, &rszR);
+
+        // Element name inside the move bar (same name every position shares).
+        const float textW = std::max(0.0f, wPx - 2.0f * kDragBarResizeW - 6.0f);
+        if (textW >= 12.0f && !element->name.empty()) {
+            SDL_Texture* nameTex = element->nameLabel.get(renderer, element->name, SDL_Color{225, 228, 235, 255});
+            if (nameTex) {
+                float tw = 0, th = 0;
+                SDL_GetTextureSize(nameTex, &tw, &th);
+                if (tw > 0 && th > 0) {
+                    const float dstH = kDragBarH - 4.0f;
+                    SDL_Rect clip{static_cast<int>(x0 + kDragBarResizeW + 2),
+                                  static_cast<int>(y0 + 2),
+                                  static_cast<int>(textW),
+                                  static_cast<int>(kDragBarH)};
+                    SDL_SetRenderClipRect(renderer, &clip);
+                    SDL_FRect dst{x0 + kDragBarResizeW + 3, y0 + 2, tw * (dstH / th), dstH};
+                    SDL_RenderTexture(renderer, nameTex, nullptr, &dst);
+                    SDL_SetRenderClipRect(renderer, nullptr);
+                }
+            }
+        }
 
         const float contentY = y0 + kDragBarH;
         const float contentH = std::max(0.0f, hPx - kDragBarH);
@@ -1149,37 +1170,28 @@ void SongRoll::createElement() {
 }
 
 void SongRoll::doubleClick() {
-    if (hoveredPosition) {
-        auto e = hoveredPosition->element;
-        if (e->type == ElementType::region) {
-            auto reg = static_cast<Region*>(e);
-            movingPosition = nullptr;
-            positionDragKind = PositionDragKind::None;
-            lmb = false;
-            createPianoRoll(reg, false);
-        }
-    } else {
-        auto trackID = getHoveredTrack();
-        auto track = tracks->getTrack(trackID);
-        if (track && track->type == TrackType::Notes) {
-            auto startPairs = pairsAtMouseX();
-            auto endPairs = lastPositionDurationPairs.empty()
-                ? addVec(startPairs, std::vector<std::pair<int,int>>{{2,1}})
-                : addVec(startPairs, lastPositionDurationPairs);
-            auto* cra = new CreateRegionAction(project, parentNode->nm->managerPath, static_cast<int>(parentNode->id));
-            project->um->newAction(cra);
-            project->um->newAction(new CreatePositionAction(project, parentNode->nm->managerPath, static_cast<int>(parentNode->id),
-                cra->regionID, startPairs, endPairs, static_cast<uint16_t>(trackID), lastPositionStartOffsetPairs));
-            auto* elem = em->getElement(cra->regionID);
-            if (elem && !elem->positions.empty()) {
-                auto* pos = elem->positions.back();
-                lastPositionDurationPairs = subVec(pos->rhythmEndVector, pos->rhythmVector);
-                lastPositionStartOffsetPairs = pos->startOffsetPairs;
-                em->currentElement = cra->regionID;
-            }
-            refreshGrid = true;
-        }
-    }
+    // Only double-clicking an existing region position opens its piano roll; the
+    // old double-click region creation is gone.
+    if (!hoveredPosition) return;
+    auto e = hoveredPosition->element;
+    if (!e || e->type != ElementType::region) return;
+    auto reg = static_cast<Region*>(e);
+    movingPosition = nullptr;
+    positionDragKind = PositionDragKind::None;
+    lmb = false;
+    createPianoRoll(reg, false);
+}
+
+bool SongRoll::positionGrabBarHit(const GridElement::Position* pos) {
+    if (!pos || !tracks) return false;
+    const int index = tracks->getIndex(pos->trackID);
+    if (index < 0) return false;
+    const float yT = getY(static_cast<float>(index));
+    if (mouseY < yT || mouseY > yT + kDragBarH) return false;
+    const float xL = getX(Note::beatsFromVector(pos->rhythmVector));
+    const float xR = getX(Note::beatsFromVector(pos->rhythmEndVector));
+    if (xR - xL <= 2.0f * kDragBarResizeW) return false;
+    return mouseX >= xL + kDragBarResizeW && mouseX <= xR - kDragBarResizeW;
 }
 
 void SongRoll::clickMouse(SDL_Event& e) {
@@ -1401,7 +1413,10 @@ void SongRoll::clickMouse(SDL_Event& e) {
                     }
                 }
 
-                if (SDL_GetTicks() - lastLmbTime < DCT) doubleClick();
+                const bool withinDct = SDL_GetTicks() - lastLmbTime < DCT;
+                const bool regionPosition = hoveredPosition && hoveredPosition->element &&
+                    hoveredPosition->element->type == ElementType::region;
+                if (withinDct && regionPosition) doubleClick();
                 else if (!hoveredPosition &&
                     mouseX > gridRect.x && mouseX < gridRect.x + gridRect.w &&
                     mouseY > gridRect.y && mouseY < gridRect.y + gridRect.h) {
@@ -1436,6 +1451,54 @@ void SongRoll::clickMouse(SDL_Event& e) {
                     rmb = false;
                     return;
                 }
+                if (hoveredPosition && mouseX < rightRect.x && positionGrabBarHit(hoveredPosition)) {
+                    // Position menu, only from the move bar (not the body or handles).
+                    GridElement* el = hoveredPosition->element;
+                    const int elemID = static_cast<int>(el->id);
+                    const int posID = hoveredPosition->id;
+                    auto root = uTreeEntry();
+                    root->label = el->name;
+
+                    if (el->type == ElementType::region) {
+                        auto open = uTreeEntry();
+                        open->label = "Open Piano Roll";
+                        open->click = [this, elemID]() {
+                            auto* reg = static_cast<Region*>(em->getElement(static_cast<uint16_t>(elemID)));
+                            if (reg) createPianoRoll(reg, true);
+                        };
+                        root->addChild(open);
+                    }
+                    auto selectAll = uTreeEntry();
+                    selectAll->label = "Select All Positions of This Element";
+                    selectAll->click = [this, elemID]() {
+                        selectedPositionIds.clear();
+                        for (auto* e : em->elements)
+                            if (static_cast<int>(e->id) == elemID)
+                                for (auto* p : e->positions) selectedPositionIds.insert(p->id);
+                        refreshGrid = true;
+                    };
+                    root->addChild(selectAll);
+                    auto delPos = uTreeEntry();
+                    delPos->label = "Delete Position";
+                    delPos->click = [this, elemID, posID]() {
+                        project->um->newAction(new DeletePositionAction(project, parentNode->nm->managerPath,
+                            static_cast<int>(parentNode->id), elemID, posID));
+                        refreshGrid = true;
+                    };
+                    root->addChild(delPos);
+                    if (selectedPositionIds.count(posID) && selectedPositionIds.size() > 1) {
+                        auto delSel = uTreeEntry();
+                        delSel->label = "Delete Selection (" + std::to_string(selectedPositionIds.size()) + ")";
+                        delSel->click = [this]() { deleteSelectedPositions(); };
+                        root->addChild(delSel);
+                    }
+                    auto ctxMenu = ContextMenu::get();
+                    ctxMenu->skipNextEvent = true;
+                    ctxMenu->activate();
+                    ctxMenu->dynamicTick = getTreeMenuTicker(root);
+                    rmb = false;
+                    return;
+                }
                 if (hoveredPosition && mouseX < rightRect.x) {
                     // A right-click on a selected position deletes the whole selection.
                     if (selectedPositionIds.count(hoveredPosition->id)) {
@@ -1453,25 +1516,6 @@ void SongRoll::clickMouse(SDL_Event& e) {
                     project->um->newAction(new DeletePositionAction(project, parentNode->nm->managerPath,
                         static_cast<int>(parentNode->id), elemId, posId));
                     refreshGrid = true;
-                } else if (MouseOn(&rightRect) && em->hoveredElement != -1 && !em->hoverNewRegion) {
-                    GridElement* ge = em->getElement(static_cast<uint16_t>(em->hoveredElement));
-                    if (ge->type == ElementType::region) {
-                        auto* ctxMenu = ContextMenu::get();
-                        ctxMenu->activate();
-                        const uint16_t rid = ge->id;
-                        auto root = uTreeEntry();
-                        auto del = uTreeEntry();
-                        del->label = "Delete Region";
-                        del->click = [this, rid]() {
-                            auto* reg = static_cast<Region*>(em->getElement(rid));
-                            clearPianoRoll(static_cast<int>(rid));
-                            project->um->newAction(new DeleteRegionAction(project, parentNode->nm->managerPath,
-                                static_cast<int>(parentNode->id), static_cast<int>(rid)));
-                            refreshGrid = true;
-                        };
-                        root->addChild(del);
-                        ctxMenu->dynamicTick = getTreeMenuTicker(root);
-                    }
                 }
             }
             break;

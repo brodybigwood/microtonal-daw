@@ -2,7 +2,42 @@
 #include "Project.h"
 #include "Note.h"
 #include "PianoRollInternal.h"
+#include "styles.h"
+#include <SDL3_ttf/SDL_ttf.h>
 #include <algorithm>
+
+SDL_Texture* CachedText::get(SDL_Renderer* r, const std::string& s, SDL_Color color) {
+    if (!r) return nullptr;
+    if (texture && text == s && renderer == r) return texture;
+    clear();
+    renderer = r;
+    text = s;
+    if (s.empty()) return nullptr;
+    SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, s.c_str(), 0, color);
+    if (surf) {
+        texture = SDL_CreateTextureFromSurface(r, surf);
+        SDL_DestroySurface(surf);
+    }
+    return texture;
+}
+
+void CachedText::clear() {
+    if (texture) SDL_DestroyTexture(texture);
+    texture = nullptr;
+    text.clear();
+    renderer = nullptr;
+}
+
+void GridElement::clearCachedTextures() {
+    nameLabel.clear();
+    metaLabel.clear();
+    idLabel.clear();
+    if (thumbTexture) SDL_DestroyTexture(thumbTexture);
+    thumbTexture = nullptr;
+    thumbW = thumbH = 0;
+    thumbSignature = 0;
+    thumbRenderer = nullptr;
+}
 
 GridElement::GridElement(Project* p, ArrangerNode* n) : project(p), parentNode(n) {
 }
@@ -29,6 +64,7 @@ void GridElement::createPos(std::vector<std::pair<int, int>> startPairs, std::ve
 GridElement::~GridElement() {
     SDL_DestroyTexture(texture);
     texture = nullptr;
+    clearCachedTextures();
     for (auto* p : positions) {
         pos_id_pool->releaseID(static_cast<uint16_t>(p->id));
         delete p;

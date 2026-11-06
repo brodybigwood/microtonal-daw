@@ -298,6 +298,9 @@ const std::unordered_map<std::string, ActionType>& UndoManager::actionRegistry()
         {"sampler_toggle_sample_solo", SamplerToggleSampleSolo},
         {"sampler_toggle_sample_mute", SamplerToggleSampleMute},
         {"instrument_rack_add_node", InstrumentRackInsertNode},
+        {"rename_element", RenameElement},
+        {"reorder_elements", ReorderElements},
+        {"delete_element", DeleteElement},
     };
     return reg;
 }
@@ -423,6 +426,12 @@ std::string UndoManager::actionSchema(const std::string& actionName) {
         return R"({"managerPath":[int,...],"nodeID":int,"chainIndex":int,"nodeType":int})";
     if (actionName == "instrument_rack_add_node")
         return R"({"managerPath":[int,...],"nodeID":int,"trackIndex":int,"nodeType":int})";
+    if (actionName == "rename_element")
+        return R"({"managerPath":[int,...],"nodeID":int,"elementID":int,"name":string})";
+    if (actionName == "reorder_elements")
+        return R"({"managerPath":[int,...],"nodeID":int,"afterOrder":[int,...]})";
+    if (actionName == "delete_element")
+        return R"({"managerPath":[int,...],"nodeID":int,"elementID":int})";
     if (actionName == "toggle_piano_roll_window")
         return R"({"managerPath":[int,...],"nodeID":int,"regionID":int,"open":bool?})";
     // Replaces whatever is on the two ports; the replaced cables are read live.
@@ -591,6 +600,29 @@ ProjectAction* UndoManager::buildRegisteredAction(const std::string& actionName,
             pa = new DeleteRegionAction(head->p, params.at("managerPath").get<std::vector<int>>(), params.at("nodeID").get<int>(),
                 params.at("regionID").get<int>());
             break;
+        case RenameElement: {
+            const auto mp = params.at("managerPath").get<std::vector<int>>();
+            pa = new RenameElementAction(head->p, mp, params.at("nodeID").get<int>(),
+                params.at("elementID").get<int>(), params.at("name").get<std::string>());
+            break;
+        }
+        case ReorderElements: {
+            const auto mp = params.at("managerPath").get<std::vector<int>>();
+            const int nodeID = params.at("nodeID").get<int>();
+            ElementManager* em = undoResolveArrangerElementManager(head->p, mp, nodeID);
+            if (!em) throw std::runtime_error("reorder_elements: element manager missing");
+            std::vector<uint16_t> before, after;
+            for (auto* el : em->elements) before.push_back(el->id);
+            for (const auto& v : params.at("afterOrder")) after.push_back(static_cast<uint16_t>(v.get<int>()));
+            pa = new ElementReorderAction(head->p, mp, nodeID, std::move(before), std::move(after));
+            break;
+        }
+        case DeleteElement: {
+            const auto mp = params.at("managerPath").get<std::vector<int>>();
+            pa = new DeleteElementAction(head->p, mp, params.at("nodeID").get<int>(),
+                params.at("elementID").get<int>());
+            break;
+        }
         case CreatePosition: {
             auto readPairs = [](const json& j) {
                 std::vector<std::pair<int,int>> out;

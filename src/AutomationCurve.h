@@ -27,9 +27,10 @@ public:
     AutomationCurve(Project*, ArrangerNode*);
     ~AutomationCurve() override;
 
-    std::string name = "Automation";
 
     void draw(SDL_Renderer*, float, int) override;
+    uint64_t thumbnailSignature() const override;
+    void drawThumbnail(SDL_Renderer*, int, int) override;
 
     json toJSON() override;
     void fromJSON(json) override;

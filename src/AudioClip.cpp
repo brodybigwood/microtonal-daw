@@ -1,4 +1,5 @@
 #include "AudioClip.h"
+#include <algorithm>
 #include <cmath>
 #include "SDL3_gfx/SDL3_gfxPrimitives.h"
 #include <iostream>
@@ -8,6 +9,7 @@
 
 AudioClip::AudioClip(Project* p, ArrangerNode* n) : GridElement(p, n) {
     type = ElementType::audioClip;
+    name = "Audio Region";
 }
 
 AudioClip::~AudioClip() {
@@ -39,6 +41,33 @@ void AudioClip::fromJSON(json j) {
     if (!buffer) {
         sampleRate = j.value("sampleRate", 0);
         numChannels = j.value("numChannels", 1);
+    }
+}
+
+uint64_t AudioClip::thumbnailSignature() const {
+    uint64_t sig = kElementHashSeed;
+    sig = elementHashMix(sig, reinterpret_cast<uintptr_t>(buffer));
+    sig = elementHashMix(sig, static_cast<uint64_t>(num_samples));
+    sig = elementHashMix(sig, static_cast<uint64_t>(sampleRate));
+    sig = elementHashMix(sig, static_cast<uint64_t>(numChannels));
+    return sig;
+}
+
+void AudioClip::drawThumbnail(SDL_Renderer* renderer, int w, int h) {
+    if (!buffer || num_samples <= 0 || numChannels <= 0 || w <= 0 || h <= 0) return;
+    SDL_SetRenderDrawColor(renderer, 200, 225, 255, 255);
+    const float mid = h * 0.5f;
+    for (int x = 0; x < w; ++x) {
+        const size_t i0 = static_cast<size_t>(static_cast<double>(x) / w * num_samples);
+        size_t i1 = static_cast<size_t>(static_cast<double>(x + 1) / w * num_samples);
+        if (i1 <= i0) i1 = std::min<size_t>(static_cast<size_t>(num_samples), i0 + 1);
+        float lo = 0.0f, hi = 0.0f;
+        for (size_t i = i0; i < i1; ++i) {
+            lo = std::min(lo, buffer[i]);
+            hi = std::max(hi, buffer[i]);
+        }
+        SDL_RenderLine(renderer, static_cast<float>(x), mid - hi * mid * 0.9f,
+                       static_cast<float>(x), mid - lo * mid * 0.9f);
     }
 }
 

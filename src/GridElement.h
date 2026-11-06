@@ -1,4 +1,6 @@
 #pragma once
+#include <cstdint>
+#include <string>
 #include <vector>
 #include <utility>
 #include <memory>
@@ -18,6 +20,24 @@ enum ElementType{
 
 class Project;
 class ArrangerNode;
+
+/** FNV-1a mixing used by element thumbnail signatures. */
+constexpr uint64_t kElementHashSeed = 1469598103934665603ull;
+inline uint64_t elementHashMix(uint64_t h, uint64_t v) {
+    h ^= v;
+    h *= 1099511628211ull;
+    return h;
+}
+
+/** A text label texture cached until the string or renderer changes (same idea as
+ *  NodeRender's cached port labels). */
+struct CachedText {
+    SDL_Texture* texture = nullptr;
+    std::string text;
+    SDL_Renderer* renderer = nullptr;
+    SDL_Texture* get(SDL_Renderer*, const std::string&, SDL_Color);
+    void clear();
+};
 
 class GridElement {
     public:
@@ -43,6 +63,9 @@ class GridElement {
 
         ElementType type;
 
+        /** User-visible name, shared by every element type. */
+        std::string name;
+
         void createPos(std::vector<std::pair<int, int>> startPairs, std::vector<std::pair<int, int>> endPairs, uint16_t,
                        int rhythmEdoSteps, std::vector<std::pair<int, int>> rhythmEdoLower, std::vector<std::pair<int, int>> rhythmEdoUpper,
                        std::vector<std::pair<int, int>> startOffsetPairs = {});
@@ -60,6 +83,21 @@ class GridElement {
         virtual void draw(SDL_Renderer*, float, int) = 0;
         float pixelsPerSecond = 0;
         int h = 0;
+
+        // Element-list preview. Each type renders itself the same way it does on the
+        // timeline (notes / waveform / curve), just into a small target.
+        virtual uint64_t thumbnailSignature() const { return 0; }
+        virtual void drawThumbnail(SDL_Renderer*, int, int) {}
+
+        CachedText nameLabel;
+        CachedText metaLabel;
+        CachedText idLabel;
+        SDL_Texture* thumbTexture = nullptr;
+        int thumbW = 0;
+        int thumbH = 0;
+        uint64_t thumbSignature = 0;
+        SDL_Renderer* thumbRenderer = nullptr;
+        void clearCachedTextures();
 
         virtual json toJSON();
         virtual void fromJSON(json);

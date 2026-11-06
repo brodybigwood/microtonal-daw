@@ -37,6 +37,11 @@ class ElementManager {
         idManager position_id_pool;
         std::unordered_map<uint16_t, uint16_t> ids;
 
+        /** Rebuild the element order from a list of element ids (undo/reorder). */
+        void applyElementOrder(const std::vector<uint16_t>& order);
+        /** Restore an element snapshot of any type at a list index (undo delete). */
+        void restoreElementFromSnapshotAt(size_t insertIndex, const json& snapshot);
+
         json toJSON();
         void fromJSON(json);
 
@@ -47,15 +52,25 @@ class ElementManager {
         int hoveredElement = -1;
 
         SDL_FRect* dstRect;
-        
+
         void render(SDL_Renderer*);
+        /** Element-list row index under a point, or -1. */
+        int rowIndexAt(float x, float y);
 
         float mouseX;
         float mouseY;
         bool hoverNewRegion = false;
-        bool hoverNewWaveform = false;
+        bool hoverNewAutomation = false;
 
-        int scrollY;
+        int scrollY = 0;
+
+        // Drag-to-reorder state.
+        bool dragPending = false;
+        bool dragActive = false;
+        uint16_t draggedElementID = 0;
+        float dragStartY = 0.0f;
+        int dropIndex = -1;
+        bool isDraggingElement() const { return dragActive; }
 
         bool handleInput(SDL_Event&);
 

@@ -80,6 +80,9 @@ enum ActionType {
     DeletePositions = 63,
     MoveElementPositions = 64,
     DeleteNotes = 65,
+    RenameElement = 66,
+    ReorderElements = 67,
+    DeleteElement = 68,
 };
 
 
@@ -676,6 +679,44 @@ struct MoveElementPositionAction : ProjectAction {
 
     MoveElementPositionAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID, int positionID, json before,
                               json after);
+};
+
+/** Rename any element type (the name is shared by the GridElement base). */
+struct RenameElementAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    int elementID = 0;
+    std::string beforeName;
+    std::string afterName;
+
+    RenameElementAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID,
+                        std::string afterName);
+    RenameElementAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID,
+                        std::string beforeName, std::string afterName);
+};
+
+/** Reorder the element list (mirrors ArrangerTrackReorderAction). */
+struct ElementReorderAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    std::vector<uint16_t> beforeOrder;
+    std::vector<uint16_t> afterOrder;
+
+    ElementReorderAction(Project* p, std::vector<int> managerPath, int nodeID,
+                         std::vector<uint16_t> beforeOrder, std::vector<uint16_t> afterOrder);
+};
+
+/** Delete any element type; undo restores it from its snapshot. */
+struct DeleteElementAction : ProjectAction {
+    std::vector<int> managerPath;
+    int nodeID = 0;
+    int elementID = 0;
+    size_t insertIndex = 0;
+    json elementSnapshot;
+
+    DeleteElementAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID);
+    DeleteElementAction(Project* p, std::vector<int> managerPath, int nodeID, int elementID,
+                        size_t insertIndex, json elementSnapshot);
 };
 
 struct DeleteRegionAction : ProjectAction {

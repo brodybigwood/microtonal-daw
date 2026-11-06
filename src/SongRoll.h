@@ -74,6 +74,8 @@ class SongRoll : public GridView{
 
         void clickMouse(SDL_Event& e) override;
         bool handleKeyboard(SDL_Event& e);
+        /** Mouse is over a position's move bar (not its resize handles). */
+        bool positionGrabBarHit(const GridElement::Position* pos);
 
         // Position selection (arranger-level clipboard works like the piano roll's notes).
         std::set<int> selectedPositionIds;

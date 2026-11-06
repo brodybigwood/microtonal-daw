@@ -27,7 +27,6 @@ class Region : public GridElement {
         Region(Project*, ArrangerNode*);
         ~Region() override;
 
-        std::string name = "MIDI Region FX Rack";
         std::vector<std::shared_ptr<Note>> notes;
 
     int createNote(std::vector<std::pair<int, int>> startPairs, std::vector<std::pair<int, int>> endPairs, std::vector<std::pair<int, int>> pitchVector = {});
@@ -60,6 +59,8 @@ std::vector<RhythmLatticeSpan> transportLines;
 std::vector<RhythmLatticeSpan> gridSpans;
 
 void draw(SDL_Renderer*, float, int) override;
+        uint64_t thumbnailSignature() const override;
+        void drawThumbnail(SDL_Renderer*, int, int) override;
 
 json toJSON() override;
 void fromJSON(json) override;

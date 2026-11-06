@@ -586,6 +586,29 @@ static ProjectAction* deSerializeOne(const json& j, Project* p) {
                 readOrder(j.at("afterOrder")));
             break;
         }
+        case RenameElement:
+            pa = new RenameElementAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(), j.at("elementID").get<int>(),
+                j.at("beforeName").get<std::string>(), j.at("afterName").get<std::string>());
+            break;
+        case ReorderElements: {
+            auto readOrder = [](const json& a) {
+                std::vector<uint16_t> order;
+                if (a.is_array())
+                    for (const auto& el : a)
+                        order.push_back(static_cast<uint16_t>(el.get<int>()));
+                return order;
+            };
+            pa = new ElementReorderAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(), readOrder(j.at("beforeOrder")),
+                readOrder(j.at("afterOrder")));
+            break;
+        }
+        case DeleteElement:
+            pa = new DeleteElementAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("nodeID").get<int>(), j.at("elementID").get<int>(),
+                j.at("insertIndex").get<size_t>(), j.at("elementSnapshot"));
+            break;
         default:
             throw std::runtime_error("invalid undo action type in save");
     }
@@ -1330,6 +1353,34 @@ static json serializeOne(ProjectAction* pa) {
             for (uint16_t id : tr->beforeOrder) j["beforeOrder"].push_back(static_cast<int>(id));
             j["afterOrder"] = json::array();
             for (uint16_t id : tr->afterOrder) j["afterOrder"].push_back(static_cast<int>(id));
+            break;
+        }
+        case RenameElement: {
+            auto* rn = static_cast<RenameElementAction*>(pa);
+            j["managerPath"] = rn->managerPath;
+            j["nodeID"] = rn->nodeID;
+            j["elementID"] = rn->elementID;
+            j["beforeName"] = rn->beforeName;
+            j["afterName"] = rn->afterName;
+            break;
+        }
+        case ReorderElements: {
+            auto* re = static_cast<ElementReorderAction*>(pa);
+            j["managerPath"] = re->managerPath;
+            j["nodeID"] = re->nodeID;
+            j["beforeOrder"] = json::array();
+            for (uint16_t id : re->beforeOrder) j["beforeOrder"].push_back(static_cast<int>(id));
+            j["afterOrder"] = json::array();
+            for (uint16_t id : re->afterOrder) j["afterOrder"].push_back(static_cast<int>(id));
+            break;
+        }
+        case DeleteElement: {
+            auto* de = static_cast<DeleteElementAction*>(pa);
+            j["managerPath"] = de->managerPath;
+            j["nodeID"] = de->nodeID;
+            j["elementID"] = de->elementID;
+            j["insertIndex"] = de->insertIndex;
+            j["elementSnapshot"] = de->elementSnapshot;
             break;
         }
         default:
