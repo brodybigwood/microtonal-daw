@@ -109,16 +109,25 @@ void ElementManager::process(int bufferSize) {
             track->dispatched.end());
     };
     auto emitNoteOff = [](Track* track, const ActiveNote& active, int offset) {
-        if (!track || !active.note) return;
+        // The note itself may already be gone (deleted source); the voice it started
+        // still needs its note-off, so only the track is required here.
+        if (!track) return;
         track->addEvent(Event{noteEventType::noteOff, active.sourcePitch,
                               active.voiceId, offset, active.sourceChannel});
     };
     auto flushAllActiveNotes = [&]() {
+        int flushed = 0;
         for (auto& t : tm->tracks) {
-            for (const auto& active : t->dispatched)
+            for (const auto& active : t->dispatched) {
                 emitNoteOff(t, active, 0);
+                ++flushed;
+            }
             t->dispatched.clear();
         }
+        if (flushed > 0)
+            SDL_Log("[dispatch] flushed %d active note-off(s) (playing=%d gen=%llu)",
+                    flushed, (int)project->dspIsPlaying,
+                    (unsigned long long)project->dspTransportGeneration);
         for (auto* element : elements)
             for (auto* pos : element->positions)
                 pos->dispatched.clear();
@@ -225,7 +234,8 @@ void ElementManager::process(int bufferSize) {
                                 active.sourceEndBeat = note->endBeats();
                                 active.sourcePitch = note->num;
                                 active.sourceChannel = note->channel;
-                                Event event{noteEventType::noteOn, note->num, active.voiceId, offset, note->channel};
+                                Event event{noteEventType::noteOn, note->num, active.voiceId, offset, note->channel,
+                                            note->velocity, note->durationBeats()};
                                 track->addEvent(event);
                                 dispatched.push_back(active);
                                 track->dispatched.push_back(active);

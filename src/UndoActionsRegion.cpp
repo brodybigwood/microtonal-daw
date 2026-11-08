@@ -116,6 +116,14 @@ void wireCreateAutomationCurveDoUndo(CreateAutomationCurveAction* t) {
             throw std::runtime_error("CreateAutomationCurveAction::doAction: element manager missing");
         if (!t->snapshotValid) {
             AutomationCurve* c = em->newAutomationCurve();
+            if (!t->customName.empty()) c->name = t->customName;
+            c->valueRangeMin = t->valueRangeMin;
+            c->valueRangeMax = t->valueRangeMax;
+            if (!t->initialPoints.empty()) {
+                json full = c->toJSON();
+                full["points"] = t->initialPoints;
+                c->fromJSON(full);
+            }
             t->curveID = static_cast<int>(c->id);
             t->curveSnapshot = c->toJSON();
             t->snapshotValid = true;
@@ -151,6 +159,19 @@ CreateAutomationCurveAction::CreateAutomationCurveAction(Project* p, std::vector
         snapshotValid(true) {
     skipInitialDo = true;
     name = "Create Automation Curve " + std::to_string(this->curveID);
+    wireCreateAutomationCurveDoUndo(this);
+}
+
+CreateAutomationCurveAction::CreateAutomationCurveAction(Project* p, std::vector<int> managerPath, int nodeID,
+                                                         json initialPoints, float valueRangeMin,
+                                                         float valueRangeMax, std::string customName) :
+        ProjectAction(p, CreateAutomationCurve),
+        managerPath(std::move(managerPath)),
+        nodeID(nodeID),
+        initialPoints(std::move(initialPoints)),
+        valueRangeMin(valueRangeMin),
+        valueRangeMax(valueRangeMax),
+        customName(std::move(customName)) {
     wireCreateAutomationCurveDoUndo(this);
 }
 

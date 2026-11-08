@@ -15,6 +15,7 @@ class Note {
         ~Note();
 
         float num;  // Frequency or pitch of the note
+        float velocity = 100.0f / 127.0f; // FL Studio default (100/127); sent to plugins as 0..127
 
         int id;
         int channel = 0;

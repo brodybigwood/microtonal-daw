@@ -656,6 +656,23 @@ void InstrumentRackNode::process() {
         cachedLatency_ = maxLat;
         if (nm) nm->markTopologyDirty(); // downstream PDC must account for it
     }
+    if (std::getenv("DAW_VST_DEBUG")) {
+        static uint64_t lastChDbg = 0;
+        const uint64_t nowChDbg = SDL_GetTicks();
+        if (nowChDbg - lastChDbg >= 1000) {
+            lastChDbg = nowChDbg;
+            std::cout << "[rack-ch] node=" << id << " outNch=" << out->numChannels
+                      << " target=" << outChannelsTarget_ << " maxCh=" << maxCh;
+            for (auto& cp : tracks) {
+                std::cout << " t" << cp->id << ":";
+                for (Node* n : cp->nodes) {
+                    Connection* dout = n ? firstWaveOut(n) : nullptr;
+                    std::cout << (dout ? std::to_string(dout->numChannels) : std::string("-")) << ",";
+                }
+            }
+            std::cout << std::endl;
+        }
+    }
     if (maxCh != outChannelsTarget_) {
         outChannelsTarget_ = maxCh;
         if (nm) nm->markTopologyDirty();

@@ -115,6 +115,7 @@ private:
     // MPE channel allocator: maps noteId -> channel (1-15)
     std::unordered_map<int, int> noteChannels;
     std::unordered_map<int, int> evictedNoteChannels; // noteId -> channel for evicted notes
+    bool wasPlaying_ = false; // transport state last block, for the stop all-notes-off
     int nextMpeChannel = 1;
     bool mpeRangeSet = false;
     bool wasBypassed_ = false;

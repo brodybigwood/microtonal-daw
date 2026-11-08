@@ -20,6 +20,8 @@ struct Event {
     int id;
     int sampleOffset;
     int channel = 0;
+    float velocity = 1.0f;
+    float duration = 0.0f; // note length in beats; used by length-to-pitch instruments
 };
 
 class Note;

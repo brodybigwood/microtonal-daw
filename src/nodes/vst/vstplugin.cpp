@@ -6,6 +6,7 @@
 #include "pluginterfaces/vst/ivsthostapplication.h"
 #include <cstdlib>
 #include <dlfcn.h>
+#include <cctype>
 #include <cstring>
 #include <iostream>
 #include <algorithm>
@@ -282,17 +283,37 @@ Steinberg::tresult PLUGIN_API EditorHostFrame::resizeView(Steinberg::IPlugView*,
 }
 
 Steinberg::tresult PLUGIN_API EditorHostFrame::beginEdit(Steinberg::Vst::ParamID id) {
+    bool first = false;
+    {
+        std::lock_guard<std::mutex> lock(gestureMutex);
+        first = activeGestureCount == 0;
+    }
     // The gesture hasn't changed any value yet — commit pending internal edits
     // now so the post-gesture re-baseline can't absorb them.
-    if (activeGestureCount == 0 && onStatePoll) onStatePoll(true);
-    activeGestureCount++;
-    // Open a gesture for this parameter (Ardour: BeginGesture -> StartTouch).
-    paramGestures[id] = nextGestureId++;
+    if (first && onStatePoll) onStatePoll(true);
+    {
+        std::lock_guard<std::mutex> lock(gestureMutex);
+        activeGestureCount++;
+        // Open a gesture for this parameter (Ardour: BeginGesture -> StartTouch).
+        paramGestures[id] = nextGestureId++;
+    }
     if (onBeginEdit) onBeginEdit(id);
     return Steinberg::kResultTrue;
 }
 
+void EditorHostFrame::beginPointerPress() {
+    std::lock_guard<std::mutex> lock(gestureMutex);
+    dragSession++;
+    freeGestures.clear();
+}
+
 uint64_t EditorHostFrame::gestureFor(Steinberg::Vst::ParamID id) {
+    // Never block here: a plugin is allowed to call performEdit from its audio
+    // thread. If the GUI thread is mid-update, hand out a fresh unique gesture
+    // without touching the maps.
+    std::unique_lock<std::mutex> lock(gestureMutex, std::try_to_lock);
+    if (!lock.owns_lock())
+        return lockFreeGestureId.fetch_add(1, std::memory_order_relaxed);
     const uint64_t now = getNowMs();
     static constexpr uint64_t kFreeGestureGapMs = 400;
 
@@ -353,13 +374,18 @@ Steinberg::tresult PLUGIN_API EditorHostFrame::performEdit(Steinberg::Vst::Param
 }
 
 Steinberg::tresult PLUGIN_API EditorHostFrame::endEdit(Steinberg::Vst::ParamID id) {
-    if (activeGestureCount > 0) activeGestureCount--;
-    // Gesture over — re-baseline (or diff) on the next tick instead of waiting
-    // out the poll interval, so an internal edit made right after a knob drag
-    // isn't absorbed into the post-drag baseline.
-    statePollRequested = true;
-    paramGestures.erase(id);
-    if (activeGestureCount == 0 && onGestureEnd) onGestureEnd();
+    bool last = false;
+    {
+        std::lock_guard<std::mutex> lock(gestureMutex);
+        if (activeGestureCount > 0) activeGestureCount--;
+        // Gesture over — re-baseline (or diff) on the next tick instead of waiting
+        // out the poll interval, so an internal edit made right after a knob drag
+        // isn't absorbed into the post-drag baseline.
+        statePollRequested = true;
+        paramGestures.erase(id);
+        last = activeGestureCount == 0;
+    }
+    if (last && onGestureEnd) onGestureEnd();
     return Steinberg::kResultTrue;
 }
 
@@ -820,6 +846,7 @@ VstPlugin::VstPlugin(const std::string& pluginPath, size_t classIndex) : pluginP
 
         editController->setComponentHandler(hostFrame.get());
         view = editController->createView(Steinberg::Vst::ViewType::kEditor);
+        enableMpeParameters();
     }
     valid = true;
 }
@@ -1115,6 +1142,8 @@ void VstPlugin::processAudio(int bufferSize, Steinberg::Vst::IEventList* inputEv
     }
     if (paramChanges_.getParameterCount() > 0)
         processData.inputParameterChanges = &paramChanges_;
+    outParamChanges_.clear();
+    processData.outputParameterChanges = &outParamChanges_;
 
     Steinberg::Vst::ProcessContext context{};
     context.state = Steinberg::Vst::ProcessContext::kProjectTimeMusicValid
@@ -1239,9 +1268,9 @@ bool VstPlugin::tickEditor() {
         const bool down = editorHost->pointerButtonDown();
         if (down && !hostFrame->pointerIsDown) {
             // A new press is a drag: don't let its edits merge into a preceding
-            // wheel/key run of the same parameter.
-            hostFrame->dragSession++;
-            hostFrame->freeGestures.clear();
+            // wheel/key run of the same parameter. Locked: plugins may call
+            // begin/endEdit from their own threads at the same time.
+            hostFrame->beginPointerPress();
         }
         hostFrame->pointerIsDown = down;
     }
@@ -1432,15 +1461,50 @@ std::string VstPlugin::getParameterName(int paramIndex) const {
 
 void VstPlugin::setParameterValue(int paramID, float valueNormalized) {
     if (!editController || !hostFrame) return;
-    editController->setParamNormalized(static_cast<Steinberg::Vst::ParamID>(paramID),
-                                       static_cast<Steinberg::Vst::ParamValue>(valueNormalized));
-    // The controller call above only updates the plugin GUI; the processor
-    // hears the change via inputParameterChanges on the next audio block.
-    queueParameterChange(static_cast<Steinberg::Vst::ParamID>(paramID),
-                         static_cast<Steinberg::Vst::ParamValue>(valueNormalized));
+    const Steinberg::Vst::ParamID pid = static_cast<Steinberg::Vst::ParamID>(paramID);
+    const Steinberg::Vst::ParamValue value = static_cast<Steinberg::Vst::ParamValue>(valueNormalized);
+    editController->setParamNormalized(pid, value);
+    // A bare setParamNormalized only updates the controller's value table, leaving
+    // the editor's widgets stale. When the editor is wired, run the same gesture
+    // notifications a GUI edit produces so the UI updates too.
+    if (hostFrame && hostFrame->onPerformEdit) {
+        hostFrame->beginEdit(pid);
+        hostFrame->performEdit(pid, value);
+        hostFrame->endEdit(pid);
+    }
+    // The processor hears the change via inputParameterChanges on its next block.
+    queueParameterChange(pid, value);
     // Ardour's set_parameter() updates _shadow_data; do the same so the next
     // editor performEdit sees the value the host just wrote.
     setShadowParameterValue(paramID, valueNormalized);
+}
+
+void VstPlugin::enableMpeParameters() {
+    if (!editController) return;
+    const int count = getParameterCount();
+    for (int i = 0; i < count; ++i) {
+        std::string name = getParameterName(i);
+        std::string lowered;
+        lowered.reserve(name.size());
+        for (char c : name)
+            lowered += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (lowered.find("mpe") == std::string::npos) continue;
+        // Only "enable"/"mode"/"switch"-style flags; never pitch-bend ranges.
+        if (lowered.find("range") != std::string::npos ||
+            lowered.find("bend") != std::string::npos ||
+            lowered.find("pitch") != std::string::npos)
+            continue;
+        const bool enableFlag =
+            lowered.find("enable") != std::string::npos ||
+            lowered.find("mode") != std::string::npos ||
+            lowered.find("switch") != std::string::npos ||
+            lowered.find("active") != std::string::npos ||
+            lowered == "mpe" || lowered == "mpe on";
+        if (!enableFlag) continue;
+        const int id = getParameterID(i);
+        if (id >= 0)
+            setParameterValue(id, 1.0f);
+    }
 }
 
 float VstPlugin::shadowParameterValue(int paramID) const {
@@ -1521,6 +1585,8 @@ void VstPlugin::setComponentState(const std::vector<uint8_t>& data) {
     // then controller->setComponentState(same stream)).
     applyComponentStateToController(data);
     refreshParameterShadow();
+    // A restored state must not silently turn MPE back off.
+    enableMpeParameters();
 }
 
 void VstPlugin::beginStateRestore() {

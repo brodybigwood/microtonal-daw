@@ -280,6 +280,16 @@ public:
     std::unordered_map<Steinberg::Vst::ParamID, uint64_t> freeGestures;
     std::unordered_map<Steinberg::Vst::ParamID, uint64_t> freeLastUseMs;
 
+    // Plugins (LSP) call beginEdit/performEdit/endEdit from their own threads;
+    // the GUI thread also touches these maps in tickEditor. Guard them together.
+    std::mutex gestureMutex;
+    /** Gesture ids for performEdit calls that could not take the lock (a plugin
+        calling from its audio thread must never block); unique, so those edits
+        stay separate undo steps instead of merging into a running gesture. */
+    std::atomic<uint64_t> lockFreeGestureId{1ull << 40};
+    /** Fresh pointer press: start a new drag session and drop wheel/key groups. */
+    void beginPointerPress();
+
     // IPlugFrame
     Steinberg::tresult PLUGIN_API resizeView(Steinberg::IPlugView* view, Steinberg::ViewRect* newSize) override;
 
@@ -402,6 +412,8 @@ public:
         (delivered via inputParameterChanges on the next audio block). */
     void setParameterValue(int paramID, float valueNormalized);
     void queueParameterChange(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue value);
+    /** Turn on any MPE enable/mode/switch parameter the plugin exposes. */
+    void enableMpeParameters();
 
     // Parameter shadow (Ardour's VST3PI::_shadow_data): last value the host knows
     // for each parameter, kept current on every host write, performEdit and state
@@ -485,6 +497,9 @@ private:
     std::mutex pendingParamMutex_;
     std::vector<std::pair<Steinberg::Vst::ParamID, Steinberg::Vst::ParamValue>> pendingParamChanges_;
     HostParameterChanges paramChanges_;   // reused each block, audio thread only
+    // DPF-based plugins (LSP, Dragonfly) assert when ProcessData.outputParameterChanges
+    // is null; give them a valid, empty container every block.
+    HostParameterChanges outParamChanges_;
 
     bool createComponent();
     bool createController();
@@ -528,6 +543,7 @@ public:
     std::string getParameterName(int) const { return {}; }
     std::string getParameterNameByID(int) const { return {}; }
     void setParameterValue(int, float) {}
+    void enableMpeParameters() {}
     std::vector<uint8_t> getComponentState() const { return {}; }
     std::vector<uint8_t> getControllerState() const { return {}; }
     void setComponentState(const std::vector<uint8_t>&) {}

@@ -20,6 +20,8 @@
 #include "nodes/mixer/mixer.h"
 #include "nodes/duplicator/duplicator.h"
 #include "nodes/instrumentrack/instrumentrack.h"
+#include "nodes/additive/additive.h"
+#include "nodes/ducker/ducker.h"
 
 inline std::string NodeTypeStr[] = {
     "Arranger",
@@ -42,7 +44,9 @@ inline std::string NodeTypeStr[] = {
     "Mixer",
     "Duplicator",
     "MPE Rack",
-    "Instrument Rack"
+    "Instrument Rack",
+    "Additive",
+    "Ducker"
 };
 
 inline Node* byType(NodeType t, int id, NodeManager* nm) {
@@ -89,6 +93,10 @@ inline Node* byType(NodeType t, int id, NodeManager* nm) {
             return new DuplicatorNode(id, nm);
         case NodeType::InstrumentRack:
             return new InstrumentRackNode(id, nm);
+        case NodeType::Additive:
+            return new AdditiveNode(id, nm);
+        case NodeType::Ducker:
+            return new DuckerNode(id, nm);
         default:
             return nullptr;
     }

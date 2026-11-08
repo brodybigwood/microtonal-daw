@@ -83,6 +83,8 @@ enum ActionType {
     RenameElement = 66,
     ReorderElements = 67,
     DeleteElement = 68,
+    VitalModRoute = 69,
+    MixerAddTrack = 70,
 };
 
 
@@ -532,9 +534,17 @@ struct CreateAutomationCurveAction : ProjectAction {
     int curveID = -1;
     json curveSnapshot = json::object();
     bool snapshotValid = false;
+    // Applied only when the curve is first created; redo restores curveSnapshot,
+    // which already contains these points.
+    json initialPoints = json::array();
+    float valueRangeMin = 0.f;
+    float valueRangeMax = 1.f;
+    std::string customName;
 
     CreateAutomationCurveAction(Project* p, std::vector<int> managerPath, int nodeID);
     CreateAutomationCurveAction(Project* p, std::vector<int> managerPath, int nodeID, int curveID, json curveSnapshot);
+    CreateAutomationCurveAction(Project* p, std::vector<int> managerPath, int nodeID, json initialPoints,
+                                float valueRangeMin, float valueRangeMax, std::string customName);
 };
 
 struct ModifyCurvePointsAction : ProjectAction {

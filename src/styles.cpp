@@ -1,6 +1,9 @@
 #include "styles.h"
 #include "Settings.h"
 #include <SDL3/SDL_mouse.h>
+#include <algorithm>
+#include <string>
+#include <vector>
 int lineWidth = 1;
 
 ColorCodes colors {
@@ -112,21 +115,38 @@ void drawPendingTooltip() {
     SDL_Renderer* r = g_tooltipRenderer;
     g_tooltipPending = false;
 
-    SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, g_tooltipText.c_str(), g_tooltipText.size(),
-                                                SDL_Color{150, 165, 180, 200});
-    if (!surf) return;
-    SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
-    if (!tex) {
-        SDL_DestroySurface(surf);
-        return;
+    // Split on newlines: the tooltip may list one value per line.
+    std::vector<std::string> lines;
+    size_t lineStart = 0;
+    while (true) {
+        const size_t nl = g_tooltipText.find('\n', lineStart);
+        lines.push_back(g_tooltipText.substr(lineStart,
+            nl == std::string::npos ? std::string::npos : nl - lineStart));
+        if (nl == std::string::npos) break;
+        lineStart = nl + 1;
     }
+
+    std::vector<SDL_Surface*> surfs;
+    int textW = 0;
+    int textH = 0;
+    constexpr int lineGap = 2;
+    for (const auto& line : lines) {
+        SDL_Surface* s = TTF_RenderText_Blended(fonts.mainFont, line.c_str(), line.size(),
+                                                SDL_Color{150, 165, 180, 200});
+        if (!s) continue;
+        if (!surfs.empty()) textH += lineGap;
+        surfs.push_back(s);
+        textW = std::max(textW, s->w);
+        textH += s->h;
+    }
+    if (surfs.empty()) return;
 
     constexpr float pad = 5.f;
     constexpr float inset = 3.f;
-    const float bw = static_cast<float>(surf->w) + pad * 2.f;
-    const float bh = static_cast<float>(surf->h) + pad * 2.f;
+    const float bw = static_cast<float>(textW) + pad * 2.f;
+    const float bh = static_cast<float>(textH) + pad * 2.f;
     float bx = g_tooltipAnchorX + 14.f;
-    float by = g_tooltipAnchorY - bh - 10.f;
+    float by = g_tooltipAnchorY + 14.f; // extend downward from the cursor
     if (bx + bw > g_tooltipBounds.x + g_tooltipBounds.w - inset) bx = g_tooltipBounds.x + g_tooltipBounds.w - bw - inset;
     if (bx < g_tooltipBounds.x + inset) bx = g_tooltipBounds.x + inset;
     if (by < g_tooltipBounds.y + inset) by = g_tooltipBounds.y + inset;
@@ -142,12 +162,19 @@ void drawPendingTooltip() {
     SDL_SetRenderDrawColor(r, 72, 86, 102, 120);
     SDL_RenderRect(r, &bg);
 
-    SDL_FRect tr{bx + pad - 2.f, by + pad - 2.f, static_cast<float>(surf->w), static_cast<float>(surf->h)};
-    SDL_RenderTexture(r, tex, nullptr, &tr);
+    float ty = by + pad - 2.f;
+    for (SDL_Surface* s : surfs) {
+        SDL_Texture* tex = SDL_CreateTextureFromSurface(r, s);
+        if (tex) {
+            SDL_FRect tr{bx + pad - 2.f, ty, static_cast<float>(s->w), static_cast<float>(s->h)};
+            SDL_RenderTexture(r, tex, nullptr, &tr);
+            SDL_DestroyTexture(tex);
+        }
+        ty += static_cast<float>(s->h + lineGap);
+        SDL_DestroySurface(s);
+    }
 
     SDL_SetRenderDrawBlendMode(r, prevBm);
-    SDL_DestroyTexture(tex);
-    SDL_DestroySurface(surf);
 }
 
 static ColorCodes defaultColors = colors;

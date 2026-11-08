@@ -107,6 +107,10 @@ class GridView : public Window {
         bool& isShiftPressed;
         bool& isCtrlPressed;
         bool& isAltPressed;
+        bool& isVPressed;
+
+        /** True when the view wants wheel events for its own edit instead of scrolling. */
+        virtual bool customWheelHandling() { return false; }
 
         void moveMouse();
         bool handleInput(SDL_Event&);

@@ -330,7 +330,12 @@ void TrackManager::processAfterElements(int bufferSize) {
                 std::memset(*t->buffer, 0, sizeof(float) * static_cast<size_t>(bufferSize) *
                     static_cast<size_t>(t->connection->allocChannels));
             } else if (t->type == TrackType::Notes && t->events && *t->events) {
-                (*t->events)->clear();
+                // Silenced, not deafened: a note-off for a voice that was already
+                // sounding must still reach the instrument or it rings forever.
+                auto& evs = **t->events;
+                evs.erase(std::remove_if(evs.begin(), evs.end(),
+                                         [](const Event& e) { return e.type != noteEventType::noteOff; }),
+                          evs.end());
             }
         }
 

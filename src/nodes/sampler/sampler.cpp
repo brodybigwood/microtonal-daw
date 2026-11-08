@@ -473,6 +473,7 @@ void SamplerNode::process() {
                         nv.phase = 0.f;
                         nv.envPhase = 0.f;
                         nv.pan = samples[si]->pan.value;
+                        nv.velocity = std::clamp(event.velocity, 0.f, 1.f);
                         nv.wait_on = event.sampleOffset;
                         // Master is slot selection only: default pitch, then
                         // the slot's pitch-shift knob.
@@ -511,6 +512,7 @@ void SamplerNode::process() {
                         nv.phase = 0.f;
                         nv.envPhase = 0.f;
                         nv.pan = samples[si]->pan.value;
+                        nv.velocity = std::clamp(event.velocity, 0.f, 1.f);
                         nv.wait_on = event.sampleOffset;
                         // Slot input: the note's pitch, shifted by the slot's
                         // pitch-shift knob.
@@ -616,8 +618,12 @@ void SamplerNode::process() {
                     float pg = 1.f;
                     if (nch >= 2)
                         pg = (ch == 0) ? panL : panR;
+                    // Velocity is relative to the DAW's default (100/127), so a note at
+                    // default velocity keeps the old unity gain; quieter notes soften.
+                    constexpr float kDefaultVelocity = 100.f / 127.f;
+                    const float velGain = v.velocity / kDefaultVelocity;
                     outBuf[static_cast<size_t>(ch) * static_cast<size_t>(bufferSize) + static_cast<size_t>(i)] +=
-                        chVal * vol * env * pg;
+                        chVal * vol * velGain * env * pg;
                 }
             }
 

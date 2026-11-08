@@ -637,6 +637,15 @@ void PianoRoll::RenderNotes(SDL_Renderer* renderer) {
 
         SDL_SetRenderDrawColor(renderer, bcol[0], bcol[1], bcol[2], bcol[3] / 4);
         SDL_RenderRect(renderer, &noteRect);
+
+        // Velocity: a bar at the note start, centred on the note and extending to the
+        // right; twice the note's height at velocity 1.
+        const float vh = noteRadius * 2.f * note->velocity; // half-height
+        if (vh > 0.f) {
+            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 90);
+            SDL_FRect velRect{noteX, noteY - vh, 3.f, 2.f * vh};
+            SDL_RenderFillRect(renderer, &velRect);
+        }
     }
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 
@@ -666,6 +675,14 @@ void PianoRoll::RenderNotes(SDL_Renderer* renderer) {
 
         setRenderColor(renderer, selected ? colors.noteSelectedBorder : colors.noteBorder);
         SDL_RenderRect(renderer, &noteRect);
+
+        // Velocity bar: symmetric about the note's centre, twice its height at 1.0.
+        const float vh = noteRadius * 2.f * note->velocity; // half-height
+        if (vh > 0.f) {
+            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 220);
+            SDL_FRect velRect{noteX, noteY - vh, 3.f, 2.f * vh};
+            SDL_RenderFillRect(renderer, &velRect);
+        }
     }
 
     // Rubber band selection rect

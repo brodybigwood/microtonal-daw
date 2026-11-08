@@ -6,6 +6,7 @@
 #include <string>
 #include <sstream>
 #include <cfloat>
+#include <climits>
 #include <numeric>
 #include <algorithm>
 #include <cmath>
@@ -555,6 +556,44 @@ inline size_t closestRhythmLineIndexForSeconds(const std::vector<RhythmGridLine>
         if (d < bd) { bd = d; best = i; }
     }
     return best;
+}
+
+struct TimeBoundary {
+    float seconds = 0.f;
+    std::vector<std::pair<int, int>> pairs;
+};
+
+/// Nearest boundary among grid rhythm lines, transport lines, and other notes'
+/// start/end lines (the edited note is excluded). No priority: nearest wins.
+inline bool closestTimeBoundary(const std::vector<RhythmGridLine>& rhythm,
+                                const std::vector<RhythmGridLine>& transport,
+                                const std::vector<std::shared_ptr<Note>>* notes,
+                                int excludeNoteID,
+                                float seconds,
+                                TimeBoundary& out) {
+    float bestDist = FLT_MAX;
+    bool found = false;
+    auto consider = [&](float s, const std::vector<std::pair<int, int>>& pairs) {
+        const float d = std::fabs(s - seconds);
+        if (d < bestDist) {
+            bestDist = d;
+            out.seconds = s;
+            out.pairs = pairs;
+            found = true;
+        }
+    };
+    for (const auto& line : rhythm)
+        consider(line.seconds, line.integerPairs);
+    for (const auto& line : transport)
+        consider(line.seconds, line.integerPairs);
+    if (notes) {
+        for (const auto& note : *notes) {
+            if (!note || static_cast<int>(note->id) == excludeNoteID) continue;
+            consider(Note::beatsFromVector(note->rhythmVector), note->rhythmVector);
+            consider(Note::beatsFromVector(note->rhythmEndVector), note->rhythmEndVector);
+        }
+    }
+    return found;
 }
 
 /// Nearest line across the grid rhythm set and the transport-strip set.

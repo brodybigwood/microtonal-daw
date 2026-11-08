@@ -57,7 +57,6 @@ json AutomationCurve::toJSON() {
     j["name"] = name;
     j["id"] = id;
     j["type"] = ElementType::automationCurve;
-    j["targetParamType"] = targetParamType;
     j["valueRangeMin"] = valueRangeMin;
     j["valueRangeMax"] = valueRangeMax;
     j["points"] = json::array();
@@ -78,7 +77,7 @@ json AutomationCurve::toJSON() {
 void AutomationCurve::fromJSON(json j) {
     id = j["id"];
     name = j.value("name", "Automation");
-    targetParamType = j.value("targetParamType", 0);
+    // Older saves may contain "targetParamType"; it had no consumer and is ignored.
     valueRangeMin = j.value("valueRangeMin", 0.f);
     valueRangeMax = j.value("valueRangeMax", 1.f);
     points.clear();

@@ -382,6 +382,7 @@ json handleQuery(Project* p, const json& req) {
         json out;
         out["tracks"] = arr->tracks ? arr->tracks->toJSON() : json::array();
         out["elements"] = arr->elements ? arr->elements->toJSON() : json::array();
+        out["transportLines"] = latticeSpansToJSON(arr->transportLines);
         return out;
     }
     if (q == "node" || q == "params") {

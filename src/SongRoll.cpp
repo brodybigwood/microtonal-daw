@@ -69,8 +69,7 @@ struct PositionClipboard {
     int nodeID = -1;
     std::vector<PositionClipEntry> entries;
     std::vector<std::pair<int, int>> firstStartPairs;
-    float firstStartSec = 0.f;
-    float lastEndSec = 0.f;
+    std::vector<std::pair<int, int>> lastEndPairs;
 };
 
 PositionClipboard g_positionClip;
@@ -443,6 +442,30 @@ void SongRoll::pushCurveUndo(AutomationCurve* ac, const json& before) {
             parentNode->nm->managerPath, static_cast<int>(parentNode->id),
             static_cast<int>(ac->id), before, after));
     }
+}
+
+bool SongRoll::copyHoveredCurvePoints() {
+    if (!hoveredPosition || !hoveredPosition->element ||
+        hoveredPosition->element->type != ElementType::automationCurve)
+        return false;
+    auto* ac = static_cast<AutomationCurve*>(hoveredPosition->element);
+    if (!ac || ac->points.empty()) return false;
+    curvePointClipboard = ac->points;
+    return true;
+}
+
+bool SongRoll::pasteHoveredCurvePoints() {
+    if (curvePointClipboard.empty()) return false;
+    if (!hoveredPosition || !hoveredPosition->element ||
+        hoveredPosition->element->type != ElementType::automationCurve)
+        return false;
+    auto* ac = static_cast<AutomationCurve*>(hoveredPosition->element);
+    if (!ac) return false;
+    auto before = snapshotCurvePoints(ac);
+    ac->points = curvePointClipboard;
+    pushCurveUndo(ac, before);
+    refreshGrid = true;
+    return true;
 }
 
 float SongRoll::secondsFromMouseX() {
@@ -994,54 +1017,30 @@ void SongRoll::copySelectedPositions() {
         const float startSec = Note::beatsFromVector(e.rhythmVector);
         const float endSec = Note::beatsFromVector(e.rhythmEndVector);
         if (first) {
-            clip.firstStartSec = startSec;
             clip.firstStartPairs = e.rhythmVector;
-            clip.lastEndSec = endSec;
+            clip.lastEndPairs = e.rhythmEndVector;
             first = false;
         } else {
-            if (startSec < clip.firstStartSec) {
-                clip.firstStartSec = startSec;
+            if (startSec < Note::beatsFromVector(clip.firstStartPairs))
                 clip.firstStartPairs = e.rhythmVector;
-            }
-            clip.lastEndSec = std::max(clip.lastEndSec, endSec);
+            if (endSec > Note::beatsFromVector(clip.lastEndPairs))
+                clip.lastEndPairs = e.rhythmEndVector;
         }
         clip.entries.push_back(std::move(e));
     }
     g_positionClip = std::move(clip);
 }
 
-void SongRoll::pastePositionClipboard(float firstBeat, bool exactDuplicate) {
+void SongRoll::pastePositionClipboard(const std::vector<std::pair<int, int>>& targetStart) {
     if (!em || !parentNode || !project || !project->um) return;
     if (!g_positionClip.valid || g_positionClip.entries.empty()) return;
     if (g_positionClip.managerPath != parentNode->nm->managerPath ||
         g_positionClip.nodeID != static_cast<int>(parentNode->id))
         return;
 
-    std::vector<std::pair<int, int>> shift;
-    if (!exactDuplicate) {
-        // Exact when the target lands on a rhythm/transport line; otherwise the note
-        // paste's rational 1/48-beat quantization.
-        constexpr float kLineEpsilon = 1e-4f;
-        const auto tryLines = [&](const std::vector<RhythmGridLine>& lines) {
-            for (const auto& line : lines)
-                if (std::fabs(line.seconds - firstBeat) < kLineEpsilon) {
-                    shift = subVec(line.integerPairs, g_positionClip.firstStartPairs);
-                    return true;
-                }
-            return false;
-        };
-        if (!tryLines(rhythmLines) && !tryLines(transportLineCache)) {
-            const float shiftBeats = firstBeat - g_positionClip.firstStartSec;
-            if (std::fabs(shiftBeats) > 1e-6f) {
-                int den = 48;
-                int num = static_cast<int>(std::lround(shiftBeats * static_cast<float>(den)));
-                const int g = std::gcd(std::abs(num), den);
-                num /= g;
-                den /= g;
-                if (num != 0) shift = {{num, den}};
-            }
-        }
-    }
+    // The clipboard carries exact start/end vectors, so the shift is pure vector
+    // arithmetic — nothing is re-quantized.
+    const auto shift = subVec(targetStart, g_positionClip.firstStartPairs);
 
     std::vector<CreatePositionSpec> specs;
     for (const auto& e : g_positionClip.entries) {
@@ -1108,21 +1107,30 @@ bool SongRoll::handleKeyboard(SDL_Event& e) {
     if (e.type != SDL_EVENT_KEY_DOWN || e.key.repeat) return false;
     switch (e.key.scancode) {
         case SDL_SCANCODE_C:
-            if (isCtrlPressed) copySelectedPositions();
+            if (isCtrlPressed) {
+                if (copyHoveredCurvePoints()) break;
+                copySelectedPositions();
+            }
             break;
         case SDL_SCANCODE_V:
-            if (isCtrlPressed) pastePositionClipboard(static_cast<float>(project->beatPosition));
+            if (isCtrlPressed) {
+                if (pasteHoveredCurvePoints()) break;
+                // Paste on the grid/transport line nearest the playhead.
+                if (const RhythmGridLine* line = closestRhythmOrTransportLine(
+                        rhythmLines, transportLineCache, static_cast<float>(project->beatPosition)))
+                    pastePositionClipboard(line->integerPairs);
+            }
             break;
         case SDL_SCANCODE_B:
             if (isCtrlPressed) {
                 copySelectedPositions();
-                if (g_positionClip.valid) pastePositionClipboard(g_positionClip.lastEndSec);
+                if (g_positionClip.valid) pastePositionClipboard(g_positionClip.lastEndPairs);
             }
             break;
         case SDL_SCANCODE_D:
             if (isCtrlPressed) {
                 copySelectedPositions();
-                if (g_positionClip.valid) pastePositionClipboard(g_positionClip.firstStartSec, true);
+                if (g_positionClip.valid) pastePositionClipboard(g_positionClip.firstStartPairs);
             }
             break;
         case SDL_SCANCODE_DELETE:
@@ -1228,6 +1236,9 @@ void SongRoll::clickMouse(SDL_Event& e) {
                         selectingTransportLines = true;
                         transportLineDragExtend = isShiftPressed;
                         transportLineDragMoved = false;
+                        // Keep the raw click time: Ctrl+Shift extends the spacing of the
+                        // interval behind the click, so it must not be snapped to a line.
+                        transportLineDragStartSec = secondsFromMouseX();
                         // Start may sit on either the transport strip or the grid rhythm.
                         if (const RhythmGridLine* line = closestRhythmOrTransportLine(
                                 rhythmLines, transportLineCache, secondsFromMouseX()))
@@ -1549,7 +1560,7 @@ void SongRoll::clickMouse(SDL_Event& e) {
                     selectingTransportLines = false;
                     if (transportLineDragExtend) {
                         if (transportLineDragMoved)
-                            extendTransportLines(transportLineDragEndPairs);
+                            extendTransportLines(transportLineDragStartSec, secondsFromMouseX());
                     } else if (transportLineDragMoved) {
                         const auto aPairs = transportLineDragStartPairs;
                         const auto bPairs = transportLineDragEndPairs;
@@ -1910,38 +1921,57 @@ void SongRoll::subdivideBetweenRhythmLines(const std::vector<std::pair<int, int>
     commitArrangerRhythmEdo(before, "Subdivide Rhythm Lines");
 }
 
-void SongRoll::extendTransportLines(const std::vector<std::pair<int, int>>& cursorPairs) {
-    if (!project || !parentNode) return;
-    const float cursorSec = Note::beatsFromVector(cursorPairs);
+void SongRoll::extendTransportLines(float startSec, float endSec) {
+    if (!project || !parentNode || parentNode->transportLines.empty()) return;
+    const float eps = 0.0005f;
+    const float dir = (endSec < startSec) ? -1.f : 1.f;
 
-    // Spacing comes from the span the cursor sits in.
-    int sourceSteps = std::max(1, project->pianoRoll.rhythmEdoSubdivisionSteps);
-    for (const auto& s : parentNode->transportLines) {
-        if (Note::beatsFromVector(s.lower) <= cursorSec && cursorSec <= Note::beatsFromVector(s.upper)) {
-            sourceSteps = s.steps;
-            break;
+    // The click picks the span (the "group") whose pattern repeats. A containing
+    // span owns the time; outside every span, the span to the left governs.
+    const auto& spans = parentNode->transportLines;
+    size_t si = SIZE_MAX;
+    for (size_t i = 0; i < spans.size(); ++i) {
+        const float lo = Note::beatsFromVector(spans[i].lower);
+        const float hi = Note::beatsFromVector(spans[i].upper);
+        if (startSec >= lo - eps && startSec <= hi + eps) { si = i; break; }
+    }
+    if (si == SIZE_MAX) {
+        float bestLo = 0.f;
+        for (size_t i = 0; i < spans.size(); ++i) {
+            const float lo = Note::beatsFromVector(spans[i].lower);
+            if (lo > startSec + eps) continue;
+            if (si == SIZE_MAX || lo > bestLo) { bestLo = lo; si = i; }
         }
     }
+    if (si == SIZE_MAX) return;
 
-    // Write that spacing into the larger neighbouring interval, up to the beat line.
-    const RhythmGridLine* prevBeat = nullptr;
-    const RhythmGridLine* nextBeat = nullptr;
-    for (const auto& rl : rhythmLines) {
-        if (rl.seconds < cursorSec && (!prevBeat || rl.seconds > prevBeat->seconds)) prevBeat = &rl;
-        if (rl.seconds > cursorSec && (!nextBeat || rl.seconds < nextBeat->seconds)) nextBeat = &rl;
-    }
-    const float leftSpan = prevBeat ? cursorSec - prevBeat->seconds : -1.f;
-    const float rightSpan = nextBeat ? nextBeat->seconds - cursorSec : -1.f;
-    const bool useLeft = (leftSpan >= rightSpan);
-    if (useLeft ? !prevBeat : !nextBeat) return;
+    // Copy the whole span, not just its line spacing, so the group length and the
+    // thick-boundary phase (isBoundary every `steps` lines) carry on unchanged.
+    const RhythmLatticeSpan base = spans[si];
+    const float baseLo = Note::beatsFromVector(base.lower);
+    const float baseHi = Note::beatsFromVector(base.upper);
+    const float periodSec = baseHi - baseLo;
+    if (periodSec <= eps) return;
 
-    RhythmLatticeSpan span;
-    span.steps = sourceSteps;
-    span.lower = useLeft ? prevBeat->integerPairs : cursorPairs;
-    span.upper = useLeft ? cursorPairs : nextBeat->integerPairs;
+    // Repeat from the span's boundary on the drag side towards the release point.
+    // A drag that does not land on a boundary rounds down to whole groups.
+    const float boundarySec = dir > 0.f ? baseHi : baseLo;
+    const int n = static_cast<int>(std::floor(std::fabs(endSec - boundarySec) / periodSec + 1e-4f));
+    if (n < 1) return;
 
+    const auto period = subVec(base.upper, base.lower);
     const json before = arrangerRhythmEdoJson();
-    insertLatticeSpan(parentNode->transportLines, span);
+    for (int k = 0; k < n; ++k) {
+        auto shift = period;
+        const int mult = dir > 0.f ? (k + 1) : -(k + 1);
+        for (auto& p : shift) p = ratMulInt(p, mult);
+
+        RhythmLatticeSpan copy;
+        copy.steps = base.steps;
+        copy.lower = addVec(base.lower, shift);
+        copy.upper = addVec(base.upper, shift);
+        insertLatticeSpan(parentNode->transportLines, copy);
+    }
 
     if (arrangerRhythmEdoJson() == before) return;
     commitArrangerRhythmEdo(before, "Extend Rhythm Lines");

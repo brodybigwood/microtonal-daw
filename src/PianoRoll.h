@@ -267,14 +267,26 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         void extendTransportLines(const std::vector<std::pair<int, int>>& cursorPairs);
         void applyTransportToGrid() override;
 
-        // Note clipboard: Ctrl+C / Ctrl+V (at playhead), Ctrl+B (at end of the copied set),
-        // Ctrl+D (in place).
+        // Note clipboard: Ctrl+C / Ctrl+V (at the line nearest the playhead), Ctrl+B (at
+        // the end of the copied set), Ctrl+D (in place). Targets are exact grid vectors.
         void copySelectedNotes();
-        void pasteCopiedNotes(float firstBeat);
+        void pasteCopiedNotes(const std::vector<std::pair<int, int>>& targetStart);
+        /** Hold V + scroll: nudge the hovered note and all selected notes by `ticks` steps of 0.05. */
+        void changeNoteVelocity(const std::shared_ptr<Note>& note, float ticks);
+        /** Hold V + right click: velocity menu (show, set, copy, paste, reset). */
+        void openVelocityMenu();
+        /** Snap an x pixel to the same rhythm/transport boundary set used by seeks. */
+        float snapXToBoundary(float x) const;
+        /** Selected notes on the current channel plus the hovered note. */
+        std::vector<int> velocityTargetIDs() const;
+        /** Set (relative=false) or shift (relative=true) velocity for the given notes, one undo step. */
+        void applyNoteVelocity(const std::vector<int>& noteIDs, bool relative, float amount);
         bool hasNoteClipboard() const;
 
     public:
         bool handleKeyboard(SDL_Event& e) override;
+        /** V held over a note: the wheel edits velocity instead of scrolling. */
+        bool customWheelHandling() override { return isVPressed && hoveredElement != nullptr; }
         bool needsInit_ = false;
 };
 

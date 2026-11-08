@@ -47,7 +47,8 @@ void applyNoteIntent(json& note, const json& intent) {
     static const char* const kFields[] = {
         "channel", "tuningMode", "tuningAnchorHarmonic", "tuningEdoSubdivisionSteps",
         "tuningEdoLowerVector", "tuningEdoUpperVector", "pitchVector",
-        "rhythmVector", "rhythmEndVector", "gridSpans",
+        "rhythmVector", "rhythmEndVector", "gridSpans", "velocity",
+        "tuningAnchorHarmonic", "tuningMode",
     };
     applyFields(note, intent, kFields, sizeof(kFields) / sizeof(kFields[0]));
 }
@@ -241,9 +242,67 @@ void stampNoteTuning(Project* proj, Region* region, int noteID, const json& inte
     if (intent.contains("tuningEdoSubdivisionSteps")) n.tuningEdoSubdivisionSteps = intent["tuningEdoSubdivisionSteps"].get<int>();
     if (intent.contains("tuningEdoLowerVector")) n.tuningEdoLowerVector = readPairs(intent["tuningEdoLowerVector"]);
     if (intent.contains("tuningEdoUpperVector")) n.tuningEdoUpperVector = readPairs(intent["tuningEdoUpperVector"]);
+    if (intent.contains("velocity"))
+        n.velocity = std::clamp(intent["velocity"].get<float>(), 0.0f, 1.0f);
 
     n.syncNumFromPitchVector();
     outSnapshot = n.toJSON();
+}
+
+/// Vital serializes its state as JSON inside the VST3 component-state chunk: a
+/// fixed binary preamble ending in a big-endian u32 JSON length, then the JSON.
+/// Rewrite one modulation-matrix slot there and rebuild the chunk lengths.
+std::vector<uint8_t> vitalEditModRoute(const std::vector<uint8_t>& blob, int slot,
+                                       const std::string& source,
+                                       const std::string& destination,
+                                       float amount, bool bipolar, bool power) {
+    static const char kJsonStart[] = "{\"author\"";
+    const auto it = std::search(blob.begin(), blob.end(), kJsonStart, kJsonStart + sizeof(kJsonStart) - 1);
+    if (it == blob.end())
+        throw std::runtime_error("vital_mod_route: not a Vital JSON state blob");
+    const size_t jsonStart = static_cast<size_t>(it - blob.begin());
+    if (jsonStart < 4 || jsonStart + 4 > blob.size())
+        throw std::runtime_error("vital_mod_route: state preamble too short");
+    const uint32_t jsonLen = (uint32_t(blob[jsonStart - 4]) << 24) | (uint32_t(blob[jsonStart - 3]) << 16) |
+                             (uint32_t(blob[jsonStart - 2]) << 8) | uint32_t(blob[jsonStart - 1]);
+    if (jsonLen == 0 || jsonStart + jsonLen > blob.size())
+        throw std::runtime_error("vital_mod_route: bad state JSON length");
+
+    json j = json::parse(blob.begin() + static_cast<std::ptrdiff_t>(jsonStart),
+                         blob.begin() + static_cast<std::ptrdiff_t>(jsonStart + jsonLen));
+    if (!j.contains("settings") || !j["settings"].contains("modulations") ||
+        !j["settings"]["modulations"].is_array())
+        throw std::runtime_error("vital_mod_route: state has no modulation matrix");
+    json& settings = j["settings"];
+    json& mods = settings["modulations"];
+    if (slot < 1 || slot > static_cast<int>(mods.size()))
+        throw std::runtime_error("vital_mod_route: slot out of range (1.." +
+                                 std::to_string(mods.size()) + ")");
+
+    mods[slot - 1]["source"] = source;
+    mods[slot - 1]["destination"] = destination;
+    const std::string prefix = "modulation_" + std::to_string(slot) + "_";
+    settings[prefix + "amount"] = amount;
+    settings[prefix + "bipolar"] = bipolar ? 1.0 : 0.0;
+    settings[prefix + "power"] = power ? 1.0 : 0.0;
+
+    const std::string text = j.dump();
+    std::vector<uint8_t> out(blob.begin(), blob.begin() + static_cast<std::ptrdiff_t>(jsonStart));
+    const uint32_t newLen = static_cast<uint32_t>(text.size());
+    out[jsonStart - 4] = static_cast<uint8_t>(newLen >> 24);
+    out[jsonStart - 3] = static_cast<uint8_t>(newLen >> 16);
+    out[jsonStart - 2] = static_cast<uint8_t>(newLen >> 8);
+    out[jsonStart - 1] = static_cast<uint8_t>(newLen);
+    out.insert(out.end(), text.begin(), text.end());
+    // "CcnK" container length at offset 20 counts everything after offset 24.
+    if (out.size() < 24)
+        throw std::runtime_error("vital_mod_route: state chunk too short");
+    const uint32_t container = static_cast<uint32_t>(out.size() - 24);
+    out[20] = static_cast<uint8_t>(container >> 24);
+    out[21] = static_cast<uint8_t>(container >> 16);
+    out[22] = static_cast<uint8_t>(container >> 8);
+    out[23] = static_cast<uint8_t>(container);
+    return out;
 }
 
 } // namespace
@@ -270,6 +329,8 @@ const std::unordered_map<std::string, ActionType>& UndoManager::actionRegistry()
         {"vst_param_change", VstParameterChange},
         {"vst_load_plugin", VstLoadPlugin},
         {"vst_state_change", VstStateChange},
+        {"vital_mod_route", VitalModRoute},
+        {"mixer_add_track", MixerAddTrack},
         {"toggle_piano_roll_window", TogglePianoRollWindow},
         {"create_automation_curve", CreateAutomationCurve},
         {"modify_curve_points", ModifyCurvePoints},
@@ -359,6 +420,11 @@ std::string UndoManager::actionSchema(const std::string& actionName) {
     }
     if (actionName == "vst_state_change") {
         return R"({"managerPath":[int,...],"nodeID":int,"oldState":object,"newState":object})";
+    }
+    // VSTs whose state is JSON (Vital): wire one modulation-matrix slot without the UI.
+    // source/destination use the plugin's own names, e.g. env_2 / filter_1_cutoff.
+    if (actionName == "vital_mod_route") {
+        return R"({"managerPath":[int,...],"nodeID":int,"slot":int,"source":string,"destination":string,"amount":float?,"bipolar":bool?,"power":bool?})";
     }
     if (actionName == "toggle_piano_roll_window") {
         return R"({"managerPath":[int,...],"arrangerNodeID":int,"regionID":int,"ewID":int,"x":float,"y":float,"w":float,"h":float,"open":bool})";
@@ -787,9 +853,38 @@ ProjectAction* UndoManager::buildRegisteredAction(const std::string& actionName,
                 std::move(oldState), std::move(newState));
             break;
         }
+        case VitalModRoute: {
+            auto mp = params.at("managerPath").get<std::vector<int>>();
+            NodeManager& nm = requireManager(head->p, mp);
+            const int nodeID = params.at("nodeID").get<int>();
+            auto* vst = dynamic_cast<VstNode*>(nm.getNode(static_cast<uint16_t>(nodeID)));
+            if (!vst || !vst->plugin)
+                throw std::runtime_error("vital_mod_route: node has no loaded plugin");
+            auto oldComp = vst->plugin->getComponentState();
+            auto newComp = vitalEditModRoute(
+                oldComp,
+                params.at("slot").get<int>(),
+                params.at("source").get<std::string>(),
+                params.at("destination").get<std::string>(),
+                params.value("amount", 0.5f),
+                params.value("bipolar", false),
+                params.value("power", true));
+            json oldState = json::object();
+            json newState = json::object();
+            oldState["compState"] = jsonBytesEncode(oldComp);
+            oldState["ctrlState"] = jsonBytesEncode(vst->plugin->getControllerState());
+            newState["compState"] = jsonBytesEncode(newComp);
+            newState["ctrlState"] = oldState["ctrlState"];
+            pa = new VstStateChangeAction(head->p, std::move(mp), nodeID,
+                std::move(oldState), std::move(newState));
+            break;
+        }
         case CreateAutomationCurve:
             pa = new CreateAutomationCurveAction(head->p, params.at("managerPath").get<std::vector<int>>(),
-                params.at("nodeID").get<int>());
+                params.at("nodeID").get<int>(),
+                params.contains("points") ? params.at("points") : json::array(),
+                params.value("valueRangeMin", 0.f), params.value("valueRangeMax", 1.f),
+                params.value("name", std::string()));
             break;
         case ModifyCurvePoints: {
             auto mp = params.at("managerPath").get<std::vector<int>>();
@@ -803,7 +898,29 @@ ProjectAction* UndoManager::buildRegisteredAction(const std::string& actionName,
                 arr->elements->getElement(static_cast<uint16_t>(curveID)));
             if (!curve) throw std::runtime_error("modify_curve_points: curve not found");
             json before = arr->sl->snapshotCurvePoints(curve);
-            json after = params.contains("points") ? params.at("points") : params.value("after", before);
+            json after;
+            if (params.contains("sourceCurveID")) {
+                // Copy another curve's points, optionally shifted in time.
+                auto* src = dynamic_cast<AutomationCurve*>(arr->elements->getElement(
+                    static_cast<uint16_t>(params.at("sourceCurveID").get<int>())));
+                if (!src) throw std::runtime_error("modify_curve_points: source curve not found");
+                const auto offset = params.contains("offsetPairs")
+                    ? readPairs(params.at("offsetPairs")) : std::vector<std::pair<int,int>>{};
+                after = json::array();
+                for (const auto& pt : src->points) {
+                    json jpt;
+                    jpt["timeVec"] = json::array();
+                    const auto tv = addVec(pt.timeVec, offset);
+                    for (const auto& pr : tv)
+                        jpt["timeVec"].push_back(json::array({pr.first, pr.second}));
+                    jpt["v"] = pt.v;
+                    jpt["shape"] = static_cast<int>(pt.shape.type);
+                    jpt["shapeParam"] = pt.shape.param;
+                    after.push_back(std::move(jpt));
+                }
+            } else {
+                after = params.contains("points") ? params.at("points") : params.value("after", before);
+            }
             pa = new ModifyCurvePointsAction(head->p, std::move(mp), nodeID, curveID,
                 std::move(before), std::move(after));
             break;
@@ -952,7 +1069,8 @@ bool UndoManager::runRegisteredAction(const std::string& actionName, const json&
         // A few operations are only reachable through the node/song-roll method the
         // UI itself calls, because they build and run their own action internally.
         if (actionName == "vst_load_plugin" || actionName == "toggle_piano_roll_window" ||
-            actionName == "mixer_chain_add_node" || actionName == "instrument_rack_add_node") {
+            actionName == "mixer_chain_add_node" || actionName == "instrument_rack_add_node" ||
+            actionName == "mixer_add_track") {
             return runDelegatedAction(actionName, params, error, result);
         }
 
@@ -1008,6 +1126,15 @@ bool UndoManager::runDelegatedAction(const std::string& actionName, const json& 
             if (!vst) { error = "vst_load_plugin: node is not a VST node"; return false; }
             const size_t cls = params.value("classIndex", static_cast<size_t>(-1));
             vst->loadPlugin(params.at("path").get<std::string>(), /*createUndo=*/true, cls);
+            return true;
+        }
+
+        if (actionName == "mixer_add_track") {
+            auto* mixer = dynamic_cast<MixerNode*>(node);
+            if (!mixer) { error = "mixer_add_track: node is not a Mixer node"; return false; }
+            // addChain records its own "Add Mixer Chain" undo action.
+            mixer->addChain(0);
+            if (result) *result = json{{"added", true}};
             return true;
         }
 

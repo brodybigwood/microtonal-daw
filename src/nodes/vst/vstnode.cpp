@@ -262,6 +262,7 @@ void VstNode::applyPendingVstState() {
     pendingCompState_.clear();
     pendingCtrlState_.clear();
     plugin->refreshParameterShadow();
+    plugin->enableMpeParameters();
     if (mpeRack_) markRackDirty();
     vstStateBaselineDirty = true;
     requestStatePollSoon();
@@ -473,7 +474,7 @@ void VstNode::process() {
                         e.noteOn.channel = static_cast<Steinberg::int16>(mpeCh);
                         e.noteOn.pitch = base;
                         e.noteOn.tuning = 0;
-                        e.noteOn.velocity = 1.0f;
+                        e.noteOn.velocity = std::clamp(ev.velocity, 0.0f, 1.0f);
                         e.noteOn.noteId = ev.id;
                         eventList(mpeCh).addEvent(e);
                     } else if (ev.type == noteOff) {
@@ -513,6 +514,29 @@ void VstNode::process() {
             const double bpm = static_cast<double>(
                 project->activeTempoCurve().evaluateAtX(static_cast<float>(beatPos)));
             bool playing = project ? project->dspIsPlaying : true;
+            if (!playing && wasPlaying_) {
+                // Transport stopped: pending note-offs can be missed, so tell the
+                // plugin to release everything (MIDI CC 123) on every channel.
+                auto addAllNotesOff = [](HostEventList& list, int ch) {
+                    Steinberg::Vst::Event e{};
+                    e.busIndex = 0;
+                    e.type = Steinberg::Vst::Event::kLegacyMIDICCOutEvent;
+                    e.midiCCOut.controlNumber = 123;
+                    e.midiCCOut.channel = static_cast<Steinberg::int8>(ch);
+                    e.midiCCOut.value = 0;
+                    e.midiCCOut.value2 = 0;
+                    list.addEvent(e);
+                };
+                if (mpeRack_) {
+                    for (int ch = 1; ch <= 15; ++ch)
+                        addAllNotesOff(channelEvents[static_cast<size_t>(ch)], ch);
+                } else {
+                    addAllNotesOff(vstEvents, 0);
+                }
+                noteChannels.clear();
+                evictedNoteChannels.clear();
+            }
+            wasPlaying_ = playing;
             if (!mpeRack_) {
                 const auto procStart = std::chrono::steady_clock::now();
                 localPlugin->processAudio(bufferSize, &vstEvents, bpm, beatPos, samplePos, playing);

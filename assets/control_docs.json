@@ -138,22 +138,28 @@
       "example": "{\"op\":\"action\",\"action\":\"delete_region\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"regionID\":0}}"
     },
     "create_automation_curve": {
-      "summary": "Create an automation curve on an Arranger node.",
-      "params": {
-        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
-        "nodeID": {"type": "int", "meaning": "Arranger node", "required": true}
-      },
-      "example": "{\"op\":\"action\",\"action\":\"create_automation_curve\",\"args\":{\"managerPath\":[],\"nodeID\":2}}"
-    },
-    "modify_curve_points": {
-      "summary": "Replace an automation curve's points. The prior point list is read live.",
+      "summary": "Create an automation curve on an Arranger node, optionally with its points already set.",
       "params": {
         "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
         "nodeID": {"type": "int", "meaning": "Arranger node", "required": true},
-        "curveID": {"type": "int", "meaning": "element id of the curve", "required": true},
-        "points": {"type": "object[]", "meaning": "new points, each {timeVec, v, shape, shapeParam} — see the automation curve points concept", "required": true}
+        "points": {"type": "object[]", "meaning": "optional initial points, each {timeVec, v, shape, shapeParam} — see the automation curve points concept", "required": false},
+        "valueRangeMin": {"type": "float", "meaning": "optional target parameter minimum (default 0)", "required": false},
+        "valueRangeMax": {"type": "float", "meaning": "optional target parameter maximum (default 1)", "required": false},
+        "name": {"type": "string", "meaning": "optional curve name", "required": false}
       },
-      "example": "{\"op\":\"action\",\"action\":\"modify_curve_points\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"curveID\":0,\"points\":[{\"timeVec\":[],\"v\":120,\"shape\":1,\"shapeParam\":0}]}}"
+      "example": "{\"op\":\"action\",\"action\":\"create_automation_curve\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"points\":[{\"timeVec\":[],\"v\":0.5,\"shape\":1,\"shapeParam\":0}]}}"
+    },
+    "modify_curve_points": {
+      "summary": "Replace an automation curve's points, or copy them from another curve. The prior point list is read live.",
+      "params": {
+        "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
+        "nodeID": {"type": "int", "meaning": "Arranger node", "required": true},
+        "curveID": {"type": "int", "meaning": "element id of the target curve", "required": true},
+        "points": {"type": "object[]", "meaning": "new points, each {timeVec, v, shape, shapeParam} — see the automation curve points concept", "required": false},
+        "sourceCurveID": {"type": "int", "meaning": "instead of points: copy this curve's points onto the target", "required": false},
+        "offsetPairs": {"type": "int[][]", "meaning": "optional beat offset applied to copied points (prime-exponent pairs; [] = 0)", "required": false}
+      },
+      "example": "{\"op\":\"action\",\"action\":\"modify_curve_points\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"curveID\":4,\"sourceCurveID\":3,\"offsetPairs\":[[9,1]]}}"
     },
     "create_audio_clip": {
       "summary": "Create an audio clip element from a file.",
@@ -520,7 +526,7 @@
     "connections": {"summary": "Every cable in one manager as (srcNodeID, srcConID, dstNodeID, dstConID).", "params": {"managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false}}, "example": "{\"op\":\"query\",\"query\":\"connections\",\"args\":{\"managerPath\":[]}}"},
     "embedded_windows": {"summary": "Floating windows on a canvas (nodes are embedded windows) with geometry and visibility.", "params": {"managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false}}, "example": "{\"op\":\"query\",\"query\":\"embedded_windows\",\"args\":{\"managerPath\":[]}}"},
     "piano_rolls": {"summary": "Piano-roll windows currently open in a manager.", "params": {"managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false}}, "example": "{\"op\":\"query\",\"query\":\"piano_rolls\",\"args\":{\"managerPath\":[]}}"},
-    "arranger": {"summary": "An Arranger node's tracks and elements together.", "params": {"managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false}, "nodeID": {"type": "int", "meaning": "Arranger node", "required": true}}, "example": "{\"op\":\"query\",\"query\":\"arranger\",\"args\":{\"managerPath\":[],\"nodeID\":2}}"},
+    "arranger": {"summary": "An Arranger node's tracks, elements and transport lines together. transportLines lists the editable strip as lattice spans: {lower, upper, steps} with lower/upper as exact pair vectors; each span is split into `steps` equal divisions and its edge lines are drawn thick.", "params": {"managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false}, "nodeID": {"type": "int", "meaning": "Arranger node", "required": true}}, "example": "{\"op\":\"query\",\"query\":\"arranger\",\"args\":{\"managerPath\":[],\"nodeID\":2}}"},
     "tracks": {"summary": "Arranger tracks: {tracks:[{type, id, connectionID, inputConnectionID, recordArmed, monitor}], soloTracks, muteTracks, id_pool, ids}. type 0 = Audio, 1 = Notes. inputConnectionID is the track's input port on the arranger node, in track order.", "params": {"managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false}, "nodeID": {"type": "int", "meaning": "Arranger node", "required": true}}, "example": "{\"op\":\"query\",\"query\":\"tracks\",\"args\":{\"managerPath\":[],\"nodeID\":2}}"},
     "elements": {"summary": "Arranger elements: {id_pool, position_id_pool, elements:[{id, type, name, positions[], ...}]}. type 0 = region, 1 = audio clip, 2 = automation curve; all three share one id space. Each element lists its positions (placements on the timeline).", "params": {"managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false}, "nodeID": {"type": "int", "meaning": "Arranger node", "required": true}}, "example": "{\"op\":\"query\",\"query\":\"elements\",\"args\":{\"managerPath\":[],\"nodeID\":2}}"},
     "region": {"summary": "One element in full. A region also lists every note as {id, channel, pitchVector, rhythmVector, rhythmEndVector, tuning*}; any element lists its positions. Use the element's id as regionID / elementID / curveID elsewhere.", "params": {"managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false}, "nodeID": {"type": "int", "meaning": "Arranger node", "required": true}, "regionID": {"type": "int", "meaning": "element id", "required": true}}, "example": "{\"op\":\"query\",\"query\":\"region\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"regionID\":0}}"},

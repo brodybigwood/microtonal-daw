@@ -46,12 +46,32 @@ void PianoRoll::renderPitchFactorsHoverTooltip() {
     auto note = hoveredElement;
     if (!note || !fonts.mainFont)
         return;
+    // Only the piano roll currently under the mouse may show its tooltip; the others
+    // keep their last hovered note and would otherwise draw a stale copy.
+    SDL_Window* mouseWindow = SDL_GetMouseFocus();
+    if (!mouseWindow || !window || mouseWindow != window)
+        return;
     if (SDL_GetTicks() - hoverPitchFactorsStartMs < kPitchFactorsTooltipDwellMs)
         return;
     if (hoverPitchFactorsNoteId != note->id)
         return;
 
-    const std::string text = formatPrimePowerVector(note->pitchVector);
+    // One exponent per line, evaluated as a float with a compact decimal count.
+    std::string text;
+    if (note->pitchVector.empty()) {
+        text = "0";
+    } else {
+        char buf[32];
+        for (size_t i = 0; i < note->pitchVector.size(); ++i) {
+            const auto& pr = note->pitchVector[i];
+            const float v = pr.second != 0
+                ? static_cast<float>(pr.first) / static_cast<float>(pr.second)
+                : 0.f;
+            std::snprintf(buf, sizeof(buf), "%.3g", v);
+            if (i) text += '\n';
+            text += buf;
+        }
+    }
     const SDL_FRect bounds{0.f, 0.f, static_cast<float>(width), static_cast<float>(height - bottomMargin)};
     renderTooltip(renderer, text, mouseX + dstRect->x, mouseY + dstRect->y, bounds);
 }

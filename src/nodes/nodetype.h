@@ -20,5 +20,7 @@ enum NodeType {
     Duplicator,
     MpeRack,
     InstrumentRack,
+    Additive,
+    Ducker,
     Count // for iteration
 };

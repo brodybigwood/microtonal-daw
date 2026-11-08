@@ -10,6 +10,7 @@ GridView::GridView(SDL_FRect* rect, float leftMargin, Window* w, Project* p) :
     isShiftPressed(WindowHandler::instance()->isShiftPressed),
     isAltPressed(WindowHandler::instance()->isAltPressed),
     isCtrlPressed(WindowHandler::instance()->isCtrlPressed),
+    isVPressed(WindowHandler::instance()->isVPressed),
     project(p)
 {
 
@@ -74,6 +75,9 @@ bool GridView::handleInput(SDL_Event& e) {
             clickMouse(e);
             break;
         case SDL_EVENT_MOUSE_WHEEL:
+            // A view may claim the wheel for its own edit (e.g. PianoRoll velocity
+            // editing with V held); the custom input handler does the work.
+            if (customWheelHandling()) break;
             if (mouseX < gridRect.x || mouseX >= (gridRect.x + gridRect.w) ||
                 mouseY < gridRect.y || mouseY >= (gridRect.y + gridRect.h)) {
                 break;

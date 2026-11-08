@@ -36,7 +36,6 @@ public:
     void fromJSON(json) override;
 
     std::vector<CurvePoint> points;
-    int targetParamType = 0;
     float valueRangeMin = 0.f;
     float valueRangeMax = 1.f;
 

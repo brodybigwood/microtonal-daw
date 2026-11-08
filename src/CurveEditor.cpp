@@ -130,10 +130,45 @@ int CurveEditor::hitTestPoint(float mx, float my) {
 void CurveEditor::tensionHandlePos(size_t seg, float& outX, float& outY) {
     const auto& a = curve_->points[seg];
     const auto& b = curve_->points[seg + 1];
-    float midSec = (Note::beatsFromVector(a.timeVec) + Note::beatsFromVector(b.timeVec)) * 0.5f;
-    float absSec = contentOriginSec() + midSec;
-    outX = gridView_->getX(absSec);
-    outY = ty(curve_->evaluateAtSec(absSec, contentOriginSec(), endSec()));
+    const float aSec = Note::beatsFromVector(a.timeVec);
+    const float bSec = Note::beatsFromVector(b.timeVec);
+    const float origin = contentOriginSec();
+    const float end = endSec();
+    auto onCurve = [&](float t, float& x, float& y) {
+        const float absSec = origin + aSec + (bSec - aSec) * t;
+        x = gridView_->getX(absSec);
+        y = ty(curve_->evaluateAtSec(absSec, origin, end));
+    };
+
+    // Distance-wise middle of the drawn curve between the two point handles:
+    // walk the segment by arc length and stop at half of its total length.
+    constexpr int kSamples = 64;
+    float px[kSamples + 1], py[kSamples + 1];
+    for (int k = 0; k <= kSamples; ++k)
+        onCurve(static_cast<float>(k) / kSamples, px[k], py[k]);
+
+    float total = 0.f;
+    for (int k = 1; k <= kSamples; ++k) {
+        const float dx = px[k] - px[k - 1];
+        const float dy = py[k] - py[k - 1];
+        total += std::sqrt(dx * dx + dy * dy);
+    }
+    const float half = total * 0.5f;
+    float acc = 0.f;
+    for (int k = 1; k <= kSamples; ++k) {
+        const float dx = px[k] - px[k - 1];
+        const float dy = py[k] - py[k - 1];
+        const float d = std::sqrt(dx * dx + dy * dy);
+        if (acc + d >= half) {
+            const float f = d > 0.f ? (half - acc) / d : 0.f;
+            outX = px[k - 1] + dx * f;
+            outY = py[k - 1] + dy * f;
+            return;
+        }
+        acc += d;
+    }
+    outX = px[kSamples];
+    outY = py[kSamples];
 }
 
 int CurveEditor::hitTestTension(float mx, float my) {

@@ -52,12 +52,13 @@ struct SamplerVoice {
     float phase = 0.f;
     float pitchRatio = 1.0f;
     float pan = 0.5f;
+    float velocity = 1.f;     // note-on velocity gain
     float envPhase = 0.f;     // seconds into envelope
     float envLevel = 0.f;     // current envelope amplitude
     int wait_on = 0;
     int wait_off = -1;
 
-    void reset() { active = false; noteId = -1; wait_off = -1; }
+    void reset() { active = false; noteId = -1; wait_off = -1; velocity = 1.f; }
 };
 
 class SamplerNode;

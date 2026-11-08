@@ -14,6 +14,13 @@ NodeProcessor::NodeProcessor(Project* p) : project(p) {
     editor->enableRootMenuBar();
     hostWindow = SDL_CreateWindow("NodeProcessorHost", 1920, 1080, SDL_WINDOW_RESIZABLE);
     hostRenderer = SDL_CreateRenderer(hostWindow, NULL);
+    // Remember SDL's GL context: plugin editors (DPF/LSP, Dragonfly) make their
+    // own context current on this thread and never restore ours.
+    hostGlWindow = SDL_GL_GetCurrentWindow();
+    hostGlContext = SDL_GL_GetCurrentContext();
+    std::cout << "[GL] renderer=" << (SDL_GetRendererName(hostRenderer) ? SDL_GetRendererName(hostRenderer) : "?")
+              << " video=" << (SDL_GetCurrentVideoDriver() ? SDL_GetCurrentVideoDriver() : "?")
+              << " ctxAtCreate=" << (hostGlContext ? 1 : 0) << std::endl;
 
     // GUI copy: owns SDL resources, used for rendering/editing.
     guiGraph = new NodeManager(project);
@@ -138,13 +145,40 @@ void NodeProcessor::deSerialize(const json& j) {
 
 void NodeProcessor::render() {
     flushProcessorActions();
+    // SDL3 may not make the renderer's context current until its first draw, so
+    // capture it lazily on the first frame, before any plugin editor runs.
+    if (!hostGlContext) {
+        hostGlWindow = SDL_GL_GetCurrentWindow();
+        hostGlContext = SDL_GL_GetCurrentContext();
+        if (hostGlContext)
+            std::cout << "[GL] captured SDL renderer context" << std::endl;
+    }
 #ifndef __EMSCRIPTEN__
     // Plugins (LSP) drive their native editor event loop through the host run-loop
     // timers. That must run every frame, not only when an SDL event arrives.
     VstPlugin::tickAllEditors();
     VstNode::tickAllRacks();
 #endif
+    // Editors may have left their own context current; restore SDL's before drawing.
+    rebindHostGlContext();
     if (editor) editor->tick(project->renderer);
+}
+
+void NodeProcessor::rebindHostGlContext() {
+    if (!hostGlWindow || !hostGlContext) return;
+    // SDL_GL_MakeCurrent no-ops when the context is already current on the thread,
+    // which is exactly the broken case: the context is current but its window's
+    // drawable was invalidated (a plugin editor mapped a new X window). Unbind
+    // first so the re-bind actually issues glXMakeCurrent for this window.
+    if (SDL_GL_GetCurrentContext() == hostGlContext)
+        SDL_GL_MakeCurrent(hostGlWindow, nullptr);
+    if (!SDL_GL_MakeCurrent(hostGlWindow, hostGlContext)) {
+        static bool logged = false;
+        if (!logged) {
+            logged = true;
+            std::cerr << "[GL] rebind failed: " << SDL_GetError() << std::endl;
+        }
+    }
 }
 
 void NodeProcessor::renderPresent() {

@@ -175,6 +175,7 @@ bool WindowHandler::tick() {
             toggleKey(e, SDL_SCANCODE_LSHIFT, isShiftPressed);
             toggleKey(e, SDL_SCANCODE_LCTRL, isCtrlPressed);
             toggleKey(e, SDL_SCANCODE_LALT, isAltPressed);
+            toggleKey(e, SDL_SCANCODE_V, isVPressed);
 
             WindowManager* wm = (project && project->processor) ? project->processor->getWindowManager() : nullptr;
 

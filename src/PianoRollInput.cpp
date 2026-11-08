@@ -7,6 +7,7 @@
 #include <cfloat>
 #include <climits>
 #include <cstdlib>
+#include <cstdio>
 #include <numeric>
 #include <sstream>
 #include <iomanip>
@@ -42,10 +43,16 @@ namespace {
 struct NoteClipboard {
     bool valid = false;
     std::vector<json> notes;
-    float first = 0.f;   // earliest start in beats
-    float last = 0.f;    // latest end in beats
+    // Exact time vectors of the earliest start and latest end, so paste shifts are
+    // pure vector arithmetic and never land beside a grid line.
+    std::vector<std::pair<int, int>> firstStartVec;
+    std::vector<std::pair<int, int>> lastEndVec;
 };
 NoteClipboard g_noteClip;
+float g_velocityClip = 0.f;
+bool g_velocityClipValid = false;
+// Session-wide, like the note clipboard: the velocity the next drawn note inherits.
+float g_lastNoteVelocity = 100.f / 127.f;
 } // namespace
 
 bool PianoRoll::handleKeyboard(SDL_Event& e) {
@@ -56,18 +63,23 @@ bool PianoRoll::handleKeyboard(SDL_Event& e) {
             if (isCtrlPressed) copySelectedNotes();
             break;
         case SDL_SCANCODE_V:
-            if (isCtrlPressed) pasteCopiedNotes(static_cast<float>(project->beatPosition));
+            if (isCtrlPressed) {
+                // Paste on the grid/transport line nearest the playhead.
+                if (const RhythmGridLine* line = closestRhythmOrTransportLine(
+                        rhythmLines, transportLineCache, static_cast<float>(project->beatPosition)))
+                    pasteCopiedNotes(line->integerPairs);
+            }
             break;
         case SDL_SCANCODE_B:
             if (isCtrlPressed) {
                 copySelectedNotes();
-                pasteCopiedNotes(g_noteClip.last); // first copied note starts at the last note's end
+                pasteCopiedNotes(g_noteClip.lastEndVec); // first copied note starts at the last note's end
             }
             break;
         case SDL_SCANCODE_D:
             if (isCtrlPressed) {
                 copySelectedNotes();
-                pasteCopiedNotes(g_noteClip.first); // duplicate in place
+                pasteCopiedNotes(g_noteClip.firstStartVec); // duplicate in place
             }
             break;
         case SDL_SCANCODE_DELETE:
@@ -156,8 +168,17 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                         closestRhythmOrTransportLine(rhythmLines, transportLineCache,
                                                      static_cast<float>(scrollX - leftMargin + mouseX) / dW);
                     if (rhythmIntervalStartNote) {
-                        rhythmIntervalStartSec = Note::beatsFromVector(rhythmIntervalStartNote->rhythmVector);
-                        rhythmDragStartVertexPairs = rhythmIntervalStartNote->rhythmVector;
+                        // Start on whichever edge of the note the press is nearer.
+                        const float sSec = Note::beatsFromVector(rhythmIntervalStartNote->rhythmVector);
+                        const float eSec = Note::beatsFromVector(rhythmIntervalStartNote->rhythmEndVector);
+                        const float cursorSec = static_cast<float>(scrollX - leftMargin + mouseX) / dW;
+                        if (std::fabs(eSec - cursorSec) < std::fabs(sSec - cursorSec)) {
+                            rhythmIntervalStartSec = eSec;
+                            rhythmDragStartVertexPairs = rhythmIntervalStartNote->rhythmEndVector;
+                        } else {
+                            rhythmIntervalStartSec = sSec;
+                            rhythmDragStartVertexPairs = rhythmIntervalStartNote->rhythmVector;
+                        }
                     } else if (startLine) {
                         rhythmIntervalStartSec = startLine->seconds;
                         rhythmDragStartVertexPairs = startLine->integerPairs;
@@ -219,6 +240,7 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     if (hoveredElement != nullptr) {
                         auto n = std::dynamic_pointer_cast<Note>(hoveredElement);
                         if (n) {
+                            g_lastNoteVelocity = n->velocity;
                             if (selectedNoteIds.count(n->id))
                                 selectedNoteIds.erase(n->id);
                             else
@@ -226,9 +248,9 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                         }
                     } else {
                         selectingRubberBand = true;
-                        rubberBandStartX = mouseX;
+                        rubberBandStartX = snapXToBoundary(mouseX);
                         rubberBandStartY = mouseY;
-                        rubberBandEndX = mouseX;
+                        rubberBandEndX = rubberBandStartX;
                         rubberBandEndY = mouseY;
                     }
                     handleMouse();
@@ -326,6 +348,16 @@ void PianoRoll::clickMouse(SDL_Event& e) {
             }
             if (e.button.button == SDL_BUTTON_RIGHT) {
                 rmb = true;
+                // V held: the right click opens the velocity menu for the hovered note.
+                if (isVPressed) {
+                    // Clear the right-drag flag first: handleMouse() deletes the hovered
+                    // note while rmb is set and no menu is open.
+                    rmb = false;
+                    handleMouse();
+                    openVelocityMenu();
+                    refreshGrid = true;
+                    break;
+                }
                 SDL_Log("[harmonic] rmb x=%.1f y=%.1f shift=%d ctrl=%d hovered=%p stretch=%p",
                         mouseX, mouseY, (int)isShiftPressed, (int)isCtrlPressed,
                         (void*)hoveredElement.get(), (void*)stretchingNote.get());
@@ -772,9 +804,17 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
         case SDL_EVENT_MOUSE_BUTTON_UP:
             break;
 
-        case SDL_EVENT_MOUSE_WHEEL:
+        case SDL_EVENT_MOUSE_WHEEL: {
+            // Hold V and scroll over a note to edit its velocity instead of scrolling.
+            handleMouse();
+            auto hoveredNote = std::dynamic_pointer_cast<Note>(hoveredElement);
+            if (isVPressed && hoveredNote) {
+                changeNoteVelocity(hoveredNote, e.wheel.y);
+                break;
+            }
             Scroll();
             break;
+        }
 
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
             width = e.window.data1;  // New width
@@ -806,21 +846,41 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
             }
 
             if (selectingRhythmInterval) {
-                auto endNote = std::dynamic_pointer_cast<Note>(hoveredElement);
                 refreshHoveredRhythmLineIndex();
-                if (endNote) {
-                    rhythmIntervalEndSec = Note::beatsFromVector(endNote->rhythmVector);
-                    rhythmDragEndVertexPairs = endNote->rhythmVector;
-                    if (!intervalStartNote || endNote->id != intervalStartNote->id)
-                        rhythmIntervalDragMoved = true;
-                } else if (const RhythmGridLine* line = closestRhythmOrTransportLine(
-                               rhythmLines, transportLineCache,
-                               static_cast<float>(scrollX - leftMargin + mouseX) / dW)) {
-                    rhythmIntervalEndSec = line->seconds;
-                    rhythmDragEndVertexPairs = line->integerPairs;
+                // One boundary set, nearest wins, no priority: rhythm lines,
+                // transport lines, and note start lines.
+                const float sec = static_cast<float>(scrollX - leftMargin + mouseX) / dW;
+                float bestDist = FLT_MAX;
+                bool found = false;
+                float bestSec = 0.f;
+                std::vector<std::pair<int, int>> bestPairs;
+                auto consider = [&](float s, const std::vector<std::pair<int, int>>& pairs) {
+                    const float d = std::fabs(s - sec);
+                    if (d < bestDist) {
+                        bestDist = d;
+                        bestSec = s;
+                        bestPairs = pairs;
+                        found = true;
+                    }
+                };
+                for (const auto& line : rhythmLines)
+                    consider(line.seconds, line.integerPairs);
+                for (const auto& line : transportLineCache)
+                    consider(line.seconds, line.integerPairs);
+                if (region)
+                    for (const auto& note : region->notes) {
+                        consider(Note::beatsFromVector(note->rhythmVector), note->rhythmVector);
+                        consider(Note::beatsFromVector(note->rhythmEndVector), note->rhythmEndVector);
+                    }
+                if (found) {
+                    rhythmIntervalEndSec = bestSec;
+                    rhythmDragEndVertexPairs = bestPairs;
                     if (std::fabs(rhythmIntervalEndSec - rhythmIntervalStartSec) > 0.001f)
                         rhythmIntervalDragMoved = true;
                 }
+                if (auto endNote = std::dynamic_pointer_cast<Note>(hoveredElement))
+                    if (!intervalStartNote || endNote->id != intervalStartNote->id)
+                        rhythmIntervalDragMoved = true;
                 refreshGrid = true;
                 break;
             }
@@ -864,7 +924,7 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
 
             // Rubber band drag
             if (selectingRubberBand && lmb) {
-                rubberBandEndX = mouseX;
+                rubberBandEndX = snapXToBoundary(mouseX);
                 rubberBandEndY = mouseY;
                 refreshGrid = true;
                 break;
@@ -1012,6 +1072,7 @@ void PianoRoll::createElement() {
         if (rli != SIZE_MAX && rli < rhythmLines.size())
             note->rhythmVector = rhythmLines[rli].integerPairs;
         note->gridSpans = project->pianoRoll.gridSpans; // whole rhythm view the note was created with
+        note->velocity = g_lastNoteVelocity;             // inherit the last touched velocity
         lastRhythmDurationPairs = subVec(note->rhythmEndVector, note->rhythmVector);
         stampNoteTuning(note);
         // CreateNoteAction::doAction does not rerun stampNoteTuning on redo; persist post-stamp state on the action.
@@ -1111,19 +1172,21 @@ void PianoRoll::stretchElement(int amount) {
     if (amount != 0)
         stretchingNoteDragDirty = true;
     refreshHoveredRhythmLineIndex();
-    // Resize edges snap to the nearest grid or transport line.
-    if (const RhythmGridLine* line = closestRhythmOrTransportLine(
-            rhythmLines, transportLineCache, static_cast<float>(scrollX - leftMargin + mouseX) / dW)) {
-        const float lineSec = line->seconds;
+    // Resize edges snap to the shared boundary set (rhythm, transport, other notes).
+    TimeBoundary boundary;
+    if (closestTimeBoundary(rhythmLines, transportLineCache, region ? &region->notes : nullptr,
+                            stretchingNote->id,
+                            static_cast<float>(scrollX - leftMargin + mouseX) / dW, boundary)) {
+        const float lineSec = boundary.seconds;
         if (resizeDir == -1 && lineSec < stretchingNote->endBeats() - 0.001f) {
-            stretchingNote->rhythmVector = line->integerPairs;
+            stretchingNote->rhythmVector = boundary.pairs;
             // Re-anchor the note onto this line: adopt the grid's rhythm
             // temperament only if that grid has a line at the note's start.
             if (region && gridHasLineAt(rhythmLines, stretchingNote->rhythmVector)) {
                 stretchingNote->gridSpans = project->pianoRoll.gridSpans;
             }
         } else if (resizeDir == 1 && lineSec > stretchingNote->startBeats() + 0.001f) {
-            stretchingNote->rhythmEndVector = line->integerPairs;
+            stretchingNote->rhythmEndVector = boundary.pairs;
             if (region && gridHasLineAt(rhythmLines, stretchingNote->rhythmVector)) {
                 stretchingNote->gridSpans = project->pianoRoll.gridSpans;
             }
@@ -1149,10 +1212,12 @@ void PianoRoll::moveNoteTime(std::shared_ptr<Note> note) {
     movingNoteDragDirty = true;
     mouseX -= rhythmDragGrabOffsetPx;
     refreshHoveredRhythmLineIndex();
-    // Snap to whichever is nearest: a grid rhythm line or a transport-strip line.
-    if (const RhythmGridLine* line = closestRhythmOrTransportLine(
-            rhythmLines, transportLineCache, static_cast<float>(scrollX - leftMargin + mouseX) / dW))
-        movingNoteRhythmPreviewPairs = line->integerPairs;
+    // Snap to the shared boundary set: rhythm lines, transport lines, other notes.
+    TimeBoundary boundary;
+    if (closestTimeBoundary(rhythmLines, transportLineCache, region ? &region->notes : nullptr,
+                            note->id,
+                            static_cast<float>(scrollX - leftMargin + mouseX) / dW, boundary))
+        movingNoteRhythmPreviewPairs = boundary.pairs;
     mouseX += rhythmDragGrabOffsetPx;
     Scroll();
 }
@@ -1186,6 +1251,140 @@ void PianoRoll::snapNoteRhythm(const std::shared_ptr<Note>& note) {
 
 bool PianoRoll::hasNoteClipboard() const { return g_noteClip.valid; }
 
+float PianoRoll::snapXToBoundary(float x) const {
+    const float sec = static_cast<float>((static_cast<double>(x) + static_cast<double>(scrollX) -
+                                          static_cast<double>(leftMargin)) / dW);
+    // Same boundary set as the rhythm-interval drag: rhythm lines, transport
+    // lines, note starts; nearest wins, no priority.
+    float bestDist = FLT_MAX;
+    float bestSec = sec;
+    if (const RhythmGridLine* line = closestRhythmOrTransportLine(rhythmLines, transportLineCache, sec))
+        bestDist = std::fabs(line->seconds - sec), bestSec = line->seconds;
+    if (region) {
+        for (const auto& note : region->notes) {
+            const float s = Note::beatsFromVector(note->rhythmVector);
+            const float e = Note::beatsFromVector(note->rhythmEndVector);
+            const float ds = std::fabs(s - sec);
+            const float de = std::fabs(e - sec);
+            if (ds < bestDist) { bestDist = ds; bestSec = s; }
+            if (de < bestDist) { bestDist = de; bestSec = e; }
+        }
+    }
+    if (!(bestDist < FLT_MAX))
+        return x;
+    return static_cast<float>(static_cast<double>(bestSec) * dW - static_cast<double>(scrollX) +
+                              static_cast<double>(leftMargin));
+}
+
+std::vector<int> PianoRoll::velocityTargetIDs() const {
+    std::vector<int> ids;
+    if (region) {
+        for (const auto& n : region->notes)
+            if (n && n->channel == currentChannel && selectedNoteIds.count(n->id))
+                ids.push_back(n->id);
+    }
+    if (auto n = std::dynamic_pointer_cast<Note>(hoveredElement))
+        if (std::find(ids.begin(), ids.end(), n->id) == ids.end())
+            ids.push_back(n->id);
+    return ids;
+}
+
+void PianoRoll::applyNoteVelocity(const std::vector<int>& noteIDs, bool relative, float amount) {
+    if (!region || noteIDs.empty()) return;
+    std::vector<int> ids;
+    std::vector<json> befores, afters;
+    for (int id : noteIDs) {
+        auto it = region->id_to_index.find(id);
+        if (it == region->id_to_index.end()) continue;
+        const size_t idx = static_cast<size_t>(it->second);
+        if (idx >= region->notes.size() || !region->notes[idx]) continue;
+        auto& n = region->notes[idx];
+        json before = n->toJSON();
+        n->velocity = std::clamp(relative ? n->velocity + amount : amount, 0.f, 1.f);
+        json after = n->toJSON();
+        if (after == before) continue;
+        g_lastNoteVelocity = n->velocity;
+        ids.push_back(id);
+        befores.push_back(std::move(before));
+        afters.push_back(std::move(after));
+    }
+    if (ids.empty()) return;
+    Node* parent = region->parentNode;
+    if (ids.size() == 1)
+        project->um->newAction(new MoveNoteAction(project, parent->nm->managerPath, parent->id,
+            region->id, ids[0], std::move(befores[0]), std::move(afters[0]), "Note Velocity"));
+    else
+        project->um->newAction(new MoveMultipleNotesAction(project, parent->nm->managerPath, parent->id,
+            region->id, std::move(ids), std::move(befores), std::move(afters), "Note Velocity"));
+}
+
+void PianoRoll::changeNoteVelocity(const std::shared_ptr<Note>& note, float ticks) {
+    if (!region || !note || ticks == 0.f) return;
+    // Same delta for every selected note, plus the hovered note.
+    applyNoteVelocity(velocityTargetIDs(), true, ticks * 0.05f);
+}
+
+void PianoRoll::openVelocityMenu() {
+    auto note = std::dynamic_pointer_cast<Note>(hoveredElement);
+    if (!note || !region) return;
+    const std::vector<int> ids = velocityTargetIDs();
+    const float value = note->velocity;
+
+    auto ctxMenu = ContextMenu::get();
+    ctxMenu->skipNextEvent = true;
+    SDL_Window* inputWin = this->window ? this->window : project->window;
+    if (inputWin) {
+        SDL_StartTextInput(inputWin);
+        ctxMenu->activate(renderer, SDL_GetWindowID(inputWin));
+    } else {
+        ctxMenu->activate();
+    }
+
+    char label[64];
+    std::snprintf(label, sizeof(label), "Velocity %.2f (%d)", value,
+                  static_cast<int>(std::lround(value * 127.f)));
+    auto root = std::make_shared<TreeEntry>(label);
+
+    auto setEntry = std::make_shared<TreeEntry>("Set Velocity...");
+    setEntry->click = [this, ids, inputWin, ctxMenu]() {
+        ctxMenu->skipNextEvent = true;
+        if (inputWin)
+            ctxMenu->activate(renderer, SDL_GetWindowID(inputWin));
+        else
+            ctxMenu->activate();
+        ctxMenu->dynamicTick = getTextInputTicker([this, ids](std::string text) {
+            try {
+                float v = std::stof(text);
+                if (v > 1.f) v /= 127.f; // accept 0..127 as well
+                applyNoteVelocity(ids, false, v);
+            } catch (...) {
+            }
+        }, []() {});
+    };
+    root->addChild(setEntry);
+
+    auto copyEntry = std::make_shared<TreeEntry>("Copy Velocity");
+    copyEntry->click = [note]() {
+        g_velocityClip = note->velocity;
+        g_velocityClipValid = true;
+    };
+    root->addChild(copyEntry);
+
+    if (g_velocityClipValid) {
+        const float clip = g_velocityClip;
+        auto pasteEntry = std::make_shared<TreeEntry>("Paste Velocity");
+        pasteEntry->click = [this, ids, clip]() { applyNoteVelocity(ids, false, clip); };
+        root->addChild(pasteEntry);
+    }
+
+    auto resetEntry = std::make_shared<TreeEntry>("Reset to Default");
+    resetEntry->click = [this, ids]() { applyNoteVelocity(ids, false, 100.f / 127.f); };
+    root->addChild(resetEntry);
+
+    ctxMenu->dynamicTick = getTreeMenuTicker(root);
+    rmb = false;
+}
+
 void PianoRoll::copySelectedNotes() {
     if (!region) return;
     std::vector<std::shared_ptr<Note>> src;
@@ -1201,43 +1400,40 @@ void PianoRoll::copySelectedNotes() {
     if (src.empty()) return;
 
     g_noteClip.notes.clear();
-    g_noteClip.first = FLT_MAX;
-    g_noteClip.last = -FLT_MAX;
+    g_noteClip.firstStartVec.clear();
+    g_noteClip.lastEndVec.clear();
+    float first = FLT_MAX;
+    float last = -FLT_MAX;
     for (const auto& n : src) {
         g_noteClip.notes.push_back(n->toJSON());
-        g_noteClip.first = std::min(g_noteClip.first, n->startBeats());
-        g_noteClip.last = std::max(g_noteClip.last, n->endBeats());
+        const float startSec = n->startBeats();
+        const float endSec = n->endBeats();
+        if (startSec < first) {
+            first = startSec;
+            g_noteClip.firstStartVec = n->rhythmVector;
+        }
+        if (endSec > last) {
+            last = endSec;
+            g_noteClip.lastEndVec = n->rhythmEndVector;
+        }
     }
     g_noteClip.valid = true;
 }
 
-void PianoRoll::pasteCopiedNotes(float firstBeat) {
+void PianoRoll::pasteCopiedNotes(const std::vector<std::pair<int, int>>& targetStart) {
     if (!region || !g_noteClip.valid || g_noteClip.notes.empty()) return;
 
-    // Shift the whole set so its earliest note lands on firstBeat. The shift is kept as an
-    // exact rational (1/48 beat grid) so the pasted rhythms stay exact.
-    std::vector<std::pair<int, int>> shift;
-    const float shiftBeats = firstBeat - g_noteClip.first;
-    if (std::fabs(shiftBeats) > 1e-6f) {
-        int den = 48;
-        int num = static_cast<int>(std::lround(shiftBeats * static_cast<float>(den)));
-        const int g = std::gcd(std::abs(num), den);
-        num /= g;
-        den /= g;
-        if (num != 0) shift = {{num, den}};
-    }
+    // Shift the whole set so its earliest note lands on targetStart. Both ends are exact
+    // vectors, so the shift is pure vector arithmetic — no beat value is re-quantized.
+    const auto shift = subVec(targetStart, g_noteClip.firstStartVec);
 
     std::vector<CreateNoteSpec> specs;
     specs.reserve(g_noteClip.notes.size());
     for (const auto& j : g_noteClip.notes) {
         CreateNoteSpec s;
         s.pitchVector = pairsFromJSON(j.at("pitchVector"));
-        s.rhythmVector = pairsFromJSON(j.at("rhythmVector"));
-        s.rhythmEndVector = pairsFromJSON(j.at("rhythmEndVector"));
-        if (!shift.empty()) {
-            s.rhythmVector = addVec(s.rhythmVector, shift);
-            s.rhythmEndVector = addVec(s.rhythmEndVector, shift);
-        }
+        s.rhythmVector = addVec(pairsFromJSON(j.at("rhythmVector")), shift);
+        s.rhythmEndVector = addVec(pairsFromJSON(j.at("rhythmEndVector")), shift);
         // createNote stamps tuning from the current view; re-apply the copied note's own
         // channel, tuning fields and rhythm definition (gridSpans) over that stamp.
         s.noteStampedSnapshot = j;

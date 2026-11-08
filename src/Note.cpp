@@ -75,6 +75,7 @@ json Note::toJSON() {
     json j;
     j["id"] = id;
     j["channel"] = channel;
+    j["velocity"] = velocity;
     j["tuningMode"] = tuningMode;
     j["tuningAnchorHarmonic"] = tuningAnchorHarmonic;
     j["tuningEdoSubdivisionSteps"] = tuningEdoSubdivisionSteps;
@@ -119,6 +120,7 @@ std::shared_ptr<Note> Note::fromJSON(json& input) {
     std::shared_ptr<Note> n = std::make_shared<Note>(startPairs, endPairs);
     n->id = nid;
     n->channel = channel;
+    n->velocity = input.value("velocity", 100.0f / 127.0f);
     n->tuningMode = input.value("tuningMode", 0);
     n->tuningAnchorHarmonic = input.value("tuningAnchorHarmonic", 1);
     n->tuningEdoSubdivisionSteps = input.value("tuningEdoSubdivisionSteps", 12);
@@ -152,6 +154,7 @@ std::shared_ptr<Note> Note::fromJSON(json& input) {
 
 void Note::applyUndoSnapshot(const json& j) {
     channel = j.value("channel", channel);
+    velocity = j.value("velocity", velocity);
     tuningMode = j.value("tuningMode", 0);
     tuningAnchorHarmonic = j.value("tuningAnchorHarmonic", 1);
     tuningEdoSubdivisionSteps = j.value("tuningEdoSubdivisionSteps", 12);

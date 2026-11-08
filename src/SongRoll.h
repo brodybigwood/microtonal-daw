@@ -9,6 +9,7 @@
 #include "GridView.h"
 #include "styles.h"
 #include "Project.h"
+#include "AutomationCurve.h"
 #include <iostream>
 #include "WindowHandler.h"
 #include "Playhead.h"
@@ -97,7 +98,7 @@ class SongRoll : public GridView{
 
         GridElement::Position* findPosition(int elementID, int positionID, GridElement** elementOut = nullptr);
         void copySelectedPositions();
-        void pastePositionClipboard(float firstBeat, bool exactDuplicate = false);
+        void pastePositionClipboard(const std::vector<std::pair<int, int>>& targetStart);
         void deleteSelectedPositions();
 
         enum class PositionDragKind { None = 0, Move, ResizeLeft, ResizeRight };
@@ -151,6 +152,8 @@ class SongRoll : public GridView{
         bool transportLineDragMoved = false;
         std::vector<std::pair<int, int>> transportLineDragStartPairs;
         std::vector<std::pair<int, int>> transportLineDragEndPairs;
+        /** Raw (unsnapped) time under the mouse when the strip drag began. */
+        float transportLineDragStartSec = 0.f;
         size_t hoveredTransportLineIndex = SIZE_MAX;
         void updateTransportLines() override;
         void refreshHoveredTransportLineIndex();
@@ -158,7 +161,7 @@ class SongRoll : public GridView{
         void subdivideBetweenRhythmLines(const std::vector<std::pair<int, int>>& aPairs,
                                          const std::vector<std::pair<int, int>>& bPairs,
                                          int parts);
-        void extendTransportLines(const std::vector<std::pair<int, int>>& cursorPairs);
+        void extendTransportLines(float startSec, float endSec);
         void applyTransportToGrid() override;
         json arrangerRhythmEdoJson() const;
         void commitArrangerRhythmEdo(const json& before, const std::string& label);
@@ -176,6 +179,10 @@ class SongRoll : public GridView{
 
     // Curve editor state (for automation curve positions)
     std::unordered_map<int, CurveEditor*> curveEditors;
+    // Ctrl+C / Ctrl+V over an automation curve: copy its points onto another curve.
+    std::vector<CurvePoint> curvePointClipboard;
+    bool copyHoveredCurvePoints();
+    bool pasteHoveredCurvePoints();
     int hoveredCurvePointIdx = -1;
     int draggingCurvePointIdx = -1;
     int draggingTensionSeg = -1;

@@ -42,6 +42,9 @@ public:
     void render();
     void renderPresent();
     void handleWindowInput(SDL_Event& e);
+    /** Plugin editors make their own GL context current on this thread; re-bind
+        SDL's context before drawing so the host renderer keeps working. */
+    void rebindHostGlContext();
 
     /** Audio thread enqueues lambdas; GUI thread flushes them before each render frame. */
     void enqueueProcessorAction(std::function<void()> fn);
@@ -52,6 +55,8 @@ private:
     class NodeEditor* editor = nullptr;
     SDL_Window* hostWindow = nullptr;
     SDL_Renderer* hostRenderer = nullptr;
+    SDL_Window* hostGlWindow = nullptr;
+    SDL_GLContext hostGlContext = nullptr;
     WindowManager* windowManager = nullptr;
 
     std::mutex processorActionMutex_;

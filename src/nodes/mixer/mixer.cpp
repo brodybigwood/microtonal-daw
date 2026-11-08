@@ -355,12 +355,48 @@ void MixerNode::syncChainParams() {
     }
 }
 
+namespace {
+void releaseOutputPort(connectionSet& outputs, Connection* o) {
+    if (!o) return;
+    for (size_t i = 0; i < outputs.connections.size(); ++i) {
+        if (outputs.connections[i] != o) continue;
+        outputs.connections.erase(outputs.connections.begin() + static_cast<ptrdiff_t>(i));
+        break;
+    }
+    outputs.id_pool.releaseID(o->id);
+    outputs.ids.erase(o->id);
+    delete o;
+}
+} // namespace
+
+void MixerNode::createChainOutput(Chain& c, uint16_t forcedID) {
+    if (c.outflow) return;
+    auto* o = new Connection;
+    o->type = DataType::Waveform;
+    o->dir = Direction::output;
+    o->minChannels = 1;
+    o->updateNumChannels();
+    if (forcedID == 0) {
+        outputs.addConnection(o);
+    } else {
+        o->nm = outputs.nm;
+        o->id = forcedID;
+        outputs.connections.push_back(o);
+        outputs.id_pool.reserveID(forcedID);
+        outputs.ids[forcedID] = static_cast<uint16_t>(outputs.connections.size() - 1);
+        if (outputs.bufferSize > 0)
+            o->allocateBuffer(outputs.bufferSize, o->numChannels);
+    }
+    c.outflow = o;
+}
+
 void MixerNode::addChainOnGraph(int chainID, uint16_t portID) {
     if (chainByID(chainID)) return;
     auto c = std::make_unique<Chain>();
     c->id = chainID;
     chainIdPool_.reserveID(static_cast<uint16_t>(chainID));
     c->inflow = addInputPort(portID);
+    createChainOutput(*c);
     chains.push_back(std::move(c));
     syncChainParams();
     if (nm) nm->markTopologyDirty();
@@ -371,6 +407,7 @@ void MixerNode::removeChainOnGraph(int chainID) {
         if (chains[i]->id != chainID) continue;
         for (Node* n : chains[i]->nodes) destroyNode(n);
         removeInputPort(chains[i]->inflow);
+        releaseOutputPort(outputs, chains[i]->outflow);
         chains.erase(chains.begin() + static_cast<ptrdiff_t>(i));
         syncChainParams();
         if (nm) nm->markTopologyDirty();
@@ -428,6 +465,7 @@ json MixerNode::chainJson(int chainID) const {
         const Chain& c = *cp;
         jc["id"] = c.id;
         if (c.inflow) jc["inputConnectionID"] = c.inflow->id;
+        if (c.outflow) jc["outputConnectionID"] = c.outflow->id;
         jc["pan"] = c.pan.value;
         jc["vol"] = c.volume.value;
         jc["solo"] = c.solo;
@@ -447,6 +485,7 @@ void MixerNode::restoreChain(const json& jc) {
     c->id = cid;
     chainIdPool_.reserveID(static_cast<uint16_t>(cid));
     c->inflow = addInputPort(static_cast<uint16_t>(jc.value("inputConnectionID", 0)));
+    createChainOutput(*c, static_cast<uint16_t>(jc.value("outputConnectionID", 0)));
     c->pan.value = jc.value("pan", 0.5f);
     c->volume.value = jc.value("vol", 1.0f);
     c->solo = jc.value("solo", false);
@@ -495,6 +534,27 @@ void MixerNode::setup() {
     out->updateNumChannels();
     if (bufferSize > 0 && (out->buffer == nullptr || out->allocChannels != out->numChannels))
         out->allocateBuffer(bufferSize, out->numChannels);
+
+    // Per-chain outputs are sized and allocated here, not in process: reallocating
+    // a buffer the downstream node already points at corrupts the audio pass.
+    for (auto& cp : chains) {
+        Chain& c = *cp;
+        if (!c.outflow) continue;
+        int ch = 1;
+        for (Node* n : c.nodes) {
+            Connection* dout = firstWaveOut(n);
+            if (dout) ch = std::max(ch, std::max(1, static_cast<int>(dout->numChannels)));
+        }
+        if (c.inflow && c.inflow->is_connected)
+            ch = std::max(ch, std::max(1, static_cast<int>(c.inflow->sourceChannels)));
+        c.outflow->minChannels = ch;
+        c.outflow->numChannels = ch;
+        c.outflow->updateNumChannels();
+        if (bufferSize > 0 && (c.outflow->buffer == nullptr ||
+                               c.outflow->bufferSize != bufferSize ||
+                               c.outflow->allocChannels != c.outflow->numChannels))
+            c.outflow->allocateBuffer(bufferSize, c.outflow->numChannels);
+    }
 }
 
 void MixerNode::process() {
@@ -607,8 +667,8 @@ void MixerNode::process() {
 
     for (auto& cp : chains) {
         Chain& c = *cp;
-        if (c.channels <= 0 || c.mute) continue;
-        if (anySolo && !c.solo) continue;
+        if (c.channels <= 0) continue;
+        const bool audible = !c.mute && (!anySolo || c.solo);
         const int d = std::max(0, maxLat - c.latency);
         if (d != c.delay || static_cast<int>(c.ring.size()) != c.channels) {
             c.ring.assign(static_cast<size_t>(c.channels),
@@ -620,23 +680,71 @@ void MixerNode::process() {
         const float panR = std::sin(c.pan.value * static_cast<float>(M_PI_2));
         const float vol = c.volume.value;
         const int nch = std::min(c.channels, outCh);
+
+        // This chain's own output port: same post-pan/post-volume signal that goes
+        // into the master sum, but only the chain's own channels. Its width and
+        // buffer are fixed in setup(); never reallocate here.
+        Connection* coutp = c.outflow;
+        // Mute/solo applies to the chain's own output too; otherwise the post-mixer
+        // buses keep the muted channel audible.
+        const int coCh = (audible && coutp && coutp->is_connected && coutp->buffer)
+            ? std::min(nch, static_cast<int>(coutp->numChannels)) : 0;
+        // Clear every channel this port owns each block: if the chain width ever
+        // shrinks, an untouched channel would otherwise keep ringing the old audio.
+        if (coutp && coutp->buffer)
+            for (int cc = 0; cc < static_cast<int>(coutp->numChannels); ++cc)
+                if (float* p = coutp->channel(cc))
+                    std::memset(p, 0, static_cast<size_t>(bs) * sizeof(float));
+
         for (int cc = 0; cc < nch; ++cc) {
             const float pg = (nch >= 2) ? ((cc == 0) ? panL : panR) : 1.f;
             const float gain = vol * pg;
             const float* src = c.buf.data() + static_cast<size_t>(cc) * bs;
-            float* dst = out->channel(cc);
+            float* dst = audible ? out->channel(cc) : nullptr;
+            float* cdst = cc < coCh ? coutp->channel(cc) : nullptr;
             if (d <= 0) {
-                for (int i = 0; i < bs; ++i) dst[i] += src[i] * gain;
+                for (int i = 0; i < bs; ++i) {
+                    const float v = src[i] * gain;
+                    if (dst) dst[i] += v;
+                    if (cdst) cdst[i] = v;
+                }
                 continue;
             }
             std::vector<float>& ring = c.ring[static_cast<size_t>(cc)];
             for (int i = 0; i < bs; ++i) {
                 const int idx = (c.writePos + i) % d;
-                dst[i] += ring[static_cast<size_t>(idx)] * gain;
+                const float v = ring[static_cast<size_t>(idx)] * gain;
+                if (dst) dst[i] += v;
+                if (cdst) cdst[i] = v;
                 ring[static_cast<size_t>(idx)] = src[i];
             }
         }
         if (d > 0) c.writePos = (c.writePos + bs) % d;
+    }
+
+    if (std::getenv("DAW_MIX_DEBUG")) {
+        static uint64_t lastDbg = 0;
+        const uint64_t nowDbg = SDL_GetTicks();
+        if (nowDbg - lastDbg >= 1000) {
+            lastDbg = nowDbg;
+            for (size_t i = 0; i < chains.size(); ++i) {
+                Chain& c = *chains[i];
+                float peak = 0.f;
+                if (c.outflow && c.outflow->buffer) {
+                    const int n = std::min(static_cast<int>(c.outflow->numChannels), 32);
+                    for (int ch = 0; ch < n; ++ch) {
+                        const float* p = c.outflow->channel(ch);
+                        if (!p) continue;
+                        for (int k = 0; k < bs; ++k) peak = std::max(peak, std::fabs(p[k]));
+                    }
+                }
+                std::cout << "[mix] node=" << id << " chain=" << i
+                          << " conn=" << (c.outflow && c.outflow->is_connected)
+                          << " buf=" << (c.outflow && c.outflow->buffer ? 1 : 0)
+                          << " nch=" << (c.outflow ? c.outflow->numChannels : 0)
+                          << " chainCh=" << c.channels << " outPeak=" << peak << std::endl;
+            }
+        }
     }
 }
 
@@ -1253,6 +1361,7 @@ json MixerNode::extraSerialize() {
         json jc;
         jc["id"] = c.id;
         if (c.inflow) jc["inputConnectionID"] = c.inflow->id;
+        if (c.outflow) jc["outputConnectionID"] = c.outflow->id;
         jc["pan"] = c.pan.value;
         jc["vol"] = c.volume.value;
         jc["solo"] = c.solo;
@@ -1269,6 +1378,8 @@ void MixerNode::extraDeSerialize(const json& j) {
     for (auto& cp : chains) {
         for (Node* n : cp->nodes) destroyNode(n);
         removeInputPort(cp->inflow);
+        releaseOutputPort(outputs, cp->outflow);
+        cp->outflow = nullptr;
     }
     chains.clear();
 
@@ -1282,6 +1393,7 @@ void MixerNode::extraDeSerialize(const json& j) {
             if (c->id < 0) c->id = static_cast<int>(chainIdPool_.newID());
             else chainIdPool_.reserveID(static_cast<uint16_t>(c->id));
             c->inflow = addInputPort(static_cast<uint16_t>(jc.value("inputConnectionID", 0)));
+            createChainOutput(*c, static_cast<uint16_t>(jc.value("outputConnectionID", 0)));
             c->pan.value = jc.value("pan", 0.5f);
             c->volume.value = jc.value("vol", 1.0f);
             c->solo = jc.value("solo", false);

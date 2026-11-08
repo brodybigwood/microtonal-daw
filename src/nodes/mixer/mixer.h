@@ -55,7 +55,8 @@ public:
     // One mixer column: a serial list of nodes (top -> bottom).
     struct Chain {
         int id = -1;
-        Connection* inflow = nullptr; // this chain's multichannel input port
+        Connection* inflow = nullptr;  // this chain's multichannel input port
+        Connection* outflow = nullptr; // this chain's own output (post pan/vol), besides the master
         std::vector<Node*> nodes;
         Knob pan;
         Bar volume;
@@ -92,6 +93,9 @@ public:
     // action calls these through requireManager on both copies.
     void addChainOnGraph(int chainID, uint16_t portID);
     void removeChainOnGraph(int chainID);
+    /** Create the chain's own output port (one per chain, after the master output).
+        forcedID != 0 restores a saved port id so existing cables stay attached. */
+    void createChainOutput(Chain& c, uint16_t forcedID = 0);
     void reorderChainsOnGraph(const std::vector<int>& chainIDs);
     json chainJson(int chainID) const;
     void restoreChain(const json& jc);

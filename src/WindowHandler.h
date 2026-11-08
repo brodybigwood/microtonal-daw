@@ -42,6 +42,7 @@ class WindowHandler {
         //keyboard
         bool isShiftPressed = false;
         bool isCtrlPressed = false;
+        bool isVPressed = false;
         bool isAltPressed = false;
 
         void toggleKey(SDL_Event& e, SDL_Scancode keycode, bool& keyVar);
