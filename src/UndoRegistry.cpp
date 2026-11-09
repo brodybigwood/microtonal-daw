@@ -215,6 +215,25 @@ std::vector<std::pair<int, int>> parsePitch(const json& j) {
     return {{static_cast<int>(en / g), static_cast<int>(ed / g)}};
 }
 
+/// Scripted note creation must state its tuning context. Nothing is derived or
+/// inherited implicitly here: harmonic notes carry an anchor harmonic plus its
+/// exact pitch vector, EDO notes carry their exact span.
+static void requireExplicitNoteTuning(const json& intent, const char* who) {
+    if (!intent.is_object() || !intent.contains("tuningMode"))
+        throw std::runtime_error(std::string(who) + ": explicit tuning context required (intent.tuningMode)");
+    const int mode = intent.at("tuningMode").get<int>();
+    if (mode == 0) {
+        if (!intent.contains("tuningAnchorHarmonic") || !intent.contains("tuningHarmonicAnchorVector"))
+            throw std::runtime_error(std::string(who) +
+                ": harmonic notes need intent.tuningAnchorHarmonic and intent.tuningHarmonicAnchorVector");
+    } else {
+        if (!intent.contains("tuningEdoSubdivisionSteps") || !intent.contains("tuningEdoLowerVector") ||
+            !intent.contains("tuningEdoUpperVector"))
+            throw std::runtime_error(std::string(who) +
+                ": EDO notes need intent.tuningEdoSubdivisionSteps, intent.tuningEdoLowerVector and intent.tuningEdoUpperVector");
+    }
+}
+
 /// Copies the surrounding scale onto a freshly created note, mirroring what
 /// PianoRoll::stampNoteTuning does on the mouse path, and persists the result on
 /// the action so redo re-applies it. Per-note tuning fields in `params` override
@@ -228,6 +247,9 @@ void stampNoteTuning(Project* proj, Region* region, int noteID, const json& inte
 
     Note& n = *region->notes[idx];
     if (proj) {
+        // Inherit the project context exactly. There is deliberately no derived
+        // or nearest-line degree here: a note either carries the project's
+        // context or an explicit one from `intent`.
         const PianoRollSettings& pr = proj->pianoRoll;
         n.tuningMode = pr.tuningMode;
         n.tuningAnchorHarmonic = pr.tuningAnchorHarmonic;
@@ -621,6 +643,7 @@ ProjectAction* UndoManager::buildRegisteredAction(const std::string& actionName,
         case CreateNote: {
             auto managerPath = params.at("managerPath").get<std::vector<int>>();
             requireManager(head->p, managerPath);
+            requireExplicitNoteTuning(params.contains("intent") ? params["intent"] : params, "create_note");
             std::vector<std::pair<int, int>> pairs = parsePitch(params.at("pitchVector"));
             std::vector<std::pair<int,int>> rPairs;
             if (params.contains("rhythmVector") && params["rhythmVector"].is_array()) {
@@ -652,7 +675,8 @@ ProjectAction* UndoManager::buildRegisteredAction(const std::string& actionName,
                 spec.rhythmVector = readPairs(n.value("rhythmVector", json::array()));
                 spec.rhythmEndVector = readPairs(n.value("rhythmEndVector", json::array()));
                 if (spec.rhythmEndVector.empty()) spec.rhythmEndVector = spec.rhythmVector;
-                if (n.contains("intent")) spec.intent = n["intent"];
+                spec.intent = n.contains("intent") ? n["intent"] : json::object();
+                requireExplicitNoteTuning(spec.intent, "create_notes");
                 specs.push_back(std::move(spec));
             }
             pa = new CreateNotesAction(head->p, managerPath, params.at("nodeID").get<int>(),
@@ -1070,7 +1094,8 @@ bool UndoManager::runRegisteredAction(const std::string& actionName, const json&
         // UI itself calls, because they build and run their own action internally.
         if (actionName == "vst_load_plugin" || actionName == "toggle_piano_roll_window" ||
             actionName == "mixer_chain_add_node" || actionName == "instrument_rack_add_node" ||
-            actionName == "mixer_add_track") {
+            actionName == "mixer_chain_move_node" || actionName == "mixer_add_track" ||
+            actionName == "export_range") {
             return runDelegatedAction(actionName, params, error, result);
         }
 
@@ -1150,6 +1175,29 @@ bool UndoManager::runDelegatedAction(const std::string& actionName, const json& 
             const int addedID = mixer->addNodeToChain(chainIndex, static_cast<NodeType>(typeInt));
             if (addedID < 0) { error = "mixer_chain_add_node: could not add (bad chain index or node type)"; return false; }
             if (result) *result = json{{"nodeID", addedID}, {"chainIndex", chainIndex}};
+            return true;
+        }
+
+        if (actionName == "export_range") {
+            const double startBeat = params.at("startBeat").get<double>();
+            const double endBeat = params.at("endBeat").get<double>();
+            const bool ok = head->p->exportRange(startBeat, endBeat, params.at("path").get<std::string>());
+            if (!ok) { error = "export_range: could not start the export"; return false; }
+            if (result) *result = json{{"started", params.at("path")}};
+            return true;
+        }
+
+        if (actionName == "mixer_chain_move_node") {
+            auto* mixer = dynamic_cast<MixerNode*>(node);
+            if (!mixer) { error = "mixer_chain_move_node: node is not a Mixer node"; return false; }
+            const int chainIndex = params.at("chainIndex").get<int>();
+            const int chainNodeID = params.at("chainNodeID").get<int>();
+            const int newIndex = params.at("newIndex").get<int>();
+            if (!mixer->moveChainNode(chainIndex, chainNodeID, newIndex)) {
+                error = "mixer_chain_move_node: node not found in chain";
+                return false;
+            }
+            if (result) *result = json{{"moved", true}};
             return true;
         }
 

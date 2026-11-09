@@ -90,8 +90,8 @@ void AudioClip::draw(SDL_Renderer* renderer, float pixelsPerSecond, int h) {
 
         texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, 16384, h);
 
-        if (!texture) std::cout << SDL_GetError() << std::endl;       
- 
+        if (!texture) { std::cout << SDL_GetError() << std::endl; return; }
+
         auto target = SDL_GetRenderTarget(renderer);
         SDL_SetRenderTarget(renderer, texture);
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);

@@ -44,6 +44,9 @@ void Node::renderContent(SDL_Renderer* renderer) {
 }
 
 void Node::renderContentHelper(SDL_Renderer* renderer) {
+    // SDL_CreateTexture can fail (returns null); SetRenderTarget would then
+    // dereference a null framebuffer and crash the renderer.
+    if (!renderer || !texture) return;
     auto target = SDL_GetRenderTarget(renderer);
     SDL_SetRenderTarget(renderer, texture);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);

@@ -172,6 +172,12 @@ class Project : public Window {
         /** Move the playhead to an absolute beat, converting through the tempo curve. */
         void seekBeat(double beat);
 
+        /** Take over the audio processing loop and stream [startBeat, endBeat)
+            to a WAV. Runs on a worker thread so the GUI can draw progress. */
+        bool exportRange(double startBeat, double endBeat, const std::string& path);
+        std::atomic<bool> exportInProgress{false};
+        std::atomic<float> exportProgressValue{0.f};
+
         uint16_t id_reg = 0;
 
         void tick();
@@ -206,6 +212,7 @@ class Project : public Window {
         void redo() { um->redo(); }
 
     private:
+        std::thread exportThread;
 
 };
 

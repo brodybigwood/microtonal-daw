@@ -194,7 +194,6 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                 if (isShiftPressed && mouseX > leftMargin) {
                     intervalEdoDefineDialogOpen = false;
                     selectingInterval = true;
-                    intervalSelectStartedHarmonic = (tuningMode == TuningMode::Harmonic);
                     intervalStartNote = std::dynamic_pointer_cast<Note>(hoveredElement);
                     intervalStartLine = intervalStartNote ? intervalStartNote->num : getHoveredLine();
                     intervalEndLine = intervalStartLine;
@@ -204,19 +203,6 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     else
                         intervalDragStartVertexPairs.clear();
                     intervalDragMoved = false;
-                    if (tuningMode == TuningMode::Harmonic) {
-                        intervalDragHarmA =
-                            intervalStartNote ? structuralHarmonicNearNote(intervalStartNote) : hoveredHarmonicFromGrid();
-                        intervalDragHarmB = intervalDragHarmA;
-                        intervalDragEdoKA = INT_MAX;
-                        intervalDragEdoKB = INT_MAX;
-                    } else {
-                        intervalDragEdoKA =
-                            intervalStartNote ? structuralEdoKNearNote(intervalStartNote) : hoveredEdoKFromGrid();
-                        intervalDragEdoKB = intervalDragEdoKA;
-                        intervalDragHarmA = 0;
-                        intervalDragHarmB = 0;
-                    }
                     return;
                 }
                 if (isCtrlPressed && mouseX > leftMargin) {
@@ -248,7 +234,7 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                         }
                     } else {
                         selectingRubberBand = true;
-                        rubberBandStartX = snapXToBoundary(mouseX);
+                        rubberBandStartX = mouseX;
                         rubberBandStartY = mouseY;
                         rubberBandEndX = rubberBandStartX;
                         rubberBandEndY = mouseY;
@@ -554,13 +540,7 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                     if (movingNoteRhythmPreviewPairs) {
                         movingNote->rhythmVector = *movingNoteRhythmPreviewPairs;
                         const auto delta = subVec(*movingNoteRhythmPreviewPairs, rhythmDragStartPairs);
-                        auto newEndPairs = addVec(rhythmDragEndPairs, delta);
-                        const RhythmGridLine* endLine = closestRhythmOrTransportLine(
-                            rhythmLines, transportLineCache, Note::beatsFromVector(newEndPairs));
-                        if (endLine)
-                            movingNote->rhythmEndVector = endLine->integerPairs;
-                        else
-                            movingNote->rhythmEndVector = std::move(newEndPairs);
+                        movingNote->rhythmEndVector = addVec(rhythmDragEndPairs, delta);
                         movingNoteRhythmPreviewPairs.reset();
                     }
                     json after = movingNote->toJSON();
@@ -903,28 +883,13 @@ void PianoRoll::handleCustomInput(SDL_Event& e) {
                     if (std::fabs(intervalEndLine - intervalStartLine) > 0.01f)
                         intervalDragMoved = true;
                 }
-                if (intervalSelectStartedHarmonic) {
-                    if (endNote)
-                        intervalDragHarmB = structuralHarmonicNearNote(endNote);
-                    else if (hoveredPitchLineIndex != SIZE_MAX && hoveredPitchLineIndex < lineStructural.size())
-                        intervalDragHarmB = std::max(1, lineStructural[hoveredPitchLineIndex]);
-                    else
-                        intervalDragHarmB = hoveredHarmonicFromGrid();
-                } else {
-                    if (endNote)
-                        intervalDragEdoKB = structuralEdoKNearNote(endNote);
-                    else if (hoveredPitchLineIndex != SIZE_MAX && hoveredPitchLineIndex < lineStructural.size())
-                        intervalDragEdoKB = lineStructural[hoveredPitchLineIndex];
-                    else
-                        intervalDragEdoKB = hoveredEdoKFromGrid();
-                }
                 refreshGrid = true;
                 break;
             }
 
             // Rubber band drag
             if (selectingRubberBand && lmb) {
-                rubberBandEndX = snapXToBoundary(mouseX);
+                rubberBandEndX = mouseX;
                 rubberBandEndY = mouseY;
                 refreshGrid = true;
                 break;

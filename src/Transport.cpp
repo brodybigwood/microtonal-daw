@@ -18,11 +18,13 @@ constexpr float kBeatLineW = 2.f;
 
 static float snappedBeat(GridView* view, float mouseX) {
     float rawBeat = (mouseX + view->scrollX - view->leftMargin) / view->dW;
-    rawBeat = view->adjustTransportSeekSec(rawBeat);
-    // Snap to whichever line is nearest: the transport's own strip or the grid rhythm.
+    // Snap in the view's own (content-local) timeline FIRST: the cached rhythm/transport
+    // lines are local, so snapping after the region-position shift below gives a line
+    // outside the cache (the visible line set tightens as you zoom in) and seeks by an
+    // offset. Then map the local beat to an absolute one.
     const RhythmGridLine* line = closestRhythmOrTransportLine(view->rhythmLines, view->transportLineCache, rawBeat);
-    if (line) return line->seconds;
-    return rawBeat;
+    if (line) rawBeat = line->seconds;
+    return view->adjustTransportSeekSec(rawBeat);
 }
 
 static json tempoPointsToJson(const std::vector<CurvePoint>& pts) {

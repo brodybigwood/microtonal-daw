@@ -2,6 +2,7 @@
 #include <RtAudio.h>
 #endif
 #include <SDL3/SDL.h>
+#include <atomic>
 #include <thread>
 #include <vector>
 #include <string>
@@ -22,6 +23,10 @@ class AudioManager {
         unsigned int outputChannels;
 
         double streamTimeSeconds;
+
+        /** An export owns the processing loop: while set, the audio callback
+            pushes silence and does no DSP work. */
+        std::atomic<bool> suspended{false};
 
         bool start();
         bool stop();

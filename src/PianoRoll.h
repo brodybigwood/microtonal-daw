@@ -1,5 +1,4 @@
 
-#include <climits>
 #include <SDL_ttf.h>
 #include <utility>
 #include <vector>
@@ -160,12 +159,6 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         float intervalEndLine = 0.0f;
         std::shared_ptr<Note> intervalStartNote = nullptr;
         bool intervalDragMoved = false;
-        // True iff shift-interval drag began in harmonic mode (structural endpoints are harmonics).
-        bool intervalSelectStartedHarmonic = false;
-        int intervalDragHarmA = 0;
-        int intervalDragHarmB = 0;
-        int intervalDragEdoKA = INT_MAX;
-        int intervalDragEdoKB = INT_MAX;
         /** Rational snapshot at mousedown / while hovering end note; avoids pitchVectorAtGridMidi(note->num). */
         std::vector<std::pair<int, int>> intervalDragStartVertexPairs;
         std::vector<std::pair<int, int>> intervalDragEndVertexPairs;
@@ -200,10 +193,6 @@ class PianoRoll : public GridView, public EmbeddedWindow {
         size_t closestLineIndexForMidi(float midiPitch) const;
         std::vector<std::pair<int, int>> pitchVectorAtGridMidi(float midiPitch) const;
         void refreshHoveredPitchLineIndex();
-        int hoveredHarmonicFromGrid();
-        int hoveredEdoKFromGrid();
-        int structuralHarmonicNearNote(const std::shared_ptr<Note>& n);
-        int structuralEdoKNearNote(const std::shared_ptr<Note>& n);
 
 
         void syncTuningToRegion();

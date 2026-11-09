@@ -75,6 +75,10 @@ public:
 
     Knob bypass = Knob(0.0f, 20.0f, NODE_H * 0.3f, 10.0f, "assets/knobs/1.png",
                        -135.0f, 135.0f, "Bypass", SDL_Color{220, 220, 220, 255});
+    /** MPE Rack instance count (1..32, default 4). Shrinking removes the extra
+        instances; growing creates them and copies the master's state in. */
+    Knob mpeInstances = Knob(4.0f, 20.0f, NODE_H * 0.55f, 10.0f, "assets/knobs/1.png",
+                             -135.0f, 135.0f, "Instances", SDL_Color{220, 220, 220, 255});
 
 private:
     void rebuildConnections();
@@ -84,8 +88,12 @@ private:
     void applyPendingVstState();
     /** Record the post-load state as the undo baseline (GUI copy, editor closed). */
     void captureStateBaseline();
-    /** Create the 15 shadow instances of an MPE rack from the master's class. */
+    /** Create the shadow instances of an MPE rack from the master's class. */
     void createRackShadows();
+    /** Instance count selected by the Instances knob (1..32). */
+    int rackTargetInstances() const;
+    /** Grow/shrink the shadow list to match the knob and sync state into new ones. */
+    void applyRackInstanceCount();
 
     // Audio bus connections — one per bus, each with numChannels = bus channel count
     std::vector<Connection*> audioInConns;

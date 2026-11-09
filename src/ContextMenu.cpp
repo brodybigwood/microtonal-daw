@@ -163,6 +163,108 @@ return [enter, onDismiss, initialText](SDL_Event& e) {
 };
 }
 
+std::function<bool(SDL_Event& e)> getTextInputTickerButton(std::function<void(std::string text)> enter,
+                                                           std::function<void(std::string text)> onButton,
+                                                           std::function<void()> onDismiss,
+                                                           const std::string& buttonLabel,
+                                                           const std::string& initialText)
+{
+    return [enter, onButton, onDismiss, buttonLabel, initialText](SDL_Event& e) {
+        auto ctxMenu = ContextMenu::get();
+        auto& renderer = ctxMenu->renderer;
+        auto& x = ctxMenu->locX;
+        auto& y = ctxMenu->locY;
+
+        SDL_FRect rect{x, y, 180.f, 30.f};
+        SDL_FRect buttonRect{x + 185.f, y, 80.f, 30.f};
+
+        bool done = false;
+        static std::string text = "";
+        static bool inited = false;
+        if (!inited) {
+            text = initialText;
+            inited = true;
+        }
+        static SDL_Surface* surf = nullptr;
+        static SDL_Texture* tex = nullptr;
+        static SDL_Texture* btnTex = nullptr;
+        SDL_Color textColor{0, 0, 0, 255};
+
+        std::string new_text = text;
+
+        const bool click = e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT;
+        if (click) {
+            if (MouseOn(&buttonRect)) {
+                if (onButton) onButton(text);
+                done = true;
+            } else if (!MouseOn(&rect)) {
+                done = true;
+            }
+        }
+
+        if (e.type == SDL_EVENT_TEXT_INPUT) new_text += e.text.text;
+
+        if (e.type == SDL_EVENT_KEY_DOWN) {
+            if (e.key.key == SDLK_BACKSPACE && !text.empty()) new_text.pop_back();
+            if (e.key.key == SDLK_ESCAPE) done = true;
+        }
+
+        if ((e.type == SDL_EVENT_TEXT_INPUT && e.text.text[0] == '\n') ||
+            (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_RETURN)) {
+            enter(text);
+            text = "";
+            done = true;
+        }
+
+        if (!done) {
+            if (!surf || text != new_text) surf = TTF_RenderText_Blended(fonts.mainFont, new_text.c_str(), 0, textColor);
+            if (!tex || text != new_text) tex = SDL_CreateTextureFromSurface(renderer, surf);
+            if (!btnTex) {
+                SDL_Surface* bs = TTF_RenderText_Blended(fonts.mainFont, buttonLabel.c_str(), 0, textColor);
+                if (bs) {
+                    btnTex = SDL_CreateTextureFromSurface(renderer, bs);
+                    SDL_DestroySurface(bs);
+                }
+            }
+            text = new_text;
+        }
+
+        if (done) {
+            if (surf) SDL_DestroySurface(surf);
+            if (tex) SDL_DestroyTexture(tex);
+            if (btnTex) SDL_DestroyTexture(btnTex);
+            surf = nullptr;
+            tex = nullptr;
+            btnTex = nullptr;
+            inited = false;
+            if (onDismiss) onDismiss();
+        } else {
+            SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
+            SDL_RenderFillRect(renderer, &rect);
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+            SDL_RenderRect(renderer, &rect);
+            if (surf && tex) {
+                SDL_FRect dst{x + 10, y + 10, (float)surf->w, (float)surf->h};
+                SDL_RenderTexture(renderer, tex, nullptr, &dst);
+            }
+
+            SDL_SetRenderDrawColor(renderer, 90, 160, 90, 255);
+            SDL_RenderFillRect(renderer, &buttonRect);
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+            SDL_RenderRect(renderer, &buttonRect);
+            if (btnTex) {
+                float bw = 0.f, bh = 0.f;
+                SDL_GetTextureSize(btnTex, &bw, &bh);
+                SDL_FRect dst{buttonRect.x + (buttonRect.w - bw) * 0.5f,
+                              buttonRect.y + (buttonRect.h - bh) * 0.5f, bw, bh};
+                SDL_RenderTexture(renderer, btnTex, nullptr, &dst);
+            }
+        }
+
+        return !done;
+    };
+}
+
 /** Recursively check if the mouse is on any visible part of the tree rooted at (x, y). */
 static bool mouseOnTree(std::shared_ptr<TreeEntry> t, float x, float y) {
     float padding = 5.0f;

@@ -242,6 +242,25 @@ Node* MixerNode::insertChainNodeFromSnapshot(int chainID, const json& nodeSnapsh
     return n;
 }
 
+bool MixerNode::moveChainNode(int chainID, int nodeID, int newIndex) {
+    Chain* c = chainByID(chainID);
+    if (!c) return false;
+    int from = -1;
+    for (size_t i = 0; i < c->nodes.size(); ++i)
+        if (c->nodes[i] && static_cast<int>(c->nodes[i]->id) == nodeID) {
+            from = static_cast<int>(i);
+            break;
+        }
+    if (from < 0) return false;
+    Node* n = c->nodes[static_cast<size_t>(from)];
+    c->nodes.erase(c->nodes.begin() + from);
+    const int to = std::clamp(newIndex, 0, static_cast<int>(c->nodes.size()));
+    c->nodes.insert(c->nodes.begin() + to, n);
+    c->appliedInCh = -1;
+    if (nm) nm->markTopologyDirty();
+    return true;
+}
+
 bool MixerNode::removeChainNodeByID(int chainID, int nodeID) {
     Chain* c = chainByID(chainID);
     if (!c) return false;

@@ -69,6 +69,18 @@ bool WindowHandler::tick() {
         }
     }
 
+    // An export owns the app exactly like the loading screen: input is not
+    // dispatched to the graph, only the frame (with its progress badge) runs.
+    if (project && project->exportInProgress.load()) {
+        SDL_Event e;
+        while (SDL_PollEvent(&e)) {
+            if (e.type == SDL_EVENT_QUIT) { running = false; return false; }
+        }
+        project->render();
+        project->renderPresent();
+        return true;
+    }
+
     double timeSinceLastFrame = double(SDL_GetTicks())-double(lastTime);
     if(timeSinceLastFrame >= frameTime) {
         {

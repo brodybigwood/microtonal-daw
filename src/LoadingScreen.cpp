@@ -276,4 +276,30 @@ void render(SDL_Renderer* r, int w, int h, double seconds, float progress,
              SDL_Color{220, 245, 255, 220}, W * 0.5f, panel.y + ph * 0.80f, true);
 }
 
+void renderExportBadge(SDL_Renderer* r, float x, float y, float w, float h,
+                       float progress) {
+    const SDL_FRect panel{x, y, w, h};
+    glossPanel(r, panel, 10.f, {16, 42, 64, 200}, {150, 210, 235, 150}, {220, 245, 255, 40});
+
+    drawText(r, "Exporting", static_cast<int>(std::max(11.f, h * 0.20f)),
+             SDL_Color{235, 248, 255, 255}, x + w * 0.5f, y + h * 0.14f, true);
+
+    const float bh = std::max(6.f, h * 0.14f);
+    const SDL_FRect track{x + w * 0.08f, y + h * 0.50f, w * 0.84f, bh};
+    glossPanel(r, track, bh * 0.5f, {8, 26, 40, 220}, {120, 180, 210, 120}, {255, 255, 255, 12});
+
+    const float p = std::clamp(progress, 0.f, 1.f);
+    if (p > 0.001f) {
+        const SDL_FRect fill{track.x + 2.f, track.y + 2.f,
+                             (track.w - 4.f) * p, track.h - 4.f};
+        glossPanel(r, fill, std::max(2.f, fill.h * 0.5f),
+                   {90, 200, 235, 235}, {200, 245, 255, 200}, {255, 255, 255, 70});
+    }
+
+    char pct[16];
+    std::snprintf(pct, sizeof(pct), "%d%%", static_cast<int>(p * 100.f + 0.5f));
+    drawText(r, pct, static_cast<int>(std::max(10.f, h * 0.16f)),
+             SDL_Color{220, 245, 255, 220}, x + w * 0.5f, y + h * 0.70f, true);
+}
+
 } // namespace loading

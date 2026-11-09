@@ -276,65 +276,6 @@ void PianoRoll::refreshHoveredPitchLineIndex() {
     hoveredPitchLineIndex = best;
 }
 
-int PianoRoll::hoveredHarmonicFromGrid() {
-    if (tuningMode != TuningMode::Harmonic || lineLabels.empty() || pitchLines.empty())
-        return 0;
-    size_t best = 0;
-    float bd = FLT_MAX;
-    for (size_t i = 0; i < pitchLines.size(); ++i) {
-        const float d = std::fabs(mouseY - getY(pitchLines[i].midi));
-        if (d < bd) {
-            bd = d;
-            best = i;
-        }
-    }
-    try {
-        return std::max(1, std::stoi(lineLabels.at(best)));
-    } catch (...) {
-        return 0;
-    }
-}
-
-int PianoRoll::hoveredEdoKFromGrid() {
-    if (tuningMode != TuningMode::EDO || lineStructural.empty() || pitchLines.empty())
-        return INT_MAX;
-    size_t best = 0;
-    float bd = FLT_MAX;
-    for (size_t i = 0; i < pitchLines.size(); ++i) {
-        const float d = std::fabs(mouseY - getY(pitchLines[i].midi));
-        if (d < bd) {
-            bd = d;
-            best = i;
-        }
-    }
-    return lineStructural[best];
-}
-
-int PianoRoll::structuralHarmonicNearNote(const std::shared_ptr<Note>& n) {
-    if (!n)
-        return hoveredHarmonicFromGrid();
-    if (n->tuningAnchorHarmonic > 0) {
-        for (size_t i = 0; i < lineStructural.size(); ++i) {
-            if (lineStructural[i] == n->tuningAnchorHarmonic)
-                return std::max(1, n->tuningAnchorHarmonic);
-        }
-    }
-    if (hoveredPitchLineIndex != SIZE_MAX && hoveredPitchLineIndex < lineStructural.size())
-        return std::max(1, lineStructural[hoveredPitchLineIndex]);
-    return hoveredHarmonicFromGrid();
-}
-
-int PianoRoll::structuralEdoKNearNote(const std::shared_ptr<Note>& n) {
-    if (!n)
-        return hoveredEdoKFromGrid();
-    const size_t li = closestLineIndexForMidi(n->num);
-    if (li != SIZE_MAX && li < lineStructural.size())
-        return lineStructural[li];
-    if (hoveredPitchLineIndex != SIZE_MAX && hoveredPitchLineIndex < lineStructural.size())
-        return lineStructural[hoveredPitchLineIndex];
-    return hoveredEdoKFromGrid();
-}
-
 void PianoRoll::notifyTuningUndoApplied(Project* p, const std::vector<int>& managerPath, int arrangerNodeId, int regionId,
                                         int noteIdToStamp) {
     ArrangerNode* arr = undoResolveArrangerNode(p, managerPath, arrangerNodeId);

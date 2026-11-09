@@ -1,6 +1,8 @@
 #include "SongRoll.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <filesystem>
 #include <numeric>
 #include <sstream>
 #include <iomanip>
@@ -1569,13 +1571,32 @@ void SongRoll::clickMouse(SDL_Event& e) {
                         if (project && project->window)
                             SDL_StartTextInput(project->window);
                         ctxMenu->activate();
-                        ctxMenu->dynamicTick = getTextInputTicker(
+                        ctxMenu->dynamicTick = getTextInputTickerButton(
                             [this, aPairs, bPairs](std::string text) {
                                 try {
                                     subdivideBetweenRhythmLines(aPairs, bPairs, std::max(1, std::stoi(text)));
                                 } catch (...) {}
                             },
-                            []() {});
+                            [this, aPairs, bPairs](std::string) {
+                                if (!project) return;
+                                const double startBeat = Note::beatsFromVector(aPairs);
+                                const double endBeat = Note::beatsFromVector(bPairs);
+                                if (endBeat <= startBeat) return;
+                                std::filesystem::path dir = project->projectFolder();
+                                if (dir.empty()) dir = std::filesystem::current_path();
+                                dir /= "exports";
+                                std::error_code ec;
+                                std::filesystem::create_directories(dir, ec);
+                                char name[128];
+                                std::snprintf(name, sizeof(name), "song_%ld_%ld.wav",
+                                              std::lround(startBeat), std::lround(endBeat));
+                                const std::string outPath = (dir / name).string();
+                                const bool ok = project->exportRange(startBeat, endBeat, outPath);
+                                SDL_Log("[export] %s -> %s", ok ? "wrote" : "failed", outPath.c_str());
+                            },
+                            []() {},
+                            "Export",
+                            "");
                     }
                     refreshGrid = true;
                 }

@@ -316,6 +316,7 @@ void Project::handleWindowInput(SDL_Event& e) {
 Project::~Project() {
     waitForSave();
     waitForLoadThread();
+    if (exportThread.joinable()) exportThread.join();
     delete um;
     delete processor;
 }
@@ -613,6 +614,14 @@ void Project::save(uint32_t triggerWindowID, SDL_Renderer* triggerRenderer) {
                             if (fileIt != o.end() && fileIt->is_string()) {
                                 std::filesystem::path p(fileIt->get<std::string>());
                                 if (p.is_relative()) p = folder / p;
+                                // Already archived inside this save's folder: keep the
+                                // reference and skip the copy. Re-copying every snapshot
+                                // on every save duplicated the whole undo tree's state.
+                                std::error_code cec;
+                                auto canonP = std::filesystem::weakly_canonical(p, cec);
+                                auto canonBase = std::filesystem::weakly_canonical(base, cec);
+                                if (!cec && canonP.string().rfind(canonBase.string(), 0) == 0)
+                                    continue;
                                 std::ifstream in(p, std::ios::binary);
                                 if (in.is_open()) {
                                     bytes.assign(std::istreambuf_iterator<char>(in),
@@ -856,6 +865,81 @@ void Project::seekBeat(double beat) {
     playHeadStart = sec;
     playHeadBeat = beat;
     syncTransportToAudio(isPlaying, beat, sec);
+}
+
+bool Project::exportRange(double startBeat, double endBeat, const std::string& path) {
+    AudioManager* am = AudioManager::instance();
+    if (!am || !processor || endBeat <= startBeat) return false;
+    if (exportInProgress.exchange(true)) return false; // already exporting
+    if (exportThread.joinable()) exportThread.join();
+    exportProgressValue.store(0.f);
+
+    exportThread = std::thread([this, am, startBeat, endBeat, path]() {
+    // The audio thread stops looping; this worker calls the audio callback
+    // itself instead, streaming each block to the file.
+    am->stop();
+    seekBeat(startBeat);
+    if (!isPlaying) togglePlaying();
+
+    // Same block size the graph was set up for: VST buffers are sized from the
+    // device buffer, so a larger manual block overruns them (garbage output).
+    const unsigned int bs = am->bufferSize > 0 ? am->bufferSize : 256;
+    const int outCh = static_cast<int>(am->outputChannels);
+    const int wavCh = 2;
+    std::vector<float> out(static_cast<size_t>(bs) * static_cast<size_t>(outCh), 0.f);
+    std::vector<float> inter(static_cast<size_t>(bs) * wavCh, 0.f);
+    std::vector<float> pcm; // interleaved; normalized to -1 dBFS before writing
+
+    const double span = endBeat - startBeat;
+    double lastBeat = dspBeatPosition;
+    bool stalled = false;
+    sf_count_t blocksWritten = 0;
+    while (dspBeatPosition < endBeat - 1e-9) {
+        std::fill(out.begin(), out.end(), 0.f);
+        AudioManager::callback(out.data(), nullptr, bs, 0.0, 0, am);
+        for (unsigned int i = 0; i < bs; ++i) {
+            inter[static_cast<size_t>(i) * 2] = out[static_cast<size_t>(i)];
+            inter[static_cast<size_t>(i) * 2 + 1] = out[static_cast<size_t>(bs) + i];
+        }
+        pcm.insert(pcm.end(), inter.begin(), inter.end());
+        ++blocksWritten;
+        exportProgressValue.store(static_cast<float>(
+            std::clamp((dspBeatPosition - startBeat) / span, 0.0, 1.0)));
+        if (dspBeatPosition <= lastBeat) { stalled = true; break; }
+        lastBeat = dspBeatPosition;
+    }
+
+    stop();
+    am->start();
+
+    // Auto-normalize: peak to -1 dBFS.
+    float peak = 0.f;
+    for (float v : pcm) peak = std::max(peak, std::fabs(v));
+    if (peak > 0.f) {
+        const float gain = 0.8912509f / peak;
+        for (float& v : pcm) v *= gain;
+    }
+
+    SF_INFO info{};
+    info.samplerate = static_cast<int>(am->sampleRate);
+    info.channels = wavCh;
+    info.format = SF_FORMAT_WAV | SF_FORMAT_FLOAT;
+    SNDFILE* sf = sf_open(path.c_str(), SFM_WRITE, &info);
+    if (sf) {
+        sf_writef_float(sf, pcm.data(), static_cast<sf_count_t>(pcm.size() / wavCh));
+        sf_close(sf);
+    }
+
+    if (!sf) {
+        std::cerr << "[export] failed to open " << path << std::endl;
+    } else if (stalled) {
+        std::cerr << "[export] transport did not advance (beat " << dspBeatPosition
+                  << "); aborted after " << blocksWritten << " block(s): " << path << std::endl;
+    }
+    exportProgressValue.store(1.f);
+    exportInProgress.store(false);
+    });
+    return true;
 }
 
 void Project::createNote(int nodeID, std::vector<std::pair<int,int>> startPairs, std::vector<std::pair<int,int>> endPairs, int regionID, std::vector<int> managerPath,

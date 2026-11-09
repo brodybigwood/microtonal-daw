@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -51,6 +52,12 @@ VstNode::VstNode(uint16_t id, NodeManager* nm, bool mpeRack)
 
     name = mpeRack ? "MPE Rack" : "VST Plugin";
     params.push_back(&bypass);
+    if (mpeRack_) {
+        mpeInstances.setValueRange(1.0f, 32.0f, 1.0f);
+        mpeInstances.value = 4.0f;
+        mpeInstances.defaultValue = 4.0f;
+        params.push_back(&mpeInstances);
+    }
 
     // Create default stereo I/O — will be rebuilt when a plugin is loaded.
     rebuildConnections();
@@ -65,6 +72,7 @@ void VstNode::markRackDirty() {
 void VstNode::tickAllRacks() {
     for (auto* n : g_rackNodes) {
         if (!n || !n->ne) continue; // GUI copy only
+        n->applyRackInstanceCount();
         if (!n->rackDirty_ || n->restoringState || !n->plugin || !n->plugin->isValid()) continue;
         auto* frame = n->plugin->getHostFrame();
         if (frame && frame->activeGestureCount > 0) continue;
@@ -97,7 +105,8 @@ void VstNode::createRackShadows() {
     rackShadows_.clear();
     if (!mpeRack_ || !plugin || !plugin->isValid()) return;
     const std::vector<int> path = nm ? nm->managerPath : std::vector<int>{};
-    for (int i = 1; i <= 15; ++i) {
+    const int want = rackTargetInstances();
+    for (int i = 1; i < want; ++i) {
         auto sp = VstPluginCache::instance().getOrCreatePlugin(
             static_cast<int>(id), path, loadedPath, classIndex_, i);
         if (sp && sp->isValid()) rackShadows_.push_back(sp);
@@ -107,6 +116,41 @@ void VstNode::createRackShadows() {
                   << " shadow instances of " << loadedPath << std::endl;
     }
     markRackDirty();
+}
+
+int VstNode::rackTargetInstances() const {
+    const int want = static_cast<int>(std::lround(mpeInstances.value));
+    return std::clamp(want, 1, 32);
+}
+
+void VstNode::applyRackInstanceCount() {
+    if (!mpeRack_ || !plugin || !plugin->isValid()) return;
+    const int wantShadows = rackTargetInstances() - 1;
+    const int have = static_cast<int>(rackShadows_.size());
+    if (wantShadows == have) return;
+
+    if (wantShadows < have) {
+        // Drop notes that were allocated to the removed instances.
+        for (auto it = noteChannels.begin(); it != noteChannels.end();) {
+            if (it->second > wantShadows) it = noteChannels.erase(it);
+            else ++it;
+        }
+        rackShadows_.resize(static_cast<size_t>(wantShadows));
+    } else {
+        const std::vector<int> path = nm ? nm->managerPath : std::vector<int>{};
+        for (int i = have + 1; i <= wantShadows; ++i) {
+            auto sp = VstPluginCache::instance().getOrCreatePlugin(
+                static_cast<int>(id), path, loadedPath, classIndex_, i);
+            if (sp && sp->isValid()) rackShadows_.push_back(sp);
+        }
+    }
+
+    // New instances start from the master's current state. The GUI copy holds
+    // the authoritative master state; the audio copy only marks the rack dirty
+    // so the GUI pushes the state into the shared shadow instances.
+    if (ne) syncRackState();
+    else markRackDirty();
+    if (nm) nm->markTopologyDirty();
 }
 
 VstNode::~VstNode() {
@@ -294,6 +338,11 @@ void VstNode::captureStateBaseline() {
 // ============================================================================
 
 void VstNode::process() {
+    // The Instances knob is a plain node parameter; pick up changes here so the
+    // audio copy grows/shrinks its shadow list with the same value the GUI copy
+    // saw. No-op unless the rounded count actually changed.
+    if (mpeRack_) applyRackInstanceCount();
+
     bool hasOut = false;
     for (auto* c : audioOutConns) {
         if (c && c->buffer) { hasOut = true; break; }

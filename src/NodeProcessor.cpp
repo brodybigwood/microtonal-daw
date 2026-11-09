@@ -2,6 +2,7 @@
 #include "NodeManager.h"
 #include "NodeEditor.h"
 #include "WindowManager.h"
+#include "LoadingScreen.h"
 #ifndef __EMSCRIPTEN__
 #include "nodes/vst/vstplugin.h"
 #include "nodes/vst/vstnode.h"
@@ -182,6 +183,17 @@ void NodeProcessor::rebindHostGlContext() {
 }
 
 void NodeProcessor::renderPresent() {
+    // Live export progress, same glass theme as the loading screen, bottom-right.
+    if (project && hostRenderer && project->exportInProgress.load()) {
+        int ww = 0, hh = 0;
+        if (hostGlWindow) SDL_GetWindowSize(hostGlWindow, &ww, &hh);
+        if (ww > 0 && hh > 0) {
+            const float bw = 280.f, bh = 64.f;
+            loading::renderExportBadge(hostRenderer, static_cast<float>(ww) - bw - 20.f,
+                                       static_cast<float>(hh) - bh - 20.f, bw, bh,
+                                       project->exportProgressValue.load());
+        }
+    }
     if (editor) editor->renderPresent(hostRenderer);
 }
 

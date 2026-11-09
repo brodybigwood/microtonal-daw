@@ -106,7 +106,10 @@ public:
     void removeSample(size_t index);
     void reorderSamples(const std::vector<size_t>& newOrder);
     void setSampleFile(size_t index, const std::string& filepath);
-    void rebuildConnections();
+    /// Keep the per-sample ports in sync with `samples` without destroying the
+    /// ports (and cables) of samples that still exist. Only a sample the user
+    /// actually removed loses its ports, and with them its own cables.
+    void syncSamplePorts();
 
     std::vector<std::unique_ptr<SampleSlab>> samples;
     static constexpr int kMaxVoices = 64;

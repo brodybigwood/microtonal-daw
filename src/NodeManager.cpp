@@ -522,14 +522,19 @@ void NodeManager::makeNodeConnectionNow(uint16_t srcNodeID, uint16_t srcConID, u
                   << " srcNode=" << srcNodeID << " dstNode=" << dstNodeID << std::endl;
         return;
     }
-    if (srcCon->type != dstCon->type || srcCon->is_connected || dstCon->is_connected) {
-        std::cout << "[WARN] makeNodeConnectionNow skip state mismatch srcNode=" << srcNodeID
+    if (srcCon->type != dstCon->type) {
+        std::cout << "[WARN] makeNodeConnectionNow skip type mismatch srcNode=" << srcNodeID
                   << " srcCon=" << srcConID << " dstNode=" << dstNodeID << " dstCon=" << dstConID
-                  << " srcType=" << srcCon->type << " dstType=" << dstCon->type
-                  << " srcConnected=" << srcCon->is_connected << " dstConnected=" << dstCon->is_connected
-                  << std::endl;
+                  << " srcType=" << srcCon->type << " dstType=" << dstCon->type << std::endl;
         return;
     }
+    // A port may already be bound (reassignment, or a cable left half-severed by
+    // a port rebuild). Binding must still succeed: drop whatever is on each side
+    // first instead of silently skipping and leaving the graph inconsistent.
+    if (srcCon->is_connected)
+        severConnectionNow(srcNodeID, srcConID, srcCon->output_node, srcCon->output_connection);
+    if (dstCon->is_connected)
+        severConnectionNow(dstCon->input_node, dstCon->input_connection, dstNodeID, dstConID);
 
     dstCon->buffer = srcCon->buffer;
     dstCon->events = srcCon->events;
@@ -558,21 +563,29 @@ void NodeManager::severConnectionNow(uint16_t srcNodeID, uint16_t srcConID, uint
     auto srcCon = srcNode->outputs.getConnection(srcConID);
     auto dstCon = dstNode->inputs.getConnection(dstConID);
     if (!srcCon || !dstCon) return;
-    if (!srcCon->is_connected || !dstCon->is_connected) return;
 
-    dstCon->input_node = -1;
-    dstCon->input_connection = -1;
-    srcCon->output_node = -1;
-    srcCon->output_connection = -1;
-    // On an input connection, output_node/output_connection identify the port
-    // itself (its owning node and its own id), not a peer — addConnection sets
-    // them once and serialize() reads them to write the cable's destination.
-    // Clearing them here would make any reconnected cable serialize as dst
-    // (-1,-1) and vanish on save/load.
-    srcCon->is_connected = false;
-    dstCon->is_connected = false;
-    dstCon->buffer = nullptr;
-    dstCon->events = nullptr;
+    // Clear only the side(s) that actually point at this cable. Bailing out
+    // when one side reports disconnected leaves the other side stranded
+    // forever — no later make or sever can repair that state.
+    if (srcCon->is_connected &&
+        srcCon->output_node == dstNodeID && srcCon->output_connection == dstConID) {
+        srcCon->output_node = -1;
+        srcCon->output_connection = -1;
+        srcCon->is_connected = false;
+    }
+    if (dstCon->is_connected &&
+        dstCon->input_node == srcNodeID && dstCon->input_connection == srcConID) {
+        dstCon->input_node = -1;
+        dstCon->input_connection = -1;
+        // On an input connection, output_node/output_connection identify the port
+        // itself (its owning node and its own id), not a peer — addConnection sets
+        // them once and serialize() reads them to write the cable's destination.
+        // Clearing them here would make any reconnected cable serialize as dst
+        // (-1,-1) and vanish on save/load.
+        dstCon->is_connected = false;
+        dstCon->buffer = nullptr;
+        dstCon->events = nullptr;
+    }
     topologyDirty = true;
 }
 

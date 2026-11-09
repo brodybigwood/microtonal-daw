@@ -37,4 +37,12 @@ std::function<bool(SDL_Event& e)> getTextInputTicker(std::function<void(std::str
                                                     std::function<void()> onDismiss = {},
                                                     const std::string& initialText = "");
 
+/** Same text box with a clickable button to its right; the button receives the
+    current text and dismisses the prompt. */
+std::function<bool(SDL_Event& e)> getTextInputTickerButton(std::function<void(std::string text)> enter,
+                                                          std::function<void(std::string text)> onButton,
+                                                          std::function<void()> onDismiss,
+                                                          const std::string& buttonLabel,
+                                                          const std::string& initialText = "");
+
 std::function<bool(SDL_Event& e)> getTreeMenuTicker(std::shared_ptr<TreeEntry> t);

@@ -104,10 +104,13 @@ SamplerNode::~SamplerNode() {
 
 void SamplerNode::setup() {}
 
-void SamplerNode::rebuildConnections() {
-    // Preserve existing connection wiring keyed by sample ID (not position).
-    struct ConnWire { uint16_t srcNode, srcCon, dstNode, dstCon; bool connected = false; };
-    std::unordered_map<int, ConnWire> inWiresById, outWiresById;
+void SamplerNode::syncSamplePorts() {
+    // Ports are persistent. Adding, removing or reordering a sample must never
+    // tear down the ports of slots that still exist: deleting a port severs its
+    // cable, and recreating ports reuses their ids, which strands the far end of
+    // every cable. Only the slot the user actually removed loses its ports (and
+    // with them its own cables); nothing else is touched, so there is nothing to
+    // restore afterwards.
 
     // Helper: parse "S<id> Evt" or "S<id> Out" → <id>, or -1 on failure.
     auto parseSampleId = [](const std::string& label) -> int {
@@ -118,107 +121,94 @@ void SamplerNode::rebuildConnections() {
         return std::stoi(label.substr(1, pos - 1));
     };
 
-    for (size_t i = 1; i < inputs.connections.size(); ++i) {
+    auto sampleExists = [&](int sid) {
+        for (auto& s : samples)
+            if (s->id == sid) return true;
+        return false;
+    };
+
+    // Index the existing ports by sample id; keep non-sample ports untouched.
+    std::unordered_map<int, Connection*> evtById, outById;
+    std::vector<Connection*> otherInputs, otherOutputs;
+    for (size_t i = 0; i < inputs.connections.size(); ++i) {
         auto* c = inputs.connections[i];
         if (c == masterEventIn) continue;
-        int sid = parseSampleId(c->label);
-        if (sid < 0) continue;
-        ConnWire w{};
-        if (c->is_connected) {
-            w.connected = true;
-            w.srcNode = c->input_node;
-            w.srcCon = c->input_connection;
-            w.dstNode = c->output_node;
-            w.dstCon = c->output_connection;
+        if (c->type == DataType::Events) {
+            int sid = parseSampleId(c->label);
+            if (sid >= 0) { evtById[sid] = c; continue; }
         }
-        inWiresById[sid] = w;
+        otherInputs.push_back(c);
     }
     for (auto* c : outputs.connections) {
         int sid = parseSampleId(c->label);
-        if (sid < 0) continue;
-        ConnWire w{};
-        if (c->is_connected) {
-            w.connected = true;
-            w.srcNode = c->input_node;
-            w.srcCon = c->input_connection;
-            w.dstNode = c->output_node;
-            w.dstCon = c->output_connection;
-        }
-        outWiresById[sid] = w;
+        if (sid >= 0) outById[sid] = c;
+        else otherOutputs.push_back(c);
     }
 
-    // Remove per-sample inputs, keeping master and mapped-param connections.
-    {
-        std::vector<Connection*> keep;
-        keep.push_back(masterEventIn);
-        for (size_t i = 1; i < inputs.connections.size(); ++i) {
-            auto* c = inputs.connections[i];
-            if (c == masterEventIn) continue;
-            if (c->type == DataType::Events) {
-                // Per-sample event input — sever wiring and delete.
-                if (c->is_connected)
-                    nm->severConnectionNow(c->input_node, c->input_connection, id, c->id);
-                inputs.id_pool.releaseID(c->id);
-                inputs.ids.erase(c->id);
-                delete c;
-            } else {
-                keep.push_back(c); // mapped connection or other — preserve
-            }
-        }
-        inputs.connections = std::move(keep);
+    // Delete only the ports of samples that no longer exist.
+    std::vector<std::pair<int, Connection*>> deadInputs, deadOutputs;
+    for (auto& [sid, c] : evtById)
+        if (!sampleExists(sid)) deadInputs.push_back({sid, c});
+    for (auto& [sid, c] : outById)
+        if (!sampleExists(sid)) deadOutputs.push_back({sid, c});
+    for (auto& [sid, c] : deadInputs) {
+        evtById.erase(sid);
+        nm->severConnectionNow(c->input_node, c->input_connection, id, c->id);
+        inputs.id_pool.releaseID(c->id);
+        inputs.ids.erase(c->id);
+        delete c;
     }
-
-    // Add per-sample event inputs.
-    for (size_t i = 0; i < samples.size(); ++i) {
-        auto* c = new Connection;
-        c->type = DataType::Events;
-        c->dir = Direction::input;
-        c->label = "S" + std::to_string(samples[i]->id) + " Evt";
-        inputs.addConnection(c);
-    }
-
-    // Remove all outputs.
-    while (!outputs.connections.empty()) {
-        auto* c = outputs.connections.back();
-        if (c->is_connected)
-            nm->severConnectionNow(id, c->id, c->output_node, c->output_connection);
+    for (auto& [sid, c] : deadOutputs) {
+        outById.erase(sid);
+        nm->severConnectionNow(id, c->id, c->output_node, c->output_connection);
         outputs.id_pool.releaseID(c->id);
         outputs.ids.erase(c->id);
-        outputs.connections.pop_back();
         delete c;
     }
 
-    // Add per-sample audio outputs.
-    for (size_t i = 0; i < samples.size(); ++i) {
-        auto* c = new Connection;
-        c->type = DataType::Waveform;
-        c->dir = Direction::output;
-        c->minChannels = samples[i]->stereoOut ? 2 : samples[i]->numChannels;
+    // Rebuild both port lists in sample order, reusing every surviving port.
+    std::vector<Connection*> newInputs;
+    newInputs.push_back(masterEventIn);
+    for (auto& s : samples) {
+        auto it = evtById.find(s->id);
+        Connection* c = nullptr;
+        if (it != evtById.end()) {
+            c = it->second;
+            evtById.erase(it);
+        } else {
+            c = new Connection;
+            c->type = DataType::Events;
+            c->dir = Direction::input;
+            c->label = "S" + std::to_string(s->id) + " Evt";
+            inputs.addConnection(c); // assigns the port id
+        }
+        newInputs.push_back(c);
+    }
+    for (auto* c : otherInputs) newInputs.push_back(c);
+    inputs.connections = std::move(newInputs);
+
+    std::vector<Connection*> newOutputs;
+    for (auto& s : samples) {
+        auto it = outById.find(s->id);
+        Connection* c = nullptr;
+        if (it != outById.end()) {
+            c = it->second;
+            outById.erase(it);
+        } else {
+            c = new Connection;
+            c->type = DataType::Waveform;
+            c->dir = Direction::output;
+            c->label = "S" + std::to_string(s->id) + " Out";
+            outputs.addConnection(c); // assigns the port id
+        }
+        c->minChannels = s->stereoOut ? 2 : s->numChannels;
         c->updateNumChannels();
-        c->label = "S" + std::to_string(samples[i]->id) + " Out";
-        outputs.addConnection(c);
+        newOutputs.push_back(c);
     }
+    for (auto* c : otherOutputs) newOutputs.push_back(c);
+    outputs.connections = std::move(newOutputs);
 
-    // Restore wiring keyed by sample ID.
-    for (size_t i = 1; i < inputs.connections.size(); ++i) {
-        auto* c = inputs.connections[i];
-        if (c == masterEventIn) continue;
-        int sid = parseSampleId(c->label);
-        auto it = inWiresById.find(sid);
-        if (it != inWiresById.end() && it->second.connected) {
-            nm->makeNodeConnectionNow(it->second.srcNode, it->second.srcCon,
-                                      c->output_node, c->output_connection);
-        }
-    }
-    for (auto* c : outputs.connections) {
-        int sid = parseSampleId(c->label);
-        auto it = outWiresById.find(sid);
-        if (it != outWiresById.end() && it->second.connected) {
-            nm->makeNodeConnectionNow(id, c->id, it->second.dstNode, it->second.dstCon);
-        }
-    }
-
-    // Rebuild ID maps.
+    // Rebuild the id -> index maps for the reordered lists.
     inputs.ids.clear();
     for (size_t i = 0; i < inputs.connections.size(); ++i)
         inputs.ids[inputs.connections[i]->id] = static_cast<uint16_t>(i);
@@ -298,7 +288,7 @@ void SamplerNode::addSample(const std::string& filepath) {
     s.release.label = "S" + std::to_string(s.id) + " Rel";
     applySamplerKnobDisplay(s);
     rebuildSampleParams();
-    rebuildConnections();
+    syncSamplePorts();
 }
 
 void SamplerNode::insertSampleAt(size_t index, const std::string& filepath) {
@@ -337,7 +327,7 @@ void SamplerNode::insertSampleAt(size_t index, const std::string& filepath) {
 
     rebuildSampleParams();
 
-    rebuildConnections();
+    syncSamplePorts();
 }
 
 void SamplerNode::removeSample(size_t index) {
@@ -370,7 +360,7 @@ void SamplerNode::removeSample(size_t index) {
         params.erase(params.begin() + static_cast<ptrdiff_t>(paramBase),
                      params.begin() + static_cast<ptrdiff_t>(paramBase + 9));
 
-    rebuildConnections();
+    syncSamplePorts();
 }
 
 void SamplerNode::reorderSamples(const std::vector<size_t>& newOrder) {
@@ -1462,5 +1452,5 @@ void SamplerNode::extraDeSerialize(const json& j) {
     }
 
     rebuildSampleParams();
-    rebuildConnections();
+    syncSamplePorts();
 }

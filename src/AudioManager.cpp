@@ -61,8 +61,8 @@ void SDLCALL AudioManager::sdlCallback(void *userdata, SDL_AudioStream *stream, 
             project->um->flushAudioSync();
         }
 
-        if (project->dspLoading) {
-            // Still push silence if loading
+        if (project->dspLoading || am->suspended.load(std::memory_order_relaxed)) {
+            // Still push silence if loading or an export owns the processing loop
             size_t byteCount = static_cast<size_t>(frames) * static_cast<size_t>(outCh) * sizeof(float);
             am->sdlInterleaved_.assign(frames * outCh, 0.0f);
             SDL_PutAudioStreamData(stream, am->sdlInterleaved_.data(), static_cast<int>(byteCount));
@@ -133,6 +133,12 @@ int AudioManager::callback(void *outputBuffer, void *inputBuffer, unsigned int b
     (void)status;
 
     AudioManager *audioManager = static_cast<AudioManager *>(userData);
+
+    // An export owns the processing loop: no DSP runs here, only silence.
+    if (audioManager->suspended.load(std::memory_order_relaxed)) {
+        memset(outputBuffer, 0, bufferSize * audioManager->outputChannels * sizeof(float));
+        return 0;
+    }
 
     Project* project = audioManager->project;
 

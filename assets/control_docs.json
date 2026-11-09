@@ -236,7 +236,7 @@
       "example": "{\"op\":\"action\",\"action\":\"remove_arranger_track\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"trackType\":1,\"trackID\":0,\"connectionID\":0}}"
     },
     "create_note": {
-      "summary": "Create a note in a region. The note is stamped with the region's scale, and its lattice degree is derived from its pitch (or taken from tuningAnchorHarmonic).",
+      "summary": "Create a note in a region. The note REQUIRES an explicit tuning context in `intent`: nothing is derived or inherited implicitly. Harmonic mode needs tuningMode 0 + tuningAnchorHarmonic + tuningHarmonicAnchorVector; EDO needs tuningMode 1 + tuningEdoSubdivisionSteps + tuningEdoLowerVector + tuningEdoUpperVector.",
       "params": {
         "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
         "nodeID": {"type": "int", "meaning": "Arranger node", "required": true},
@@ -244,20 +244,19 @@
         "pitchVector": {"type": "int[][]|string", "meaning": "pitch as prime-exponent pairs; [] = 1/1 = MIDI 69. May instead be a token: m69, e7/12, 3/2, h9 (see the pitch tokens concept)", "required": true},
         "rhythmVector": {"type": "int[][]", "meaning": "start beat; [] = beat 0", "required": false},
         "rhythmEndVector": {"type": "int[][]", "meaning": "end beat; defaults to rhythmVector", "required": false},
-        "tuningAnchorHarmonic": {"type": "int", "meaning": "force the scale degree instead of deriving it", "required": false},
-        "intent": {"type": "object", "meaning": "override the anchors stamped from the region: tuningMode, tuningAnchorHarmonic, tuningEdo*, rhythmEdoSubdivisionSteps, rhythmEdoLowerVector, rhythmEdoUpperVector", "required": false}
+        "intent": {"type": "object", "meaning": "REQUIRED explicit tuning context: tuningMode plus (harmonic) tuningAnchorHarmonic + tuningHarmonicAnchorVector, or (EDO) tuningEdoSubdivisionSteps + tuningEdoLowerVector + tuningEdoUpperVector. Also accepts rhythmEdo* fields.", "required": true}
       },
-      "example": "{\"op\":\"action\",\"action\":\"create_note\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"regionID\":0,\"pitchVector\":[[-2,1],[0,1],[1,1]],\"rhythmVector\":[],\"rhythmEndVector\":[[1,1]]}}"
+      "example": "{\"op\":\"action\",\"action\":\"create_note\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"regionID\":0,\"pitchVector\":\"m69\",\"rhythmVector\":[],\"rhythmEndVector\":[[1,1]],\"intent\":{\"tuningMode\":1,\"tuningEdoSubdivisionSteps\":12,\"tuningEdoLowerVector\":[],\"tuningEdoUpperVector\":[[1,1]]}}}"
     },
     "create_notes": {
-      "summary": "Create many notes in one undo step. Each entry takes the same pitchVector (vector or token), rhythmVector, rhythmEndVector and optional intent as create_note.",
+      "summary": "Create many notes in one undo step. Every entry REQUIRES an explicit tuning context in its own `intent` (same fields as create_note); nothing is inherited implicitly.",
       "params": {
         "managerPath": {"type": "int[]", "meaning": "graph address; [] is the root graph (see the managerPath concept)", "required": false},
         "nodeID": {"type": "int", "meaning": "Arranger node", "required": true},
         "regionID": {"type": "int", "meaning": "region element id", "required": true},
-        "notes": {"type": "object[]", "meaning": "each {pitchVector, rhythmVector, rhythmEndVector?, intent?}", "required": true}
+        "notes": {"type": "object[]", "meaning": "each {pitchVector, rhythmVector, rhythmEndVector?, intent} where intent is the explicit tuning context", "required": true}
       },
-      "example": "{\"op\":\"action\",\"action\":\"create_notes\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"regionID\":0,\"notes\":[{\"pitchVector\":\"m69\",\"rhythmVector\":[],\"rhythmEndVector\":[[3,4]]},{\"pitchVector\":\"m71\",\"rhythmVector\":[[1,4]],\"rhythmEndVector\":[[3,4]]}]}}"
+      "example": "{\"op\":\"action\",\"action\":\"create_notes\",\"args\":{\"managerPath\":[],\"nodeID\":2,\"regionID\":0,\"notes\":[{\"pitchVector\":\"m69\",\"rhythmVector\":[],\"rhythmEndVector\":[[3,4]],\"intent\":{\"tuningMode\":1,\"tuningEdoSubdivisionSteps\":12,\"tuningEdoLowerVector\":[],\"tuningEdoUpperVector\":[[1,1]]}},{\"pitchVector\":\"m71\",\"rhythmVector\":[[1,4]],\"rhythmEndVector\":[[3,4]],\"intent\":{\"tuningMode\":1,\"tuningEdoSubdivisionSteps\":12,\"tuningEdoLowerVector\":[],\"tuningEdoUpperVector\":[[1,1]]}}]}}"
     },
     "delete_note": {
       "summary": "Delete a note.",

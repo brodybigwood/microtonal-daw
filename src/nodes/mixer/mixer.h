@@ -106,6 +106,7 @@ public:
     /** Append one insert from its serialized snapshot (id preserved). */
     Node* insertChainNodeFromSnapshot(int chainID, const json& nodeSnapshot);
     bool removeChainNodeByID(int chainID, int nodeID);
+    bool moveChainNode(int chainID, int nodeID, int newIndex);
 
     static constexpr float kColW = 22.f;
     static constexpr float kColPad = 4.f;

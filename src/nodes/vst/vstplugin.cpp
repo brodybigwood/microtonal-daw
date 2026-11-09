@@ -532,7 +532,13 @@ public:
             // or closing the editor leaves them on screen.
             closeTransientWindows();
             XUngrabKey(display, AnyKey, AnyModifier, window);
-            XDestroyWindow(display, window);
+            // The window may already be gone (closed by the window manager or
+            // the plugin). Destroying an invalid XID only produces a BadWindow
+            // error, but some plugins keep a stale child window inside it, so
+            // verify first.
+            XWindowAttributes attrs;
+            if (XGetWindowAttributes(display, window, &attrs))
+                XDestroyWindow(display, window);
             window = 0;
         }
         if (display) {
@@ -826,8 +832,22 @@ VstPlugin::VstPlugin(const std::string& pluginPath, size_t classIndex) : pluginP
     needsSetup_ = true;
 
     if (is_yabridge_) {
-        // Controller, view creation: yabridge IPC, defer to showEditor bg thread.
+        // Controller creation is yabridge IPC, so it must not run on the GUI
+        // thread. Do the controller half in the background at load time (the
+        // same work the editor path does, minus the view), so the plugin's
+        // parameters exist before any editor is opened.
         valid = true;
+        std::thread([this]() {
+            if (!createController()) return;
+            connectComponentController();
+            if (editController) {
+                if (!g_vstLoadingChainInsert) {
+                    auto compState = getComponentState();
+                    if (!compState.empty()) applyComponentStateToController(compState);
+                }
+                refreshParameterShadow();
+            }
+        }).detach();
         return;
     }
 
@@ -915,23 +935,42 @@ bool VstPlugin::createComponent() {
 
 bool VstPlugin::createController() {
     if (editController) return true; // already created
-    if (!hasController_) return false;
-    Steinberg::FUnknown* controllerUnknown = nullptr;
-    auto result = lib->getFactory()->createInstance(
-        controllerCID_, Steinberg::Vst::IEditController::iid, (void**)&controllerUnknown);
+    bool fromComponent = false;
 
-    if (result != Steinberg::kResultTrue || !controllerUnknown) {
-        std::cerr << "[VstPlugin] Failed to create edit controller" << std::endl;
-        return false;
+    if (hasController_) {
+        Steinberg::FUnknown* controllerUnknown = nullptr;
+        auto result = lib->getFactory()->createInstance(
+            controllerCID_, Steinberg::Vst::IEditController::iid, (void**)&controllerUnknown);
+
+        if (result != Steinberg::kResultTrue || !controllerUnknown) {
+            std::cerr << "[VstPlugin] Failed to create edit controller" << std::endl;
+        } else {
+            editController = Steinberg::FUnknownPtr<Steinberg::Vst::IEditController>(controllerUnknown);
+        }
     }
 
-    editController = Steinberg::FUnknownPtr<Steinberg::Vst::IEditController>(controllerUnknown);
+    // Single-object plugins — and bridged classes that advertise no separate
+    // controller class — implement IEditController on the component itself.
+    // Without this fallback they expose no parameters and no editor at all.
+    if (!editController && component) {
+        Steinberg::FUnknown* controllerUnknown = nullptr;
+        if (component->queryInterface(Steinberg::Vst::IEditController::iid, (void**)&controllerUnknown) ==
+                Steinberg::kResultTrue && controllerUnknown) {
+            editController = Steinberg::FUnknownPtr<Steinberg::Vst::IEditController>(controllerUnknown);
+            fromComponent = (editController != nullptr);
+        }
+    }
+
     if (!editController) return false;
 
     if (vstDebug()) std::cout << "[vst] controller initialize: " << className_ << std::endl;
     if (editController->initialize(&g_hostContext) != Steinberg::kResultTrue) {
-        std::cerr << "[VstPlugin] Edit controller initialize failed" << std::endl;
-        return false;
+        // The component was already initialized above; a single-object plugin
+        // legitimately refuses a second initialize. Any other failure is fatal.
+        if (!fromComponent) {
+            std::cerr << "[VstPlugin] Edit controller initialize failed" << std::endl;
+            return false;
+        }
     }
 
     return true;
@@ -1290,7 +1329,15 @@ bool VstPlugin::tickEditor() {
         // Final state check so edits made just before closing the window still
         // land in the undo tree.
         if (hostFrame && hostFrame->onStatePoll) hostFrame->onStatePoll(true);
-        if (view) view->removed();
+        // Release the view together with its host window. Leaving it alive but
+        // detached leaves a stale view whose X window no longer exists; the
+        // next showEditor re-attaches that dead view and plugins such as Vital
+        // crash on their destroyed child window.
+        if (view) {
+            view->removed();
+            view->release();
+            view = nullptr;
+        }
         editorHost.reset();
         editorOpen = false;
         unregisterEditor(this);
