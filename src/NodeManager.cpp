@@ -89,6 +89,19 @@ json NodeManager::serialize() {
     return j;
 }
 
+void NodeManager::applyGraphPreset(const json& j) {
+    std::vector<uint16_t> removing;
+    for (Node* n : nodes)
+        if (n && n != inNode && n != outNode) removing.push_back(n->id);
+    for (uint16_t nid : removing) removeNodeNow(nid);
+
+    // deSerialize appends into the (now user-node-free) manager and reloads the
+    // Input/Output node state from the preset.
+    deSerialize(j);
+    markTopologyDirty();
+    refreshChannelWidths();
+}
+
 void NodeManager::deSerialize(json j) {
     id_pool.fromJSON(j["idManager"]);
     if (ne && j.contains("ewIdPool")) ne->ewIdPoolFromJSON(j["ewIdPool"]);

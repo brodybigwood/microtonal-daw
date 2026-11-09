@@ -224,8 +224,11 @@ void Knob::render(SDL_Renderer* renderer) {
         4, 20, 20, 20, 255);
 
     const std::string& shownLabel = displayLabel.empty() ? label : displayLabel;
-    if (!shownLabel.empty() && fonts.mainFont) {
-        SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, shownLabel.c_str(), 0, labelColor);
+    // Node captions use the compact face everywhere; the 12 px face is for
+    // menus/headers.
+    TTF_Font* labelFont = fonts.smallFont ? fonts.smallFont : fonts.mainFont;
+    if (!shownLabel.empty() && labelFont) {
+        SDL_Surface* surf = TTF_RenderText_Blended(labelFont, shownLabel.c_str(), 0, labelColor);
         if (surf) {
             SDL_Texture* textTex = SDL_CreateTextureFromSurface(renderer, surf);
             SDL_FRect tr{
@@ -268,6 +271,50 @@ void Knob::handleInput(SDL_Event& e) {
             value = std::clamp(value + wheelVelocity * step, valueMin, valueMax);
         break;
     }
+}
+
+// --- Toggle ---
+
+Toggle::Toggle(float value, float x, float y, float w, float h, std::string label, SDL_Color labelColor)
+    : Parameter(value, generateRect(x, y, w, h)),
+      boxRect{x, y, w, h},
+      displayLabel(std::move(label)),
+      labelColor(labelColor) {}
+
+void Toggle::reposition(float x, float y, float w, float h) {
+    boxRect = {x, y, w, h};
+    auto poly = generateRect(x, y, w, h);
+    vx = std::move(poly.first);
+    vy = std::move(poly.second);
+}
+
+void Toggle::render(SDL_Renderer* renderer) {
+    const bool on = value > 0.5f;
+    SDL_SetRenderDrawColor(renderer, on ? 52 : 46, on ? 150 : 46, on ? 96 : 52, 255);
+    SDL_RenderFillRect(renderer, &boxRect);
+    SDL_SetRenderDrawColor(renderer, on ? 110 : 80, on ? 230 : 80, on ? 150 : 88, 255);
+    SDL_RenderRect(renderer, &boxRect);
+    TTF_Font* font = fonts.smallFont ? fonts.smallFont : fonts.mainFont;
+    if (font) {
+        const std::string text = displayLabel.empty()
+            ? std::string(on ? "ON" : "OFF")
+            : displayLabel + (on ? ": ON" : ": OFF");
+        SDL_Surface* surf = TTF_RenderText_Blended(font, text.c_str(), 0, labelColor);
+        if (surf) {
+            SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
+            const float tw = static_cast<float>(surf->w);
+            const float th = static_cast<float>(surf->h);
+            SDL_FRect tr{boxRect.x + (boxRect.w - tw) * 0.5f, boxRect.y + (boxRect.h - th) * 0.5f, tw, th};
+            SDL_RenderTexture(renderer, tex, nullptr, &tr);
+            SDL_DestroyTexture(tex);
+            SDL_DestroySurface(surf);
+        }
+    }
+}
+
+void Toggle::handleInput(SDL_Event& e) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT)
+        value = value > 0.5f ? 0.0f : 1.0f;
 }
 
 // --- Bar ---

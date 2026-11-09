@@ -13,6 +13,7 @@
 #include "NodeEditor.h"
 #include "nodes/nodetypes.h"
 #include "NodeManager.h"
+#include "UndoInternal.h"
 #include "InputNode.h"
 #include "OutputNode.h"
 #include "Note.h"
@@ -454,6 +455,21 @@ IoPortChannelAction::IoPortChannelAction(Project* p, int opIn, std::vector<int> 
             default:
                 break;
         }
+    };
+}
+
+PatcherGraphPresetAction::PatcherGraphPresetAction(Project* p, std::vector<int> managerPath,
+                                                   json before, json after)
+    : ProjectAction(p, ActionType::PatcherGraphPreset)
+    , managerPath(std::move(managerPath))
+    , before(std::move(before))
+    , after(std::move(after)) {
+    name = "Load Patcher Preset";
+    doAction = [this]() {
+        requireManager(this->p, this->managerPath).applyGraphPreset(this->after);
+    };
+    undoAction = [this]() {
+        requireManager(this->p, this->managerPath).applyGraphPreset(this->before);
     };
 }
 

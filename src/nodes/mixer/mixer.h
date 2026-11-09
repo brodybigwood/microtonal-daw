@@ -43,6 +43,10 @@ public:
 
     void process() override;
     void setup() override;
+    /** The graph's width pass calls this after propagating input widths and
+        before relinking downstream: compute every chain's outflow width here so
+        the relink sees the mixer's real width. */
+    void syncWidthsFromInputs() override;
     int reportedLatency() const override { return cachedLatency_; }
     void render(SDL_Renderer* r) override;
     void renderContent(SDL_Renderer*) override;

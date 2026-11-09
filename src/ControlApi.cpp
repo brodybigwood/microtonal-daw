@@ -206,6 +206,11 @@ void collectManagers(NodeManager& nm, const std::vector<int>& path, json& out) {
             if (pat->mainManager) collectManagers(*pat->mainManager, childPath, out);
         } else if (auto* dly = dynamic_cast<DelayNode*>(n)) {
             if (dly->chain) collectManagers(*dly->chain, childPath, out);
+            if (dly->preChain) {
+                std::vector<int> prePath = childPath;
+                prePath.push_back(-1);
+                collectManagers(*dly->preChain, prePath, out);
+            }
         } else if (auto* mux = dynamic_cast<MultiplexerNode*>(n)) {
             for (auto* mp : mux->patchers) {
                 if (!mp || !mp->mainManager) continue;

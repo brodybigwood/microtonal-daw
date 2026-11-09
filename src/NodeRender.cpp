@@ -62,8 +62,18 @@ void Node::render(SDL_Renderer* renderer) {
     if (!renderer)
         return;
 
-    if (!texture)
-        texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, NODE_W, NODE_H);
+    // Size the target texture to the node's real bounds. Nodes taller than
+    // NODE_H (Ducker 160, Sampler/Mixer 180) otherwise render into a 200x120
+    // target that renderContentHelper then stretches to the full height,
+    // clipping the lower content and distorting the knobs.
+    const int texW = std::max(1, static_cast<int>(dstRect.w));
+    const int texH = std::max(1, static_cast<int>(dstRect.h));
+    float curW = 0.f, curH = 0.f;
+    if (texture) SDL_GetTextureSize(texture, &curW, &curH);
+    if (!texture || static_cast<int>(curW) != texW || static_cast<int>(curH) != texH) {
+        if (texture) SDL_DestroyTexture(texture);
+        texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, texW, texH);
+    }
 
     renderContentHelper(renderer);
 

@@ -24,6 +24,9 @@
 #include "PianoRoll.h"
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <map>
 #include <stdexcept>
 #include <string>
@@ -510,6 +513,8 @@ std::string UndoManager::actionSchema(const std::string& actionName) {
         return R"({"managerPath":[int,...],"nodeID":int,"compState":bytes?,"ctrlState":bytes?})";
     if (actionName == "vst_load_plugin")
         return R"({"managerPath":[int,...],"nodeID":int,"path":string,"classIndex":int?})";
+    if (actionName == "save_patcher_preset" || actionName == "load_patcher_preset")
+        return R"({"managerPath":[int,...],"name":string})";
     if (actionName == "mixer_chain_add_node")
         return R"({"managerPath":[int,...],"nodeID":int,"chainIndex":int,"nodeType":int})";
     if (actionName == "instrument_rack_add_node")
@@ -1095,7 +1100,8 @@ bool UndoManager::runRegisteredAction(const std::string& actionName, const json&
         if (actionName == "vst_load_plugin" || actionName == "toggle_piano_roll_window" ||
             actionName == "mixer_chain_add_node" || actionName == "instrument_rack_add_node" ||
             actionName == "mixer_chain_move_node" || actionName == "mixer_add_track" ||
-            actionName == "export_range") {
+            actionName == "export_range" ||
+            actionName == "save_patcher_preset" || actionName == "load_patcher_preset") {
             return runDelegatedAction(actionName, params, error, result);
         }
 
@@ -1142,6 +1148,59 @@ bool UndoManager::runDelegatedAction(const std::string& actionName, const json& 
     try {
         const auto managerPath = params.at("managerPath").get<std::vector<int>>();
         NodeManager& nm = requireManager(head->p, managerPath);
+
+        // Patcher presets: embedded sub-graphs only, addressed by managerPath.
+        if (actionName == "save_patcher_preset" || actionName == "load_patcher_preset") {
+            if (nm.managerPath.empty()) {
+                error = actionName + ": the top-level graph is not a patcher";
+                return false;
+            }
+            // Presets are global, shared by every project.
+            const char* home = std::getenv("HOME");
+            std::filesystem::path dir =
+                std::filesystem::path(home ? home : ".") / ".local/share/microtonal-daw/patcher-presets";
+            std::error_code ec;
+            std::filesystem::create_directories(dir, ec);
+
+            std::string name;
+            for (char c : params.value("name", std::string("preset"))) {
+                if (std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_') name += c;
+                else if (c == ' ') name += '_';
+            }
+            if (name.empty()) name = "preset";
+            const auto path = dir / (name + ".json");
+
+            if (actionName == "save_patcher_preset") {
+                json j = nm.serialize();
+                j.erase("ewIdPool");
+                j.erase("openPianoRolls");
+                std::ofstream out(path);
+                if (!out) { error = "save_patcher_preset: cannot write " + path.string(); return false; }
+                out << j.dump(2);
+                if (result) *result = json{{"saved", path.string()}};
+                return true;
+            }
+
+            std::ifstream in(path);
+            if (!in) { error = "load_patcher_preset: not found: " + path.string(); return false; }
+            json preset;
+            try {
+                preset = json::parse(in);
+            } catch (...) {
+                error = "load_patcher_preset: invalid json: " + path.string();
+                return false;
+            }
+            preset.erase("ewIdPool");
+            preset.erase("openPianoRolls");
+            json before = nm.serialize();
+            auto* pa = new PatcherGraphPresetAction(head->p, nm.managerPath,
+                                                    std::move(before), std::move(preset));
+            pa->skipInitialDo = false;
+            newAction(pa);
+            if (result) *result = json{{"loaded", path.string()}};
+            return true;
+        }
+
         const int nodeID = params.at("nodeID").get<int>();
         Node* node = nm.getNode(static_cast<uint16_t>(nodeID));
         if (!node) { error = actionName + ": node not found"; return false; }

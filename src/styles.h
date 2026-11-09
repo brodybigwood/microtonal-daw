@@ -50,6 +50,7 @@ extern Cursors cursors;
 
 struct Fonts{
     TTF_Font* mainFont;
+    TTF_Font* smallFont; // compact labels on dense node controls
 };
 
 extern Fonts fonts;

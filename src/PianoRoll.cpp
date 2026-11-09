@@ -709,6 +709,13 @@ bool PianoRoll::getExistingNote() {
     if(mouseY < topMargin || mouseX < leftMargin) {
         return false;
     }
+    // Pick the note nearest the cursor, not the first one in the region that
+    // happens to be hit. Where two notes meet (one ends as the next begins)
+    // the pixel rounding can put both under the mouse; the note that starts at
+    // or before the cursor wins, so hovering just left of the shared boundary
+    // selects the note that ends there.
+    std::shared_ptr<Note> best;
+    float bestDist = FLT_MAX;
     for (std::shared_ptr<Note> note : region->notes) {
         if (note->channel != currentChannel) continue;
 
@@ -716,12 +723,33 @@ bool PianoRoll::getExistingNote() {
         const int noteEnd = getNoteEnd(note);
         const int noteY = getY(noteMidiForRender(note));
 
-        if (mouseX >= notePosX && mouseX <= noteEnd &&
-            mouseY <= noteY + noteRadius && mouseY >= (noteY - noteRadius)) {
-            hoveredElement = note;
-            lastHoveredLine = getHoveredLine();
-            return true;
+        if (mouseY > noteY + noteRadius || mouseY < noteY - noteRadius) continue;
+
+        // Horizontal reach is bounded: the cursor must be over the note or
+        // within the same small edge margin resize uses. Without this every
+        // note on the pitch line would be "hovered" wherever the mouse is.
+        const float edgeZone = std::min(noteRadius, (noteEnd - notePosX) * 0.3f);
+        if (mouseX < notePosX - edgeZone || mouseX > noteEnd + edgeZone) continue;
+
+        const bool contains = mouseX >= notePosX && mouseX <= noteEnd;
+        const float dist = contains
+            ? 0.f
+            : std::min(std::fabs(mouseX - static_cast<float>(notePosX)),
+                       std::fabs(mouseX - static_cast<float>(noteEnd)));
+        if (dist < bestDist - 0.001f) {
+            bestDist = dist;
+            best = note;
+        } else if (std::fabs(dist - bestDist) <= 0.001f && best) {
+            // Same distance (two notes meeting at the boundary): the one that
+            // starts further left wins, i.e. the note that ends there.
+            if (notePosX < getNotePosX(best))
+                best = note;
         }
+    }
+    if (best) {
+        hoveredElement = best;
+        lastHoveredLine = getHoveredLine();
+        return true;
     }
     return false;
 }

@@ -187,15 +187,3 @@ ExpandedWindow* WindowManager::findByTitle(const char* title) {
     return nullptr;
 }
 
-void WindowManager::removeWindowsByTitleSuffix(const std::string& suffix) {
-    for (auto it = windows_.begin(); it != windows_.end(); ) {
-        auto& w = *it;
-        if (w->title.size() >= suffix.size() &&
-            w->title.compare(w->title.size() - suffix.size(), suffix.size(), suffix) == 0) {
-            bySDLID_.erase(w->sdlWindowID);
-            it = windows_.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}

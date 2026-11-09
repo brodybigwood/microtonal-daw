@@ -6,7 +6,9 @@
 #include <cmath>
 #include <cfloat>
 #include <climits>
+#include <cstdint>
 #include <cstdlib>
+#include <iterator>
 #include <cstdio>
 #include <numeric>
 #include <sstream>
@@ -734,7 +736,6 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                             intervalLoNotePairs, intervalHiNotePairs, capIntervalStartNote, capIntervalEndNote,
                             capDragStartVertexPairs, capDragEndVertexPairs](std::string text) {
                         try {
-                            const int steps = std::max(1, std::stoi(text));
                             // Snapshots track rational endpoints while dragging; b can be off-grid note MIDI with
                             // hoveredElement on the staff (endNote null) — never pitchVectorAtGridMidi(note->num).
                             const std::vector<std::pair<int, int>> vecAtA =
@@ -749,9 +750,77 @@ void PianoRoll::clickMouse(SDL_Event& e) {
                             const std::vector<std::pair<int, int>> upperLineVec =
                                 intervalFromTwoNotes ? intervalHiNotePairs : (a <= b ? vecAtB : vecAtA);
 
+                            auto trimmed = text;
+                            trimmed.erase(0, trimmed.find_first_not_of(" \t\r\n"));
+                            trimmed.erase(trimmed.find_last_not_of(" \t\r\n") + 1);
+
                             auto before = captureCentralTuning();
                             auto after = before;
 
+                            if (trimmed.empty()) {
+                                // Blank + Enter: infer the interval. Rational endpoints
+                                // (all exponents integers) become a harmonic grid whose
+                                // lines pass exactly through both endpoints; anything
+                                // with a fractional exponent is not a rational ratio, so
+                                // fall back to one equal division.
+                                static const int primes[] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29,
+                                                             31, 37, 41, 43, 47, 53, 59, 61, 67, 71};
+                                auto expAt = [](const std::vector<std::pair<int, int>>& v, size_t i) {
+                                    if (i < v.size())
+                                        return std::pair<long long, long long>{v[i].first, v[i].second ? v[i].second : 1};
+                                    return std::pair<long long, long long>{0, 1};
+                                };
+                                bool fractional = false;
+                                long long num = 1, den = 1;
+                                for (size_t i = 0; i < std::size(primes) && !fractional; ++i) {
+                                    auto [aN, aD] = expAt(lowerLineVec, i);
+                                    auto [bN, bD] = expAt(upperLineVec, i);
+                                    // upper/lower exponent difference = (bN*aD - aN*bD) / (bD*aD)
+                                    const long long dn = bN * aD - aN * bD;
+                                    const long long dd = bD * aD;
+                                    if (dd == 0 || dn % dd != 0) {
+                                        fractional = true;
+                                        break;
+                                    }
+                                    const long long e = dn / dd;
+                                    const long long p = primes[i];
+                                    for (long long k = 0; k < (e > 0 ? e : -e); ++k) {
+                                        if (e > 0) {
+                                            if (num > (1LL << 40) / p) { fractional = true; break; }
+                                            num *= p;
+                                        } else {
+                                            if (den > (1LL << 40) / p) { fractional = true; break; }
+                                            den *= p;
+                                        }
+                                    }
+                                }
+
+                                if (!fractional && num <= INT32_MAX && den <= INT32_MAX) {
+                                    // Anchor harmonic den at the lower pitch; the upper
+                                    // endpoint then lands exactly on harmonic num.
+                                    after.mode = 0;
+                                    after.harmonicAnchorNumber = static_cast<int>(den);
+                                    after.harmonicAnchorVector = lowerLineVec;
+                                    project->um->newAction(new PianoRollRegionTuningUndoAction(project,
+                                        region->parentNode->nm->managerPath, region->parentNode->id, region->id,
+                                        regionTuningSnapshotToUndoJson(before), regionTuningSnapshotToUndoJson(after),
+                                        "Define Harmonic Interval"));
+                                    return;
+                                }
+                                // Simplest equal temperament: one division.
+                                after.mode = 1;
+                                after.edoLowerVector = lowerLineVec;
+                                after.edoUpperVector = upperLineVec;
+                                after.edoSubdivisionSteps = 1;
+                                after.harmonicAnchorVector.clear();
+                                project->um->newAction(new PianoRollRegionTuningUndoAction(project,
+                                    region->parentNode->nm->managerPath, region->parentNode->id, region->id,
+                                    regionTuningSnapshotToUndoJson(before), regionTuningSnapshotToUndoJson(after),
+                                    "Define EDO Interval"));
+                                return;
+                            }
+
+                            const int steps = std::max(1, std::stoi(trimmed));
                             after.mode = 1;
                             after.edoLowerVector = lowerLineVec;
                             after.edoUpperVector = upperLineVec;
@@ -1103,6 +1172,11 @@ bool PianoRoll::getStretchingNote() {
     if(isStretchingNote) {
         return true;
     }
+    // Pick the closest note edge under the cursor, not the first note in the
+    // region whose edge zone happens to overlap it.
+    std::shared_ptr<Note> best;
+    int bestDir = 0;
+    float bestDist = 1e9f;
     for (std::shared_ptr<Note> note : region->notes) {
         if (note->channel != currentChannel) continue;
 
@@ -1110,20 +1184,27 @@ bool PianoRoll::getStretchingNote() {
         const int noteEnd = getNoteEnd(note);
         const int noteY = getY(noteMidiForRender(note));
 
-        if ((mouseY >= noteY - noteRadius && mouseY <= (noteY + noteRadius))) {
+        if (mouseY >= noteY - noteRadius && mouseY <= noteY + noteRadius) {
             const float edgeZone = std::min(noteRadius, (noteEnd - notePosX) * 0.3f);
-            if(mouseX >= notePosX - edgeZone && mouseX <= notePosX + edgeZone) {
-                stretchingNote = note;
-                resizeDir = -1;
-                isStretchingNote = true;
-                return true;
-            } else if (mouseX >= noteEnd - edgeZone && mouseX <= noteEnd + edgeZone) {
-                stretchingNote = note;
-                resizeDir = 1;
-                isStretchingNote = true;
-                return true;
+            const float dStart = std::fabs(mouseX - static_cast<float>(notePosX));
+            const float dEnd = std::fabs(mouseX - static_cast<float>(noteEnd));
+            if (dStart <= edgeZone && dStart < bestDist) {
+                bestDist = dStart;
+                best = note;
+                bestDir = -1;
+            }
+            if (dEnd <= edgeZone && dEnd < bestDist) {
+                bestDist = dEnd;
+                best = note;
+                bestDir = 1;
             }
         }
+    }
+    if (best) {
+        stretchingNote = best;
+        resizeDir = bestDir;
+        isStretchingNote = true;
+        return true;
     }
     stretchingNote = nullptr;
     isStretchingNote = false;

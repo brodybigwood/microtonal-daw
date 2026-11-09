@@ -35,6 +35,18 @@ DelayNode::DelayNode(uint16_t id, NodeManager* nm) : Node(id, nm, NodeType::Dela
     chainEditor->setEmbeddedCanvasSize(static_cast<float>(NODE_W), static_cast<float>(NODE_H));
     chain->setNE(chainEditor);
     chainEditor->retach();
+
+    // Pre-feedback graph: processes the input before it enters the delay line.
+    // The -1 marker keeps its managerPath distinct from the feedback graph.
+    auto prePath = nm->managerPath;
+    prePath.push_back(id);
+    prePath.push_back(-1);
+    preChain = new NodeManager(project, prePath);
+    preEditor = new NodeEditor;
+    preEditor->embedded_ = true;
+    preEditor->setEmbeddedCanvasSize(static_cast<float>(NODE_W), static_cast<float>(NODE_H));
+    preChain->setNE(preEditor);
+    preEditor->retach();
 }
 
 DelayNode::~DelayNode() {
@@ -48,28 +60,56 @@ DelayNode::~DelayNode() {
     }
     delete chain;
     chain = nullptr;
+
+    if (preEditor) {
+        preEditor->setTopMenuBarHostNode(nullptr);
+        preEditor->clearWireDragState();
+        preEditor->retach();
+        if (preChain) preChain->resetNE();
+        delete preEditor;
+        preEditor = nullptr;
+    }
+    delete preChain;
+    preChain = nullptr;
 }
 
 void DelayNode::setup() {
-    if (!chain || !chain->inNode || !chain->outNode) return;
-    // The feedback graph's interface follows the delay's actual channel counts: one inner
-    // Input output and one inner Output input per channel of the surrounding signal path.
+    // Both inner graphs follow the delay's actual channel counts: one inner
+    // Input output and one inner Output input per channel of the signal path.
     const int wantCh = std::max({1, in ? in->numChannels : 1, out ? out->numChannels : 1});
     const size_t want = static_cast<size_t>(wantCh);
-    bool changed = false;
-    while (chain->inNode->countWaveformOutputs() < want) {
-        chain->inNode->addWaveformOutputChannel();
-        changed = true;
-    }
-    while (chain->outNode->countWaveformInputs() < want) {
-        chain->outNode->addWaveformInputChannel();
-        changed = true;
-    }
-    if (changed) {
-        chain->inNode->makeConnectionRects();
-        chain->outNode->makeConnectionRects();
-        chain->markTopologyDirty();
-    }
+
+    auto resizeGraph = [want](NodeManager* m) {
+        if (!m || !m->inNode || !m->outNode) return;
+        bool changed = false;
+        while (m->inNode->countWaveformOutputs() < want) {
+            m->inNode->addWaveformOutputChannel();
+            changed = true;
+        }
+        while (m->outNode->countWaveformInputs() < want) {
+            m->outNode->addWaveformInputChannel();
+            changed = true;
+        }
+        if (changed) {
+            m->inNode->makeConnectionRects();
+            m->outNode->makeConnectionRects();
+            m->markTopologyDirty();
+        }
+        // A fresh graph is a straight cable per channel: Input output i ->
+        // Output input i. It is a real, visible connection, not a hidden bypass.
+        if (m->getNodes().empty()) {
+            for (size_t i = 0; i < want; ++i) {
+                if (i >= m->inNode->countWaveformOutputs() ||
+                    i >= m->outNode->countWaveformInputs())
+                    break;
+                Connection* inCon = m->outNode->inputs.getConnection(static_cast<uint16_t>(i));
+                if (inCon && inCon->is_connected) continue;
+                m->makeNodeConnectionNow(1, static_cast<uint16_t>(i), 0, static_cast<uint16_t>(i));
+            }
+        }
+    };
+    resizeGraph(chain);
+    resizeGraph(preChain);
 }
 
 void DelayNode::ensureCapacity(int channels) {
@@ -108,19 +148,42 @@ void DelayNode::process() {
     const float mix = mixKnob[0];
     const bool haveIn = in && in->is_connected && in->buffer;
 
-    // Read the delayed signal, then form input + previous output * feedback.
+    // Pre-feedback graph: the input is processed before it enters the delay
+    // line (and therefore before the repeats/feedback). The dry tap below still
+    // uses the untouched input.
+    int preOutCh = ch;
+    bool preWired = false;
+    if (preChain && preChain->outNode) {
+        for (auto* c : preChain->outNode->inputs.connections)
+            if (c && c->type == DataType::Waveform && c->is_connected) { preWired = true; break; }
+    }
+    preBuf.assign(static_cast<size_t>(ch) * bs, 0.0f);
+    if (preChain && preWired) {
+        preChain->inNode->input = haveIn ? in->buffer : nullptr;
+        preChain->inNode->numChannels = haveIn ? in->numChannels : 0;
+        const int innerPre = static_cast<int>(preChain->outNode->totalWaveformChannels());
+        if (innerPre > 0) preOutCh = std::min(innerPre, ch);
+        preChain->process(preBuf.data(), bs, preOutCh, sr);
+    }
+
+    // Read the delayed signal, then form (pre-processed input) + previous output * feedback.
     prevBuf.assign(static_cast<size_t>(ch) * bs, 0.0f);
     sumBuf.assign(static_cast<size_t>(ch) * bs, 0.0f);
     for (int c = 0; c < ch; ++c) {
         const int srcCh = haveIn ? std::min(c, std::max(0, in->numChannels - 1)) : 0;
         const float* inCh = haveIn ? in->channel(srcCh) : nullptr;
+        // An unwired pre graph is a broken path (silent), same rule as the
+        // feedback graph. Fresh graphs are wired straight by setup().
+        const float* preCh = nullptr;
+        if (preWired && !preBuf.empty())
+            preCh = preBuf.data() + static_cast<size_t>(std::min(c, std::max(0, preOutCh - 1))) * bs;
         float* prev = prevBuf.data() + static_cast<size_t>(c) * bs;
         float* sum = sumBuf.data() + static_cast<size_t>(c) * bs;
         for (int i = 0; i < bs; ++i) {
             int readPos = (writePos + i - delay) % lineLen;
             if (readPos < 0) readPos += lineLen;
             prev[i] = line[static_cast<size_t>(c)][static_cast<size_t>(readPos)];
-            sum[i] = (inCh ? inCh[i] : 0.0f) + prev[i] * fb;
+            sum[i] = (preCh ? preCh[i] : 0.0f) + prev[i] * fb;
         }
     }
 
@@ -161,8 +224,9 @@ void DelayNode::process() {
     writePos = (writePos + bs) % lineLen;
 }
 
-// "Open" button under the knobs.
-static const SDL_FRect kDelayOpenRect{60.f, 78.f, 80.f, 26.f};
+// Graph buttons below the knobs: pre-feedback on top, feedback under it.
+static const SDL_FRect kDelayPreRect{40.f, 54.f, 120.f, 20.f};
+static const SDL_FRect kDelayFeedbackRect{40.f, 80.f, 120.f, 20.f};
 
 void DelayNode::renderContent(SDL_Renderer* renderer) {
     // Base draws the node body/outline and the parameter knobs.
@@ -173,7 +237,7 @@ void DelayNode::renderContent(SDL_Renderer* renderer) {
         if (surf) {
             SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
             if (tex) {
-                SDL_FRect dst{NODE_W * 0.5f - surf->w * 0.5f, 8.0f,
+                SDL_FRect dst{NODE_W * 0.5f - surf->w * 0.5f, 6.0f,
                               static_cast<float>(surf->w), static_cast<float>(surf->h)};
                 SDL_RenderTexture(renderer, tex, nullptr, &dst);
                 SDL_DestroyTexture(tex);
@@ -182,48 +246,59 @@ void DelayNode::renderContent(SDL_Renderer* renderer) {
         }
     }
 
-    SDL_SetRenderDrawColor(renderer, 60, 60, 68, 255);
-    SDL_RenderFillRect(renderer, &kDelayOpenRect);
-    SDL_SetRenderDrawColor(renderer, 100, 100, 110, 255);
-    SDL_RenderRect(renderer, &kDelayOpenRect);
-
-    if (fonts.mainFont) {
-        SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, "Open", 0, SDL_Color{220, 220, 220, 255});
-        if (surf) {
-            SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
-            if (tex) {
-                SDL_FRect dst{kDelayOpenRect.x + kDelayOpenRect.w * 0.5f - surf->w * 0.5f,
-                              kDelayOpenRect.y + kDelayOpenRect.h * 0.5f - surf->h * 0.5f,
-                              static_cast<float>(surf->w), static_cast<float>(surf->h)};
-                SDL_RenderTexture(renderer, tex, nullptr, &dst);
-                SDL_DestroyTexture(tex);
-            }
-            SDL_DestroySurface(surf);
+    auto drawButton = [&](const SDL_FRect& rect, const char* label) {
+        SDL_SetRenderDrawColor(renderer, 60, 60, 68, 255);
+        SDL_RenderFillRect(renderer, &rect);
+        SDL_SetRenderDrawColor(renderer, 100, 100, 110, 255);
+        SDL_RenderRect(renderer, &rect);
+        if (!fonts.mainFont) return;
+        SDL_Surface* surf = TTF_RenderText_Blended(fonts.mainFont, label, 0, SDL_Color{220, 220, 220, 255});
+        if (!surf) return;
+        SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
+        if (tex) {
+            SDL_FRect dst{rect.x + rect.w * 0.5f - surf->w * 0.5f,
+                          rect.y + rect.h * 0.5f - surf->h * 0.5f,
+                          static_cast<float>(surf->w), static_cast<float>(surf->h)};
+            SDL_RenderTexture(renderer, tex, nullptr, &dst);
+            SDL_DestroyTexture(tex);
         }
-    }
+        SDL_DestroySurface(surf);
+    };
+    drawButton(kDelayPreRect, "Pre Feedback");
+    drawButton(kDelayFeedbackRect, "Feedback");
 }
 
 bool DelayNode::handleCustomInput(SDL_Event& e) {
-    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT &&
-        msX >= kDelayOpenRect.x && msX < kDelayOpenRect.x + kDelayOpenRect.w &&
-        msY >= kDelayOpenRect.y && msY < kDelayOpenRect.y + kDelayOpenRect.h) {
-        if (project && project->processor && chainEditor) {
-            if (auto* wm = project->processor->getWindowManager()) {
-                std::string title = "Delay##" + std::to_string(id);
-                if (auto* existing = wm->findByTitle(title.c_str())) {
-                    existing->show();
-                    SDL_RaiseWindow(existing->window);
-                } else {
-                    auto pw = std::make_unique<PatcherExpandedWindow>(chainEditor, project);
-                    pw->ownerNode = this;
-                    if (ExpandedWindow* ew = wm->addWindow(std::move(pw), 1000, 700, title.c_str()))
-                        ew->show();
-                }
+    if (e.type != SDL_EVENT_MOUSE_BUTTON_DOWN || e.button.button != SDL_BUTTON_LEFT)
+        return false; // let the base handle dragging/knobs
+    auto inside = [&](const SDL_FRect& r) {
+        return msX >= r.x && msX < r.x + r.w && msY >= r.y && msY < r.y + r.h;
+    };
+    NodeEditor* editor = nullptr;
+    std::string title;
+    if (inside(kDelayPreRect) && preEditor) {
+        editor = preEditor;
+        title = "Pre Feedback##" + std::to_string(id);
+    } else if (inside(kDelayFeedbackRect) && chainEditor) {
+        editor = chainEditor;
+        title = "Feedback##" + std::to_string(id);
+    } else {
+        return false;
+    }
+    if (project && project->processor) {
+        if (auto* wm = project->processor->getWindowManager()) {
+            if (auto* existing = wm->findByTitle(title.c_str())) {
+                existing->show();
+                SDL_RaiseWindow(existing->window);
+            } else {
+                auto pw = std::make_unique<PatcherExpandedWindow>(editor, project);
+                pw->ownerNode = this;
+                if (ExpandedWindow* ew = wm->addWindow(std::move(pw), 1000, 700, title.c_str()))
+                    ew->show();
             }
         }
-        return true; // only the Open button is consumed here
     }
-    return false; // let the base handle dragging/knobs
+    return true;
 }
 
 void DelayNode::clearCustomTextures() {}
@@ -231,9 +306,11 @@ void DelayNode::clearCustomTextures() {}
 json DelayNode::extraSerialize() {
     json j;
     if (chain) j["chain"] = chain->serialize();
+    if (preChain) j["preChain"] = preChain->serialize();
     return j;
 }
 
 void DelayNode::extraDeSerialize(const json& j) {
     if (chain && j.contains("chain")) chain->deSerialize(j["chain"]);
+    if (preChain && j.contains("preChain")) preChain->deSerialize(j["preChain"]);
 }

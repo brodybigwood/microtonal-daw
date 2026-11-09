@@ -51,6 +51,23 @@ PlugLib::PlugLib(std::string path) : path(std::move(path)) {
 
     is_yabridge = dlsym(handle, "yabridge_version") != nullptr;
 
+    // VST 2.x libraries export VSTPluginMain (older ones: main) and have no
+    // GetPluginFactory. Yabridge's VST2 bridge is a regular 64-bit VST2, so a
+    // 32-bit Windows plugin wrapped by it arrives here exactly the same way.
+    auto vst2Main = reinterpret_cast<Vst2PluginMainProc>(dlsym(handle, "VSTPluginMain"));
+    if (!vst2Main) vst2Main = reinterpret_cast<Vst2PluginMainProc>(dlsym(handle, "main"));
+    if (vst2Main) {
+        this->is_vst2 = true;
+        this->vst2Main = vst2Main;
+        size_t slash = this->path.find_last_of('/');
+        std::string base = slash == std::string::npos ? this->path : this->path.substr(slash + 1);
+        size_t dot = base.find_last_of('.');
+        displayName = dot == std::string::npos ? base : base.substr(0, dot);
+        loaded = true;
+        std::cout << "[PlugLib] VST2 library: " << this->path << std::endl;
+        return;
+    }
+
     // Call ModuleEntry before GetPluginFactory — required by VST3 spec,
     // and essential for yabridge chainloaders.
     using ModuleEntryProc = bool (*)();
@@ -460,11 +477,14 @@ uint64_t EditorHostFrame::getNowMs() const {
 }
 
 void EditorHostFrame::pollRunLoop() {
+    static const bool dbg = std::getenv("DAW_VST_DEBUG") != nullptr;
     // Fire expired timers
     uint64_t now = getNowMs();
+    int fired = 0;
     for (auto& t : timers) {
         if (now >= t.nextFireMs) {
             t.handler->onTimer();
+            ++fired;
             t.nextFireMs = now + t.intervalMs;
         }
     }
@@ -481,9 +501,21 @@ void EditorHostFrame::pollRunLoop() {
             for (size_t i = 0; i < pfds.size(); ++i) {
                 if (pfds[i].revents & POLLIN) {
                     fdHandlers[i].handler->onFDIsSet(fdHandlers[i].fd);
+                    ++fired;
+                    if (dbg) {
+                        static std::atomic<int> fdLog{0};
+                        if (fdLog.fetch_add(1) < 20)
+                            std::cout << "[RunLoop] fd event fd=" << fdHandlers[i].fd << std::endl;
+                    }
                 }
             }
         }
+    }
+    if (dbg) {
+        static std::atomic<int> calls{0};
+        if (calls.fetch_add(1) % 120 == 0)
+            std::cout << "[RunLoop] timers=" << timers.size() << " fds=" << fdHandlers.size()
+                      << " fired=" << fired << std::endl;
     }
 }
 
@@ -804,6 +836,41 @@ VstPlugin::VstPlugin(const std::string& pluginPath, size_t classIndex) : pluginP
         return;
     }
 
+    if (lib->is_vst2) {
+        // VST 2.x library: one class per file, so classIndex is irrelevant.
+        classIndex_ = 0;
+        vst2_ = std::make_unique<Vst2Plugin>(pluginPath, lib->vst2Main);
+        if (!vst2_->isValid()) {
+            vst2_.reset();
+            lib = nullptr;
+            return;
+        }
+        name = vst2_->getName();
+        className_ = name;
+        vendor = vst2_->getVendor();
+        is_yabridge_ = lib->is_yabridge;
+        hostFrame = std::make_unique<EditorHostFrame>();
+        // The plugin calls audioMasterAutomate / BeginEdit / EndEdit from its
+        // own threads; the frame owns the gesture grouping and undo delivery.
+        auto* frame = hostFrame.get();
+        vst2_->onAutomate = [frame](int index, float v) {
+            frame->performEdit(static_cast<Steinberg::Vst::ParamID>(index),
+                               static_cast<Steinberg::Vst::ParamValue>(v));
+        };
+        vst2_->onBeginEdit = [frame](int index) {
+            frame->beginEdit(static_cast<Steinberg::Vst::ParamID>(index));
+        };
+        vst2_->onEndEdit = [frame](int index) {
+            frame->endEdit(static_cast<Steinberg::Vst::ParamID>(index));
+        };
+        // The plugin reported its own program/state change: let the node run the
+        // same state-reset path used for VST3 restartComponent.
+        vst2_->onStateChanged = [frame]() { frame->stateResetRequested = true; };
+        needsSetup_ = true;
+        valid = true;
+        return;
+    }
+
     const PlugLib::ClassInfo* cls = lib->getClass(classIndex);
     if (!cls) {
         lib = nullptr;
@@ -875,6 +942,7 @@ VstPlugin::~VstPlugin() {
     // May run on the audio thread; the list is mutex-protected so a destroyed
     // plugin can't be dereferenced by the next GUI tick.
     unregisterEditor(this);
+    vst2_.reset();
     if (view) {
         view->removed();
         view->release();
@@ -1058,7 +1126,31 @@ bool VstPlugin::activateComponent() {
 }
 
 void VstPlugin::setup(int sampleRate, int bufferSize, const std::function<void()>& beforeActivate) {
-    if (!valid || !audioProcessor) return;
+    if (!valid) return;
+
+    if (vst2_) {
+        if (processingActive && sampleRate == processSampleRate && bufferSize == processBufferSize)
+            return;
+        processSampleRate = sampleRate;
+        processBufferSize = bufferSize;
+        needsSetup_ = false;
+        vst2_->setup(sampleRate, bufferSize);
+
+        const int inCh = vst2_->numInputs();
+        const int outCh = std::max(1, vst2_->numOutputs());
+        inputBusData.clear();
+        outputBusData.clear();
+        if (inCh > 0)
+            inputBusData.emplace_back(static_cast<size_t>(bufferSize) * static_cast<size_t>(inCh), 0.0f);
+        outputBusData.emplace_back(static_cast<size_t>(bufferSize) * static_cast<size_t>(outCh), 0.0f);
+
+        if (beforeActivate) beforeActivate();
+        vst2_->resume();
+        processingActive = true;
+        return;
+    }
+
+    if (!audioProcessor) return;
 
     // Both graph copies (and the mixer's per-chain setup) call setup repeatedly. The
     // instance is shared, so a second setupProcessing while processing breaks some
@@ -1149,6 +1241,33 @@ void VstPlugin::setup(int sampleRate, int bufferSize, const std::function<void()
 void VstPlugin::processAudio(int bufferSize, Steinberg::Vst::IEventList* inputEvents,
                               double tempo, double projectTimeMusic, double projectTimeSamples,
                               bool isPlaying) {
+    if (vst2_) {
+        if (!processingActive || bypassed) return;
+        vst2_->setProcessContext(tempo, projectTimeMusic, projectTimeSamples, isPlaying);
+        const int inCh = vst2_->numInputs();
+        const int outCh = std::max(1, vst2_->numOutputs());
+        float* inputs[32]{};
+        float* outputs[32]{};
+        if (inCh > 0 && !inputBusData.empty()) {
+            const auto& src = inputBusData[0];
+            const int ch = std::min(inCh, static_cast<int>(src.size()) / std::max(1, bufferSize));
+            for (int c = 0; c < ch; ++c)
+                inputs[c] = const_cast<float*>(src.data() + static_cast<size_t>(c) * bufferSize);
+        }
+        if (!outputBusData.empty()) {
+            auto& dst = outputBusData[0];
+            // Zero the whole output first: a plugin with fewer channels than the
+            // bus leaves the rest silent instead of replaying old samples.
+            std::fill(dst.begin(), dst.end(), 0.0f);
+            const int ch = std::min(outCh, static_cast<int>(dst.size()) / std::max(1, bufferSize));
+            for (int c = 0; c < ch; ++c)
+                outputs[c] = dst.data() + static_cast<size_t>(c) * bufferSize;
+        }
+        vst2_->process(bufferSize, inCh > 0 ? inputs : nullptr, inCh,
+                       outputs, outCh, inputEvents);
+        return;
+    }
+
     if (!valid || !audioProcessor || !processingActive || bypassed) return;
 
     // Zero output bus data
@@ -1199,12 +1318,70 @@ void VstPlugin::processAudio(int bufferSize, Steinberg::Vst::IEventList* inputEv
     processData.processContext = &context;
 
     audioProcessor->process(processData);
+
+    // The processor publishes values (meters, internal changes) through
+    // outputParameterChanges. VST3 makes the host responsible for relaying
+    // them to the edit controller; without this the plugin's own GUI shows
+    // stale values forever. Queue here, apply on the GUI thread.
+    if (outParamChanges_.getParameterCount() > 0) {
+        std::lock_guard<std::mutex> lock(outParamMutex_);
+        for (auto& q : outParamChanges_.queues)
+            pendingControllerUpdates_.emplace_back(static_cast<int>(q.paramId),
+                                                   static_cast<float>(q.value));
+        // A stalled GUI must not grow this without bound.
+        if (pendingControllerUpdates_.size() > 200000)
+            pendingControllerUpdates_.erase(pendingControllerUpdates_.begin(),
+                                            pendingControllerUpdates_.begin() + 100000);
+    }
+}
+
+void VstPlugin::applyPendingControllerUpdates() {
+    if (!editController) {
+        std::lock_guard<std::mutex> lock(outParamMutex_);
+        pendingControllerUpdates_.clear();
+        return;
+    }
+    std::vector<std::pair<int, float>> updates;
+    {
+        std::lock_guard<std::mutex> lock(outParamMutex_);
+        updates.swap(pendingControllerUpdates_);
+    }
+    for (auto& [id, value] : updates) {
+        editController->setParamNormalized(static_cast<Steinberg::Vst::ParamID>(id), value);
+        setShadowParameterValue(id, value);
+    }
 }
 
 void VstPlugin::showEditor() {
     std::cout << "[VstPlugin::showEditor] called" << std::endl;
     if (editorOpen) {
         std::cout << "[VstPlugin::showEditor] editor already open" << std::endl;
+        return;
+    }
+
+    if (vst2_) {
+        if (!vst2_->hasEditor()) {
+            std::cerr << "[showEditor] VST2 plugin has no editor" << std::endl;
+            return;
+        }
+        editorHost = EditorWindowHost::create();
+        if (!editorHost) { std::cerr << "[showEditor] no host" << std::endl; return; }
+        auto nativeHandle = editorHost->getNativeWindowHandle();
+        if (!vst2_->openEditor(nativeHandle)) {
+            editorHost.reset();
+            std::cerr << "[showEditor] VST2 effEditOpen failed" << std::endl;
+            return;
+        }
+        int w = 0, h = 0;
+        if (vst2_->getEditorRect(w, h) && w > 0 && h > 0) {
+            editorHost->resize(w, h);
+            editorW = w;
+            editorH = h;
+        }
+        editorHost->setName(name.c_str());
+        editorOpen = true;
+        registerEditor(this);
+        std::cout << "[VstPlugin::showEditor] VST2 editor opened" << std::endl;
         return;
     }
 
@@ -1283,6 +1460,12 @@ void VstPlugin::showEditor() {
 void VstPlugin::hideEditor() {
     if (!editorOpen) return;
     unregisterEditor(this);
+    if (vst2_) {
+        vst2_->closeEditor();
+        editorHost.reset();
+        editorOpen = false;
+        return;
+    }
     if (view) {
         view->removed();
         view->release();
@@ -1299,6 +1482,34 @@ void* VstPlugin::getEditorWindowHandle() const {
 
 bool VstPlugin::tickEditor() {
     if (!editorOpen || !editorHost) return false;
+
+    if (vst2_) {
+        // Same pointer tracking as VST3: plugins that skip beginEdit/endEdit
+        // (or an audioMasterAutomate stream) still group one drag into one undo.
+        if (hostFrame) {
+            const bool down = editorHost->pointerButtonDown();
+            if (down && !hostFrame->pointerIsDown) hostFrame->beginPointerPress();
+            hostFrame->pointerIsDown = down;
+        }
+        // VST2 has no mandatory edit notification (Purity sends neither
+        // audioMasterAutomate nor audioMasterUpdateDisplay), so a periodic state
+        // poll is the only way to see its edits. This is VST2-only: VST3
+        // plugins report edits themselves. pollVstStateForUndo rate-limits to
+        // one read per 500 ms.
+        if (hostFrame && hostFrame->onStatePoll) hostFrame->onStatePoll(false);
+        vst2_->editorIdle();
+        if (!editorHost->tick()) {
+            // Final state check so edits made just before closing still land in
+            // the undo tree (same contract as the VST3 path).
+            if (hostFrame && hostFrame->onStatePoll) hostFrame->onStatePoll(true);
+            vst2_->closeEditor();
+            editorHost.reset();
+            editorOpen = false;
+            unregisterEditor(this);
+            return false;
+        }
+        return true;
+    }
 
     // Track the pointer press/release before draining plugin events, so the
     // performEdits below can be grouped into one drag (plugins that skip
@@ -1402,7 +1613,11 @@ void VstPlugin::tickAllEditors() {
     // unregister the entry it is ticking.
     for (size_t i = 0; i < openEditors.size(); ) {
         VstPlugin* p = openEditors[i];
-        if (p->editorOpen) p->tickEditor();
+        if (p->editorOpen) {
+            // Audio-thread values published by the processor reach the GUI here.
+            p->applyPendingControllerUpdates();
+            p->tickEditor();
+        }
         if (i < openEditors.size() && openEditors[i] == p) ++i;
     }
 }
@@ -1418,16 +1633,19 @@ void VstPlugin::commitPendingStateEdits() {
 }
 
 int VstPlugin::getNumAudioInputs() const {
+    if (vst2_) return vst2_->numInputs() > 0 ? 1 : 0;
     if (!component) return 0;
     return component->getBusCount(Steinberg::Vst::kAudio, Steinberg::Vst::kInput);
 }
 
 int VstPlugin::getNumAudioOutputs() const {
+    if (vst2_) return vst2_->numOutputs() > 0 ? 1 : 0;
     if (!component) return 0;
     return component->getBusCount(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput);
 }
 
 int VstPlugin::getAudioInputChannels(int busIndex) const {
+    if (vst2_) return busIndex == 0 ? vst2_->numInputs() : 0;
     if (!component) return 0;
     Steinberg::Vst::BusInfo info{};
     if (component->getBusInfo(Steinberg::Vst::kAudio, Steinberg::Vst::kInput, busIndex, info) == Steinberg::kResultTrue)
@@ -1436,6 +1654,7 @@ int VstPlugin::getAudioInputChannels(int busIndex) const {
 }
 
 int VstPlugin::getAudioOutputChannels(int busIndex) const {
+    if (vst2_) return busIndex == 0 ? vst2_->numOutputs() : 0;
     if (!component) return 0;
     Steinberg::Vst::BusInfo info{};
     if (component->getBusInfo(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput, busIndex, info) == Steinberg::kResultTrue)
@@ -1444,26 +1663,31 @@ int VstPlugin::getAudioOutputChannels(int busIndex) const {
 }
 
 int VstPlugin::getNumEventInputs() const {
+    if (vst2_) return 1; // VST2 always accepts MIDI events; instruments need them.
     if (!component) return 0;
     return component->getBusCount(Steinberg::Vst::kEvent, Steinberg::Vst::kInput);
 }
 
 int VstPlugin::getNumEventOutputs() const {
+    if (vst2_) return 0;
     if (!component) return 0;
     return component->getBusCount(Steinberg::Vst::kEvent, Steinberg::Vst::kOutput);
 }
 
 int VstPlugin::getParameterCount() const {
+    if (vst2_) return vst2_->getParameterCount();
     if (!editController) return 0;
     return editController->getParameterCount();
 }
 
 float VstPlugin::getParameterValue(int paramID) const {
+    if (vst2_) return vst2_->getParameterValue(paramID);
     if (!editController) return 0.0f;
     return static_cast<float>(editController->getParamNormalized(static_cast<Steinberg::Vst::ParamID>(paramID)));
 }
 
 int VstPlugin::getParameterID(int paramIndex) const {
+    if (vst2_) return paramIndex;
     if (!editController) return -1;
     Steinberg::Vst::ParameterInfo info{};
     if (editController->getParameterInfo(paramIndex, info) != Steinberg::kResultOk) return -1;
@@ -1471,6 +1695,7 @@ int VstPlugin::getParameterID(int paramIndex) const {
 }
 
 std::string VstPlugin::getParameterNameByID(int paramID) const {
+    if (vst2_) return vst2_->getParameterName(paramID);
     if (editController) {
         int count = getParameterCount();
         Steinberg::Vst::ParameterInfo info{};
@@ -1484,6 +1709,7 @@ std::string VstPlugin::getParameterNameByID(int paramID) const {
 }
 
 std::string VstPlugin::getParameterName(int paramIndex) const {
+    if (vst2_) return vst2_->getParameterName(paramIndex);
     if (!editController) return "Param " + std::to_string(paramIndex);
     Steinberg::Vst::ParameterInfo info{};
     if (editController->getParameterInfo(paramIndex, info) == Steinberg::kResultOk) {
@@ -1507,6 +1733,11 @@ std::string VstPlugin::getParameterName(int paramIndex) const {
 }
 
 void VstPlugin::setParameterValue(int paramID, float valueNormalized) {
+    if (vst2_) {
+        vst2_->setParameterValue(paramID, valueNormalized);
+        setShadowParameterValue(paramID, valueNormalized);
+        return;
+    }
     if (!editController || !hostFrame) return;
     const Steinberg::Vst::ParamID pid = static_cast<Steinberg::Vst::ParamID>(paramID);
     const Steinberg::Vst::ParamValue value = static_cast<Steinberg::Vst::ParamValue>(valueNormalized);
@@ -1527,7 +1758,7 @@ void VstPlugin::setParameterValue(int paramID, float valueNormalized) {
 }
 
 void VstPlugin::enableMpeParameters() {
-    if (!editController) return;
+    if (!editController && !vst2_) return;
     const int count = getParameterCount();
     for (int i = 0; i < count; ++i) {
         std::string name = getParameterName(i);
@@ -1578,7 +1809,7 @@ float VstPlugin::swapShadowParameterValue(int paramID, float valueNormalized) {
 }
 
 void VstPlugin::refreshParameterShadow() {
-    if (!editController) return;
+    if (!editController && !vst2_) return;
     std::vector<std::pair<int, float>> values;
     const int n = getParameterCount();
     values.reserve(static_cast<size_t>(n > 0 ? n : 0));
@@ -1592,6 +1823,12 @@ void VstPlugin::refreshParameterShadow() {
 }
 
 void VstPlugin::queueParameterChange(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue value) {
+    // VST2 has no deferred parameter queue: setParameter already delivers the
+    // value to the running plugin immediately.
+    if (vst2_) {
+        vst2_->setParameterValue(static_cast<int>(id), static_cast<float>(value));
+        return;
+    }
     std::lock_guard<std::mutex> lock(pendingParamMutex_);
     for (auto& pc : pendingParamChanges_) {
         if (pc.first == id) {
@@ -1603,6 +1840,7 @@ void VstPlugin::queueParameterChange(Steinberg::Vst::ParamID id, Steinberg::Vst:
 }
 
 std::vector<uint8_t> VstPlugin::getComponentState() const {
+    if (vst2_) return vst2_->getState();
     if (!component) return {};
     Steinberg::MemoryStream stream;
     if (component->getState(&stream) == Steinberg::kResultTrue) {
@@ -1612,6 +1850,7 @@ std::vector<uint8_t> VstPlugin::getComponentState() const {
 }
 
 std::vector<uint8_t> VstPlugin::getControllerState() const {
+    if (vst2_) return {}; // VST2 keeps one state blob; there is no controller half.
     if (!editController) return {};
     Steinberg::MemoryStream stream;
     if (editController->getState(&stream) == Steinberg::kResultTrue) {
@@ -1621,6 +1860,11 @@ std::vector<uint8_t> VstPlugin::getControllerState() const {
 }
 
 void VstPlugin::setComponentState(const std::vector<uint8_t>& data) {
+    if (vst2_) {
+        vst2_->setState(data);
+        refreshParameterShadow();
+        return;
+    }
     if (!component || data.empty()) return;
     Steinberg::MemoryStream stream;
     Steinberg::int32 bytesWritten = 0;
@@ -1637,6 +1881,16 @@ void VstPlugin::setComponentState(const std::vector<uint8_t>& data) {
 }
 
 void VstPlugin::beginStateRestore() {
+    if (vst2_) {
+        if (inStateRestore_) return;
+        inStateRestore_ = true;
+        stateRestoreWasProcessing_ = processingActive;
+        if (processingActive) {
+            vst2_->suspend();
+            processingActive = false;
+        }
+        return;
+    }
     if (inStateRestore_) return;
     inStateRestore_ = true;
     stateRestoreWasProcessing_ = processingActive;
@@ -1648,6 +1902,17 @@ void VstPlugin::beginStateRestore() {
 }
 
 void VstPlugin::endStateRestore() {
+    if (vst2_) {
+        if (!inStateRestore_) return;
+        inStateRestore_ = false;
+        if (stateRestoreWasProcessing_) {
+            vst2_->resume();
+            processingActive = true;
+        }
+        stateRestoreWasProcessing_ = false;
+        refreshParameterShadow();
+        return;
+    }
     if (!inStateRestore_) return;
     inStateRestore_ = false;
     if (!component) return;
@@ -1661,6 +1926,7 @@ void VstPlugin::endStateRestore() {
 }
 
 void VstPlugin::applyComponentStateToController(const std::vector<uint8_t>& data) {
+    if (vst2_) return; // the VST2 chunk already reaches the plugin's UI
     if (!editController || data.empty()) return;
     Steinberg::MemoryStream stream;
     Steinberg::int32 bytesWritten = 0;
@@ -1671,6 +1937,7 @@ void VstPlugin::applyComponentStateToController(const std::vector<uint8_t>& data
 }
 
 void VstPlugin::setControllerState(const std::vector<uint8_t>& data) {
+    if (vst2_) return;
     if (!editController || data.empty()) return;
     Steinberg::MemoryStream stream;
     Steinberg::int32 bytesWritten = 0;

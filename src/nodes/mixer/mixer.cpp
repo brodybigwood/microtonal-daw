@@ -547,15 +547,11 @@ void MixerNode::reorderChains(const std::vector<size_t>& newOrder) {
 // Audio
 // ============================================================================
 
-void MixerNode::setup() {
+void MixerNode::syncWidthsFromInputs() {
     if (!out) return;
     out->minChannels = std::max(1, outChannelsTarget_);
     out->updateNumChannels();
-    if (bufferSize > 0 && (out->buffer == nullptr || out->allocChannels != out->numChannels))
-        out->allocateBuffer(bufferSize, out->numChannels);
 
-    // Per-chain outputs are sized and allocated here, not in process: reallocating
-    // a buffer the downstream node already points at corrupts the audio pass.
     for (auto& cp : chains) {
         Chain& c = *cp;
         if (!c.outflow) continue;
@@ -564,11 +560,33 @@ void MixerNode::setup() {
             Connection* dout = firstWaveOut(n);
             if (dout) ch = std::max(ch, std::max(1, static_cast<int>(dout->numChannels)));
         }
-        if (c.inflow && c.inflow->is_connected)
+        if (c.inflow && c.inflow->is_connected) {
+            // numChannels is refreshed by this same width pass; sourceChannels
+            // only on the previous relink. Take the larger so the first pass
+            // already sees a widened source.
             ch = std::max(ch, std::max(1, static_cast<int>(c.inflow->sourceChannels)));
+            ch = std::max(ch, std::max(1, static_cast<int>(c.inflow->numChannels)));
+        }
         c.outflow->minChannels = ch;
         c.outflow->numChannels = ch;
         c.outflow->updateNumChannels();
+    }
+}
+
+void MixerNode::setup() {
+    if (!out) return;
+    // Widths first, in the same pass the graph uses for every node, so the
+    // downstream relink sees the real width in the same topology update.
+    syncWidthsFromInputs();
+
+    if (bufferSize > 0 && (out->buffer == nullptr || out->allocChannels != out->numChannels))
+        out->allocateBuffer(bufferSize, out->numChannels);
+
+    // Per-chain outputs are sized and allocated here, not in process: reallocating
+    // a buffer the downstream node already points at corrupts the audio pass.
+    for (auto& cp : chains) {
+        Chain& c = *cp;
+        if (!c.outflow) continue;
         if (bufferSize > 0 && (c.outflow->buffer == nullptr ||
                                c.outflow->bufferSize != bufferSize ||
                                c.outflow->allocChannels != c.outflow->numChannels))

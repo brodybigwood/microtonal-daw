@@ -22,7 +22,7 @@
 
 // Synchronous file dialog on the calling (GUI) thread via zenity
 static std::string openFileDialog() {
-    FILE* fp = popen("zenity --file-selection --title='Load VST3 Plugin' 2>/dev/null", "r");
+    FILE* fp = popen("zenity --file-selection --title='Load VST Plugin (VST3 or VST2)' 2>/dev/null", "r");
     if (!fp) return "";
     char buf[4096]{};
     std::string result;
@@ -53,7 +53,7 @@ VstNode::VstNode(uint16_t id, NodeManager* nm, bool mpeRack)
     name = mpeRack ? "MPE Rack" : "VST Plugin";
     params.push_back(&bypass);
     if (mpeRack_) {
-        mpeInstances.setValueRange(1.0f, 32.0f, 1.0f);
+        mpeInstances.setValueRange(1.0f, 15.0f, 1.0f);
         mpeInstances.value = 4.0f;
         mpeInstances.defaultValue = 4.0f;
         params.push_back(&mpeInstances);
@@ -67,6 +67,8 @@ VstNode::VstNode(uint16_t id, NodeManager* nm, bool mpeRack)
 void VstNode::markRackDirty() {
     rackDirty_ = true;
     rackLastEditMs_ = nowMsSteady();
+    if (std::getenv("DAW_VST_DEBUG"))
+        std::cout << "[vst-rack] dirty node=" << id << " " << (ne ? "gui" : "dsp") << std::endl;
 }
 
 void VstNode::tickAllRacks() {
@@ -87,11 +89,21 @@ void VstNode::tickAllRacks() {
 }
 
 void VstNode::syncRackState() {
-    rackDirty_ = false;
-    if (!mpeRack_ || !plugin || !plugin->isValid() || rackShadows_.empty()) return;
+    if (!mpeRack_ || !plugin || !plugin->isValid() || rackShadows_.empty()) {
+        rackDirty_ = false;
+        return;
+    }
     const auto comp = plugin->getComponentState();
     const auto ctrl = plugin->getControllerState();
-    if (comp.empty() && ctrl.empty()) return;
+    if (comp.empty() && ctrl.empty()) {
+        // The master's state could not be read (e.g. a fresh group of bridged
+        // instances is still coming up). Keep the rack dirty so the next GUI
+        // tick retries instead of leaving the new voices on their defaults.
+        return;
+    }
+    if (std::getenv("DAW_VST_DEBUG"))
+        std::cout << "[vst-rack] sync node=" << id << " shadows=" << rackShadows_.size()
+                  << " comp=" << comp.size() << " ctrl=" << ctrl.size() << std::endl;
     for (auto& shadow : rackShadows_) {
         if (!shadow || !shadow->isValid()) continue;
         shadow->beginStateRestore();
@@ -99,6 +111,7 @@ void VstNode::syncRackState() {
         if (!ctrl.empty()) shadow->setControllerState(ctrl);
         shadow->endStateRestore();
     }
+    rackDirty_ = false;
 }
 
 void VstNode::createRackShadows() {
@@ -119,20 +132,23 @@ void VstNode::createRackShadows() {
 }
 
 int VstNode::rackTargetInstances() const {
+    // Instance i owns MIDI channel i+1. MPE member channels are 1..15, so the
+    // master (instance 0, channel 1) plus 14 shadows is the ceiling.
     const int want = static_cast<int>(std::lround(mpeInstances.value));
-    return std::clamp(want, 1, 32);
+    return std::clamp(want, 1, 15);
 }
 
 void VstNode::applyRackInstanceCount() {
     if (!mpeRack_ || !plugin || !plugin->isValid()) return;
-    const int wantShadows = rackTargetInstances() - 1;
+    const int wantTotal = rackTargetInstances();
+    const int wantShadows = wantTotal - 1;
     const int have = static_cast<int>(rackShadows_.size());
     if (wantShadows == have) return;
 
     if (wantShadows < have) {
         // Drop notes that were allocated to the removed instances.
         for (auto it = noteChannels.begin(); it != noteChannels.end();) {
-            if (it->second > wantShadows) it = noteChannels.erase(it);
+            if (it->second > wantTotal) it = noteChannels.erase(it);
             else ++it;
         }
         rackShadows_.resize(static_cast<size_t>(wantShadows));
@@ -388,13 +404,17 @@ void VstNode::process() {
                 : 120.0;
             double sr = AudioManager::instance()->sampleRate;
             if (mpeRack_) {
-                for (size_t i = 0; i < rackShadows_.size() && i < 15; ++i) {
-                    auto& sh = rackShadows_[i];
-                    if (!sh || !sh->isValid()) continue;
-                    HostEventList& evs = rackReleases[i + 1];
-                    sh->processAudio(bufferSize, evs.events.empty() ? nullptr : &evs,
-                                     bpm, beat, seconds * sr,
-                                     project ? project->dspIsPlaying : true);
+                // Voice 1 is the master, voice i+2 is rackShadows_[i].
+                for (int ch = 1; ch <= 15; ++ch) {
+                    VstPlugin* inst = ch == 1
+                        ? localPlugin.get()
+                        : (static_cast<size_t>(ch - 2) < rackShadows_.size()
+                               ? rackShadows_[static_cast<size_t>(ch - 2)].get() : nullptr);
+                    if (!inst || !inst->isValid()) continue;
+                    HostEventList& evs = rackReleases[static_cast<size_t>(ch)];
+                    inst->processAudio(bufferSize, evs.events.empty() ? nullptr : &evs,
+                                       bpm, beat, seconds * sr,
+                                       project ? project->dspIsPlaying : true);
                 }
             } else {
                 localPlugin->processAudio(bufferSize, &releases, bpm, beat, seconds * sr,
@@ -444,7 +464,12 @@ void VstNode::process() {
                 if (!mpeRack_) return vstEvents;
                 return channelEvents[static_cast<size_t>(std::clamp(ch, 0, 15))];
             };
-            if (mpeRack_) {
+            // A VST2 plugin has no MPE contract: its MIDI channels are usually
+            // separate parts/instruments (Purity) and it ignores the MPE RPN.
+            // Send it plain channel-0 MIDI and use the GM/standard ±2 semitone
+            // bend range. VST3 keeps the ±48 MPE convention.
+            const bool vst2Plugin = localPlugin->isVst2();
+            if (mpeRack_ && !vst2Plugin) {
                 if (!mpeRangeSet) {
                     mpeRangeSet = true;
                     auto rpn = [](HostEventList& out, int ch, int cc, int val) {
@@ -464,7 +489,7 @@ void VstNode::process() {
                         rpn(out, ch, 101, 127); rpn(out, ch, 100, 127);
                     }
                 }
-            } else {
+            } else if (!vst2Plugin) {
                 sendMpePitchBendRange(&vstEvents);
             }
             const bool midiConnected = midiIn && midiIn->is_connected && midiIn->events;
@@ -477,7 +502,8 @@ void VstNode::process() {
                     off.sampleOffset = 0;
                     off.flags = 0;
                     off.type = Steinberg::Vst::Event::kNoteOffEvent;
-                    off.noteOff.channel = static_cast<Steinberg::int16>(channel);
+                    off.noteOff.channel = static_cast<Steinberg::int16>(
+                        (mpeRack_ && vst2Plugin) ? 0 : channel);
                     off.noteOff.pitch = 0;
                     off.noteOff.tuning = 0;
                     off.noteOff.velocity = 0.0f;
@@ -493,14 +519,35 @@ void VstNode::process() {
                     float frac = ev.num - base;
 
                     if (ev.type == noteOn) {
-                        int mpeCh = allocMpeChannel(ev.id, &vstEvents, mpeRack_ ? &channelEvents : nullptr);
-                        if (mpeCh > 0) {
-                            // MPE standard pitch-bend range is ±48 semitones. Bend by
-                            // `frac` semitones in that range (the RPN below tells the
-                            // plugin the range; 48 is the spec default MPE plugins use).
+                        int mpeCh;
+                        if (mpeRack_) {
+                            // VST2 has no MPE: each rack instance is a whole
+                            // multi-part plugin, so address every instance on
+                            // its configured part (channel 0 = part 1). The
+                            // rack still gives each note its own instance,
+                            // which is what makes per-note pitch work.
+                            mpeCh = allocMpeChannel(ev.id, &vstEvents, &channelEvents,
+                                                    vst2Plugin ? 0 : -1);
+                        } else if (vst2Plugin) {
+                            // Plain channel 0: Purity (and VST2 instruments in
+                            // general) map MIDI channels to parts. Per-note
+                            // channels would send most notes to empty parts.
+                            mpeCh = 0;
+                            noteChannels[ev.id] = 0;
+                        } else {
+                            mpeCh = allocMpeChannel(ev.id, &vstEvents, nullptr);
+                        }
+                        const bool sendBend = mpeCh > 0 || (!mpeRack_ && vst2Plugin);
+                        // MIDI channel written into the events: for VST2 in a
+                        // rack every instance is addressed on channel 0.
+                        const int outCh = (mpeRack_ && vst2Plugin) ? 0 : mpeCh;
+                        auto addPitchBend = [&]() {
+                            // MPE range is ±48 semitones; VST2 has no MPE RPN
+                            // convention, so use the standard ±2 semitone bend.
+                            const float bendRange = vst2Plugin ? 2.0f : 48.0f;
                             Steinberg::int32 pb14 = 8192;
                             if (frac != 0.0f) {
-                                pb14 = 8192 + static_cast<Steinberg::int32>(frac / 48.0f * 8192.0f);
+                                pb14 = 8192 + static_cast<Steinberg::int32>(frac / bendRange * 8192.0f);
                                 pb14 = std::max(0, std::min(16383, static_cast<int>(pb14)));
                             }
                             Steinberg::Vst::Event pb{};
@@ -509,23 +556,29 @@ void VstNode::process() {
                             pb.flags = Steinberg::Vst::Event::kIsLive;
                             pb.type = Steinberg::Vst::Event::kLegacyMIDICCOutEvent;
                             pb.midiCCOut.controlNumber = Steinberg::Vst::kPitchBend;
-                            pb.midiCCOut.channel = static_cast<Steinberg::int8>(mpeCh);
+                            pb.midiCCOut.channel = static_cast<Steinberg::int8>(outCh);
                             pb.midiCCOut.value = static_cast<Steinberg::int8>(pb14 & 0x7F);
                             pb.midiCCOut.value2 = static_cast<Steinberg::int8>((pb14 >> 7) & 0x7F);
                             eventList(mpeCh).addEvent(pb);
-                        }
+                        };
+                        // VST3/MPE: bend precedes the note (per-note MPE).
+                        // VST2: many instruments (Purity) only apply a bend to
+                        // voices that already exist, so send it after the note-on.
+                        if (sendBend && !vst2Plugin) addPitchBend();
 
                         Steinberg::Vst::Event e{};
                         e.busIndex = 0;
                         e.sampleOffset = ev.sampleOffset;
                         e.flags = Steinberg::Vst::Event::kIsLive;
                         e.type = Steinberg::Vst::Event::kNoteOnEvent;
-                        e.noteOn.channel = static_cast<Steinberg::int16>(mpeCh);
+                        e.noteOn.channel = static_cast<Steinberg::int16>(outCh);
                         e.noteOn.pitch = base;
                         e.noteOn.tuning = 0;
                         e.noteOn.velocity = std::clamp(ev.velocity, 0.0f, 1.0f);
                         e.noteOn.noteId = ev.id;
                         eventList(mpeCh).addEvent(e);
+
+                        if (sendBend && vst2Plugin) addPitchBend();
                     } else if (ev.type == noteOff) {
                         int mpeCh = -1;
                         auto it = noteChannels.find(ev.id);
@@ -546,7 +599,8 @@ void VstNode::process() {
                         e.sampleOffset = ev.sampleOffset;
                         e.flags = 0;
                         e.type = Steinberg::Vst::Event::kNoteOffEvent;
-                        e.noteOff.channel = static_cast<Steinberg::int16>(mpeCh >= 0 ? mpeCh : 0);
+                        e.noteOff.channel = static_cast<Steinberg::int16>(
+                            (mpeRack_ && vst2Plugin) ? 0 : mpeCh);
                         e.noteOff.pitch = base;
                         e.noteOff.tuning = 0;
                         e.noteOff.velocity = 0.0f;
@@ -578,7 +632,8 @@ void VstNode::process() {
                 };
                 if (mpeRack_) {
                     for (int ch = 1; ch <= 15; ++ch)
-                        addAllNotesOff(channelEvents[static_cast<size_t>(ch)], ch);
+                        addAllNotesOff(channelEvents[static_cast<size_t>(ch)],
+                                       vst2Plugin ? 0 : ch);
                 } else {
                     addAllNotesOff(vstEvents, 0);
                 }
@@ -627,38 +682,48 @@ void VstNode::process() {
                 // are skipped so sixteen copies don't cost sixteen times the CPU.
                 const uint64_t nowMs = SDL_GetTicks();
                 long long worstUs = 0;
-                for (size_t i = 0; i < rackShadows_.size() && i < 15; ++i) {
-                    auto& sh = rackShadows_[i];
-                    if (!sh || !sh->isValid()) continue;
-                    const int ch = static_cast<int>(i) + 1;
+                // Instance i owns channel i+1: the master is voice 1 (and owns
+                // the editor), rackShadows_[i] is voice i+2. Each voice only
+                // runs while it has notes or a recent tail, so a full rack does
+                // not cost a full plugin per voice when idle.
+                auto processVoice = [&](VstPlugin* inst, int ch, bool force) {
+                    if (!inst || !inst->isValid()) return;
                     HostEventList& evs = channelEvents[static_cast<size_t>(ch)];
                     bool channelHasNotes = false;
                     for (auto& [noteId, noteCh] : noteChannels)
                         if (noteCh == ch) { channelHasNotes = true; break; }
                     if (channelHasNotes || !evs.events.empty())
                         rackChannelLastMs_[static_cast<size_t>(ch)] = nowMs;
-                    const bool live = channelHasNotes || !evs.events.empty() ||
+                    const bool live = force || channelHasNotes || !evs.events.empty() ||
                                       (nowMs - rackChannelLastMs_[static_cast<size_t>(ch)] < 5000);
-                    if (!live) continue;
+                    if (!live) return;
 
-                    applyMapped(sh.get());
-                    copyInputs(sh.get());
+                    applyMapped(inst);
+                    copyInputs(inst);
                     const auto t0 = std::chrono::steady_clock::now();
-                    sh->processAudio(bufferSize, evs.events.empty() ? nullptr : &evs,
-                                     bpm, beatPos, samplePos, playing);
+                    inst->processAudio(bufferSize, evs.events.empty() ? nullptr : &evs,
+                                       bpm, beatPos, samplePos, playing);
                     worstUs = std::max<long long>(worstUs, std::chrono::duration_cast<std::chrono::microseconds>(
                         std::chrono::steady_clock::now() - t0).count());
 
                     for (size_t bi = 0; bi < audioOutConns.size(); ++bi) {
                         auto* c = audioOutConns[bi];
                         if (!c || !c->buffer) continue;
-                        if (bi >= sh->outputBusData.size()) continue;
-                        auto& data = sh->outputBusData[bi];
+                        if (bi >= inst->outputBusData.size()) continue;
+                        auto& data = inst->outputBusData[bi];
                         const size_t chn = std::min(static_cast<size_t>(c->numChannels),
                                                     data.size() / static_cast<size_t>(bufferSize));
                         const size_t n = static_cast<size_t>(bufferSize) * chn;
                         for (size_t k = 0; k < n; ++k) c->buffer[k] += data[k];
                     }
+                };
+                // Voice 1 always runs: its editor's own keyboard generates sound
+                // inside the plugin and never shows up as DAW note events.
+                processVoice(localPlugin.get(), 1, true);
+                for (size_t i = 0; i < rackShadows_.size() && i < 14; ++i) {
+                    auto& sh = rackShadows_[i];
+                    if (!sh) continue;
+                    processVoice(sh.get(), static_cast<int>(i) + 2, false);
                 }
                 const int lat = localPlugin->latencySamples();
                 if (lat != lastReportedLatency_) {
@@ -808,6 +873,10 @@ void VstNode::renderContent(SDL_Renderer* renderer) {
         const std::string tag = "MPE RACK x" + std::to_string(rackShadows_.size() + 1);
         renderText(tag, 8, 66, SDL_Color{120, 225, 150, 255});
     }
+
+    // The base renderer draws the node's knobs; the VST renderer replaces it,
+    // so Bypass (and Instances on a rack) must be drawn explicitly.
+    renderParams(renderer);
 
     // Editor run-loop ticking happens globally once per frame
     // (VstPlugin::tickAllEditors from NodeEditor::tick). Ticking here made the
@@ -1042,7 +1111,14 @@ void VstNode::unloadPlugin() {
 void VstNode::onPluginParameterChange(int paramID, float oldValue, float newValue, uint64_t gestureID) {
     if (!project || !project->um || !plugin) return;
     if (restoringState) return;
-    if (mpeRack_) markRackDirty();
+    // Edit-time fan-out: an editor edit goes to every voice instance
+    // immediately, as a parameter change. Reloading the bank on every edit
+    // would cut the voices; parameters apply in place.
+    if (mpeRack_) {
+        for (auto& shadow : rackShadows_)
+            if (shadow && shadow->isValid())
+                shadow->setParameterValue(paramID, newValue);
+    }
     // Suppress undo when a mapped connection owns the parameter.
     auto it = mappedVstParams.find(paramID);
     if (it != mappedVstParams.end() && it->second && it->second->is_connected)
@@ -1074,6 +1150,13 @@ void VstNode::onPluginParameterChange(int paramID, float oldValue, float newValu
 
 void VstNode::wirePluginCallbacks() {
     if (!plugin || !plugin->isValid()) return;
+    // The GUI copy and the audio copy share one VstPlugin instance, whose host
+    // frame callbacks are therefore global. If the audio copy wires them last,
+    // every editor edit lands on the audio copy's VstNode and the GUI copy's
+    // rackDirty_ is never set — MPE shadows never learn about the change.
+    if (!ne) return;
+    if (std::getenv("DAW_VST_DEBUG"))
+        std::cout << "[vst-rack] wire callbacks node=" << id << " gui" << std::endl;
     auto* frame = plugin->getHostFrame();
     if (!frame) return;
     mpeRangeSet = false;
@@ -1195,6 +1278,9 @@ void VstNode::pollVstStateForUndo(bool force) {
     auto* pa = new VstStateChangeAction(project, std::move(mgrPath), static_cast<int>(id),
                                         std::move(oldState), std::move(newState), true);
     project->um->newAction(pa);
+    // The master's state moved (e.g. a VST2 preset changed in its editor, which
+    // never emits performEdit). Every voice instance must follow it.
+    if (mpeRack_) markRackDirty();
     stateBaselineComp_ = std::move(comp);
     stateBaselineCtrl_ = std::move(ctrl);
 }
@@ -1218,10 +1304,22 @@ json VstNode::extraSerialize() {
     if (!className_.empty()) j["className"] = className_;
     if (plugin && plugin->isValid()) {
         j["pluginPath"] = loadedPath;
+        const auto compState = plugin->getComponentState();
         json state;
-        state["compState"] = jsonBytesEncode(plugin->getComponentState());
+        state["compState"] = jsonBytesEncode(compState);
         state["ctrlState"] = jsonBytesEncode(plugin->getControllerState());
         if (project) state = project->externalizeVstState(std::move(state));
+        if (compState.empty() && !lastGoodCompStateFile_.empty()) {
+            // The read failed (or returned nothing). Keep pointing at the last
+            // good state instead of saving an empty blob that resets the plugin
+            // to defaults on the next load.
+            std::cerr << "[VstNode] node=" << id << ": empty component state, keeping "
+                      << lastGoodCompStateFile_ << std::endl;
+            state["compStateFile"] = lastGoodCompStateFile_;
+            state.erase("compState");
+        } else if (state.contains("compStateFile") && !compState.empty()) {
+            lastGoodCompStateFile_ = state["compStateFile"].get<std::string>();
+        }
         for (auto& [key, value] : state.items()) j[key] = std::move(value);
     }
     if (!mappedVstParams.empty()) {
@@ -1281,6 +1379,9 @@ void VstNode::extraDeSerialize(const json& j) {
                 if (j.contains("ctrlStateFile") || j.contains("ctrlState"))
                     pendingCtrlState_ = readBlob("ctrlStateFile", "ctrlState");
             }
+            if (j.contains("compStateFile") && !pendingCompState_.empty()) {
+                lastGoodCompStateFile_ = j["compStateFile"].get<std::string>();
+            }
             rebuildConnections();
             if (mpeRack_) createRackShadows();
             invalidateOwnerChain();
@@ -1338,20 +1439,25 @@ void VstNode::extraDeSerialize(const json& j) {
 // ============================================================================
 
 int VstNode::allocMpeChannel(int noteId, HostEventList* plain,
-                             std::array<HostEventList, 16>* rack) {
+                             std::array<HostEventList, 16>* rack,
+                             int midiChannelOverride) {
     auto it = noteChannels.find(noteId);
     if (it != noteChannels.end()) return it->second;
+    // A rack only has as many voices as it has instances; channels beyond that
+    // have no instance and their notes would be silently dropped. Plain VST3
+    // nodes keep all 15 member channels on the single instance.
+    const int maxCh = rack ? std::max(1, std::min(15, rackTargetInstances())) : 15;
     bool used[16] = {};
     for (auto& [id, ch] : noteChannels) used[ch] = true;
     int ch = nextMpeChannel;
     bool found = false;
-    for (int tries = 0; tries < 15; tries++) {
-        if (ch == 0) ch = 1;
+    for (int tries = 0; tries < maxCh; tries++) {
+        if (ch <= 0 || ch > maxCh) ch = 1;
         if (!used[ch]) { found = true; break; }
-        if (++ch > 15) ch = 1;
+        if (++ch > maxCh) ch = 1;
     }
     if (!found) {
-        // All 15 MPE channels in use — evict the first entry and send note-off
+        // All member channels in use — evict the first entry and send note-off
         if (!noteChannels.empty()) {
             auto oldest = noteChannels.begin();
             ch = oldest->second;
@@ -1366,7 +1472,8 @@ int VstNode::allocMpeChannel(int noteId, HostEventList* plain,
             off.sampleOffset = 0;
             off.flags = 0;
             off.type = Steinberg::Vst::Event::kNoteOffEvent;
-            off.noteOff.channel = static_cast<Steinberg::int16>(ch);
+            off.noteOff.channel = static_cast<Steinberg::int16>(
+                midiChannelOverride >= 0 ? midiChannelOverride : ch);
             off.noteOff.pitch = 0;
             off.noteOff.tuning = 0;
             off.noteOff.velocity = 0.0f;
@@ -1376,7 +1483,7 @@ int VstNode::allocMpeChannel(int noteId, HostEventList* plain,
             ch = 1;
         }
     }
-    nextMpeChannel = (ch % 15) + 1;
+    nextMpeChannel = (ch % maxCh) + 1;
     noteChannels[noteId] = ch;
     return ch;
 }

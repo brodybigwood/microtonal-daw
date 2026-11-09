@@ -103,6 +103,23 @@ struct Knob : Parameter {
 
 // Vertical value bar. Owns its press/drag/release input and the undo step for
 // the whole gesture (via Parameter::beginDrag/dragToValue/endDrag).
+// Click-toggle parameter: value is 0 (off) or 1 (on); a left click flips it.
+// For binary node params (bypass) where a knob makes no sense.
+struct Toggle : Parameter {
+    SDL_FRect boxRect;
+    std::string displayLabel;
+    SDL_Color labelColor{220, 220, 220, 255};
+
+    void render(SDL_Renderer*) override;
+    void handleInput(SDL_Event&) override;
+    void reposition(float x, float y, float w, float h);
+
+    Toggle(float value, float x, float y, float w, float h, std::string label = "",
+           SDL_Color labelColor = {220, 220, 220, 255});
+    Toggle(Toggle&&) noexcept = default;
+    Toggle& operator=(Toggle&&) noexcept = default;
+};
+
 struct Bar : Parameter {
     SDL_FRect barRect;
     Node* ownerNode = nullptr;

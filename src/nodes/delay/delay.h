@@ -25,13 +25,19 @@ class DelayNode : public Node {
         NodeManager* chain = nullptr;
         NodeEditor* chainEditor = nullptr;
 
+        // Node graph processed on the input before it enters the delay line.
+        // Its managerPath is [nodeID, -1] so it is distinct from the feedback
+        // graph's [nodeID].
+        NodeManager* preChain = nullptr;
+        NodeEditor* preEditor = nullptr;
+
     private:
         Connection* in = nullptr;
         Connection* out = nullptr;
 
-        Knob timeKnob = Knob(0.25f, 40.0f, 44.0f, 11.0f, "assets/knobs/1.png", -135.0f, 135.0f, "Time");
-        Knob feedbackKnob = Knob(0.5f, 100.0f, 44.0f, 11.0f, "assets/knobs/1.png", -135.0f, 135.0f, "Feedback");
-        Knob mixKnob = Knob(0.5f, 160.0f, 44.0f, 11.0f, "assets/knobs/1.png", -135.0f, 135.0f, "Mix");
+        Knob timeKnob = Knob(0.25f, 40.0f, 28.0f, 11.0f, "assets/knobs/1.png", -135.0f, 135.0f, "Time");
+        Knob feedbackKnob = Knob(0.5f, 100.0f, 28.0f, 11.0f, "assets/knobs/1.png", -135.0f, 135.0f, "Feedback");
+        Knob mixKnob = Knob(0.5f, 160.0f, 28.0f, 11.0f, "assets/knobs/1.png", -135.0f, 135.0f, "Mix");
 
         void ensureCapacity(int channels);
 
@@ -40,6 +46,7 @@ class DelayNode : public Node {
         std::vector<float> prevBuf;
         std::vector<float> sumBuf;
         std::vector<float> chainBuf;
+        std::vector<float> preBuf;
         int lineLen = 0;
         int writePos = 0;
         int lineChannels = 0;

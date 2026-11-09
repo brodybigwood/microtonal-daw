@@ -13,6 +13,7 @@
 #include "pluginterfaces/gui/iplugview.h"
 #include "pluginterfaces/base/funknown.h"
 #include "public.sdk/source/vst/hosting/plugprovider.h"
+#include "vst2host.h"
 
 #include <string>
 #include <vector>
@@ -66,6 +67,9 @@ private:
     bool loaded = false;
 public:
     bool is_yabridge = false;
+    /** The library is a VST 2.x plugin (VSTPluginMain instead of GetPluginFactory). */
+    bool is_vst2 = false;
+    Vst2PluginMainProc vst2Main = nullptr;
 
     Steinberg::FUnknownPtr<Steinberg::IPluginFactory> factory;
     std::unique_ptr<VST3::Hosting::PluginFactory> factoryWrapper;
@@ -387,6 +391,10 @@ public:
     /** Force a state-diff capture on every open editor so pending plugin-internal
         edits become undo actions NOW — call before undo-tree navigation. */
     static void commitPendingStateEdits();
+    /** GUI thread: push parameter values the processor published through
+        outputParameterChanges into the edit controller (meters, internal
+        state). The audio thread only queues them. */
+    void applyPendingControllerUpdates();
     static void registerEditor(VstPlugin* p);
     static void unregisterEditor(VstPlugin* p);
     int getEditorWidth() const { return editorW; }
@@ -443,10 +451,14 @@ public:
 
     /// Processing latency the plugin reports for delay compensation.
     int latencySamples() const {
+        if (vst2_) return vst2_->latencySamples();
         return audioProcessor ? static_cast<int>(audioProcessor->getLatencySamples()) : 0;
     }
 
     bool isYabridge() const { return is_yabridge_; }
+    /** True when the loaded library is VST 2.x; every public method above
+        routes to the VST2 backend in that case. */
+    bool isVst2() const { return vst2_ != nullptr; }
 
 private:
     bool valid = false;
@@ -463,6 +475,10 @@ private:
     std::atomic<bool> bypassed{false};
 
     PlugLib* lib = nullptr;
+
+    // VST 2.x backend. Non-null when the loaded library is VST2; the VST3
+    // members below stay empty in that case.
+    std::unique_ptr<Vst2Plugin> vst2_;
 
     // Steinberg interfaces
     Steinberg::FUnknownPtr<Steinberg::Vst::IComponent> component;
@@ -500,6 +516,10 @@ private:
     // DPF-based plugins (LSP, Dragonfly) assert when ProcessData.outputParameterChanges
     // is null; give them a valid, empty container every block.
     HostParameterChanges outParamChanges_;
+
+    // Processor-published parameter values, audio thread -> GUI thread.
+    std::mutex outParamMutex_;
+    std::vector<std::pair<int, float>> pendingControllerUpdates_;
 
     bool createComponent();
     bool createController();

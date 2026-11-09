@@ -22,6 +22,9 @@
 #include "nodes/instrumentrack/instrumentrack.h"
 #include "nodes/additive/additive.h"
 #include "nodes/ducker/ducker.h"
+#include "nodes/paninvert/paninvert.h"
+#include "nodes/eventduplicator/eventduplicator.h"
+#include "nodes/notelength/notelength.h"
 
 inline std::string NodeTypeStr[] = {
     "Arranger",
@@ -46,7 +49,10 @@ inline std::string NodeTypeStr[] = {
     "MPE Rack",
     "Instrument Rack",
     "Additive",
-    "Ducker"
+    "Ducker",
+    "Pan Invert",
+    "Event Duplicator",
+    "Note Length"
 };
 
 inline Node* byType(NodeType t, int id, NodeManager* nm) {
@@ -97,6 +103,12 @@ inline Node* byType(NodeType t, int id, NodeManager* nm) {
             return new AdditiveNode(id, nm);
         case NodeType::Ducker:
             return new DuckerNode(id, nm);
+        case NodeType::PanInvert:
+            return new PanInvertNode(id, nm);
+        case NodeType::EventDuplicator:
+            return new EventDuplicatorNode(id, nm);
+        case NodeType::NoteLength:
+            return new NoteLengthNode(id, nm);
         default:
             return nullptr;
     }

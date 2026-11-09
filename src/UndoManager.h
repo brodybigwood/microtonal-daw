@@ -85,6 +85,7 @@ enum ActionType {
     DeleteElement = 68,
     VitalModRoute = 69,
     MixerAddTrack = 70,
+    PatcherGraphPreset = 71,
 };
 
 
@@ -1032,6 +1033,15 @@ struct VstStateChangeAction : ProjectAction {
 
     VstStateChangeAction(Project* p, std::vector<int> managerPath, int nodeID,
                          json oldState, json newState, bool liveCreated = false);
+};
+
+/** Replace an embedded patcher's whole sub-graph with a preset (undoable). */
+struct PatcherGraphPresetAction : ProjectAction {
+    std::vector<int> managerPath;
+    json before;
+    json after;
+
+    PatcherGraphPresetAction(Project* p, std::vector<int> managerPath, json before, json after);
 };
 
 struct MapParameterUndoAction : ProjectAction {

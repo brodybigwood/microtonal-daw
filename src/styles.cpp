@@ -78,6 +78,7 @@ bool initFonts() {
         return false;
     }
     fonts.mainFont = TTF_OpenFont("assets/fonts/SprinturaDemo.ttf", 12);
+    fonts.smallFont = TTF_OpenFont("assets/fonts/SprinturaDemo.ttf", 9);
     if (fonts.mainFont) {
         return true;
     } else {

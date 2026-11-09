@@ -55,7 +55,13 @@ NodeManager& requireManager(Project* p, const std::vector<int>& path) {
                 throw std::runtime_error("requireManager: mixer insert not found");
             i += 2;
             if (auto* dn = dynamic_cast<DelayNode*>(insert); dn && dn->chain) {
-                nm = dn->chain;
+                // [.., delayID, -1] selects the pre-feedback graph.
+                if (i + 1 < path.size() && path[i + 1] == -1 && dn->preChain) {
+                    ++i;
+                    nm = dn->preChain;
+                } else {
+                    nm = dn->chain;
+                }
                 continue;
             }
             if (auto* pt = dynamic_cast<PatcherNode*>(insert); pt && pt->mainManager) {
@@ -88,7 +94,13 @@ NodeManager& requireManager(Project* p, const std::vector<int>& path) {
         }
         auto* delayNode = dynamic_cast<DelayNode*>(node);
         if (delayNode && delayNode->chain) {
-            nm = delayNode->chain;
+            // [delayID] is the feedback graph; [delayID, -1] the pre-feedback graph.
+            if (i + 1 < path.size() && path[i + 1] == -1 && delayNode->preChain) {
+                ++i;
+                nm = delayNode->preChain;
+            } else {
+                nm = delayNode->chain;
+            }
             continue;
         }
         auto* mux = dynamic_cast<MultiplexerNode*>(node);
@@ -151,10 +163,21 @@ void UndoManager::newAction(ProjectAction* pa) {
             }
             if (patcher && patcher->mainManager)
                 nm = patcher->mainManager;
-            else if (auto* dly = dynamic_cast<DelayNode*>(node); dly && dly->chain)
-                nm = dly->chain;
-            else if (!mux2)
+            else if (auto* dly = dynamic_cast<DelayNode*>(node); dly) {
+                // [delayID] is the feedback graph; [delayID, -1] the pre-feedback
+                // graph. Descending into the wrong one made the mux walk treat
+                // -1 as a node id and silently stop.
+                if (pi + 1 < path.size() && path[pi + 1] == -1 && dly->preChain) {
+                    ++pi;
+                    nm = dly->preChain;
+                } else if (dly->chain) {
+                    nm = dly->chain;
+                } else {
+                    break;
+                }
+            } else if (!mux2) {
                 break;
+            }
         }
 
         if (!levels.empty()) {

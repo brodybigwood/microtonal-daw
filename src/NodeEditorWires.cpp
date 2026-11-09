@@ -371,11 +371,16 @@ void NodeEditor::clearPointersToNode(Node* n) {
         srcNode = nullptr;
         srcNodeID = -1;
     }
-    // Close any expanded windows that reference this node.
+    // Close expanded windows owned by this node. Never by title: ids repeat
+    // across nested graphs, so a title suffix match can close an unrelated
+    // window (a nested patcher deleting node 4 used to close "…##4").
     if (nm && nm->project && nm->project->processor) {
         auto* wm = nm->project->processor->getWindowManager();
         if (wm) {
-            wm->removeWindowsByTitleSuffix("##" + std::to_string(n->id));
+            std::vector<ExpandedWindow*> owned;
+            for (auto& w : wm->windows())
+                if (w && w->ownerNode == n) owned.push_back(w.get());
+            for (auto* w : owned) wm->removeWindow(w);
         }
     }
     if (movingNode == n) {

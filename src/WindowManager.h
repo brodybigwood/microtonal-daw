@@ -79,9 +79,6 @@ public:
     /// Active windows, for enumerating/capturing them from the control channel.
     const std::vector<std::unique_ptr<ExpandedWindow>>& windows() const { return windows_; }
 
-    /// Remove all windows whose title ends with the given suffix.
-    void removeWindowsByTitleSuffix(const std::string& suffix);
-
 private:
     std::vector<std::unique_ptr<ExpandedWindow>> windows_;
     std::unordered_map<Uint32, ExpandedWindow*> bySDLID_;

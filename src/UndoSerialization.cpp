@@ -453,6 +453,11 @@ static ProjectAction* deSerializeOne(const json& j, Project* p) {
                 j.at("oldState"), j.at("newState"));
             break;
         }
+        case PatcherGraphPreset: {
+            pa = new PatcherGraphPresetAction(p, j.at("managerPath").get<std::vector<int>>(),
+                j.at("before"), j.at("after"));
+            break;
+        }
         case TogglePianoRollWindow: {
             pa = new TogglePianoRollWindowAction(p, j.at("managerPath").get<std::vector<int>>(),
                 j.at("arrangerNodeID").get<int>(), j.at("regionID").get<int>(), j.at("ewID").get<int>(),
@@ -1179,6 +1184,13 @@ static json serializeOne(ProjectAction* pa) {
             j["nodeID"] = vs->nodeID;
             j["oldState"] = vs->oldState;
             j["newState"] = vs->newState;
+            break;
+        }
+        case PatcherGraphPreset: {
+            auto* pg = static_cast<PatcherGraphPresetAction*>(pa);
+            j["managerPath"] = pg->managerPath;
+            j["before"] = pg->before;
+            j["after"] = pg->after;
             break;
         }
         case TogglePianoRollWindow: {

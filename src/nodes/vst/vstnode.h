@@ -62,10 +62,11 @@ public:
 
     std::shared_ptr<VstPlugin> plugin; // shared across copies via VstPluginCache
 
-    /** MPE Rack: master instance `plugin` plus 15 shadows, one per member
-        channel (channel c -> rackShadows_[c-1]). The master holds the editor,
-        parameters and state; shadows mirror it and only play their channel,
-        so a non-MPE instrument can be retuned per note. */
+    /** MPE Rack: one instance per voice. Instance i owns MIDI channel i+1, so
+        the master `plugin` is voice 1 (and holds the editor, parameters and
+        state) and rackShadows_[i] is voice i+2. Shadows mirror the master and
+        only play their own channel, so a non-MPE instrument can be retuned
+        per note. */
     bool isMpeRack() const { return mpeRack_; }
     void markRackDirty();
     /** GUI thread: push the master's state into every shadow instance. */
@@ -73,11 +74,10 @@ public:
     /** GUI thread: sync racks whose master state changed and is idle. */
     static void tickAllRacks();
 
-    Knob bypass = Knob(0.0f, 20.0f, NODE_H * 0.3f, 10.0f, "assets/knobs/1.png",
-                       -135.0f, 135.0f, "Bypass", SDL_Color{220, 220, 220, 255});
-    /** MPE Rack instance count (1..32, default 4). Shrinking removes the extra
+    Toggle bypass = Toggle(0.0f, 8.0f, NODE_H * 0.72f, 66.0f, 18.0f, "Bypass");
+    /** MPE Rack instance count (1..15, default 4). Shrinking removes the extra
         instances; growing creates them and copies the master's state in. */
-    Knob mpeInstances = Knob(4.0f, 20.0f, NODE_H * 0.55f, 10.0f, "assets/knobs/1.png",
+    Knob mpeInstances = Knob(4.0f, 160.0f, NODE_H * 0.79f, 9.0f, "assets/knobs/1.png",
                              -135.0f, 135.0f, "Instances", SDL_Color{220, 220, 220, 255});
 
 private:
@@ -107,13 +107,16 @@ private:
     SDL_FRect editorBtnRect_{8, 38, NODE_W - 16, 24};
 
     bool mpeRack_ = false;
-    std::vector<std::shared_ptr<VstPlugin>> rackShadows_; // channels 1..15
+    std::vector<std::shared_ptr<VstPlugin>> rackShadows_; // voices 2..15 (master is voice 1)
     bool rackDirty_ = false;
     uint64_t rackLastSyncMs_ = 0;
     uint64_t rackLastEditMs_ = 0;
     std::array<uint64_t, 16> rackChannelLastMs_{};
 
     std::string loadedPath; // currently loaded plugin path
+    /** Last non-empty component-state blob path. A failed/interrupted state
+        read must never be saved over a good preset. */
+    std::string lastGoodCompStateFile_;
     size_t classIndex_ = 0; // class inside the bundle
     std::string className_;
     // State restored from JSON before the plugin was set up; applied once setup runs.
@@ -128,7 +131,8 @@ private:
     bool mpeRangeSet = false;
     bool wasBypassed_ = false;
     int allocMpeChannel(int noteId, HostEventList* plain,
-                        std::array<HostEventList, 16>* rack);
+                        std::array<HostEventList, 16>* rack,
+                        int midiChannelOverride = -1);
     void freeMpeChannel(int noteId);
     void sendMpePitchBendRange(void* eventList); // HostEventList*
 

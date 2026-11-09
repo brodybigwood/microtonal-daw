@@ -19,6 +19,10 @@ class NodeManager {
 
         json serialize();
         void deSerialize(json);
+        /** Replace every user node/cable with a saved patcher preset. The
+            manager's own Input/Output nodes are kept (their port state is
+            reloaded from the preset). */
+        void applyGraphPreset(const json&);
        
         static NodeManager* get();
 

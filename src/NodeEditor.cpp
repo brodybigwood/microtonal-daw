@@ -21,6 +21,11 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cctype>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include "Project.h"
 
 void NodeEditor::retach() {
     for (auto n : nm->getNodes()) {
@@ -280,6 +285,94 @@ std::shared_ptr<TreeEntry> NodeEditor::getClickMenu() {
     }   
     
     t->addChild(create);
+
+    // Patcher presets: embedded sub-graphs only (the top-level project graph is
+    // saved through the normal project save).
+    if (nm && !nm->managerPath.empty()) {
+        // Presets are global, shared by every project.
+        auto presetDir = [](Project*) -> std::filesystem::path {
+            const char* home = std::getenv("HOME");
+            std::filesystem::path dir =
+                std::filesystem::path(home ? home : ".") / ".local/share/microtonal-daw/patcher-presets";
+            std::error_code ec;
+            std::filesystem::create_directories(dir, ec);
+            return dir;
+        };
+
+        auto presets = uTreeEntry();
+        presets->label = "Presets";
+
+        auto save = uTreeEntry();
+        save->label = "Save Preset...";
+        save->click = [this, presetDir]() {
+            if (!nm) return;
+            auto* ctxMenu = ContextMenu::get();
+            ctxMenu->activate();
+            ctxMenu->dynamicTick = getTextInputTicker([this, presetDir](std::string text) {
+                std::string name;
+                for (char c : text) {
+                    if (std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_')
+                        name += c;
+                    else if (c == ' ')
+                        name += '_';
+                }
+                if (name.empty()) name = "preset";
+                json j = nm->serialize();
+                j.erase("ewIdPool");
+                j.erase("openPianoRolls");
+                const auto path = presetDir(nm->project) / (name + ".json");
+                std::ofstream out(path);
+                if (!out) {
+                    std::cerr << "[preset] cannot write " << path << std::endl;
+                    return;
+                }
+                out << j.dump(2);
+                std::cout << "[preset] saved " << path << std::endl;
+            });
+        };
+        presets->addChild(save);
+
+        auto load = uTreeEntry();
+        load->label = "Load Preset";
+        const auto dir = presetDir(nm->project);
+        bool any = false;
+        std::error_code ec;
+        for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+            if (ec) break;
+            if (!entry.is_regular_file() || entry.path().extension() != ".json") continue;
+            any = true;
+            auto item = uTreeEntry();
+            item->label = entry.path().stem().string();
+            const auto filePath = entry.path();
+            item->click = [this, filePath]() {
+                if (!nm || !nm->project || !nm->project->um) return;
+                std::ifstream in(filePath);
+                if (!in) return;
+                json preset;
+                try {
+                    preset = json::parse(in);
+                } catch (...) {
+                    std::cerr << "[preset] invalid json " << filePath << std::endl;
+                    return;
+                }
+                preset.erase("ewIdPool");
+                preset.erase("openPianoRolls");
+                json before = nm->serialize();
+                if (preset == before) return;
+                auto* pa = new PatcherGraphPresetAction(nm->project, nm->managerPath,
+                                                        std::move(before), std::move(preset));
+                nm->project->um->newAction(pa);
+            };
+            load->addChild(item);
+        }
+        if (!any) {
+            auto none = uTreeEntry();
+            none->label = "(none saved)";
+            load->addChild(none);
+        }
+        presets->addChild(load);
+        t->addChild(presets);
+    }
 
     return t;
 }

@@ -22,5 +22,8 @@ enum NodeType {
     InstrumentRack,
     Additive,
     Ducker,
+    PanInvert,
+    EventDuplicator,
+    NoteLength,
     Count // for iteration
 };
